@@ -63,6 +63,11 @@ void Palette::show()
     shown = true;
     rebuild();
     applyQuery();
+
+    // Snapshot where we came from. We deliberately don't peek row 0 here —
+    // merely opening the switcher shouldn't move you; the terminal only
+    // changes once you start navigating.
+    sessions.beginPeek();
     repaint();
 }
 
@@ -164,13 +169,50 @@ void Palette::choose()
         const auto item = visible[(std::size_t) selected];
 
         if (item.kind == PaletteItem::Kind::Session && item.session != nullptr)
-            sessions.switchTo(*item.session);
+        {
+            // The peek already put us here; Enter just commits it as a real
+            // switch (recording recency) and dismisses the box.
+            sessions.peekTo(*item.session);
+            sessions.endPeek(true);
+        }
         else
+        {
+            // A project isn't open yet, so it was never peeked (spawning a
+            // shell is a side effect). Drop the peek back to the origin, then
+            // actually open it.
+            sessions.endPeek(false);
             sessions.openProject(item.key);
+        }
+    }
+    else
+    {
+        sessions.endPeek(false);
     }
 
     shown = false;
     onClosed();
+}
+
+void Palette::cancel()
+{
+    // Escape / click-away: the peek was only a preview, so put the terminal
+    // back where it was.
+    sessions.endPeek(false);
+    shown = false;
+    onClosed();
+}
+
+void Palette::peekSelected()
+{
+    if (selected >= (int) visible.size())
+        return;
+
+    const auto& item = visible[(std::size_t) selected];
+
+    // Only open sessions live-peek — switching to one is free. Projects would
+    // spawn a shell per highlighted row, so they wait for Enter.
+    if (item.kind == PaletteItem::Kind::Session && item.session != nullptr)
+        sessions.peekTo(*item.session);
 }
 
 void Palette::moveSelection(int delta)
@@ -178,6 +220,7 @@ void Palette::moveSelection(int delta)
     if (!visible.empty())
     {
         selected = (selected + delta + (int) visible.size()) % (int) visible.size();
+        peekSelected();
         repaint();
     }
 }
@@ -199,8 +242,7 @@ void Palette::keyDown(const KeyEvent& event)
     if (event.keyCode == KeyCode::Escape
         || (event.modifiers.command && event.charactersIgnoringModifiers == "k"))
     {
-        shown = false;
-        onClosed();
+        cancel();
         return;
     }
 
@@ -228,6 +270,7 @@ void Palette::keyDown(const KeyEvent& event)
     {
         popQueryChar();
         applyQuery();
+        peekSelected();
         repaint();
         return;
     }
@@ -242,6 +285,7 @@ void Palette::keyDown(const KeyEvent& event)
         query += text;
         selected = 0;
         applyQuery();
+        peekSelected();
         repaint();
     }
 }
@@ -274,6 +318,7 @@ void Palette::mouseMoved(const MouseEvent& event)
     if (const auto row = rowAt(event.pos); row >= 0 && row != selected)
     {
         selected = row;
+        peekSelected();
         repaint();
     }
 }
@@ -290,10 +335,7 @@ void Palette::mouseDown(const MouseEvent& event)
     }
 
     if (!panelBounds().contains(event.pos))
-    {
-        shown = false;
-        onClosed();
-    }
+        cancel();
 }
 
 void Palette::paint(Context& context)

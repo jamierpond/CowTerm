@@ -78,6 +78,17 @@ public:
     void switchTo(TermSession& session);
     void switchToIndex(int index);
     void switchToLast();
+
+    // Live-peek support for the palette. The palette shows the terminal
+    // underneath switching to whatever row is highlighted, so navigating the
+    // list is itself the navigation and Enter merely dismisses. beginPeek
+    // snapshots the active session; peekTo previews one (swaps active +
+    // notifies, but records no recency and never persists — a peek isn't a
+    // "use"); endPeek(true) commits the last peek as a real switch, endPeek(
+    // false) restores the pre-peek session.
+    void beginPeek();
+    void peekTo(TermSession& session);
+    void endPeek(bool commit);
     void close(TermSession& session);
     void restoreOrCreateInitial();
 
@@ -118,6 +129,8 @@ private:
     std::vector<std::unique_ptr<TermSession>> sessions;
     TermSession* activeSession = nullptr;
     TermSession* previousSession = nullptr;
+    TermSession* peekOrigin = nullptr;
+    bool peeking = false;
     bool persistPending = false;
     std::shared_ptr<bool> alive = std::make_shared<bool>(true);
 };

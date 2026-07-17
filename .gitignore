@@ -7,3 +7,4 @@ CMakeUserPresets.json
 # macOS
 .DS_Store
 .cache/clangd/index
+cowcrash.txt
