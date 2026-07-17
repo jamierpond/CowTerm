@@ -83,6 +83,15 @@ void AppShell::attachActive(TermSession& session)
 
         attached = &session;
         addSubview(session.view);
+
+        // A live peek swaps the attached terminal while the switcher is open;
+        // re-raise the overlay so it stays on top and keeps keyboard focus.
+        if (palette.isShown())
+        {
+            removeSubview(palette);
+            addSubview(palette);
+            palette.focus();
+        }
     }
 
     session.view.setBounds(getLocalBounds());

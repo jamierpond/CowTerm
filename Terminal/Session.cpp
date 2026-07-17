@@ -178,6 +178,58 @@ void SessionManager::switchToLast()
             }
 }
 
+void SessionManager::beginPeek()
+{
+    peekOrigin = activeSession;
+    peeking = true;
+}
+
+void SessionManager::peekTo(TermSession& session)
+{
+    if (!peeking)
+        beginPeek();
+
+    if (activeSession == &session)
+        return;
+
+    // Swap and repaint only — no mru.touch, no persist. Peeking through five
+    // sessions must not stamp all five as recently used, and it must not hit
+    // disk on every keystroke.
+    activeSession = &session;
+    onActiveChanged(session);
+}
+
+void SessionManager::endPeek(bool commit)
+{
+    if (!peeking)
+        return;
+
+    peeking = false;
+    auto* origin = peekOrigin;
+    peekOrigin = nullptr;
+
+    if (commit)
+    {
+        // activeSession is already the peeked target and its view is attached;
+        // now record it as a real switch away from where we started.
+        if (activeSession != nullptr && activeSession != origin)
+        {
+            previousSession = origin;
+            mru.touch(activeSession->key());
+            persist();
+        }
+
+        return;
+    }
+
+    // Cancel: restore the session we were on before peeking.
+    if (origin != nullptr && activeSession != origin)
+    {
+        activeSession = origin;
+        onActiveChanged(*origin);
+    }
+}
+
 void SessionManager::closeIfPresent(TermSession* session)
 {
     for (auto& candidate: sessions)
@@ -207,6 +259,9 @@ void SessionManager::close(TermSession& session)
 
     if (previousSession == closing.get())
         previousSession = nullptr;
+
+    if (peekOrigin == closing.get())
+        peekOrigin = nullptr;
 
     if (sessions.empty())
     {

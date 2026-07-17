@@ -52,6 +52,8 @@ private:
     void rebuild();
     void applyQuery();
     void choose();
+    void cancel();
+    void peekSelected();
     void moveSelection(int delta);
     void popQueryChar();
     int rowAt(eacp::Graphics::Point pos) const;
