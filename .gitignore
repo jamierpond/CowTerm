@@ -1,0 +1,8 @@
+# CMake / CPM build trees
+/build/
+/cmake-build-*/
+_deps/
+CMakeUserPresets.json
+
+# macOS
+.DS_Store
