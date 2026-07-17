@@ -120,6 +120,16 @@ character typed after the prefix; the action is one of:
 `Ctrl+A u` (`cd ..`) and `Ctrl+A n` (`nvim .`) ship as defaults even with
 no config file.
 
+## The shell
+
+macOS/Linux panes run your login shell (`$SHELL`). Windows panes come up as
+the **Visual Studio Developer PowerShell**: CowTerm launches `pwsh`/`powershell`
+and runs `Enter-VsDevShell` at startup (locating the install with `vswhere`),
+so the MSVC toolchain — `cl`, `link`, `cmake`, `ninja` — is on `PATH` in every
+pane, just like the "Developer PowerShell for VS" profile. When no Visual
+Studio install is found it falls back to an ordinary PowerShell prompt; set
+`COWTERM_NO_DEVSHELL=1` to opt out even when one is.
+
 ## The session daemon (real tmux mode)
 
 Shells don't belong to the GUI: a headless `CowTermDaemon` (bundled next to
