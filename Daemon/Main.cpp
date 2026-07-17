@@ -6,6 +6,7 @@
 #include "Protocol.h"
 #include "Pty.h"
 
+#include <eacp/Core/App/App.h>
 #include <eacp/Core/Core.h>
 #include <eacp/Network/IPC/Messenger.h>
 
@@ -40,6 +41,13 @@ struct Daemon
         signal(SIGHUP, SIG_IGN);
         signal(SIGPIPE, SIG_IGN);
 #endif
+
+        // The daemon is a headless PTY server with no UI. Its executable
+        // lives inside CowTerm.app/Contents/MacOS, so [NSBundle mainBundle]
+        // resolves to CowTerm.app and eacp's loop would otherwise give it the
+        // app's regular activation policy — a second "CowTerm" tile in the
+        // Dock and the app switcher. Drop out of the Dock entirely.
+        Apps::setDockIconVisible(false);
 
         server.onClient = [this](IPC::Messenger& messenger)
         { adoptClient(messenger); };
