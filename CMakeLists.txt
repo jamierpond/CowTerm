@@ -69,3 +69,11 @@ set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
 
 add_subdirectory(Daemon)
 add_subdirectory(Terminal)
+
+# Regression tests for the POSIX PTY teardown (the quit-hang fix). The Pty
+# sources are POSIX-only, so the suite is gated off Windows.
+option(COWTERM_ENABLE_TESTS "Build CowTerm unit tests" ON)
+if (COWTERM_ENABLE_TESTS AND NOT WIN32)
+    enable_testing()
+    add_subdirectory(Test)
+endif ()

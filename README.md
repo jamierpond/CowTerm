@@ -1,6 +1,13 @@
+<div align="center">
+
+<img src="Terminal/Icon.png" alt="CowTerm" width="180" />
+
 # CowTerm
 
-A GPU-accelerated terminal emulator and session manager.
+**A GPU-accelerated terminal emulator and session manager.**
+
+</div>
+
 Every visible pixel — glyphs, backgrounds, cursor, selection — is composited
 on the GPU from a CoreText glyph atlas. Sessions, the fuzzy palette, MRU
 ordering and ring-back notifications replace the tmux-sessionizer workflow.
