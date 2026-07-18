@@ -42,6 +42,14 @@ std::string truncated(const std::string& text, std::size_t max)
 
     return text.substr(0, max - 1) + "…";
 }
+
+// A row's backing directory: a git worktree checkout lives in a
+// "<repo>.worktrees/<leaf>" folder, so that segment marks it as one — the only
+// kind of row Ctrl+X may trash.
+bool isWorktreePath(const std::string& path)
+{
+    return path.find(".worktrees/") != std::string::npos;
+}
 } // namespace
 
 Palette::Palette(const AppConfig& configToUse, SessionManager& sessionsToUse)
@@ -63,6 +71,8 @@ void Palette::show()
     shown = true;
     worktreeMode = false;
     worktreeError.clear();
+    confirmDeleteMode = false;
+    deleteError.clear();
     rebuild();
     applyQuery();
 
@@ -247,6 +257,12 @@ void Palette::keyDown(const KeyEvent& event)
         return;
     }
 
+    if (confirmDeleteMode)
+    {
+        confirmDeleteKeyDown(event);
+        return;
+    }
+
     if (event.keyCode == KeyCode::Escape
         || (event.modifiers.command && event.charactersIgnoringModifiers == "k"))
     {
@@ -287,6 +303,13 @@ void Palette::keyDown(const KeyEvent& event)
     if (event.modifiers.control && event.charactersIgnoringModifiers == "w")
     {
         beginWorktree();
+        return;
+    }
+
+    // Ctrl+X on a highlighted worktree: move it to the trash (with a confirm).
+    if (event.modifiers.control && event.charactersIgnoringModifiers == "x")
+    {
+        beginRemoveWorktree();
         return;
     }
 
@@ -414,6 +437,78 @@ void Palette::exitWorktree()
     repaint();
 }
 
+void Palette::beginRemoveWorktree()
+{
+    if (selected >= (int) visible.size())
+        return;
+
+    const auto& item = visible[(std::size_t) selected];
+
+    // An open repo is a Session (take its project dir); an unopened one is a
+    // Project keyed by path. Either way, only worktree checkouts can be binned.
+    const auto path =
+        item.session != nullptr ? item.session->projectDir : item.key;
+
+    if (!isWorktreePath(path))
+        return;
+
+    // Trashing is a side effect, not a switch — and the target may well be the
+    // session we're currently peeking. Drop the preview back to the origin
+    // before we take over the panel, so we're not previewing a doomed session.
+    sessions.endPeek(false);
+
+    confirmDeleteMode = true;
+    deleteTargetPath = path;
+    deleteTargetName = item.label;
+    deleteError.clear();
+    repaint();
+}
+
+void Palette::confirmDeleteKeyDown(const KeyEvent& event)
+{
+    // Destructive, so require an explicit "y" — Enter deliberately does
+    // nothing here to defeat Ctrl+X-then-reflexive-Enter.
+    if (event.keyCode == KeyCode::Escape
+        || event.charactersIgnoringModifiers == "n")
+    {
+        exitConfirmDelete();
+        return;
+    }
+
+    if (event.charactersIgnoringModifiers == "y")
+        performRemoveWorktree();
+}
+
+void Palette::performRemoveWorktree()
+{
+    // onRemoveWorktree trashes the checkout and closes any session on it. A
+    // non-empty return is the OS/git error — keep the prompt up so the user
+    // can read it.
+    if (const auto error = onRemoveWorktree(deleteTargetPath); error.empty())
+    {
+        confirmDeleteMode = false;
+        shown = false;
+        onClosed();
+    }
+    else
+    {
+        deleteError = error;
+        repaint();
+    }
+}
+
+void Palette::exitConfirmDelete()
+{
+    confirmDeleteMode = false;
+    deleteError.clear();
+
+    // Back to the list. Unlike the worktree prompt, the peek was torn down on
+    // entry, so re-arm it fresh for the row we're back on.
+    sessions.beginPeek();
+    peekSelected();
+    repaint();
+}
+
 Rect Palette::panelBounds() const
 {
     const auto bounds = getLocalBounds();
@@ -439,7 +534,7 @@ int Palette::rowAt(Point pos) const
 
 void Palette::mouseMoved(const MouseEvent& event)
 {
-    if (worktreeMode)
+    if (worktreeMode || confirmDeleteMode)
         return;
 
     if (const auto row = rowAt(event.pos); row >= 0 && row != selected)
@@ -452,8 +547,8 @@ void Palette::mouseMoved(const MouseEvent& event)
 
 void Palette::mouseDown(const MouseEvent& event)
 {
-    // The worktree prompt is keyboard-only; a stray click mustn't tear it down.
-    if (worktreeMode)
+    // The sub-prompts are keyboard-only; a stray click mustn't tear them down.
+    if (worktreeMode || confirmDeleteMode)
         return;
 
     const auto row = rowAt(event.pos);
@@ -526,11 +621,75 @@ void Palette::paintWorktree(Context& context)
     }
 }
 
+void Palette::paintConfirmDelete(Context& context)
+{
+    const auto bounds = getLocalBounds();
+    const auto width = std::min(panelWidth, bounds.w - 60.0f);
+    const auto height = headerHeight + rowHeight * 3.0f + 12.0f;
+    const auto panel = Rect {
+        (bounds.w - width) / 2.0f, std::max(bounds.h * 0.14f, 20.0f), width, height};
+
+    context.setColor(Color::black(0.38f));
+    context.fillRect(bounds);
+
+    context.setColor(toColor(theme.background).brighter(0.04f));
+    context.fillRoundedRect(panel, 12.0f);
+
+    // Red-tinted border flags this as the destructive branch.
+    context.setColor(toColor(theme.ansi[1], 0.8f));
+    context.setLineWidth(1.0f);
+    context.strokeRect(panel);
+
+    // Header: what we're doing, and which worktree it targets.
+    context.setColor(toColor(theme.ansi[1]));
+    context.drawText("trash worktree", {panel.x + 18.0f, panel.y + 30.0f}, queryFont);
+
+    const auto headWidth =
+        Graphics::TextMetrics::measureWidth("trash worktree", queryFont);
+    context.setColor(toColor(theme.ansi[8]));
+    context.drawText("·  " + truncated(deleteTargetName, 40),
+                     {panel.x + 18.0f + headWidth + 12.0f, panel.y + 30.0f},
+                     queryFont);
+
+    context.setColor(toColor(theme.selection));
+    context.drawLine({panel.x + 12.0f, panel.y + headerHeight - 2.0f},
+                     {panel.right() - 12.0f, panel.y + headerHeight - 2.0f});
+
+    // The question.
+    const auto questionY = panel.y + headerHeight + rowHeight * 0.7f;
+    context.setColor(toColor(theme.foreground));
+    context.drawText("Move this worktree to the Trash?",
+                     {panel.x + 18.0f, questionY},
+                     rowFont);
+
+    // Hint, or the OS/git complaint if the last attempt failed.
+    const auto hintY = panel.y + headerHeight + rowHeight * 1.9f;
+
+    if (!deleteError.empty())
+    {
+        context.setColor(toColor(theme.ansi[1]));
+        context.drawText(truncated(deleteError, 66), {panel.x + 18.0f, hintY}, detailFont);
+    }
+    else
+    {
+        context.setColor(toColor(theme.ansi[8]));
+        context.drawText("y: move to Trash · n: cancel",
+                         {panel.x + 18.0f, hintY},
+                         detailFont);
+    }
+}
+
 void Palette::paint(Context& context)
 {
     if (worktreeMode)
     {
         paintWorktree(context);
+        return;
+    }
+
+    if (confirmDeleteMode)
+    {
+        paintConfirmDelete(context);
         return;
     }
 

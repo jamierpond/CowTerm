@@ -51,6 +51,12 @@ public:
         onCreateWorktree =
             [](const std::string&, const std::string&) { return std::string {}; };
 
+    // Ctrl+X on a highlighted worktree (after a y/n confirm): move it to the OS
+    // trash. Returns "" on success (the palette then closes), or an error to
+    // show in the confirm prompt on failure. Only worktree rows offer this.
+    std::function<std::string(const std::string& worktreePath)> onRemoveWorktree =
+        [](const std::string&) { return std::string {}; };
+
     void paint(eacp::Graphics::Context& context) override;
     void keyDown(const eacp::Graphics::KeyEvent& event) override;
     void mouseDown(const eacp::Graphics::MouseEvent& event) override;
@@ -74,6 +80,13 @@ private:
     void exitWorktree();
     void paintWorktree(eacp::Graphics::Context& context);
 
+    // The "trash this worktree?" y/n confirmation.
+    void beginRemoveWorktree();
+    void confirmDeleteKeyDown(const eacp::Graphics::KeyEvent& event);
+    void performRemoveWorktree();
+    void exitConfirmDelete();
+    void paintConfirmDelete(eacp::Graphics::Context& context);
+
     const AppConfig& config;
     SessionManager& sessions;
     Theme theme;
@@ -91,6 +104,13 @@ private:
     std::string worktreeRepoName;
     std::string branchName;
     std::string worktreeError;
+
+    // Confirm sub-prompt: when active the list is replaced by a y/n question
+    // guarding the trashing of deleteTargetPath.
+    bool confirmDeleteMode = false;
+    std::string deleteTargetPath;
+    std::string deleteTargetName;
+    std::string deleteError;
 
     eacp::Graphics::Font queryFont;
     eacp::Graphics::Font rowFont;

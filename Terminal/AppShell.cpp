@@ -69,6 +69,22 @@ AppShell::AppShell()
         return {};
     };
 
+    // Trash a highlighted worktree: bin the checkout, then close any session
+    // still open on it (its directory is gone). Git's error, if any, goes back
+    // to the confirm prompt.
+    palette.onRemoveWorktree = [this](const std::string& worktreePath) -> std::string
+    {
+        const auto result = removeWorktree(worktreePath);
+
+        if (!result.ok)
+            return result.message;
+
+        if (auto* session = manager.find(worktreePath))
+            manager.close(*session);
+
+        return {};
+    };
+
     popup.onClosed = [this] { hidePopup(); };
 
     popup.interceptKey = [this](const KeyEvent& event) { return popupKey(event); };

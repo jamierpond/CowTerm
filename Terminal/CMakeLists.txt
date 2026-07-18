@@ -30,14 +30,16 @@ if (APPLE)
     target_sources(CowTerm PRIVATE
             Pty-Posix.cpp
             GlyphAtlas-macOS.mm
-            Notifier-macOS.mm)
+            Notifier-macOS.mm
+            Trash-macOS.mm)
 
-    target_link_libraries(CowTerm PRIVATE "-framework UserNotifications")
+    target_link_libraries(CowTerm PRIVATE "-framework UserNotifications" "-framework Foundation")
 elseif (WIN32)
     target_sources(CowTerm PRIVATE
             Pty-Windows.cpp
             GlyphAtlas-Windows.cpp
-            Notifier-Windows.cpp)
+            Notifier-Windows.cpp
+            Trash-Windows.cpp)
 
     # The parser and screen sources hold Unicode literals (box drawing,
     # powerline glyphs); MSVC assumes the ANSI codepage without this.
@@ -48,7 +50,8 @@ elseif (WIN32)
             dwrite
             windowscodecs
             user32
-            ole32)
+            ole32
+            shell32)
 endif ()
 
 target_link_libraries(CowTerm PRIVATE eacp-sprites eacp-network emberstore)

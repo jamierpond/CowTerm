@@ -19,4 +19,11 @@ struct WorktreeResult
 // PATH and git apply, and the exact git error (not a repo, branch exists,
 // dirty tree) is surfaced verbatim on failure.
 WorktreeResult createWorktree(const std::string& repoPath, const std::string& branch);
+
+// Moves an existing worktree checkout to the OS trash / recycle bin, then
+// prunes git's now-stale registration in the parent repo. worktreePath is the
+// absolute "<repo>.worktrees/<leaf>" directory createWorktree laid down; a
+// path outside that layout is refused so this never bins arbitrary folders.
+// The branch itself is left alone. ok=false carries the OS/git diagnostic.
+WorktreeResult removeWorktree(const std::string& worktreePath);
 } // namespace term
