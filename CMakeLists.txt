@@ -20,6 +20,15 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # be position-independent, matching eacp's own top-level build.
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
+# MSVC compiles the standard library's try/catch (e.g. <chrono>) without unwind
+# semantics unless told otherwise, raising C4530 — a hard error in the deps that
+# build warnings-as-error (emberstore's /WX). Enable standard C++ exception
+# handling for every target, matching the other platforms' Clang default. Set
+# before the CPM packages so their targets inherit it.
+if (MSVC)
+    add_compile_options(/EHsc)
+endif ()
+
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 include(CPM)
 
@@ -27,10 +36,13 @@ include(CPM)
 # helpers (res_embed_add, eacp_set_gui_subsystem, eacp_set_app_icon, ...) that
 # the app's CMakeLists call. Examples/tests are top-level-only in eacp, so they
 # stay off here. Point CPM at a local checkout with -DCPM_eacp_SOURCE=/path.
+# The IPC::Messenger layer the session daemon and DaemonClient ride on lives
+# on the jp/fancy-terminal branch (with the Windows Channel/Lock backends);
+# it hasn't merged to eacp main yet, so pin the branch that actually has it.
 CPMAddPackage(
         NAME eacp
         GITHUB_REPOSITORY jamierpond/eacp
-        GIT_TAG main
+        GIT_TAG jp/fancy-terminal
         OPTIONS
             "EACP_ENABLE_EXAMPLES OFF"
             "EACP_ENABLE_TESTS OFF")

@@ -80,6 +80,80 @@ ULONGLONG creationTime(DWORD pid)
     return time;
 }
 
+// Base64 of an arbitrary byte buffer (no line wrapping). Small and dependency
+// free so we don't have to pull in crypt32 just to build -EncodedCommand.
+std::wstring base64(const std::vector<unsigned char>& bytes)
+{
+    static const char table[] =
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+    std::wstring out;
+    out.reserve((bytes.size() + 2) / 3 * 4);
+
+    for (std::size_t i = 0; i < bytes.size(); i += 3)
+    {
+        const auto b0 = bytes[i];
+        const auto b1 = i + 1 < bytes.size() ? bytes[i + 1] : (unsigned char) 0;
+        const auto b2 = i + 2 < bytes.size() ? bytes[i + 2] : (unsigned char) 0;
+
+        out.push_back(table[b0 >> 2]);
+        out.push_back(table[((b0 & 0x03) << 4) | (b1 >> 4)]);
+        out.push_back(i + 1 < bytes.size()
+                          ? table[((b1 & 0x0f) << 2) | (b2 >> 6)]
+                          : L'=');
+        out.push_back(i + 2 < bytes.size() ? table[b2 & 0x3f] : L'=');
+    }
+
+    return out;
+}
+
+// Base64 of the UTF-16LE encoding of an ASCII script — the exact form
+// PowerShell's -EncodedCommand expects, which sidesteps all command-line
+// quoting for a multi-line script.
+std::wstring encodePowerShell(const std::string& script)
+{
+    std::vector<unsigned char> utf16le;
+    utf16le.reserve(script.size() * 2);
+
+    for (const auto c: script)
+    {
+        utf16le.push_back((unsigned char) c);
+        utf16le.push_back(0);
+    }
+
+    return base64(utf16le);
+}
+
+// -EncodedCommand payload that brings up the Visual Studio Developer
+// PowerShell environment (Enter-VsDevShell) so the MSVC toolchain — cl, link,
+// cmake, ninja — lands on PATH before the interactive prompt appears. It
+// locates VS via vswhere; when nothing is found (or COWTERM_NO_DEVSHELL is
+// set) the script is a no-op and -NoExit just leaves an ordinary shell.
+std::wstring devShellCommand()
+{
+    static const char* script =
+        "try {"
+        "  if ($env:COWTERM_NO_DEVSHELL) { return };"
+        "  $vswhere = Join-Path ${env:ProgramFiles(x86)} "
+        "'Microsoft Visual Studio\\Installer\\vswhere.exe';"
+        "  if (Test-Path $vswhere) {"
+        "    $p = & $vswhere -latest -prerelease -products * "
+        "-property installationPath 2>$null | Select-Object -First 1;"
+        "    $dll = if ($p) { Join-Path $p "
+        "'Common7\\Tools\\Microsoft.VisualStudio.DevShell.dll' } else { $null };"
+        "    if ($dll -and (Test-Path $dll)) {"
+        "      Import-Module $dll;"
+        "      $arch = if ($env:PROCESSOR_ARCHITECTURE -eq 'ARM64') {'arm64'} "
+        "elseif ($env:PROCESSOR_ARCHITECTURE -eq 'x86') {'x86'} else {'x64'};"
+        "      Enter-VsDevShell -VsInstallPath $p -SkipAutomaticLocation "
+        "-DevCmdArguments \"-arch=$arch -host_arch=$arch\" | Out-Null;"
+        "    }"
+        "  }"
+        "} catch {}";
+
+    return encodePowerShell(script);
+}
+
 std::string baseName(const std::wstring& exeFile)
 {
     auto name = fromWideString(exeFile);
@@ -150,14 +224,20 @@ bool Pty::start(const PtyOptions& options,
 
     auto info = PROCESS_INFORMATION {};
     const auto shell = findShell();
+    const auto isCmd = shell.find(L"cmd.exe") != std::wstring::npos;
     auto commandLine = L"\"" + shell + L"\"";
 
     if (!options.command.empty())
     {
-        const auto isCmd = shell.find(L"cmd.exe") != std::wstring::npos;
         const auto wide = toWideString(options.command);
         commandLine +=
             isCmd ? L" /c " + wide : L" -NoLogo -Command \"" + wide + L"\"";
+    }
+    else if (!isCmd)
+    {
+        // Default interactive PowerShell comes up as the VS Developer
+        // PowerShell; -NoExit keeps the prompt after the env is set up.
+        commandLine += L" -NoLogo -NoExit -EncodedCommand " + devShellCommand();
     }
     const auto directory = startDirectory(options.workingDirectory);
 
