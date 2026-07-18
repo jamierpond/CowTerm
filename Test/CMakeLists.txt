@@ -3,7 +3,8 @@
 CPMAddPackage(
         NAME NanoTest
         GITHUB_REPOSITORY eyalamirmusic/NanoTest
-        GIT_TAG v1.0.0)
+        GIT_TAG main
+)
 
 # The PTY teardown lives in Pty-Posix.cpp, which has no eacp dependencies, so we
 # compile it straight into the test binary rather than through the app targets.
