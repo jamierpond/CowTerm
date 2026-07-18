@@ -320,10 +320,10 @@ void Palette::beginWorktree()
     if (repo.empty())
         return;
 
-    // Spawning a worktree is a side effect, not a switch — drop the live
-    // preview back to where we came from before we take over the panel.
-    sessions.endPeek(false);
-
+    // Keep the source repo's live peek up while we name the branch — the
+    // background terminal should show the session we're forking, not the one
+    // the palette was opened from. Navigation already peeked this row (open
+    // sessions only); an unopened project has nothing to preview.
     worktreeMode = true;
     worktreeRepoPath = repo;
     worktreeRepoName = item.label;
@@ -385,6 +385,10 @@ void Palette::createWorktreeFromInput()
     // the user can read it and retry the name.
     if (const auto error = onCreateWorktree(worktreeRepoPath, branchName); error.empty())
     {
+        // onCreateWorktree opened a session in the new worktree, so it's now
+        // the active peek. Commit it as a real switch so it sticks instead of
+        // reverting to wherever we opened the palette from.
+        sessions.endPeek(true);
         worktreeMode = false;
         shown = false;
         onClosed();
@@ -402,8 +406,10 @@ void Palette::exitWorktree()
     branchName.clear();
     worktreeError.clear();
 
-    // Back to the list — re-arm the preview for the row we left on.
-    sessions.beginPeek();
+    // Back to the list. The peek was never torn down (we kept the source
+    // visible while naming), and peekOrigin still points at where we opened
+    // from, so just re-preview the highlighted row — a fresh beginPeek() here
+    // would clobber the real origin with the source repo.
     peekSelected();
     repaint();
 }
