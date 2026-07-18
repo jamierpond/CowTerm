@@ -1,4 +1,5 @@
 #include "AppShell.h"
+#include "GitWorktree.h"
 #include "Notifier.h"
 
 #include <eacp/Core/App/App.h>
@@ -53,6 +54,20 @@ AppShell::AppShell()
     };
 
     palette.onClosed = [this] { hidePalette(); };
+
+    // Branch a highlighted repo into a fresh worktree and drop a session in
+    // it. Returns git's error on failure so the palette can show it in place.
+    palette.onCreateWorktree =
+        [this](const std::string& repoPath, const std::string& branch) -> std::string
+    {
+        const auto result = createWorktree(repoPath, branch);
+
+        if (!result.ok)
+            return result.message;
+
+        manager.newSession(result.path);
+        return {};
+    };
 
     popup.onClosed = [this] { hidePopup(); };
 

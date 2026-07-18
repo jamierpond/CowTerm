@@ -34,6 +34,7 @@ pass `-DCPM_eacp_SOURCE=/path/to/eacp`.
 | Key | Action |
 | --- | --- |
 | `Ctrl+A f` / `w` / `p` (or `Cmd+K` / `Cmd+T`) | Open the palette |
+| `Ctrl+W` (in the palette) | New worktree + branch off the highlighted repo |
 | `Ctrl+A i` | Lazygit popup in the active pane's directory |
 | `Ctrl+A "` | Split pane below (in the pane's directory) |
 | `Ctrl+A %` (or `Cmd+D`) | Split pane right (in the pane's directory) |
@@ -68,6 +69,17 @@ One overlay, everything fuzzy-searchable (Wim-style scoring + MRU):
   session there (or switches if one exists).
 
 Type to rank; `Enter` opens, `Esc` closes, arrows or `Ctrl+P/N` move.
+
+**New worktree in one keystroke.** Highlight a repo and hit `Ctrl+W`: the
+list gives way to a branch-name field (`new worktree · <repo>`). Type a name,
+`Enter`, and CowTerm runs `git worktree add <repo>.worktrees/<branch> -b
+<branch>` off the repo's current HEAD, then spawns a session in the new
+worktree. Worktrees for a repo land together in a sibling `<repo>.worktrees/`
+folder; branch slashes collapse to `-` for the directory, the branch keeps
+its real name. Works on an already-open repo too (it branches from its
+project dir). git runs through your login shell, so a failure — dirty tree,
+name already taken — comes straight back into the prompt to fix; `Esc` backs
+out to the list.
 
 ## The lazygit popup
 

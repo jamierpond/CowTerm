@@ -11,6 +11,7 @@ add_executable(CowTerm
         Main.cpp
         AppShell.cpp
         Config.cpp
+        GitWorktree.cpp
         MruStore.cpp
         Palette.cpp
         Popup.cpp

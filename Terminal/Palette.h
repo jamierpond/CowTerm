@@ -3,6 +3,7 @@
 #include "Config.h"
 #include "Session.h"
 
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -43,6 +44,13 @@ public:
     // and restores terminal focus.
     eacp::Callback onClosed = [] {};
 
+    // Ctrl+W on a highlighted repo: create a new git worktree + branch based
+    // on it and open a session there. Returns "" on success (the palette then
+    // closes), or a git error to display in the branch prompt on failure.
+    std::function<std::string(const std::string& repoPath, const std::string& branch)>
+        onCreateWorktree =
+            [](const std::string&, const std::string&) { return std::string {}; };
+
     void paint(eacp::Graphics::Context& context) override;
     void keyDown(const eacp::Graphics::KeyEvent& event) override;
     void mouseDown(const eacp::Graphics::MouseEvent& event) override;
@@ -59,6 +67,13 @@ private:
     int rowAt(eacp::Graphics::Point pos) const;
     eacp::Graphics::Rect panelBounds() const;
 
+    // The worktree branch-name sub-prompt.
+    void beginWorktree();
+    void worktreeKeyDown(const eacp::Graphics::KeyEvent& event);
+    void createWorktreeFromInput();
+    void exitWorktree();
+    void paintWorktree(eacp::Graphics::Context& context);
+
     const AppConfig& config;
     SessionManager& sessions;
     Theme theme;
@@ -68,6 +83,14 @@ private:
     std::string query;
     int selected = 0;
     bool shown = false;
+
+    // Worktree sub-prompt: when active the list is replaced by a single
+    // branch-name field bound to the repo we entered from.
+    bool worktreeMode = false;
+    std::string worktreeRepoPath;
+    std::string worktreeRepoName;
+    std::string branchName;
+    std::string worktreeError;
 
     eacp::Graphics::Font queryFont;
     eacp::Graphics::Font rowFont;

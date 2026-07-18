@@ -61,6 +61,8 @@ void Palette::show()
     query.clear();
     selected = 0;
     shown = true;
+    worktreeMode = false;
+    worktreeError.clear();
     rebuild();
     applyQuery();
 
@@ -239,6 +241,12 @@ void Palette::popQueryChar()
 
 void Palette::keyDown(const KeyEvent& event)
 {
+    if (worktreeMode)
+    {
+        worktreeKeyDown(event);
+        return;
+    }
+
     if (event.keyCode == KeyCode::Escape
         || (event.modifiers.command && event.charactersIgnoringModifiers == "k"))
     {
@@ -275,6 +283,13 @@ void Palette::keyDown(const KeyEvent& event)
         return;
     }
 
+    // Ctrl+W on the highlighted repo: branch off it into a fresh worktree.
+    if (event.modifiers.control && event.charactersIgnoringModifiers == "w")
+    {
+        beginWorktree();
+        return;
+    }
+
     if (event.modifiers.command || event.modifiers.control)
         return;
 
@@ -288,6 +303,109 @@ void Palette::keyDown(const KeyEvent& event)
         peekSelected();
         repaint();
     }
+}
+
+void Palette::beginWorktree()
+{
+    if (selected >= (int) visible.size())
+        return;
+
+    const auto& item = visible[(std::size_t) selected];
+
+    // A repo the user already has open shows up as a Session, so take its
+    // project dir; an unopened one is a Project whose key is the path.
+    const auto repo =
+        item.session != nullptr ? item.session->projectDir : item.key;
+
+    if (repo.empty())
+        return;
+
+    // Spawning a worktree is a side effect, not a switch — drop the live
+    // preview back to where we came from before we take over the panel.
+    sessions.endPeek(false);
+
+    worktreeMode = true;
+    worktreeRepoPath = repo;
+    worktreeRepoName = item.label;
+    branchName.clear();
+    worktreeError.clear();
+    repaint();
+}
+
+void Palette::worktreeKeyDown(const KeyEvent& event)
+{
+    if (event.keyCode == KeyCode::Escape)
+    {
+        exitWorktree();
+        return;
+    }
+
+    if (event.keyCode == KeyCode::Return)
+    {
+        createWorktreeFromInput();
+        return;
+    }
+
+    if (event.keyCode == KeyCode::Delete)
+    {
+        while (!branchName.empty())
+        {
+            const auto last = (unsigned char) branchName.back();
+            branchName.pop_back();
+
+            if ((last & 0xc0) != 0x80)
+                break;
+        }
+
+        worktreeError.clear();
+        repaint();
+        return;
+    }
+
+    if (event.modifiers.command || event.modifiers.control)
+        return;
+
+    const auto& text = event.characters;
+
+    if (!text.empty() && (unsigned char) text[0] >= 0x20 && text[0] != 0x7f)
+    {
+        branchName += text;
+        worktreeError.clear();
+        repaint();
+    }
+}
+
+void Palette::createWorktreeFromInput()
+{
+    if (branchName.empty())
+        return;
+
+    // The shell runs git and, on success, opens the session in the new
+    // worktree. A non-empty return is git's error — keep the prompt up so
+    // the user can read it and retry the name.
+    if (const auto error = onCreateWorktree(worktreeRepoPath, branchName); error.empty())
+    {
+        worktreeMode = false;
+        shown = false;
+        onClosed();
+    }
+    else
+    {
+        worktreeError = error;
+        repaint();
+    }
+}
+
+void Palette::exitWorktree()
+{
+    worktreeMode = false;
+    branchName.clear();
+    worktreeError.clear();
+
+    // Back to the list — re-arm the preview for the row we left on.
+    sessions.beginPeek();
+    peekSelected();
+    repaint();
 }
 
 Rect Palette::panelBounds() const
@@ -315,6 +433,9 @@ int Palette::rowAt(Point pos) const
 
 void Palette::mouseMoved(const MouseEvent& event)
 {
+    if (worktreeMode)
+        return;
+
     if (const auto row = rowAt(event.pos); row >= 0 && row != selected)
     {
         selected = row;
@@ -325,6 +446,10 @@ void Palette::mouseMoved(const MouseEvent& event)
 
 void Palette::mouseDown(const MouseEvent& event)
 {
+    // The worktree prompt is keyboard-only; a stray click mustn't tear it down.
+    if (worktreeMode)
+        return;
+
     const auto row = rowAt(event.pos);
 
     if (row >= 0)
@@ -338,8 +463,71 @@ void Palette::mouseDown(const MouseEvent& event)
         cancel();
 }
 
+void Palette::paintWorktree(Context& context)
+{
+    const auto bounds = getLocalBounds();
+    const auto width = std::min(panelWidth, bounds.w - 60.0f);
+    const auto height = headerHeight + rowHeight * 3.0f + 12.0f;
+    const auto panel = Rect {
+        (bounds.w - width) / 2.0f, std::max(bounds.h * 0.14f, 20.0f), width, height};
+
+    context.setColor(Color::black(0.38f));
+    context.fillRect(bounds);
+
+    context.setColor(toColor(theme.background).brighter(0.04f));
+    context.fillRoundedRect(panel, 12.0f);
+
+    context.setColor(toColor(theme.selection, 0.8f));
+    context.setLineWidth(1.0f);
+    context.strokeRect(panel);
+
+    // Header: what we're doing, and which repo it branches from.
+    context.setColor(toColor(theme.ansi[5]));
+    context.drawText("new worktree", {panel.x + 18.0f, panel.y + 30.0f}, queryFont);
+
+    const auto headWidth =
+        Graphics::TextMetrics::measureWidth("new worktree", queryFont);
+    context.setColor(toColor(theme.ansi[8]));
+    context.drawText("·  " + truncated(worktreeRepoName, 40),
+                     {panel.x + 18.0f + headWidth + 12.0f, panel.y + 30.0f},
+                     queryFont);
+
+    context.setColor(toColor(theme.selection));
+    context.drawLine({panel.x + 12.0f, panel.y + headerHeight - 2.0f},
+                     {panel.right() - 12.0f, panel.y + headerHeight - 2.0f});
+
+    // Branch-name field.
+    const auto branchY = panel.y + headerHeight + rowHeight * 0.7f;
+    context.setColor(toColor(theme.ansi[8]));
+    context.drawText("branch", {panel.x + 18.0f, branchY}, detailFont);
+    context.setColor(toColor(theme.foreground));
+    context.drawText("› " + branchName + "▏", {panel.x + 88.0f, branchY}, rowFont);
+
+    // Hint, or git's complaint if the last attempt failed.
+    const auto hintY = panel.y + headerHeight + rowHeight * 1.9f;
+
+    if (!worktreeError.empty())
+    {
+        context.setColor(toColor(theme.ansi[1]));
+        context.drawText(truncated(worktreeError, 66), {panel.x + 18.0f, hintY}, detailFont);
+    }
+    else
+    {
+        context.setColor(toColor(theme.ansi[8]));
+        context.drawText("Enter: create worktree · Esc: back",
+                         {panel.x + 18.0f, hintY},
+                         detailFont);
+    }
+}
+
 void Palette::paint(Context& context)
 {
+    if (worktreeMode)
+    {
+        paintWorktree(context);
+        return;
+    }
+
     const auto panel = panelBounds();
 
     context.setColor(Color::black(0.38f));
