@@ -65,6 +65,8 @@ install: build
     New-Item -ItemType Directory -Force -Path "$env:LOCALAPPDATA\Programs\CowTerm" | Out-Null
     Copy-Item -Force "{{build_dir}}\Terminal\CowTerm.exe" "$env:LOCALAPPDATA\Programs\CowTerm"
     Copy-Item -Force "{{build_dir}}\Terminal\CowTermDaemon.exe" "$env:LOCALAPPDATA\Programs\CowTerm"
+    $exe = "$env:LOCALAPPDATA\Programs\CowTerm\CowTerm.exe"; $ws = New-Object -ComObject WScript.Shell; @([Environment]::GetFolderPath('Desktop'), [Environment]::GetFolderPath('Programs')) | ForEach-Object { $s = $ws.CreateShortcut((Join-Path $_ 'CowTerm.lnk')); $s.TargetPath = $exe; $s.WorkingDirectory = (Split-Path $exe); $s.IconLocation = $exe; $s.Description = 'CowTerm'; $s.Save() }; Write-Host "Added Desktop and Start Menu shortcuts"
+    ie4uinit.exe -show
     Write-Host "Installed CowTerm to $env:LOCALAPPDATA\Programs\CowTerm"
 
 # The Linux backends aren't wired up in CMake yet (Terminal/CMakeLists.txt
