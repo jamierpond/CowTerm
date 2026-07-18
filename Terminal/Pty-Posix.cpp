@@ -19,10 +19,19 @@ namespace term
 {
 namespace
 {
+// shutdown() polls for the reaped shell every shutdownPollMs, and if it has not
+// hung up within shutdownKillGraceMs it escalates from SIGHUP to SIGKILL.
+constexpr int shutdownPollMs = 10;
+constexpr int shutdownKillGraceMs = 250;
+
 [[noreturn]] void execShell(const std::string& workingDirectory,
                             const std::string& command)
 {
-    for (auto sig: {SIGINT, SIGQUIT, SIGTSTP, SIGPIPE, SIGCHLD})
+    // SIGHUP is deliberately included: the daemon sets it to SIG_IGN so the
+    // GUI dying can't take it down, and an ignored disposition survives execve.
+    // Left alone, the shell would inherit SIG_IGN and never hang up when we
+    // close its terminal — wedging quit. Reset it so a hangup ends the shell.
+    for (auto sig: {SIGHUP, SIGINT, SIGQUIT, SIGTSTP, SIGPIPE, SIGCHLD})
         signal(sig, SIG_DFL);
 
     setenv("TERM", "xterm-256color", 1);
@@ -218,22 +227,44 @@ bool Pty::isRunning() const
 
 void Pty::shutdown()
 {
-    if (fd >= 0)
-    {
-        close(fd);
-        fd = -1;
-    }
-
+    // Order matters, and this used to hang the app on quit. Closing the master
+    // fd while the reader thread is still blocked in read() on it deadlocks in
+    // the kernel on the tty lock: close() waits for the in-flight read to drop
+    // the vnode, but that read only returns once the slave side is gone. So end
+    // the shell first — that closes the slave, the reader's read() returns EOF
+    // and unwinds — and only then join the reader and close the fd.
     if (pid > 0)
     {
-        ::kill((pid_t) pid, SIGHUP);
+        // Signal the whole foreground process group (forkpty made the child a
+        // session leader, so its pid is the group id). SIGHUP alone would leave
+        // grandchildren holding the slave open, so the master would never see
+        // EOF and the reader would never unwind; the group hangs them all up.
+        ::kill((pid_t) -pid, SIGHUP);
 
-        auto status = 0;
-        waitpid((pid_t) pid, &status, 0);
+        // Reap the shell, escalating to an unignorable SIGKILL if it does not
+        // hang up promptly. A shell that traps or ignores SIGHUP must never be
+        // able to wedge our own shutdown, so we never block indefinitely here.
+        for (int elapsedMs = 0;; elapsedMs += shutdownPollMs)
+        {
+            if (waitpid((pid_t) pid, nullptr, WNOHANG) != 0)
+                break;
+
+            if (elapsedMs == shutdownKillGraceMs)
+                ::kill((pid_t) -pid, SIGKILL);
+
+            usleep(shutdownPollMs * 1000);
+        }
+
         pid = -1;
     }
 
     if (reader.joinable())
         reader.join();
+
+    if (fd >= 0)
+    {
+        close(fd);
+        fd = -1;
+    }
 }
 } // namespace term
