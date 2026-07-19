@@ -239,12 +239,14 @@ void TerminalView::resized()
     const auto bounds = getLocalBounds();
 
     if (bounds.w > 0 && bounds.h > 0)
+    {
         sprites.emplace(Graphics::Point {bounds.w, bounds.h}, sampleCount());
 
         if (!glyphs)
             glyphs.emplace();
 
         glyphs->setViewportSize({bounds.w, bounds.h});
+    }
 
     applyGridSize();
     repaint();
