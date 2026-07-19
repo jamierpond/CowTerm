@@ -239,7 +239,14 @@ void TerminalView::resized()
     const auto bounds = getLocalBounds();
 
     if (bounds.w > 0 && bounds.h > 0)
+    {
         sprites.emplace(Graphics::Point {bounds.w, bounds.h}, sampleCount());
+
+        if (!glyphs)
+            glyphs.emplace();
+
+        glyphs->setViewportSize({bounds.w, bounds.h});
+    }
 
     applyGridSize();
     repaint();
@@ -386,18 +393,28 @@ void TerminalView::drawGlyphs(int visualRow, const Line& line, float y)
 
         if (cell.ch != U' ')
         {
-            const auto& slot = atlas->glyph(cell.ch,
-                                            (cell.attrs & Attr::Bold) != 0,
-                                            (cell.attrs & Attr::Italic) != 0);
+            const auto slot = atlas->glyph(cell.ch,
+                                           (cell.attrs & Attr::Bold) != 0,
+                                           (cell.attrs & Attr::Italic) != 0,
+                                           wide ? 2 : 1);
 
-            if (slot.valid)
+            if (slot.valid && !slot.empty)
             {
                 const auto alpha = (cell.attrs & Attr::Faint) != 0 ? 0.55f : 1.0f;
                 const auto tint = slot.colored ? Graphics::Color::white(alpha)
                                                : toColor(fg, alpha);
 
-                sprites->drawTexture(
-                    atlas->texture(), slot.src, {x, y, width, cellH}, tint);
+                // Placed by its own bearings from the cell origin and baseline,
+                // rather than stretched to fill the cell.
+                const auto scale = atlas->scale();
+
+                glyphs->add({x + slot.offset.x,
+                             y + baseline + slot.offset.y,
+                             slot.src.w / scale,
+                             slot.src.h / scale},
+                            slot.src,
+                            tint,
+                            slot.colored);
             }
         }
 
@@ -461,17 +478,24 @@ void TerminalView::drawCursor()
 
         if (cell.ch != U' ' && (cell.attrs & Attr::WideCont) == 0)
         {
-            const auto& slot = atlas->glyph(cell.ch,
-                                            (cell.attrs & Attr::Bold) != 0,
-                                            (cell.attrs & Attr::Italic) != 0);
+            const auto wide = (cell.attrs & Attr::Wide) != 0;
+            const auto slot = atlas->glyph(cell.ch,
+                                           (cell.attrs & Attr::Bold) != 0,
+                                           (cell.attrs & Attr::Italic) != 0,
+                                           wide ? 2 : 1);
 
-            if (slot.valid && !slot.colored)
+            if (slot.valid && !slot.empty && !slot.colored)
             {
-                const auto wide = (cell.attrs & Attr::Wide) != 0;
-                sprites->drawTexture(atlas->texture(),
-                                     slot.src,
-                                     {x, y, wide ? cellW * 2 : cellW, cellH},
-                                     toColor(theme.background));
+                const auto scale = atlas->scale();
+                const auto baseline = atlas->baseline();
+
+                glyphs->add({x + slot.offset.x,
+                             y + baseline + slot.offset.y,
+                             slot.src.w / scale,
+                             slot.src.h / scale},
+                            slot.src,
+                            toColor(theme.background),
+                            false);
             }
         }
     }
@@ -485,6 +509,7 @@ void TerminalView::render(GPU::Frame& frame)
         return;
 
     sprites->begin(pass);
+    glyphs->begin();
 
     const auto rows = screen.rows();
     const auto cellH = atlas->cellHeight();
@@ -504,11 +529,12 @@ void TerminalView::render(GPU::Frame& frame)
                 && (cell.attrs & (Attr::WideCont | Attr::Hidden)) == 0)
                 atlas->glyph(cell.ch,
                              (cell.attrs & Attr::Bold) != 0,
-                             (cell.attrs & Attr::Italic) != 0);
+                             (cell.attrs & Attr::Italic) != 0,
+                             (cell.attrs & Attr::Wide) != 0 ? 2 : 1);
         }
     }
 
-    atlas->texture();
+    atlas->commit();
 
     for (auto row = 0; row < rows; ++row)
         drawBackgrounds(
@@ -518,8 +544,22 @@ void TerminalView::render(GPU::Frame& frame)
         drawGlyphs(
             row, screen.lineAt(row, scrollOffset), marginY + (float) row * cellH);
 
+    // Every cell's glyph is queued by now, so the whole screen submits as one
+    // instanced draw rather than one call per character.
+    glyphs->flush(pass, atlas->atlas());
+
     if (scrollOffset == 0)
+    {
+        // The cursor draws a filled block through the sprite renderer and then
+        // the glyph on top of it, so both pipelines have to be rebound: the
+        // glyph flush above left its own pipeline in place.
+        sprites->begin(pass);
+        glyphs->begin();
+
         drawCursor();
+
+        glyphs->flush(pass, atlas->atlas());
+    }
 
     renderedVersion = screen.version();
 }

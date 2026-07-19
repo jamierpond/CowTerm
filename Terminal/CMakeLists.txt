@@ -22,14 +22,14 @@ add_executable(CowTerm
         TermParser.cpp
         TerminalView.cpp
         TrayController.cpp
-        DaemonClient.cpp)
+        DaemonClient.cpp
+        GlyphAtlas.cpp)
 
 # Portable core (parser, screen, sessions, palette) + per-platform PTY,
 # glyph raster and notifications.
 if (APPLE)
     target_sources(CowTerm PRIVATE
             Pty-Posix.cpp
-            GlyphAtlas-macOS.mm
             Notifier-macOS.mm
             Trash-macOS.mm)
 
@@ -37,7 +37,6 @@ if (APPLE)
 elseif (WIN32)
     target_sources(CowTerm PRIVATE
             Pty-Windows.cpp
-            GlyphAtlas-Windows.cpp
             Notifier-Windows.cpp
             Trash-Windows.cpp)
 
@@ -54,7 +53,7 @@ elseif (WIN32)
             shell32)
 endif ()
 
-target_link_libraries(CowTerm PRIVATE eacp-sprites eacp-network emberstore)
+target_link_libraries(CowTerm PRIVATE eacp-sprites eacp-text eacp-network emberstore)
 
 # The session daemon rides inside the bundle, next to the app binary, so
 # the client can launch it with no install step.

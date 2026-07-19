@@ -145,6 +145,11 @@ private:
     float fontSize = 13.0f;
     std::optional<GlyphAtlas> atlas;
     std::optional<eacp::Sprites::SpriteRenderer> sprites;
+
+    // Glyphs go through eacp-text's instanced renderer rather than the sprite
+    // renderer: the mask atlas is R8Unorm, which a general sprite shader draws
+    // as opaque red, and batching turns a screen of cells into one draw call.
+    std::optional<eacp::Text::GlyphRenderer> glyphs;
     std::string paneShellId;
     std::unique_ptr<Shell> shell;
 
