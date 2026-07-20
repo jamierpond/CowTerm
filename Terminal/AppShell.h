@@ -43,6 +43,7 @@ private:
     void showPopup(const std::string& command);
     void hidePopup();
     void attachActive(TermSession& session);
+    void setGlobalFontSize(float size);
     void updateTitle();
     void handleSessionNotify(TermSession& session, const std::string& text);
 

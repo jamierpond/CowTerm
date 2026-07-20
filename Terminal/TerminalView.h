@@ -49,6 +49,10 @@ public:
     // state now instead of waiting for the next blink tick.
     void refreshCursor();
 
+    // Zoom is app-wide, not per pane: the shell owns the shortcut, persists
+    // the size in the config and pushes it into every live pane through here.
+    void setFontSize(float newSize);
+
     std::function<void(const std::string&)> onTitleChanged =
         [](const std::string&) {};
     std::function<void(const std::string&)> onCwdChanged = [](const std::string&) {};
@@ -113,7 +117,6 @@ private:
     bool handleSpecialKey(const eacp::Graphics::KeyEvent& event);
     void paste();
     void copySelection();
-    void setFontSize(float newSize);
     void applyGridSize();
     void scrollBy(int lines);
 

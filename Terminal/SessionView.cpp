@@ -418,6 +418,15 @@ void SessionView::resizeActive(char direction, float cells)
     layout();
 }
 
+void SessionView::setFontSize(float size)
+{
+    auto leaves = std::vector<Node*> {};
+    collectLeaves(root.get(), leaves);
+
+    for (auto* leaf: leaves)
+        leaf->view->setFontSize(size);
+}
+
 void SessionView::toggleZoom()
 {
     zoomed = zoomed != nullptr ? nullptr : active;

@@ -5,6 +5,14 @@
 
 namespace term
 {
+namespace
+{
+eacp::FilePath configPath()
+{
+    return eacp::FilePath::homeDirectory() / ".config" / "cowterm.json";
+}
+} // namespace
+
 std::string expandHome(const std::string& path)
 {
     if (path.empty() || path[0] != '~')
@@ -16,13 +24,27 @@ std::string expandHome(const std::string& path)
 AppConfig loadConfig()
 {
     auto config = AppConfig {};
-    const auto path = eacp::FilePath::homeDirectory() / ".config" / "cowterm.json";
-    const auto text = eacp::Files::readFile(path);
+    const auto text = eacp::Files::readFile(configPath());
 
     if (!text.empty())
         Miro::fromJSONString(config, text);
 
     return config;
+}
+
+void saveConfig(const AppConfig& config)
+{
+    const auto text = Miro::toJSONString(config, 4);
+
+    try
+    {
+        eacp::Files::writeFileAtomically(
+            configPath(),
+            {reinterpret_cast<const std::uint8_t*>(text.data()), text.size()});
+    }
+    catch (const std::exception&)
+    {
+    }
 }
 
 Theme themeByName(const std::string& name)

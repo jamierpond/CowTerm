@@ -40,7 +40,15 @@ struct AppConfig
     MIRO_REFLECT(searchDirs, font, fontSize, theme, bindings)
 };
 
+inline constexpr float minFontSize = 7.0f;
+inline constexpr float maxFontSize = 40.0f;
+
 AppConfig loadConfig();
+
+// Writes the effective config back to ~/.config/cowterm.json, so settings
+// changed from inside the app (Cmd +/- zoom) survive a relaunch. Best
+// effort: an unwritable file loses the change but never interrupts typing.
+void saveConfig(const AppConfig& config);
 
 Theme themeByName(const std::string& name);
 

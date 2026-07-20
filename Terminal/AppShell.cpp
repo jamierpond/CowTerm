@@ -4,6 +4,7 @@
 
 #include <eacp/Core/App/App.h>
 
+#include <algorithm>
 #include <cctype>
 
 namespace term
@@ -149,6 +150,21 @@ void AppShell::resized()
     palette.setBounds(bounds);
     switcher.setBounds(bounds);
     popup.setBounds(bounds);
+}
+
+void AppShell::setGlobalFontSize(float size)
+{
+    const auto clamped = std::clamp(size, minFontSize, maxFontSize);
+
+    if (clamped == config.fontSize)
+        return;
+
+    config.fontSize = clamped;
+
+    for (const auto& session: manager.all())
+        session->view.setFontSize(clamped);
+
+    saveConfig(config);
 }
 
 void AppShell::updateTitle()
@@ -522,6 +538,26 @@ bool AppShell::handleCommand(const KeyEvent& event)
     if (chars == "q")
     {
         Apps::quit();
+        return true;
+    }
+
+    // Zoom: one size for the whole app. Every pane in every session changes
+    // together, and the new size is written back to ~/.config/cowterm.json.
+    if (chars == "=" || chars == "+")
+    {
+        setGlobalFontSize(config.fontSize + 1);
+        return true;
+    }
+
+    if (chars == "-")
+    {
+        setGlobalFontSize(config.fontSize - 1);
+        return true;
+    }
+
+    if (chars == "0")
+    {
+        setGlobalFontSize(AppConfig {}.fontSize);
         return true;
     }
 

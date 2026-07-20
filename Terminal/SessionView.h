@@ -61,6 +61,9 @@ public:
     void cycleFocus();
     void focusActive();
 
+    // Applies an app-wide font size change to every pane in this tree.
+    void setFontSize(float size);
+
     // Fired for every leaf created (restore and splits) so per-pane
     // callbacks (interceptKey, notify, title, cwd) get installed.
     std::function<void(TerminalView&)> onPaneCreated = [](TerminalView&) {};

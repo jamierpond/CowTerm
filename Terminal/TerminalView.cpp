@@ -274,7 +274,7 @@ void TerminalView::applyGridSize()
 
 void TerminalView::setFontSize(float newSize)
 {
-    const auto clamped = std::clamp(newSize, 7.0f, 40.0f);
+    const auto clamped = std::clamp(newSize, minFontSize, maxFontSize);
 
     if (clamped == fontSize)
         return;
@@ -592,24 +592,6 @@ bool TerminalView::handleCommandShortcut(const KeyEvent& event)
         scrollOffset = 0;
         send("\014");
         repaint();
-        return true;
-    }
-
-    if (chars == "=" || chars == "+")
-    {
-        setFontSize(fontSize + 1);
-        return true;
-    }
-
-    if (chars == "-")
-    {
-        setFontSize(fontSize - 1);
-        return true;
-    }
-
-    if (chars == "0")
-    {
-        setFontSize(13.0f);
         return true;
     }
 
