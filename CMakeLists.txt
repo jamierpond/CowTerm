@@ -36,13 +36,15 @@ include(CPM)
 # helpers (res_embed_add, eacp_set_gui_subsystem, eacp_set_app_icon, ...) that
 # the app's CMakeLists call. Examples/tests are top-level-only in eacp, so they
 # stay off here. Point CPM at a local checkout with -DCPM_eacp_SOURCE=/path.
-# The IPC::Messenger layer the session daemon and DaemonClient ride on lives
-# on the jp/fancy-terminal branch (with the Windows Channel/Lock backends);
-# it hasn't merged to eacp main yet, so pin the branch that actually has it.
+# Pinned to eacp upstream: eacp-text (the glyph atlas the app's GlyphAtlas.h
+# now sits on) lives on main there, and hasn't reached jamierpond/eacp — the
+# fork this used to track. Upstream main also carries the IPC::Messenger
+# layer the session daemon and DaemonClient ride on, with the Windows
+# Channel/Lock backends, which is what jp/fancy-terminal was pinned for.
 CPMAddPackage(
         NAME eacp
-        GITHUB_REPOSITORY jamierpond/eacp
-        GIT_TAG jp/fancy-terminal
+        GITHUB_REPOSITORY eyalamirmusic/eacp
+        GIT_TAG main
         OPTIONS
             "EACP_ENABLE_EXAMPLES OFF"
             "EACP_ENABLE_TESTS OFF")
