@@ -74,13 +74,17 @@ GlyphSlot GlyphAtlas::glyph(char32_t codepoint, bool bold, bool italic, int cell
     if (!glyph.valid || glyph.empty)
         return slot;
 
-    // Centre the glyph in its cell span. A monospace face's own advance already
-    // matches the cell, so this is a no-op for ordinary text; it matters for
-    // glyphs that came from a fallback face — CJK and emoji — whose advance
-    // does not line up with two cells.
+    // Centre the glyph's *advance* within the cell span, keeping its design
+    // bearing intact inside that advance. For the face's own glyphs the
+    // advance differs from the cell only by the ceil that sized the grid, so
+    // every glyph shifts by the same sub-point amount and stays justified; a
+    // fallback glyph — CJK, emoji — whose advance does not match the span is
+    // centred without disturbing where its ink sits. Centring by the bitmap's
+    // ink width instead pushed narrow glyphs visibly right: an apostrophe's
+    // 2pt of ink gained (cell − 2)/2 while a letter's 6pt gained
+    // (cell − 6)/2, skewing punctuation by the difference.
     const auto span = static_cast<float>(std::max(cells, 1)) * cellW;
-    const auto width = glyph.src.w / backingScale;
-    const auto centring = std::max((span - width) * 0.5f, 0.f);
+    const auto centring = std::max((span - glyph.advance) * 0.5f, 0.f);
 
     slot.offset = {centring + glyph.offset.x, glyph.offset.y};
 
