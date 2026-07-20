@@ -1,14 +1,7 @@
 #include "GitWorktree.h"
 
+#include "Command.h"
 #include "Trash.h"
-
-#include <array>
-#include <cstdio>
-#include <cstdlib>
-
-#if !defined(_WIN32)
-#include <sys/wait.h>
-#endif
 
 namespace term
 {
@@ -24,20 +17,6 @@ std::string trimmed(const std::string& text)
     return text.substr(begin, text.find_last_not_of(" \t\r\n") - begin + 1);
 }
 
-// Single-quote for POSIX sh, escaping any embedded quote as '\''. Safe to
-// nest: the result is a literal to one shell, which is exactly what the
-// login-shell wrap below relies on.
-std::string shellQuote(const std::string& text)
-{
-    auto out = std::string {"'"};
-
-    for (const auto c: text)
-        out += c == '\'' ? "'\\''" : std::string {c};
-
-    out += "'";
-    return out;
-}
-
 // A filesystem-friendly leaf for the worktree directory. The git branch keeps
 // its real name (feature/foo); only the folder flattens ("feature-foo").
 std::string dirLeaf(const std::string& branch)
@@ -48,54 +27,6 @@ std::string dirLeaf(const std::string& branch)
         out += (c == '/' || c == '\\' || c == ' ' || c == ':') ? '-' : c;
 
     return out;
-}
-
-struct CommandOutput
-{
-    int status = -1;
-    std::string text;
-};
-
-CommandOutput runCaptured(const std::string& command)
-{
-#if defined(_WIN32)
-    auto* pipe = _popen(command.c_str(), "r");
-#else
-    auto* pipe = popen(command.c_str(), "r");
-#endif
-
-    if (pipe == nullptr)
-        return {-1, "could not launch git"};
-
-    auto text = std::string {};
-    auto buffer = std::array<char, 512> {};
-
-    while (std::fgets(buffer.data(), (int) buffer.size(), pipe) != nullptr)
-        text += buffer.data();
-
-#if defined(_WIN32)
-    const auto status = _pclose(pipe);
-#else
-    const auto raw = pclose(pipe);
-    const auto status = (raw != -1 && WIFEXITED(raw)) ? WEXITSTATUS(raw) : -1;
-#endif
-
-    return {status, std::move(text)};
-}
-
-// Runs a shell command through the user's login shell — the same trick the
-// lazygit popup uses — so a GUI launch (with its stripped PATH) still finds
-// their git. On Windows there's no login shell to wrap, so run it directly.
-CommandOutput runViaLoginShell(const std::string& command)
-{
-#if defined(_WIN32)
-    return runCaptured(command);
-#else
-    const auto* shell = std::getenv("SHELL");
-    const auto wrapped =
-        shellQuote(shell != nullptr ? shell : "/bin/sh") + " -lc " + shellQuote(command);
-    return runCaptured(wrapped);
-#endif
 }
 
 // The start-point a new worktree branches from: the repo's mainline, resolved

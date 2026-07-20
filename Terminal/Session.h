@@ -54,6 +54,13 @@ public:
     std::string name;
     std::string projectDir;
     std::string lastNotify;
+
+    // When lastNotify arrived, and whether it landed while the session was
+    // in the background and hasn't been looked at since — the Claude HUD's
+    // "waiting on you" signal. Cleared the moment the session is shown.
+    std::int64_t lastNotifyAt = 0;
+    bool notifyUnseen = false;
+
     SessionView view;
 };
 

@@ -10,10 +10,13 @@ CPMAddPackage(
 add_executable(CowTerm
         Main.cpp
         AppShell.cpp
+        ClaudeHud.cpp
+        Command.cpp
         Config.cpp
         GitWorktree.cpp
         MruStore.cpp
         Palette.cpp
+        PrDashboard.cpp
         Popup.cpp
         Projects.cpp
         Session.cpp

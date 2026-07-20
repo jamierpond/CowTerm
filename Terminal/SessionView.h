@@ -49,6 +49,14 @@ public:
     int paneCount() const;
     bool isClaudeAnywhere() const;
 
+    // Leaves whose foreground process or title says a Claude Code
+    // conversation runs there — the Claude HUD's row source.
+    std::vector<TerminalView*> claudePanes() const;
+
+    // Moves the active-pane marker (and keyboard focus) to this pane, if it
+    // is still one of this tree's leaves.
+    void focusPane(TerminalView* pane);
+
     void splitActive(bool horizontal);
     void closeActivePane();
 

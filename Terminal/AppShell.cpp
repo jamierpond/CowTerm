@@ -58,6 +58,10 @@ AppShell::AppShell()
 
     switcher.onClosed = [this] { hideSwitcher(); };
 
+    prDashboard.onClosed = [this] { hidePrDashboard(); };
+
+    claudeHud.onClosed = [this] { hideClaudeHud(); };
+
     // Branch a highlighted repo into a fresh worktree and drop a session in
     // it. Returns git's error on failure so the palette can show it in place.
     palette.onCreateWorktree =
@@ -132,12 +136,30 @@ void AppShell::attachActive(TermSession& session)
             addSubview(switcher);
             switcher.focus();
         }
+        else if (prDashboard.isShown())
+        {
+            removeSubview(prDashboard);
+            addSubview(prDashboard);
+            prDashboard.focus();
+        }
+        else if (claudeHud.isShown())
+        {
+            removeSubview(claudeHud);
+            addSubview(claudeHud);
+            claudeHud.focus();
+        }
     }
 
     session.view.setBounds(getLocalBounds());
 
-    if (!palette.isShown() && !switcher.isShown())
+    if (!anyOverlayShown())
         session.view.focusActive();
+}
+
+bool AppShell::anyOverlayShown() const
+{
+    return palette.isShown() || switcher.isShown() || prDashboard.isShown()
+           || claudeHud.isShown() || popup.isShown();
 }
 
 void AppShell::resized()
@@ -149,6 +171,8 @@ void AppShell::resized()
 
     palette.setBounds(bounds);
     switcher.setBounds(bounds);
+    prDashboard.setBounds(bounds);
+    claudeHud.setBounds(bounds);
     popup.setBounds(bounds);
 }
 
@@ -236,6 +260,44 @@ void AppShell::showSwitcher(bool reverse)
 void AppShell::hideSwitcher()
 {
     removeSubview(switcher);
+
+    if (attached != nullptr)
+        attached->view.focusActive();
+}
+
+void AppShell::showPrDashboard()
+{
+    if (anyOverlayShown())
+        return;
+
+    addSubview(prDashboard);
+    prDashboard.setBounds(getLocalBounds());
+    prDashboard.show();
+    prDashboard.focus();
+}
+
+void AppShell::hidePrDashboard()
+{
+    removeSubview(prDashboard);
+
+    if (attached != nullptr)
+        attached->view.focusActive();
+}
+
+void AppShell::showClaudeHud()
+{
+    if (anyOverlayShown())
+        return;
+
+    addSubview(claudeHud);
+    claudeHud.setBounds(getLocalBounds());
+    claudeHud.show();
+    claudeHud.focus();
+}
+
+void AppShell::hideClaudeHud()
+{
+    removeSubview(claudeHud);
 
     if (attached != nullptr)
         attached->view.focusActive();
@@ -413,9 +475,23 @@ bool AppShell::handlePrefixed(const KeyEvent& event)
         return true;
     }
 
-    if (chars == "f" || chars == "w" || chars == "p")
+    if (chars == "f" || chars == "w")
     {
         showPalette();
+        return true;
+    }
+
+    // The PR dashboard, on the same key the tmux setup bound it to.
+    if (chars == "p")
+    {
+        showPrDashboard();
+        return true;
+    }
+
+    // The Claude HUD: every conversation across every session, one glance.
+    if (chars == "a")
+    {
+        showClaudeHud();
         return true;
     }
 

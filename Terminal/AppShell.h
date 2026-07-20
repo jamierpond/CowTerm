@@ -1,8 +1,10 @@
 #pragma once
 
+#include "ClaudeHud.h"
 #include "Config.h"
 #include "Palette.h"
 #include "Popup.h"
+#include "PrDashboard.h"
 #include "Session.h"
 #include "Switcher.h"
 #include "TrayController.h"
@@ -42,6 +44,11 @@ private:
     void hideSwitcher();
     void showPopup(const std::string& command);
     void hidePopup();
+    void showPrDashboard();
+    void hidePrDashboard();
+    void showClaudeHud();
+    void hideClaudeHud();
+    bool anyOverlayShown() const;
     void attachActive(TermSession& session);
     void setGlobalFontSize(float size);
     void updateTitle();
@@ -51,6 +58,8 @@ private:
     SessionManager manager {config};
     Palette palette {config, manager};
     Switcher switcher {config, manager};
+    PrDashboard prDashboard {config, manager};
+    ClaudeHud claudeHud {config, manager};
     Popup popup {config};
     TrayController tray {manager};
     TermSession* attached = nullptr;

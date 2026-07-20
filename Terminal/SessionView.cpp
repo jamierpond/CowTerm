@@ -156,29 +156,42 @@ int SessionView::paneCount() const
 
 bool SessionView::isClaudeAnywhere() const
 {
+    return !claudePanes().empty();
+}
+
+std::vector<TerminalView*> SessionView::claudePanes() const
+{
     auto leaves = std::vector<Node*> {};
     collectLeaves(root.get(), leaves);
+
+    auto contains = [](const std::string& text, const char* needle)
+    {
+        auto lowered = text;
+        std::transform(lowered.begin(),
+                       lowered.end(),
+                       lowered.begin(),
+                       [](unsigned char c) { return (char) std::tolower(c); });
+        return lowered.find(needle) != std::string::npos;
+    };
+
+    auto panes = std::vector<TerminalView*> {};
 
     for (auto* leaf: leaves)
     {
         const auto process = leaf->view->foregroundProcess();
         const auto& title = leaf->view->currentTitle();
 
-        auto contains = [](const std::string& text, const char* needle)
-        {
-            auto lowered = text;
-            std::transform(lowered.begin(),
-                           lowered.end(),
-                           lowered.begin(),
-                           [](unsigned char c) { return (char) std::tolower(c); });
-            return lowered.find(needle) != std::string::npos;
-        };
-
         if (contains(process, "claude") || contains(title, "claude"))
-            return true;
+            panes.push_back(leaf->view.get());
     }
 
-    return false;
+    return panes;
+}
+
+void SessionView::focusPane(TerminalView* pane)
+{
+    if (auto* leaf = leafFor(pane))
+        setActive(leaf);
 }
 
 void SessionView::collectLeaves(Node* node, std::vector<Node*>& out) const
