@@ -1,6 +1,7 @@
 #include "Palette.h"
 
 #include "FuzzyMatch.h"
+#include "GitWorktree.h"
 #include "Projects.h"
 
 #include <eacp/Graphics/Primitives/TextMetrics.h>
@@ -43,13 +44,6 @@ std::string truncated(const std::string& text, std::size_t max)
     return text.substr(0, max - 1) + "…";
 }
 
-// A row's backing directory: a git worktree checkout lives in a
-// "<repo>.worktrees/<leaf>" folder, so that segment marks it as one — the only
-// kind of row Ctrl+X may trash.
-bool isWorktreePath(const std::string& path)
-{
-    return path.find(".worktrees/") != std::string::npos;
-}
 } // namespace
 
 Palette::Palette(const AppConfig& configToUse, SessionManager& sessionsToUse)
@@ -449,7 +443,9 @@ void Palette::beginRemoveWorktree()
     const auto path =
         item.session != nullptr ? item.session->projectDir : item.key;
 
-    if (!isWorktreePath(path))
+    // Only a genuine linked worktree may be trashed — git decides, since the
+    // "<repo>-<leaf>" layout is otherwise indistinguishable from a plain repo.
+    if (!isWorktree(path))
         return;
 
     // Trashing is a side effect, not a switch — and the target may well be the

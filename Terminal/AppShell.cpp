@@ -55,6 +55,8 @@ AppShell::AppShell()
 
     palette.onClosed = [this] { hidePalette(); };
 
+    switcher.onClosed = [this] { hideSwitcher(); };
+
     // Branch a highlighted repo into a fresh worktree and drop a session in
     // it. Returns git's error on failure so the palette can show it in place.
     palette.onCreateWorktree =
@@ -115,7 +117,7 @@ void AppShell::attachActive(TermSession& session)
         attached = &session;
         addSubview(session.view);
 
-        // A live peek swaps the attached terminal while the switcher is open;
+        // A live peek swaps the attached terminal while an overlay is open;
         // re-raise the overlay so it stays on top and keeps keyboard focus.
         if (palette.isShown())
         {
@@ -123,11 +125,17 @@ void AppShell::attachActive(TermSession& session)
             addSubview(palette);
             palette.focus();
         }
+        else if (switcher.isShown())
+        {
+            removeSubview(switcher);
+            addSubview(switcher);
+            switcher.focus();
+        }
     }
 
     session.view.setBounds(getLocalBounds());
 
-    if (!palette.isShown())
+    if (!palette.isShown() && !switcher.isShown())
         session.view.focusActive();
 }
 
@@ -139,6 +147,7 @@ void AppShell::resized()
         attached->view.setBounds(bounds);
 
     palette.setBounds(bounds);
+    switcher.setBounds(bounds);
     popup.setBounds(bounds);
 }
 
@@ -184,6 +193,33 @@ void AppShell::showPalette()
 void AppShell::hidePalette()
 {
     removeSubview(palette);
+
+    if (attached != nullptr)
+        attached->view.focusActive();
+}
+
+void AppShell::showSwitcher(bool reverse)
+{
+    if (switcher.isShown() || palette.isShown() || popup.isShown())
+        return;
+
+    addSubview(switcher);
+    switcher.setBounds(getLocalBounds());
+
+    // begin() only opens with two or more sessions to flip between; if it
+    // declines, take the overlay back down and leave the pane focused.
+    if (!switcher.begin(reverse))
+    {
+        removeSubview(switcher);
+        return;
+    }
+
+    switcher.focus();
+}
+
+void AppShell::hideSwitcher()
+{
+    removeSubview(switcher);
 
     if (attached != nullptr)
         attached->view.focusActive();
@@ -261,6 +297,16 @@ bool AppShell::interceptKey(const KeyEvent& event)
     {
         prefixArmed = false;
         return handlePrefixed(event);
+    }
+
+    // Ctrl+Tab: the MRU session switcher, macOS Cmd+Tab style. Shift reverses.
+    // Once it's up it owns the keyboard, so this only fires the first press;
+    // the switcher itself handles the rest (further taps, release-to-commit).
+    if (event.modifiers.control && !event.modifiers.command
+        && event.keyCode == KeyCode::Tab)
+    {
+        showSwitcher(event.modifiers.shift);
+        return true;
     }
 
     if (event.modifiers.control && event.charactersIgnoringModifiers == "a"

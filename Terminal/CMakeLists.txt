@@ -18,6 +18,7 @@ add_executable(CowTerm
         Projects.cpp
         Session.cpp
         SessionView.cpp
+        Switcher.cpp
         TermScreen.cpp
         TermParser.cpp
         TerminalView.cpp

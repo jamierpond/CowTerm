@@ -4,6 +4,7 @@
 #include "Palette.h"
 #include "Popup.h"
 #include "Session.h"
+#include "Switcher.h"
 #include "TrayController.h"
 
 namespace term
@@ -37,6 +38,8 @@ private:
     bool popupKey(const eacp::Graphics::KeyEvent& event);
     void showPalette();
     void hidePalette();
+    void showSwitcher(bool reverse);
+    void hideSwitcher();
     void showPopup(const std::string& command);
     void hidePopup();
     void attachActive(TermSession& session);
@@ -46,6 +49,7 @@ private:
     AppConfig config = loadConfig();
     SessionManager manager {config};
     Palette palette {config, manager};
+    Switcher switcher {config, manager};
     Popup popup {config};
     TrayController tray {manager};
     TermSession* attached = nullptr;

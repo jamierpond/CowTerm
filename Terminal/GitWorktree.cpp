@@ -82,6 +82,80 @@ CommandOutput runCaptured(const std::string& command)
 
     return {status, std::move(text)};
 }
+
+// Runs a shell command through the user's login shell — the same trick the
+// lazygit popup uses — so a GUI launch (with its stripped PATH) still finds
+// their git. On Windows there's no login shell to wrap, so run it directly.
+CommandOutput runViaLoginShell(const std::string& command)
+{
+#if defined(_WIN32)
+    return runCaptured(command);
+#else
+    const auto* shell = std::getenv("SHELL");
+    const auto wrapped =
+        shellQuote(shell != nullptr ? shell : "/bin/sh") + " -lc " + shellQuote(command);
+    return runCaptured(wrapped);
+#endif
+}
+
+// The start-point a new worktree branches from: the repo's mainline, resolved
+// as the remote's default branch, else a local main/master, else HEAD. The
+// grouped `||` fallbacks each print exactly one ref (or nothing) and stop at
+// the first that resolves.
+std::string resolveBaseBranch(const std::string& repoPath)
+{
+    const auto q = shellQuote(repoPath);
+    const auto script =
+        "git -C " + q + " symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null"
+        " || { git -C " + q + " show-ref --verify --quiet refs/heads/main && echo main; }"
+        " || { git -C " + q + " show-ref --verify --quiet refs/heads/master && echo master; }"
+        " || echo HEAD";
+
+    const auto ref = trimmed(runViaLoginShell(script).text);
+    return ref.empty() ? std::string {"HEAD"} : ref;
+}
+
+struct WorktreeProbe
+{
+    bool linked = false;   // path is a git worktree that is NOT the main working tree
+    std::string repoPath;  // owning repo's main working tree (set when linked)
+};
+
+// Ask git what `path` is. A checkout's private git dir (--absolute-git-dir)
+// equals the shared common dir (--git-common-dir) for a repo's main working
+// tree and differs for a linked worktree; that difference is what marks a
+// worktree we may trash. The common dir, "<repo>/.git", also names the repo to
+// prune. Both are absolute lines thanks to --path-format=absolute.
+WorktreeProbe probeWorktree(const std::string& path)
+{
+    const auto probe = runViaLoginShell(
+        "git -C " + shellQuote(path)
+        + " rev-parse --path-format=absolute --absolute-git-dir --git-common-dir 2>/dev/null");
+
+    if (probe.status != 0)
+        return {};
+
+    const auto text = probe.text;
+    const auto newline = text.find('\n');
+
+    if (newline == std::string::npos)
+        return {};
+
+    const auto gitDir = trimmed(text.substr(0, newline));
+    const auto commonDir = trimmed(text.substr(newline + 1));
+
+    if (gitDir.empty() || commonDir.empty() || gitDir == commonDir)
+        return {};  // main working tree, or unparseable — not a linked worktree
+
+    // Strip the trailing "/.git" (or bare ".git") to get the repo's top level.
+    const auto suffix = std::string {"/.git"};
+    auto repo = commonDir;
+
+    if (repo.size() >= suffix.size() && repo.compare(repo.size() - suffix.size(), suffix.size(), suffix) == 0)
+        repo = repo.substr(0, repo.size() - suffix.size());
+
+    return {true, repo};
+}
 } // namespace
 
 WorktreeResult createWorktree(const std::string& repoPath, const std::string& branchInput)
@@ -91,24 +165,18 @@ WorktreeResult createWorktree(const std::string& repoPath, const std::string& br
     if (branch.empty())
         return {false, {}, "branch name is empty"};
 
-    const auto path = repoPath + ".worktrees/" + dirLeaf(branch);
+    // A plain sibling of the repo: ~/dir/repo -> ~/dir/repo-<leaf>.
+    const auto path = repoPath + "-" + dirLeaf(branch);
+    const auto base = resolveBaseBranch(repoPath);
 
-    // git -C <repo> worktree add <path> -b <branch>; 2>&1 folds git's
-    // diagnostics into the captured stream so a failure surfaces verbatim.
-    const auto git = "git -C " + shellQuote(repoPath) + " worktree add "
-                     + shellQuote(path) + " -b " + shellQuote(branch) + " 2>&1";
+    // git -C <repo> worktree add <path> -b <branch> <base>; the start-point
+    // cuts the branch from mainline rather than the source row's HEAD. 2>&1
+    // folds git's diagnostics into the captured stream so failures surface
+    // verbatim.
+    const auto git = "git -C " + shellQuote(repoPath) + " worktree add " + shellQuote(path)
+                     + " -b " + shellQuote(branch) + " " + shellQuote(base) + " 2>&1";
 
-#if defined(_WIN32)
-    const auto command = git;
-#else
-    // Run through the user's login shell — the same trick the lazygit popup
-    // uses — so a GUI launch (with its stripped PATH) still finds their git.
-    const auto* shell = std::getenv("SHELL");
-    const auto command =
-        shellQuote(shell != nullptr ? shell : "/bin/sh") + " -lc " + shellQuote(git);
-#endif
-
-    const auto result = runCaptured(command);
+    const auto result = runViaLoginShell(git);
 
     if (result.status != 0)
     {
@@ -126,13 +194,12 @@ WorktreeResult removeWorktree(const std::string& worktreePath)
     if (path.empty())
         return {false, {}, "no worktree path"};
 
-    // Guard: only ever bin paths that live in a "<repo>.worktrees/" tree — the
-    // exact layout createWorktree lays down. Anything else isn't a worktree we
-    // created and mustn't be trashed by this path.
-    const auto marker = std::string {".worktrees/"};
-    const auto at = path.find(marker);
+    // Guard: only ever bin a genuine linked worktree. git — not a path string —
+    // confirms this is one and names the repo to prune, so a plain folder or a
+    // repo's main working tree is refused rather than trashed.
+    const auto probe = probeWorktree(path);
 
-    if (at == std::string::npos)
+    if (!probe.linked)
         return {false, {}, "not a worktree directory"};
 
     // Trash the checkout first; if that fails there's nothing to prune.
@@ -141,23 +208,16 @@ WorktreeResult removeWorktree(const std::string& worktreePath)
     if (!moveToTrash(path, trashError))
         return {false, {}, trashError.empty() ? "could not move to Trash" : trashError};
 
-    // The parent repo is everything up to the ".worktrees/" segment. Pruning
-    // clears git's now-dangling registration for the folder we just binned.
-    // Best-effort: the checkout is already gone, so a prune hiccup shouldn't
-    // read as a failed removal.
-    const auto repoPath = path.substr(0, at);
-    const auto git = "git -C " + shellQuote(repoPath) + " worktree prune 2>&1";
-
-#if defined(_WIN32)
-    const auto command = git;
-#else
-    const auto* shell = std::getenv("SHELL");
-    const auto command =
-        shellQuote(shell != nullptr ? shell : "/bin/sh") + " -lc " + shellQuote(git);
-#endif
-
-    runCaptured(command);
+    // Pruning clears git's now-dangling registration for the folder we just
+    // binned. Best-effort: the checkout is already gone, so a prune hiccup
+    // shouldn't read as a failed removal.
+    runViaLoginShell("git -C " + shellQuote(probe.repoPath) + " worktree prune 2>&1");
 
     return {true, path, {}};
+}
+
+bool isWorktree(const std::string& path)
+{
+    return probeWorktree(trimmed(path)).linked;
 }
 } // namespace term
