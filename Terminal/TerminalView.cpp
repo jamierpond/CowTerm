@@ -501,6 +501,77 @@ void TerminalView::drawCursor()
     }
 }
 
+void TerminalView::drawCopyMode(const std::string& indicator)
+{
+    const auto cellW = atlas->cellWidth();
+    const auto cellH = atlas->cellHeight();
+    const auto baseline = atlas->baseline();
+    const auto scale = atlas->scale();
+
+    const auto visualRow =
+        (int) (copyCursor.row - ((long) screen.scrollbackSize() - scrollOffset));
+
+    if (visualRow >= 0 && visualRow < screen.rows())
+    {
+        const auto x = marginX + (float) copyCursor.col * cellW;
+        const auto y = marginY + (float) visualRow * cellH;
+
+        sprites->fillRect({x, y, cellW, cellH}, toColor(theme.cursor));
+
+        // Like the normal block cursor: repaint the covered glyph in the
+        // background color so it stays legible.
+        const auto& line = lineAtAbsolute(copyCursor.row);
+
+        if (copyCursor.col < (int) line.size())
+        {
+            const auto& cell = line[(std::size_t) copyCursor.col];
+
+            if (cell.ch != U' ' && (cell.attrs & Attr::WideCont) == 0)
+            {
+                const auto slot = atlas->glyph(cell.ch,
+                                               (cell.attrs & Attr::Bold) != 0,
+                                               (cell.attrs & Attr::Italic) != 0,
+                                               (cell.attrs & Attr::Wide) != 0 ? 2
+                                                                              : 1);
+
+                if (slot.valid && !slot.empty && !slot.colored)
+                    glyphs->add({x + slot.offset.x,
+                                 y + baseline + slot.offset.y,
+                                 slot.src.w / scale,
+                                 slot.src.h / scale},
+                                slot.src,
+                                toColor(theme.background),
+                                false);
+            }
+        }
+    }
+
+    // tmux's position badge, top right: lines scrolled up / history size.
+    const auto pad = 4.0f;
+    const auto width = (float) indicator.size() * cellW + pad * 2;
+    const auto x0 = getLocalBounds().w - width - marginX;
+
+    sprites->fillRect({x0, marginY, width, cellH}, toColor(theme.ansi[3]));
+
+    auto x = x0 + pad;
+
+    for (const auto c: indicator)
+    {
+        const auto slot = atlas->glyph((char32_t) c, false, false, 1);
+
+        if (slot.valid && !slot.empty)
+            glyphs->add({x + slot.offset.x,
+                         marginY + baseline + slot.offset.y,
+                         slot.src.w / scale,
+                         slot.src.h / scale},
+                        slot.src,
+                        toColor(theme.background),
+                        false);
+
+        x += cellW;
+    }
+}
+
 void TerminalView::render(GPU::Frame& frame)
 {
     auto pass = frame.beginPass({toColor(theme.background)});
@@ -534,6 +605,17 @@ void TerminalView::render(GPU::Frame& frame)
         }
     }
 
+    auto copyIndicator = std::string {};
+
+    if (copyMode)
+    {
+        copyIndicator = "[" + std::to_string(scrollOffset) + "/"
+                        + std::to_string(screen.scrollbackSize()) + "]";
+
+        for (const auto c: copyIndicator)
+            atlas->glyph((char32_t) c, false, false, 1);
+    }
+
     atlas->commit();
 
     for (auto row = 0; row < rows; ++row)
@@ -548,7 +630,7 @@ void TerminalView::render(GPU::Frame& frame)
     // instanced draw rather than one call per character.
     glyphs->flush(pass, atlas->atlas());
 
-    if (scrollOffset == 0)
+    if (copyMode || scrollOffset == 0)
     {
         // The cursor draws a filled block through the sprite renderer and then
         // the glyph on top of it, so both pipelines have to be rebound: the
@@ -556,7 +638,10 @@ void TerminalView::render(GPU::Frame& frame)
         sprites->begin(pass);
         glyphs->begin();
 
-        drawCursor();
+        if (copyMode)
+            drawCopyMode(copyIndicator);
+        else
+            drawCursor();
 
         glyphs->flush(pass, atlas->atlas());
     }
@@ -717,6 +802,9 @@ void TerminalView::keyDown(const KeyEvent& event)
     if (interceptKey(event))
         return;
 
+    if (copyMode && handleCopyModeKey(event))
+        return;
+
     if (handleCommandShortcut(event))
         return;
 
@@ -803,9 +891,11 @@ std::string TerminalView::selectedText() const
 
     for (auto row = selectionStart.row; row <= selectionEnd.row; ++row)
     {
+        // Grid rows sit past the scrollback and resolve to negative offsets,
+        // down to -(rows - 1) for the bottom line.
         const auto offset = (int) (screen.scrollbackSize() - row);
 
-        if (offset < 0 || offset > screen.scrollbackSize())
+        if (offset <= -screen.rows() || offset > screen.scrollbackSize())
             continue;
 
         const auto& line = screen.lineAt(0, offset);
@@ -842,6 +932,266 @@ void TerminalView::copySelection()
 {
     if (hasSelection())
         Clipboard::copyText(selectedText());
+}
+
+// ---- copy mode -------------------------------------------------------------
+
+const Line& TerminalView::lineAtAbsolute(long row) const
+{
+    return screen.lineAt(0, (int) ((long) screen.scrollbackSize() - row));
+}
+
+int TerminalView::lineLength(long row) const
+{
+    const auto& line = lineAtAbsolute(row);
+    auto length = (int) line.size();
+
+    while (length > 0 && line[(std::size_t) length - 1].ch == U' ')
+        --length;
+
+    return length;
+}
+
+void TerminalView::enterCopyMode()
+{
+    if (copyMode)
+        return;
+
+    copyMode = true;
+    copySelecting = false;
+    copyLineSelect = false;
+
+    // Already scrolled up: keep the view and start at its top-left, like
+    // tmux. Otherwise start at the terminal cursor.
+    if (scrollOffset > 0)
+        setCopyCursor((long) screen.scrollbackSize() - scrollOffset, 0);
+    else
+        setCopyCursor((long) screen.scrollbackSize() + screen.cursor.y,
+                      screen.cursor.x);
+}
+
+void TerminalView::exitCopyMode()
+{
+    copyMode = false;
+    copySelecting = false;
+    copyLineSelect = false;
+    selectionActive = false;
+    scrollOffset = 0;
+    repaint();
+}
+
+void TerminalView::setCopyCursor(long row, int col)
+{
+    const auto lastRow = (long) screen.scrollbackSize() + screen.rows() - 1;
+    copyCursor.row = std::clamp(row, 0L, lastRow);
+    copyCursor.col = std::clamp(col, 0, screen.columns() - 1);
+
+    const auto visualRow =
+        (int) (copyCursor.row - ((long) screen.scrollbackSize() - scrollOffset));
+
+    if (visualRow < 0)
+        scrollOffset = (int) ((long) screen.scrollbackSize() - copyCursor.row);
+    else if (visualRow >= screen.rows())
+        scrollOffset = (int) ((long) screen.scrollbackSize() - copyCursor.row
+                              + screen.rows() - 1);
+
+    scrollOffset = std::clamp(scrollOffset, 0, screen.scrollbackSize());
+    updateCopySelection();
+    repaint();
+}
+
+void TerminalView::updateCopySelection()
+{
+    if (!copySelecting)
+        return;
+
+    auto start = std::min(copyAnchor, copyCursor);
+    auto end = std::max(copyAnchor, copyCursor);
+
+    if (copyLineSelect)
+    {
+        start.col = 0;
+        end.col = screen.columns() - 1;
+    }
+
+    selectionStart = start;
+    selectionEnd = end;
+    selectionActive = true;
+}
+
+void TerminalView::moveCopyCursorByWord(bool forward)
+{
+    const auto lastRow = (long) screen.scrollbackSize() + screen.rows() - 1;
+    auto row = copyCursor.row;
+    auto col = copyCursor.col;
+
+    const auto charAt = [&](long r, int c) -> char32_t
+    {
+        const auto& line = lineAtAbsolute(r);
+        return c < (int) line.size() ? line[(std::size_t) c].ch : U' ';
+    };
+
+    if (forward)
+    {
+        const auto step = [&]
+        {
+            if (col < screen.columns() - 1)
+            {
+                ++col;
+                return true;
+            }
+
+            if (row >= lastRow)
+                return false;
+
+            ++row;
+            col = 0;
+            return true;
+        };
+
+        // Off the current word, then over the gap to the next one.
+        while (charAt(row, col) != U' ' && step()) {}
+        while (charAt(row, col) == U' ' && step()) {}
+    }
+    else
+    {
+        const auto step = [&]
+        {
+            if (col > 0)
+            {
+                --col;
+                return true;
+            }
+
+            if (row <= 0)
+                return false;
+
+            --row;
+            col = screen.columns() - 1;
+            return true;
+        };
+
+        // Over the gap backwards, then to the head of that word.
+        if (step())
+        {
+            while (charAt(row, col) == U' ' && step()) {}
+
+            while (col > 0 && charAt(row, col - 1) != U' ')
+                --col;
+        }
+    }
+
+    setCopyCursor(row, col);
+}
+
+bool TerminalView::handleCopyModeKey(const KeyEvent& event)
+{
+    // Cmd shortcuts (zoom, copy, paste) stay live; the mode consumes
+    // everything else so no keystroke leaks into the shell.
+    if (event.modifiers.command)
+        return false;
+
+    const auto& chars = event.charactersIgnoringModifiers;
+    const auto rows = screen.rows();
+
+    const auto move = [&](long deltaRow, int deltaCol)
+    { setCopyCursor(copyCursor.row + deltaRow, copyCursor.col + deltaCol); };
+
+    const auto beginSelection = [&](bool lines)
+    {
+        copySelecting = true;
+        copyLineSelect = lines;
+        copyAnchor = copyCursor;
+        updateCopySelection();
+        repaint();
+    };
+
+    if (event.keyCode == KeyCode::Escape)
+    {
+        // First Escape drops the selection, the second leaves the mode.
+        if (copySelecting)
+        {
+            copySelecting = false;
+            copyLineSelect = false;
+            selectionActive = false;
+            repaint();
+        }
+        else
+        {
+            exitCopyMode();
+        }
+
+        return true;
+    }
+
+    if (chars == "q" || (event.modifiers.control && chars == "c"))
+    {
+        exitCopyMode();
+        return true;
+    }
+
+    if (chars == "y" || event.keyCode == KeyCode::Return
+        || event.keyCode == MacKey::KeypadEnter)
+    {
+        if (selectionActive)
+            Clipboard::copyText(selectedText());
+
+        exitCopyMode();
+        return true;
+    }
+
+    if (event.modifiers.control)
+    {
+        if (chars == "u")
+            move(-(long) (rows / 2), 0);
+        else if (chars == "d")
+            move(rows / 2, 0);
+        else if (chars == "b")
+            move(-(long) (rows - 1), 0);
+        else if (chars == "f")
+            move(rows - 1, 0);
+
+        return true;
+    }
+
+    if (event.keyCode == MacKey::PageUp)
+    {
+        move(-(long) (rows - 1), 0);
+        return true;
+    }
+
+    if (event.keyCode == MacKey::PageDown)
+    {
+        move(rows - 1, 0);
+        return true;
+    }
+
+    if (chars == "h" || event.keyCode == KeyCode::LeftArrow)
+        move(0, -1);
+    else if (chars == "j" || event.keyCode == KeyCode::DownArrow)
+        move(1, 0);
+    else if (chars == "k" || event.keyCode == KeyCode::UpArrow)
+        move(-1, 0);
+    else if (chars == "l" || event.keyCode == KeyCode::RightArrow)
+        move(0, 1);
+    else if (chars == "0" || event.keyCode == MacKey::Home)
+        setCopyCursor(copyCursor.row, 0);
+    else if (chars == "$" || event.keyCode == MacKey::End)
+        setCopyCursor(copyCursor.row, std::max(0, lineLength(copyCursor.row) - 1));
+    else if (chars == "g")
+        setCopyCursor(0, 0);
+    else if (chars == "G")
+        setCopyCursor((long) screen.scrollbackSize() + rows - 1, 0);
+    else if (chars == "w")
+        moveCopyCursorByWord(true);
+    else if (chars == "b")
+        moveCopyCursorByWord(false);
+    else if (chars == "v" || chars == " ")
+        beginSelection(false);
+    else if (chars == "V")
+        beginSelection(true);
+
+    return true;
 }
 
 bool TerminalView::mouseReportingActive() const

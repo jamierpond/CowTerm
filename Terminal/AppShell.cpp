@@ -461,6 +461,25 @@ bool AppShell::handlePrefixed(const KeyEvent& event)
         return true;
     }
 
+    // tmux copy mode on the active pane; ] pastes, completing the pair.
+    if (chars == "[")
+    {
+        if (paneTree != nullptr)
+            if (auto* pane = paneTree->activePane())
+                pane->enterCopyMode();
+
+        return true;
+    }
+
+    if (chars == "]")
+    {
+        if (paneTree != nullptr)
+            if (auto* pane = paneTree->activePane())
+                pane->paste();
+
+        return true;
+    }
+
     if (chars == "o")
     {
         if (paneTree != nullptr)

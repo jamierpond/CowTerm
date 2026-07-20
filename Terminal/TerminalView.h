@@ -53,6 +53,14 @@ public:
     // the size in the config and pushes it into every live pane through here.
     void setFontSize(float newSize);
 
+    // tmux copy mode (Ctrl+A [): keyboard scrollback navigation with vi
+    // keys. h/j/k/l and friends move, v/V select, y yanks to the clipboard
+    // and leaves, q leaves. While active, keys never reach the shell.
+    void enterCopyMode();
+    bool inCopyMode() const { return copyMode; }
+
+    void paste();
+
     std::function<void(const std::string&)> onTitleChanged =
         [](const std::string&) {};
     std::function<void(const std::string&)> onCwdChanged = [](const std::string&) {};
@@ -115,10 +123,21 @@ private:
     void sendAndScrollToBottom(std::string_view bytes);
     bool handleCommandShortcut(const eacp::Graphics::KeyEvent& event);
     bool handleSpecialKey(const eacp::Graphics::KeyEvent& event);
-    void paste();
     void copySelection();
     void applyGridSize();
     void scrollBy(int lines);
+
+    bool handleCopyModeKey(const eacp::Graphics::KeyEvent& event);
+    void exitCopyMode();
+
+    // Clamps to the buffer, scrolls the viewport to keep the cursor visible
+    // and extends the live selection.
+    void setCopyCursor(long row, int col);
+    void moveCopyCursorByWord(bool forward);
+    void updateCopySelection();
+    void drawCopyMode(const std::string& indicator);
+    const Line& lineAtAbsolute(long row) const;
+    int lineLength(long row) const;
 
     bool mouseReportingActive() const;
     void sendMouseReport(const eacp::Graphics::MouseEvent& event,
@@ -171,6 +190,12 @@ private:
     CellRef selectionStart;
     CellRef selectionEnd;
     bool selectionActive = false;
+
+    bool copyMode = false;
+    bool copySelecting = false;
+    bool copyLineSelect = false;
+    CellRef copyAnchor;
+    CellRef copyCursor;
 
     float marginX = 6.0f;
     float marginY = 4.0f;
