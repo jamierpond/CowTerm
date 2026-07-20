@@ -36,15 +36,15 @@ include(CPM)
 # helpers (res_embed_add, eacp_set_gui_subsystem, eacp_set_app_icon, ...) that
 # the app's CMakeLists call. Examples/tests are top-level-only in eacp, so they
 # stay off here. Point CPM at a local checkout with -DCPM_eacp_SOURCE=/path.
-# Pinned to eacp upstream: eacp-text (the glyph atlas the app's GlyphAtlas.h
-# now sits on) lives on main there, and hasn't reached jamierpond/eacp — the
-# fork this used to track. Upstream main also carries the IPC::Messenger
-# layer the session daemon and DaemonClient ride on, with the Windows
-# Channel/Lock backends, which is what jp/fancy-terminal was pinned for.
+# Temporarily pinned to the fork's fix-stale-mouse-targets commit: upstream
+# main plus the View hover/drag use-after-free fix (eyalamirmusic/eacp PR #38,
+# the mouseExited crash). Once that merges, repoint at eyalamirmusic/eacp main.
+# Before this it tracked upstream main directly for eacp-text (GlyphAtlas.h)
+# and the IPC::Messenger layer the session daemon and DaemonClient ride on.
 CPMAddPackage(
         NAME eacp
-        GITHUB_REPOSITORY eyalamirmusic/eacp
-        GIT_TAG main
+        GITHUB_REPOSITORY jamierpond/eacp
+        GIT_TAG e4573f9c857ba6aad2ea4f5c88fe353de05b3278
         OPTIONS
             "EACP_ENABLE_EXAMPLES OFF"
             "EACP_ENABLE_TESTS OFF")
