@@ -1,5 +1,7 @@
 #include "Switcher.h"
 
+#include <eacp/Core/Threads/EventLoop.h>
+#include <eacp/Graphics/Graphics/Keyboard.h>
 #include <eacp/Graphics/Primitives/TextMetrics.h>
 
 #include <algorithm>
@@ -10,7 +12,6 @@ using namespace eacp;
 using Graphics::Color;
 using Graphics::Context;
 using Graphics::KeyEvent;
-using Graphics::ModifierKeys;
 using Graphics::MouseEvent;
 using Graphics::Point;
 using Graphics::Rect;
@@ -89,6 +90,17 @@ bool Switcher::begin(bool reverse)
     selected = reverse ? n - 1 : 1;
     shown = true;
 
+    // Watch the trigger: once Ctrl comes back up, commit the highlight, exactly
+    // like releasing Cmd in the macOS app switcher. Shift going up or down
+    // mid-walk must not commit, so we key only on Control.
+    modifierPoll = std::make_unique<Threads::Timer>(
+        [this]
+        {
+            if (shown && !Graphics::Keyboard::isControlPressed())
+                commit();
+        },
+        60);
+
     sessions.beginPeek();
     peekSelected();
     return true;
@@ -122,6 +134,7 @@ void Switcher::commit()
     peekSelected();
     sessions.endPeek(true);
     shown = false;
+    stopPolling();
     onClosed();
 }
 
@@ -132,7 +145,22 @@ void Switcher::cancel()
 
     sessions.endPeek(false);
     shown = false;
+    stopPolling();
     onClosed();
+}
+
+void Switcher::stopPolling()
+{
+    // commit()/cancel() can run from inside the poll timer's own callback, so
+    // tearing the Timer down here would free the closure mid-call. Defer the
+    // reset to the next loop turn — and skip it if the switcher has reopened in
+    // the meantime, which owns a fresh timer we must not drop.
+    Threads::callAsync(
+        [this]
+        {
+            if (!shown)
+                modifierPoll.reset();
+        });
 }
 
 void Switcher::keyDown(const KeyEvent& event)
@@ -170,15 +198,6 @@ void Switcher::keyDown(const KeyEvent& event)
     }
 
     // Everything else is swallowed while the switcher owns the keyboard.
-}
-
-void Switcher::modifiersChanged(const ModifierKeys& modifiers)
-{
-    // The trigger let go — commit, exactly like releasing Cmd in the macOS app
-    // switcher. Shift going up or down mid-walk must not commit, so key only on
-    // Control.
-    if (shown && !modifiers.control)
-        commit();
 }
 
 void Switcher::mouseDown(const MouseEvent& event)

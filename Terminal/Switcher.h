@@ -3,6 +3,9 @@
 #include "Config.h"
 #include "Session.h"
 
+#include <eacp/Core/Threads/Timer.h>
+
+#include <memory>
 #include <vector>
 
 namespace term
@@ -36,7 +39,6 @@ public:
 
     void paint(eacp::Graphics::Context& context) override;
     void keyDown(const eacp::Graphics::KeyEvent& event) override;
-    void modifiersChanged(const eacp::Graphics::ModifierKeys& modifiers) override;
     void mouseDown(const eacp::Graphics::MouseEvent& event) override;
     void mouseMoved(const eacp::Graphics::MouseEvent& event) override;
 
@@ -44,6 +46,7 @@ private:
     void commit();
     void cancel();
     void peekSelected();
+    void stopPolling();
 
     float cardWidth() const;
     eacp::Graphics::Rect panelBounds() const;
@@ -61,5 +64,10 @@ private:
     eacp::Graphics::Font titleFont;
     eacp::Graphics::Font labelFont;
     eacp::Graphics::Font detailFont;
+
+    // Polls the modifier keys while open so releasing Ctrl commits, the way the
+    // macOS app switcher commits when you let go of Cmd. eacp no longer pushes
+    // modifier-change events, so we watch the state instead.
+    std::unique_ptr<eacp::Threads::Timer> modifierPoll;
 };
 } // namespace term
