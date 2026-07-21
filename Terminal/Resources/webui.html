@@ -1,10 +1,12 @@
 <!doctype html>
-<!-- CowTerm web UI. Served embedded from the app (GET /); one tab is the
-     pane of glass for the whole fleet: the serving CowTerm plus every peer
-     in its "remotes" config, each over its own gateway websocket (discovery
-     via that host's /api/v1/server, which is the one CORS-open endpoint).
-     Terminal emulation is xterm.js — gateways ship raw PTY bytes, this page
-     just plays them. Protocol: DESIGN-WEBUI.md in the repo. -->
+<!-- CowTerm web UI: a real mux client, not a pane viewer. One tab shows a
+     whole session — the full split tree, every pane live at once, laid out
+     with the owning GUI's geometry — across the serving CowTerm and every
+     peer in its "remotes" config, each fleet member on its own gateway
+     websocket. Cmd/Ctrl+K opens the session palette (fuzzy search across
+     the fleet); switching sessions is per-client and never touches the
+     host GUI — "focus on host" does that explicitly. Terminal emulation is
+     xterm.js; gateways ship raw PTY bytes. Protocol: DESIGN-WEBUI.md. -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -23,7 +25,7 @@
     color: var(--fg); font: 13px/1.5 "JetBrains Mono", ui-monospace, monospace;
   }
   #sidebar {
-    width: 280px; min-width: 280px; background: var(--panel);
+    width: 250px; min-width: 250px; background: var(--panel);
     border-right: 1px solid var(--border); overflow-y: auto; padding: 8px;
   }
   #sidebar h1 {
@@ -31,51 +33,85 @@
     font-weight: normal; letter-spacing: 1px;
   }
   #sidebar h1 b { color: var(--fg); }
+  #sidebar h1 .hint { float: right; font-size: 10px; }
   .gateway { margin-bottom: 10px; }
   .gateway-name {
     padding: 3px 8px; font-size: 11px; color: var(--dim);
-    text-transform: lowercase; letter-spacing: 0.5px;
     display: flex; justify-content: space-between; align-items: center;
   }
   .gateway-name .dot { font-size: 9px; }
   .gateway-name .dot.on { color: var(--ok); }
   .gateway-name .dot.off { color: var(--bad); }
-  .session { margin-bottom: 2px; }
   .session-name {
     padding: 3px 8px; color: var(--dim); cursor: pointer; border-radius: 4px;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
   .session-name:hover { background: var(--border); }
-  .session.active .session-name { color: var(--fg); }
+  .session-name.viewed { background: var(--border); color: var(--fg);
+    border-left: 2px solid var(--accent); }
   .session-name .claude { color: var(--claude); }
-  .pane {
-    padding: 3px 8px 3px 20px; cursor: pointer; border-radius: 4px;
-    color: var(--fg); white-space: nowrap; overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  .pane:hover { background: var(--border); }
-  .pane.attached { background: var(--border); border-left: 2px solid var(--accent); }
-  .pane .cwd { color: var(--dim); font-size: 11px; }
+  .session-name .count { color: var(--dim); font-size: 11px; }
   #main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
   #status {
     padding: 5px 12px; font-size: 11px; color: var(--dim);
-    border-bottom: 1px solid var(--border); display: flex; gap: 12px;
+    border-bottom: 1px solid var(--border); display: flex; gap: 14px;
+    align-items: center;
   }
-  #term-wrap { flex: 1; padding: 8px; overflow: auto; }
+  #status .name { color: var(--fg); }
+  #status button {
+    background: none; border: 1px solid var(--border); color: var(--dim);
+    font: inherit; border-radius: 4px; padding: 1px 8px; cursor: pointer;
+  }
+  #status button:hover { color: var(--fg); border-color: var(--dim); }
+  #view { flex: 1; min-height: 0; padding: 4px; }
   #placeholder { color: var(--dim); padding: 40px; }
+  .split { display: flex; width: 100%; height: 100%; gap: 2px; }
+  .split.h { flex-direction: row; }
+  .split.v { flex-direction: column; }
+  .leaf {
+    overflow: hidden; position: relative; border: 1px solid var(--border);
+    border-radius: 3px; background: var(--bg); min-width: 0; min-height: 0;
+  }
+  .leaf.focused { border-color: var(--accent); }
+  .leaf .xt { position: absolute; inset: 2px; }
+  #palette {
+    display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.45);
+    z-index: 10;
+  }
+  #palette.open { display: block; }
+  #palette-box {
+    width: min(560px, 90vw); margin: 12vh auto 0; background: var(--panel);
+    border: 1px solid var(--border); border-radius: 10px; overflow: hidden;
+  }
+  #palette-input {
+    width: 100%; background: none; border: none; outline: none;
+    color: var(--fg); font: 14px "JetBrains Mono", monospace; padding: 12px 14px;
+    border-bottom: 1px solid var(--border);
+  }
+  .palette-row { padding: 7px 14px; cursor: pointer; display: flex; gap: 10px; }
+  .palette-row.sel { background: var(--border); }
+  .palette-row .host { color: var(--dim); font-size: 11px; margin-left: auto; }
 </style>
 </head>
 <body>
   <nav id="sidebar">
-    <h1><b>cow</b>term</h1>
+    <h1><b>cow</b>term <span class="hint">⌘K search</span></h1>
     <div id="gateways"></div>
   </nav>
   <main id="main">
     <div id="status">
-      <span id="attached-label">pick a pane on the left</span>
+      <span id="viewed-label">no session — ⌘K to pick one</span>
+      <button id="host-focus" style="display:none">focus on host</button>
     </div>
-    <div id="term-wrap"><div id="placeholder"></div></div>
+    <div id="view"><div id="placeholder"></div></div>
   </main>
+  <div id="palette">
+    <div id="palette-box">
+      <input id="palette-input" placeholder="search sessions across the fleet…"
+             autocomplete="off" spellcheck="false">
+      <div id="palette-list"></div>
+    </div>
+  </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.min.js"></script>
 <script>
@@ -100,18 +136,18 @@
     brightCyan: '#7dcfff', brightWhite: '#c0caf5',
   };
 
-  // One Gateway per CowTerm instance: the serving one ("local", relative
-  // URLs) plus each peer in its remotes list. Each keeps its own websocket
-  // and rediscovers/redials on loss.
+  // The fleet: one Gateway per CowTerm — the serving instance ("local",
+  // relative URLs) plus each peer its config names.
   const gateways = [];
-  const attached = { gateway: null, pane: null };
-  let term = null;
+  // What THIS client is looking at; other clients (and the host GUI) are
+  // free to look elsewhere.
+  const view = { g: null, key: null, layoutSig: '' };
+  // Live terminals for the viewed session, keyed by pane id.
+  const terms = new Map();
+  let focusedPane = null;
 
-  function makeGateway(base, label) {
-    return {
-      base, label, ws: null, online: false, sessions: [], retryTimer: null,
-    };
-  }
+  const makeGateway = (base, label) =>
+    ({ base, label, ws: null, online: false, sessions: [], retryTimer: null });
 
   async function connectGateway(g) {
     let info;
@@ -121,7 +157,6 @@
       return scheduleRetry(g);
     }
 
-    // The serving instance's peer list seeds the fleet, once.
     if (g.label === 'local' && !gateways.seeded) {
       gateways.seeded = true;
       for (const address of info.remotes || []) {
@@ -137,10 +172,12 @@
 
     ws.onopen = () => {
       g.online = true;
-      render();
+      renderSidebar();
 
-      if (attached.gateway === g && attached.pane)
-        send(g, { op: 'attach', pane: attached.pane });
+      // Resume the viewed session's streams after an outage.
+      if (view.g === g)
+        for (const paneId of terms.keys())
+          send(g, { op: 'attach', pane: paneId });
     };
 
     ws.onmessage = event => {
@@ -153,7 +190,7 @@
     ws.onclose = () => {
       g.online = false;
       g.ws = null;
-      render();
+      renderSidebar();
       scheduleRetry(g);
     };
   }
@@ -171,58 +208,213 @@
       g.ws.send(JSON.stringify(message));
   }
 
+  function findSession(g, key) {
+    return g.sessions.find(s => s.key === key) || null;
+  }
+
   function handleEvent(g, message) {
     if (message.ev === 'sessions') {
       g.sessions = message.sessions || [];
-      render();
+      renderSidebar();
+
+      if (view.g === g) {
+        const session = findSession(g, view.key);
+
+        if (!session) {
+          clearView('session closed on ' + g.label);
+        } else if (layoutSignature(session) !== view.layoutSig) {
+          buildView(); // splits changed shape or size — rebuild the tree
+        } else {
+          $('viewed-label').innerHTML = viewedLabel(session);
+        }
+      }
+
+      // First roster from the local gateway: land on its active session.
+      if (!view.g && g.label === 'local' && g.sessions.length)
+        viewSession(g, (g.sessions.find(s => s.active) || g.sessions[0]).key);
     } else if (message.ev === 'attached') {
-      if (attached.gateway === g && attached.pane === message.pane && term)
-        term.resize(message.cols, message.rows);
+      const entry = view.g === g ? terms.get(message.pane) : null;
+      if (entry)
+        entry.term.resize(message.cols, message.rows);
     } else if (message.ev === 'exit') {
-      if (attached.gateway === g && attached.pane === message.pane && term)
-        term.write('\r\n\x1b[90m[shell exited]\x1b[0m\r\n');
+      const entry = view.g === g ? terms.get(message.pane) : null;
+      if (entry)
+        entry.term.write('\r\n\x1b[90m[shell exited]\x1b[0m\r\n');
     } else if (message.ev === 'error') {
       console.warn('cowterm[' + g.label + ']:', message.message);
     }
   }
 
   function handleBinary(g, buffer) {
+    if (view.g !== g)
+      return;
+
     const bytes = new Uint8Array(buffer);
     const idLength = bytes[0];
     const id = new TextDecoder().decode(bytes.subarray(1, 1 + idLength));
+    const entry = terms.get(id);
 
-    if (attached.gateway === g && attached.pane === id && term)
-      term.write(bytes.subarray(1 + idLength));
+    if (entry)
+      entry.term.write(bytes.subarray(1 + idLength));
   }
 
-  function attach(g, pane) {
-    if (attached.gateway && attached.pane
-        && (attached.gateway !== g || attached.pane !== pane.id))
-      send(attached.gateway, { op: 'detach', pane: attached.pane });
+  // The whole point: switching sessions is a CLIENT act. Each tab muxes
+  // its own choice of session; the host GUI never moves underneath you.
+  function viewSession(g, key) {
+    if (view.g === g && view.key === key)
+      return;
 
-    attached.gateway = g;
-    attached.pane = pane.id;
-    $('attached-label').textContent = g.label + ' · ' + (pane.title || pane.id)
-      + ' — ' + pane.cols + '×' + pane.rows;
-
-    if (term) { term.dispose(); term = null; }
-    $('term-wrap').textContent = '';
-
-    // Each GUI owns its panes' sizes; mirror the owner exactly.
-    term = new Terminal({
-      cols: pane.cols, rows: pane.rows, theme,
-      fontFamily: '"JetBrains Mono", ui-monospace, monospace',
-      fontSize: 13, cursorBlink: true, allowProposedApi: true,
-      scrollback: 5000,
-    });
-    term.open($('term-wrap'));
-    term.onData(data => send(attached.gateway,
-                             { op: 'input', pane: attached.pane, data }));
-    term.focus();
-
-    send(g, { op: 'attach', pane: pane.id });
-    render();
+    detachAll();
+    view.g = g;
+    view.key = key;
+    buildView();
   }
+
+  function detachAll() {
+    if (view.g)
+      for (const paneId of terms.keys())
+        send(view.g, { op: 'detach', pane: paneId });
+
+    for (const entry of terms.values())
+      entry.term.dispose();
+
+    terms.clear();
+    focusedPane = null;
+  }
+
+  function clearView(message) {
+    detachAll();
+    view.g = null;
+    view.key = null;
+    view.layoutSig = '';
+    $('view').innerHTML = '<div id="placeholder">' + escapeHtml(message) + '</div>';
+    $('viewed-label').textContent = 'no session — ⌘K to pick one';
+    $('host-focus').style.display = 'none';
+    renderSidebar();
+  }
+
+  const layoutSignature = session => JSON.stringify([
+    session.layout, session.panes.map(p => [p.id, p.cols, p.rows]),
+  ]);
+
+  function viewedLabel(session) {
+    return '<span class="name">' + escapeHtml(session.name) + '</span> · '
+      + escapeHtml(view.g.label) + ' · ' + session.panes.length
+      + (session.panes.length === 1 ? ' pane' : ' panes');
+  }
+
+  // Rebuild the split tree for the viewed session. Terminals for panes
+  // that survived the reshape are reused (no re-snapshot flicker); only
+  // new panes attach fresh.
+  function buildView() {
+    const session = findSession(view.g, view.key);
+
+    if (!session || !session.layout.length) {
+      clearView('nothing to show');
+      return;
+    }
+
+    view.layoutSig = layoutSignature(session);
+    const surviving = new Set(session.panes.map(p => p.id));
+
+    for (const [paneId, entry] of [...terms]) {
+      if (!surviving.has(paneId)) {
+        send(view.g, { op: 'detach', pane: paneId });
+        entry.term.dispose();
+        terms.delete(paneId);
+      } else {
+        entry.el.remove(); // keep the terminal, re-home its element below
+      }
+    }
+
+    const root = $('view');
+    root.innerHTML = '';
+    root.appendChild(buildNode(session, 0));
+
+    if (!focusedPane || !surviving.has(focusedPane))
+      focusedPane = (session.panes.find(p => p.active) || session.panes[0]).id;
+
+    const focused = terms.get(focusedPane);
+    if (focused)
+      focused.term.focus();
+
+    $('viewed-label').innerHTML = viewedLabel(session);
+    $('host-focus').style.display = '';
+    renderSidebar();
+  }
+
+  function buildNode(session, index) {
+    const node = session.layout[index];
+
+    if (node.split) {
+      const box = document.createElement('div');
+      box.className = 'split ' + (node.horizontal ? 'h' : 'v');
+
+      const first = buildNode(session, node.first);
+      const second = buildNode(session, node.second);
+      first.style.flex = String(node.ratio);
+      second.style.flex = String(1 - node.ratio);
+      box.appendChild(first);
+      box.appendChild(second);
+      return box;
+    }
+
+    const pane = session.panes.find(p => p.id === node.pane)
+                 || { id: node.pane, cols: 80, rows: 24 };
+    const leaf = document.createElement('div');
+    leaf.className = 'leaf' + (pane.id === focusedPane ? ' focused' : '');
+    leaf.dataset.pane = pane.id;
+
+    let entry = terms.get(pane.id);
+
+    if (!entry) {
+      // Mirror the owner's grid exactly; the box crops or letterboxes.
+      const term = new Terminal({
+        cols: pane.cols, rows: pane.rows, theme,
+        fontFamily: '"JetBrains Mono", ui-monospace, monospace',
+        fontSize: 13, cursorBlink: true, allowProposedApi: true,
+        scrollback: 5000,
+      });
+      const el = document.createElement('div');
+      el.className = 'xt';
+      term.onData(data =>
+        send(view.g, { op: 'input', pane: pane.id, data }));
+      entry = { term, el, opened: false };
+      terms.set(pane.id, entry);
+      send(view.g, { op: 'attach', pane: pane.id });
+    } else if (entry.term.cols !== pane.cols || entry.term.rows !== pane.rows) {
+      // Owner resized: follow along; full-screen apps repaint themselves
+      // over the stream after the owner's WINCH.
+      entry.term.resize(pane.cols, pane.rows);
+    }
+
+    leaf.appendChild(entry.el);
+
+    if (!entry.opened) {
+      entry.term.open(entry.el);
+      entry.opened = true;
+    }
+
+    leaf.addEventListener('mousedown', () => setFocus(pane.id));
+    entry.el.addEventListener('focusin', () => setFocus(pane.id));
+    return leaf;
+  }
+
+  function setFocus(paneId) {
+    if (focusedPane === paneId)
+      return;
+
+    focusedPane = paneId;
+
+    for (const leaf of document.querySelectorAll('.leaf'))
+      leaf.classList.toggle('focused', leaf.dataset.pane === paneId);
+
+    const entry = terms.get(paneId);
+    if (entry)
+      entry.term.focus();
+  }
+
+  // ---- sidebar ----
 
   function shortPath(p) {
     if (!p) return '';
@@ -236,7 +428,7 @@
     return div.innerHTML;
   }
 
-  function render() {
+  function renderSidebar() {
     const root = $('gateways');
     root.textContent = '';
 
@@ -250,42 +442,131 @@
         + ' <span class="dot ' + (g.online ? 'on' : 'off') + '">●</span>';
       box.appendChild(name);
 
-      if (!g.online) {
-        const off = document.createElement('div');
-        off.className = 'pane';
-        off.innerHTML = '<span class="cwd">offline — retrying…</span>';
-        box.appendChild(off);
-      }
-
       for (const session of g.sessions) {
-        const sbox = document.createElement('div');
-        sbox.className = 'session' + (session.active ? ' active' : '');
-
-        const sname = document.createElement('div');
-        sname.className = 'session-name';
-        sname.innerHTML = (session.claude ? '<span class="claude">✳ </span>' : '')
-          + escapeHtml(session.name);
-        sname.title = session.projectDir || session.name;
-        sname.onclick = () => send(g, { op: 'activate', key: session.key });
-        sbox.appendChild(sname);
-
-        for (const pane of session.panes || []) {
-          const row = document.createElement('div');
-          const isAttached = attached.gateway === g && attached.pane === pane.id;
-          row.className = 'pane' + (isAttached ? ' attached' : '');
-          const title = pane.title || shortPath(pane.cwd) || pane.id.slice(0, 8);
-          row.innerHTML = escapeHtml(title)
-            + ' <span class="cwd">' + escapeHtml(shortPath(pane.cwd)) + '</span>';
-          row.onclick = () => attach(g, pane);
-          sbox.appendChild(row);
-        }
-
-        box.appendChild(sbox);
+        const row = document.createElement('div');
+        const viewed = view.g === g && view.key === session.key;
+        row.className = 'session-name' + (viewed ? ' viewed' : '');
+        row.innerHTML = (session.claude ? '<span class="claude">✳ </span>' : '')
+          + escapeHtml(session.name)
+          + ' <span class="count">' + session.panes.length + '</span>';
+        row.title = session.projectDir || session.name;
+        row.onclick = () => viewSession(g, session.key);
+        box.appendChild(row);
       }
 
       root.appendChild(box);
     }
   }
+
+  // ---- session palette (⌘K / Ctrl+K): fuzzy search across the fleet ----
+
+  let paletteSel = 0;
+
+  const fuzzyScore = (needle, hay) => {
+    needle = needle.toLowerCase();
+    hay = hay.toLowerCase();
+    let score = 0, h = 0;
+    for (const c of needle) {
+      const at = hay.indexOf(c, h);
+      if (at < 0) return -1;
+      score += (at === h ? 2 : 1); // consecutive runs score higher
+      h = at + 1;
+    }
+    return score;
+  };
+
+  function paletteMatches() {
+    const query = $('palette-input').value.trim();
+    const out = [];
+
+    for (const g of gateways)
+      for (const session of g.sessions) {
+        const hay = session.name + ' ' + (session.projectDir || '') + ' ' + g.label;
+        const score = query ? fuzzyScore(query, hay) : 0;
+        if (score >= 0)
+          out.push({ g, session, score });
+      }
+
+    out.sort((a, b) => b.score - a.score);
+    return out.slice(0, 12);
+  }
+
+  function renderPalette() {
+    const list = $('palette-list');
+    const matches = paletteMatches();
+    paletteSel = Math.min(paletteSel, Math.max(matches.length - 1, 0));
+    list.textContent = '';
+
+    matches.forEach((m, i) => {
+      const row = document.createElement('div');
+      row.className = 'palette-row' + (i === paletteSel ? ' sel' : '');
+      row.innerHTML = (m.session.claude ? '<span class="claude">✳</span>' : '')
+        + escapeHtml(m.session.name)
+        + '<span class="host">' + escapeHtml(m.g.label) + '</span>';
+      row.onmousedown = e => {
+        e.preventDefault();
+        closePalette();
+        viewSession(m.g, m.session.key);
+      };
+      list.appendChild(row);
+    });
+
+    list.dataset.count = matches.length;
+    return matches;
+  }
+
+  function openPalette() {
+    $('palette').classList.add('open');
+    $('palette-input').value = '';
+    paletteSel = 0;
+    renderPalette();
+    $('palette-input').focus();
+  }
+
+  function closePalette() {
+    $('palette').classList.remove('open');
+    const entry = terms.get(focusedPane);
+    if (entry)
+      entry.term.focus();
+  }
+
+  $('palette-input').addEventListener('input', () => {
+    paletteSel = 0;
+    renderPalette();
+  });
+
+  $('palette-input').addEventListener('keydown', e => {
+    if (e.key === 'Escape') { closePalette(); }
+    else if (e.key === 'ArrowDown') { paletteSel++; renderPalette(); e.preventDefault(); }
+    else if (e.key === 'ArrowUp') { paletteSel = Math.max(0, paletteSel - 1); renderPalette(); e.preventDefault(); }
+    else if (e.key === 'Enter') {
+      const matches = paletteMatches();
+      const m = matches[paletteSel];
+      if (m) { closePalette(); viewSession(m.g, m.session.key); }
+    }
+  });
+
+  $('palette').addEventListener('mousedown', e => {
+    if (e.target === $('palette'))
+      closePalette();
+  });
+
+  // Capture-phase so the shortcut wins even while an xterm owns the keys.
+  window.addEventListener('keydown', e => {
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+      e.preventDefault();
+      e.stopPropagation();
+      if ($('palette').classList.contains('open')) closePalette();
+      else openPalette();
+    }
+  }, true);
+
+  // "focus on host": the one deliberate way a client reaches into the
+  // host GUI — makes the viewed session active over there too.
+  $('host-focus').onclick = () => {
+    if (view.g && view.key)
+      send(view.g, { op: 'activate', key: view.key });
+  };
 
   const local = makeGateway('', 'local');
   gateways.push(local);

@@ -298,6 +298,7 @@ void TerminalView::applyGridSize()
     screen.resize(cols, rows);
     shell->resize({cols, rows});
     scrollOffset = std::min(scrollOffset, screen.scrollbackSize());
+    onGridResized();
 }
 
 void TerminalView::setFontSize(float newSize)

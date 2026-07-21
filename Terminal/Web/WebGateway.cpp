@@ -153,6 +153,8 @@ void WebGateway::wirePane(TerminalView& pane)
 {
     pane.onOutput = [this, &pane](std::string_view data)
     { paneOutput(pane.shellId(), data); };
+
+    pane.onGridResized = [this] { sessionsChanged(); };
 }
 
 void WebGateway::sessionsChanged()
@@ -525,6 +527,20 @@ std::string WebGateway::sessionsJson() const
             paneInfo.rows = pane->screenModel().rows();
             paneInfo.active = session->view.activePane() == pane;
             info.panes.push_back(std::move(paneInfo));
+        }
+
+        // The same tree snapshot that session-restore persists doubles as
+        // the client's layout: shellId is the pane id everywhere.
+        for (const auto& node: session->view.snapshot())
+        {
+            auto layoutNode = LayoutNode {};
+            layoutNode.split = node.split;
+            layoutNode.horizontal = node.horizontal;
+            layoutNode.ratio = node.ratio;
+            layoutNode.first = node.first;
+            layoutNode.second = node.second;
+            layoutNode.pane = node.shellId;
+            info.layout.push_back(layoutNode);
         }
 
         event.sessions.push_back(std::move(info));

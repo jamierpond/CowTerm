@@ -76,6 +76,10 @@ public:
     // thread — the web gateway's streaming tap.
     std::function<void(std::string_view)> onOutput = [](std::string_view) {};
 
+    // The grid changed dimensions (window resize, split, zoom) — the web
+    // gateway rebroadcasts the roster so clients mirror the new geometry.
+    eacp::Callback onGridResized = [] {};
+
     std::function<void(const std::string&)> onTitleChanged =
         [](const std::string&) {};
     std::function<void(const std::string&)> onCwdChanged = [](const std::string&) {};

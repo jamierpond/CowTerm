@@ -28,6 +28,22 @@ struct PaneInfo
     MIRO_REFLECT(id, title, cwd, cols, rows, active)
 };
 
+// One node of a session's pane tree, mirroring the GUI's split geometry so
+// a client can lay panes out exactly as the owning CowTerm does. `first`/
+// `second` index into the same vector, node 0 is the root; leaves carry the
+// pane id. horizontal means side by side; ratio is `first`'s share.
+struct LayoutNode
+{
+    bool split = false;
+    bool horizontal = false;
+    float ratio = 0.5f;
+    int first = -1;
+    int second = -1;
+    std::string pane;
+
+    MIRO_REFLECT(split, horizontal, ratio, first, second, pane)
+};
+
 struct SessionInfo
 {
     std::string key;
@@ -36,8 +52,9 @@ struct SessionInfo
     bool active = false;
     bool claude = false;
     std::vector<PaneInfo> panes;
+    std::vector<LayoutNode> layout;
 
-    MIRO_REFLECT(key, name, projectDir, active, claude, panes)
+    MIRO_REFLECT(key, name, projectDir, active, claude, panes, layout)
 };
 
 struct SessionsEvent
