@@ -1,0 +1,233 @@
+<!doctype html>
+<!-- CowTerm web UI. Served embedded from the app (GET /); talks to the REST
+     API for discovery and the WebSocket for everything live. Terminal
+     emulation is xterm.js — the server ships raw PTY bytes, this page just
+     plays them. Protocol: DESIGN-WEBUI.md in the repo. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>CowTerm</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.min.css">
+<style>
+  :root {
+    --bg: #1a1b26; --panel: #16161e; --fg: #c0caf5; --dim: #565f89;
+    --accent: #7aa2f7; --claude: #bb9af7; --border: #292e42;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; height: 100vh; display: flex; background: var(--bg);
+    color: var(--fg); font: 13px/1.5 "JetBrains Mono", ui-monospace, monospace;
+  }
+  #sidebar {
+    width: 260px; min-width: 260px; background: var(--panel);
+    border-right: 1px solid var(--border); overflow-y: auto; padding: 8px;
+  }
+  #sidebar h1 {
+    font-size: 13px; margin: 4px 8px 10px; color: var(--dim);
+    font-weight: normal; letter-spacing: 1px;
+  }
+  #sidebar h1 b { color: var(--fg); }
+  .session { margin-bottom: 6px; }
+  .session-name {
+    padding: 4px 8px; color: var(--dim); cursor: pointer; border-radius: 4px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .session-name:hover { background: var(--border); }
+  .session.active .session-name { color: var(--fg); }
+  .session-name .claude { color: var(--claude); }
+  .pane {
+    padding: 3px 8px 3px 20px; cursor: pointer; border-radius: 4px;
+    color: var(--fg); white-space: nowrap; overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .pane:hover { background: var(--border); }
+  .pane.attached { background: var(--border); border-left: 2px solid var(--accent); }
+  .pane .cwd { color: var(--dim); font-size: 11px; }
+  #main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  #status {
+    padding: 5px 12px; font-size: 11px; color: var(--dim);
+    border-bottom: 1px solid var(--border); display: flex; gap: 12px;
+  }
+  #status .ok { color: #9ece6a; }
+  #status .bad { color: #f7768e; }
+  #term-wrap { flex: 1; padding: 8px; overflow: auto; }
+  #placeholder { color: var(--dim); padding: 40px; }
+</style>
+</head>
+<body>
+  <nav id="sidebar">
+    <h1><b>cow</b>term</h1>
+    <div id="sessions"></div>
+  </nav>
+  <main id="main">
+    <div id="status">
+      <span id="conn" class="bad">connecting…</span>
+      <span id="attached-label"></span>
+    </div>
+    <div id="term-wrap"><div id="placeholder">pick a pane on the left</div></div>
+  </main>
+
+<script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.min.js"></script>
+<script>
+(() => {
+  'use strict';
+
+  if (typeof Terminal === 'undefined') {
+    document.getElementById('placeholder').textContent =
+      'xterm.js failed to load (offline?) — the web UI needs the CDN for now.';
+    return;
+  }
+
+  const state = { ws: null, term: null, pane: null, sessions: [] };
+
+  const $ = id => document.getElementById(id);
+
+  const theme = {
+    background: '#1a1b26', foreground: '#c0caf5', cursor: '#c0caf5',
+    selectionBackground: '#33467c',
+    black: '#15161e', red: '#f7768e', green: '#9ece6a', yellow: '#e0af68',
+    blue: '#7aa2f7', magenta: '#bb9af7', cyan: '#7dcfff', white: '#a9b1d6',
+    brightBlack: '#414868', brightRed: '#f7768e', brightGreen: '#9ece6a',
+    brightYellow: '#e0af68', brightBlue: '#7aa2f7', brightMagenta: '#bb9af7',
+    brightCyan: '#7dcfff', brightWhite: '#c0caf5',
+  };
+
+  function renderSessions() {
+    const root = $('sessions');
+    root.textContent = '';
+
+    for (const session of state.sessions) {
+      const box = document.createElement('div');
+      box.className = 'session' + (session.active ? ' active' : '');
+
+      const name = document.createElement('div');
+      name.className = 'session-name';
+      name.innerHTML = (session.claude ? '<span class="claude">✳ </span>' : '')
+        + escapeHtml(session.name);
+      name.title = session.projectDir || session.name;
+      name.onclick = () => send({ op: 'activate', key: session.key });
+      box.appendChild(name);
+
+      for (const pane of session.panes || []) {
+        const row = document.createElement('div');
+        row.className = 'pane' + (pane.id === state.pane ? ' attached' : '');
+        const title = pane.title || shortPath(pane.cwd) || pane.id.slice(0, 8);
+        row.innerHTML = escapeHtml(title)
+          + ' <span class="cwd">' + escapeHtml(shortPath(pane.cwd)) + '</span>';
+        row.onclick = () => attach(pane);
+        box.appendChild(row);
+      }
+
+      root.appendChild(box);
+    }
+  }
+
+  function shortPath(p) {
+    if (!p) return '';
+    const parts = p.replace(/\/+$/, '').split('/');
+    return parts[parts.length - 1] || p;
+  }
+
+  function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text ?? '';
+    return div.innerHTML;
+  }
+
+  function attach(pane) {
+    state.pane = pane.id;
+    $('attached-label').textContent = (pane.title || pane.id) + ' — '
+      + pane.cols + '×' + pane.rows;
+
+    if (state.term) { state.term.dispose(); state.term = null; }
+    $('term-wrap').textContent = '';
+
+    // The GUI owns the grid size in v1; mirror it exactly.
+    const term = new Terminal({
+      cols: pane.cols, rows: pane.rows, theme,
+      fontFamily: '"JetBrains Mono", ui-monospace, monospace',
+      fontSize: 13, cursorBlink: true, allowProposedApi: true,
+      scrollback: 5000,
+    });
+    state.term = term;
+    term.open($('term-wrap'));
+    term.onData(data => send({ op: 'input', pane: state.pane, data }));
+    term.focus();
+
+    send({ op: 'attach', pane: pane.id });
+    renderSessions();
+  }
+
+  function send(message) {
+    if (state.ws && state.ws.readyState === WebSocket.OPEN)
+      state.ws.send(JSON.stringify(message));
+  }
+
+  function handleBinary(buffer) {
+    const bytes = new Uint8Array(buffer);
+    const idLength = bytes[0];
+    const id = new TextDecoder().decode(bytes.subarray(1, 1 + idLength));
+
+    if (id === state.pane && state.term)
+      state.term.write(bytes.subarray(1 + idLength));
+  }
+
+  function handleEvent(message) {
+    if (message.ev === 'sessions') {
+      state.sessions = message.sessions || [];
+      renderSessions();
+    } else if (message.ev === 'attached') {
+      if (state.term)
+        state.term.resize(message.cols, message.rows);
+    } else if (message.ev === 'exit') {
+      if (message.pane === state.pane && state.term)
+        state.term.write('\r\n\x1b[90m[shell exited]\x1b[0m\r\n');
+    } else if (message.ev === 'error') {
+      console.warn('cowterm:', message.message);
+    }
+  }
+
+  async function connect() {
+    let wsUrl;
+    try {
+      const info = await (await fetch('/api/v1/server')).json();
+      wsUrl = info.wsUrl;
+    } catch {
+      $('conn').textContent = 'server unreachable — retrying…';
+      setTimeout(connect, 2000);
+      return;
+    }
+
+    const ws = new WebSocket(wsUrl);
+    ws.binaryType = 'arraybuffer';
+    state.ws = ws;
+
+    ws.onopen = () => {
+      $('conn').textContent = 'connected';
+      $('conn').className = 'ok';
+
+      // Re-attach after a reconnect so the stream resumes with a snapshot.
+      if (state.pane)
+        send({ op: 'attach', pane: state.pane });
+    };
+
+    ws.onmessage = event => {
+      if (typeof event.data === 'string')
+        handleEvent(JSON.parse(event.data));
+      else
+        handleBinary(event.data);
+    };
+
+    ws.onclose = () => {
+      $('conn').textContent = 'disconnected — retrying…';
+      $('conn').className = 'bad';
+      setTimeout(connect, 1500);
+    };
+  }
+
+  connect();
+})();
+</script>
+</body>
+</html>

@@ -30,7 +30,7 @@ build: configure
 
 # Build and run the unit tests (regression coverage, incl. the quit-hang fix).
 test: configure
-    cmake --build {{build_dir}} --target CowTermTests
+    cmake --build {{build_dir}} --target CowTermTests CowTermWebTests
     ctest --test-dir {{build_dir}} --output-on-failure
 
 # Remove the build tree.

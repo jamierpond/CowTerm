@@ -8,6 +8,7 @@
 #include "Session.h"
 #include "Switcher.h"
 #include "TrayController.h"
+#include "Web/WebGateway.h"
 
 namespace term
 {
@@ -62,6 +63,7 @@ private:
     ClaudeHud claudeHud {config, manager};
     Popup popup {config};
     TrayController tray {manager};
+    web::WebGateway web {config, manager};
     TermSession* attached = nullptr;
     bool prefixArmed = false;
     bool popupPrefixArmed = false;

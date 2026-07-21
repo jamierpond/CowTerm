@@ -204,6 +204,7 @@ void TerminalView::flushOutput()
         return;
 
     parser.feed(data);
+    onOutput(data);
 
     if (screen.modes.altScreen)
         scrollOffset = 0;

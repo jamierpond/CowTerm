@@ -22,7 +22,11 @@ AppShell::AppShell()
         tray.refresh();
     };
 
-    manager.onSessionsChanged = [this] { tray.refresh(); };
+    manager.onSessionsChanged = [this]
+    {
+        tray.refresh();
+        web.sessionsChanged();
+    };
 
     manager.onPaneWired = [this](TermSession& session, TerminalView& pane)
     {
@@ -36,6 +40,9 @@ AppShell::AppShell()
             if (manager.active() == raw)
                 updateTitle();
         };
+
+        web.wirePane(pane);
+        web.sessionsChanged();
     };
 
     tray.onShowWindow = [this] { onBringToFront(); };

@@ -45,6 +45,14 @@ public:
     // Backs the config file's send-keys bindings.
     void sendText(std::string_view text);
 
+    // Raw bytes straight to the shell — the web gateway's input path, which
+    // ships ready-made escape sequences and must bypass any translation.
+    void writeToShell(std::string_view data) { shell->write(data); }
+
+    // The parsed screen, read-only — the web gateway serializes it for
+    // attach snapshots.
+    const TermScreen& screenModel() const { return screen; }
+
     // Focus moved into or out of this pane: redraw the cursor in its new
     // state now instead of waiting for the next blink tick.
     void refreshCursor();
@@ -60,6 +68,10 @@ public:
     bool inCopyMode() const { return copyMode; }
 
     void paste();
+
+    // Raw PTY output after it has been parsed into the screen, on the main
+    // thread — the web gateway's streaming tap.
+    std::function<void(std::string_view)> onOutput = [](std::string_view) {};
 
     std::function<void(const std::string&)> onTitleChanged =
         [](const std::string&) {};

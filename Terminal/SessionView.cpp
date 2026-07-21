@@ -159,6 +159,20 @@ bool SessionView::isClaudeAnywhere() const
     return !claudePanes().empty();
 }
 
+std::vector<TerminalView*> SessionView::panes() const
+{
+    auto leaves = std::vector<Node*> {};
+    collectLeaves(root.get(), leaves);
+
+    auto views = std::vector<TerminalView*> {};
+    views.reserve(leaves.size());
+
+    for (auto* leaf: leaves)
+        views.push_back(leaf->view.get());
+
+    return views;
+}
+
 std::vector<TerminalView*> SessionView::claudePanes() const
 {
     auto leaves = std::vector<Node*> {};

@@ -37,7 +37,11 @@ struct AppConfig
     std::vector<KeyBinding> bindings = {{.key = "u", .send = "cd ..\n"},
                                         {.key = "n", .send = "nvim .\n"}};
 
-    MIRO_REFLECT(searchDirs, font, fontSize, theme, bindings)
+    // The web UI's HTTP port (loopback only; the WebSocket stream rides one
+    // port up). 0 disables the gateway. 2697 spells COWS on a phone pad.
+    int webPort = 2697;
+
+    MIRO_REFLECT(searchDirs, font, fontSize, theme, bindings, webPort)
 };
 
 inline constexpr float minFontSize = 7.0f;

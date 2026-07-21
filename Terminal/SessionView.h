@@ -53,6 +53,9 @@ public:
     // conversation runs there — the Claude HUD's row source.
     std::vector<TerminalView*> claudePanes() const;
 
+    // Every leaf, in layout order — the web gateway's pane enumeration.
+    std::vector<TerminalView*> panes() const;
+
     // Moves the active-pane marker (and keyboard focus) to this pane, if it
     // is still one of this tree's leaves.
     void focusPane(TerminalView* pane);
