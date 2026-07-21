@@ -46,9 +46,15 @@ clean:
 rebuild: clean build
 
 # Build, then launch the app.
+#
+# Exec the bundle's binary rather than `open`ing the bundle: `open` resolves
+# the app by bundle identifier, so an already-running installed copy
+# (/Applications/CowTerm.app) is merely brought to the front and the freshly
+# built binary never launches. Running it directly also keeps stdout/stderr
+# attached to this terminal.
 [macos]
 run: build
-    open "{{build_dir}}/Terminal/CowTerm.app"
+    "{{build_dir}}/Terminal/CowTerm.app/Contents/MacOS/CowTerm"
 
 [windows]
 run: build

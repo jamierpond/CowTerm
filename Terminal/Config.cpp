@@ -1,4 +1,5 @@
 #include "Config.h"
+#include "Protocol.h"
 
 #include <eacp/Core/Utils/FilePath.h>
 #include <eacp/Core/Utils/Files.h>
@@ -7,9 +8,16 @@ namespace term
 {
 namespace
 {
+// A named dev instance reads and writes its own file, so running a build
+// under test cannot inherit — or overwrite, via the zoom keys — the
+// settings of the CowTerm you actually use. See proto::instanceSuffix.
 eacp::FilePath configPath()
 {
-    return eacp::FilePath::homeDirectory() / ".config" / "cowterm.json";
+    const auto suffix = proto::instanceSuffix();
+    const auto file =
+        suffix.empty() ? "cowterm.json" : "cowterm." + suffix + ".json";
+
+    return eacp::FilePath::homeDirectory() / ".config" / file;
 }
 } // namespace
 

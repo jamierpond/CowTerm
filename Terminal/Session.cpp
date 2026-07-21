@@ -1,5 +1,6 @@
 #include "Session.h"
 #include "Projects.h"
+#include "Protocol.h"
 #include "Web/GatewayClient.h"
 
 #include <eacp/Core/Threads/Async.h>
@@ -51,8 +52,13 @@ std::string TermSession::activeWorkingDirectory() const
 
 SessionManager::SessionManager(const AppConfig& configToUse)
     : config(configToUse)
-    , db(emberstore::databaseForApp(
-          "tamber", "cowterm", emberstore::Durability::Atomic))
+    // A named dev instance restores into its own store rather than
+    // adopting (and then rewriting) the real one's session list.
+    , db(emberstore::databaseForApp("tamber",
+                                    proto::instanceSuffix().empty()
+                                        ? "cowterm"
+                                        : "cowterm-" + proto::instanceSuffix(),
+                                    emberstore::Durability::Atomic))
     , mru(db)
     , saved(db.document<SavedState>("sessions"))
 {

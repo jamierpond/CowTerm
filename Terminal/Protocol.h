@@ -1,13 +1,31 @@
 #pragma once
 
+#include <cstdlib>
 #include <string>
 #include <string_view>
 #include <vector>
 
 namespace term::proto
 {
+// A dev instance suffix, from $COWTERM_INSTANCE. Empty for the real one.
+//
+// CowTerm is otherwise a singleton by construction: one hardcoded config
+// path, one hardcoded daemon name, so a second copy silently shares the
+// first one's sessions and loses the race for the web port. Naming an
+// instance gives it its own config file and its own daemon, which is what
+// makes it possible to run a build under test next to the one you use.
+inline std::string instanceSuffix()
+{
+    const auto* name = std::getenv("COWTERM_INSTANCE");
+    return name != nullptr ? std::string {name} : std::string {};
+}
+
 // The IPC name the daemon serves and the app dials.
-constexpr auto serverName = "cowtermd";
+inline std::string serverName()
+{
+    const auto suffix = instanceSuffix();
+    return suffix.empty() ? "cowtermd" : "cowtermd-" + suffix;
+}
 
 // One Messenger message: a verb line ("verb arg1 arg2..."), then an
 // optional raw payload after the first newline. The payload is untouched

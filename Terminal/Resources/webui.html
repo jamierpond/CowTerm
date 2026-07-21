@@ -592,8 +592,16 @@
 
   // Runs for every terminal, popup included. Returning false keeps the key
   // away from the shell.
+  const modifierKeys = new Set(['Shift', 'Control', 'Alt', 'Meta', 'CapsLock']);
+
   function leaderHandler(event) {
     if (event.type !== 'keydown') return true;
+
+    // A modifier's own keydown arrives before the key it modifies, so
+    // consuming the leader here would disarm it before `"` (Shift+') or
+    // `%` (Shift+5) ever showed up — the whole shifted half of the table
+    // would fall through to the shell as literal text.
+    if (modifierKeys.has(event.key)) return !leaderArmed;
 
     if (leaderArmed) {
       armLeader(false);
