@@ -63,7 +63,24 @@
     font: inherit; border-radius: 4px; padding: 1px 8px; cursor: pointer;
   }
   #status button:hover { color: var(--fg); border-color: var(--dim); }
-  #view { flex: 1; min-height: 0; padding: 4px; }
+  #view { flex: 1; min-height: 0; padding: 4px; position: relative; }
+  /* Zoom overlays the focused leaf on the whole view, so it works at any
+     nesting depth rather than depending on the tree's shape. */
+  #view.zoomed .leaf:not(.focused) { visibility: hidden; }
+  #view.zoomed .leaf.focused { position: absolute; inset: 0; z-index: 2; }
+  #popup {
+    display: none; position: absolute; inset: 10px; z-index: 5;
+    background: var(--bg); border: 1px solid var(--accent); border-radius: 6px;
+  }
+  #popup.open { display: block; }
+  #popup .xt { position: absolute; inset: 4px; }
+  #leader {
+    display: none; position: fixed; bottom: 10px; left: 50%;
+    transform: translateX(-50%); background: var(--panel); color: var(--fg);
+    border: 1px solid var(--accent); border-radius: 5px; padding: 3px 12px;
+    font-size: 11px; z-index: 20;
+  }
+  #leader.on { display: block; }
   #placeholder { color: var(--dim); padding: 40px; }
   .split { display: flex; width: 100%; height: 100%; gap: 2px; }
   .split.h { flex-direction: row; }
@@ -104,7 +121,9 @@
       <button id="host-focus" style="display:none">focus on host</button>
     </div>
     <div id="view"><div id="placeholder"></div></div>
+    <div id="popup"></div>
   </main>
+  <div id="leader">Ctrl+A —  " % split · x close · z zoom · hjkl focus · o cycle · HJKL resize · i lazygit · c new · f find</div>
   <div id="palette">
     <div id="palette-box">
       <input id="palette-input" placeholder="search sessions across the fleet…"
@@ -145,9 +164,27 @@
   // Live terminals for the viewed session, keyed by pane id.
   const terms = new Map();
   let focusedPane = null;
+  let zoomed = false;
+  let pendingView = null;
+  // The Ctrl+A popup: an ephemeral pane running on the serving machine.
+  const popup = { pane: null, term: null, g: null };
 
   const makeGateway = (base, label) =>
     ({ base, label, ws: null, online: false, sessions: [], retryTimer: null });
+
+  // Cell metrics, measured once from the real font, so a popup can ask the
+  // remote for a grid that actually fits the box we will draw it in.
+  const cell = (() => {
+    const probe = document.createElement('div');
+    probe.style.cssText = 'position:absolute;visibility:hidden;white-space:pre;'
+      + 'font:13px "JetBrains Mono", ui-monospace, monospace';
+    probe.textContent = 'W'.repeat(100);
+    document.body.appendChild(probe);
+    const w = probe.getBoundingClientRect().width / 100;
+    const h = probe.getBoundingClientRect().height;
+    probe.remove();
+    return { w: w || 7.8, h: (h || 17) * 1.2 };
+  })();
 
   async function connectGateway(g) {
     let info;
@@ -217,6 +254,14 @@
       g.sessions = message.sessions || [];
       renderSidebar();
 
+      if (pendingView && pendingView.g === g
+          && findSession(g, pendingView.key)) {
+        const target = pendingView;
+        pendingView = null;
+        viewSession(target.g, target.key);
+        return;
+      }
+
       if (view.g === g) {
         const session = findSession(g, view.key);
 
@@ -233,10 +278,34 @@
       if (!view.g && g.label === 'local' && g.sessions.length)
         viewSession(g, (g.sessions.find(s => s.active) || g.sessions[0]).key);
     } else if (message.ev === 'attached') {
+      if (popup.pane === message.pane && popup.term) {
+        popup.term.resize(message.cols, message.rows);
+        return;
+      }
+
       const entry = view.g === g ? terms.get(message.pane) : null;
       if (entry)
         entry.term.resize(message.cols, message.rows);
+    } else if (message.ev === 'popup') {
+      showPopupPane(g, message.pane);
+    } else if (message.ev === 'opened') {
+      // The roster push is coalesced and therefore still in flight; view
+      // the new session once it actually appears.
+      pendingView = { g, key: message.key };
     } else if (message.ev === 'exit') {
+      if (popup.pane === message.pane) {
+        // The command ended (quitting lazygit), so the popup goes away.
+        popup.term.dispose();
+        popup.term = null;
+        popup.pane = null;
+        popup.g = null;
+        $('popup').classList.remove('open');
+        $('popup').textContent = '';
+        const entry = terms.get(focusedPane);
+        if (entry) entry.term.focus();
+        return;
+      }
+
       const entry = view.g === g ? terms.get(message.pane) : null;
       if (entry)
         entry.term.write('\r\n\x1b[90m[shell exited]\x1b[0m\r\n');
@@ -245,13 +314,46 @@
     }
   }
 
-  function handleBinary(g, buffer) {
-    if (view.g !== g)
-      return;
+  function showPopupPane(g, paneId) {
+    popup.pane = paneId;
+    popup.g = g;
 
+    const box = $('popup');
+    box.textContent = '';
+    box.classList.add('open');
+
+    const el = document.createElement('div');
+    el.className = 'xt';
+    box.appendChild(el);
+
+    const rect = box.getBoundingClientRect();
+    popup.term = new Terminal({
+      cols: Math.max(20, Math.floor((rect.width - 8) / cell.w)),
+      rows: Math.max(5, Math.floor((rect.height - 8) / cell.h)),
+      theme, fontFamily: '"JetBrains Mono", ui-monospace, monospace',
+      fontSize: 13, cursorBlink: true, allowProposedApi: true,
+    });
+    popup.term.open(el);
+    popup.term.onData(data => send(g, { op: 'input', pane: paneId, data }));
+    popup.term.attachCustomKeyEventHandler(leaderHandler);
+    popup.term.focus();
+
+    send(g, { op: 'attach', pane: paneId });
+  }
+
+  function handleBinary(g, buffer) {
     const bytes = new Uint8Array(buffer);
     const idLength = bytes[0];
     const id = new TextDecoder().decode(bytes.subarray(1, 1 + idLength));
+
+    if (popup.pane === id && popup.term) {
+      popup.term.write(bytes.subarray(1 + idLength));
+      return;
+    }
+
+    if (view.g !== g)
+      return;
+
     const entry = terms.get(id);
 
     if (entry)
@@ -265,6 +367,8 @@
       return;
 
     detachAll();
+    zoomed = false;
+    $('view').classList.remove('zoomed');
     view.g = g;
     view.key = key;
     buildView();
@@ -379,6 +483,7 @@
       el.className = 'xt';
       term.onData(data =>
         send(view.g, { op: 'input', pane: pane.id, data }));
+      term.attachCustomKeyEventHandler(leaderHandler);
       entry = { term, el, opened: false };
       terms.set(pane.id, entry);
       send(view.g, { op: 'attach', pane: pane.id });
@@ -398,6 +503,148 @@
     leaf.addEventListener('mousedown', () => setFocus(pane.id));
     entry.el.addEventListener('focusin', () => setFocus(pane.id));
     return leaf;
+  }
+
+  // ---- the leader table (Ctrl+A), mirroring the native one ----
+  //
+  // Shape commands (splits, close, resize) travel to the CowTerm that owns
+  // the pane tree, exactly as they do from a native mirror. View commands
+  // (focus, zoom) stay here, because every viewer gets its own answer.
+
+  let leaderArmed = false;
+
+  function armLeader(on) {
+    leaderArmed = on;
+    $('leader').classList.toggle('on', on);
+  }
+
+  const sendCommand = (name, cells) =>
+    send(view.g, { op: 'command', pane: focusedPane, command: name,
+                   cells: cells || 1 });
+
+  // Nearest leaf whose centre lies in the given direction — the geometric
+  // pick the native focusDirection makes.
+  function focusDirection(dir) {
+    const leaves = [...document.querySelectorAll('.leaf')];
+    const from = leaves.find(l => l.dataset.pane === focusedPane);
+    if (!from) return;
+
+    const a = from.getBoundingClientRect();
+    const ax = a.left + a.width / 2, ay = a.top + a.height / 2;
+    let best = null, bestDist = Infinity;
+
+    for (const leaf of leaves) {
+      if (leaf === from) continue;
+      const b = leaf.getBoundingClientRect();
+      const bx = b.left + b.width / 2, by = b.top + b.height / 2;
+      const dx = bx - ax, dy = by - ay;
+
+      const ok = dir === 'h' ? dx < -1 : dir === 'l' ? dx > 1
+               : dir === 'k' ? dy < -1 : dy > 1;
+      if (!ok) continue;
+
+      const dist = Math.abs(dx) + Math.abs(dy);
+      if (dist < bestDist) { bestDist = dist; best = leaf; }
+    }
+
+    if (best) setFocus(best.dataset.pane);
+  }
+
+  function cycleFocus() {
+    const leaves = [...document.querySelectorAll('.leaf')];
+    if (leaves.length < 2) return;
+    const at = leaves.findIndex(l => l.dataset.pane === focusedPane);
+    setFocus(leaves[(at + 1) % leaves.length].dataset.pane);
+  }
+
+  function toggleZoom() {
+    zoomed = !zoomed;
+    $('view').classList.toggle('zoomed', zoomed);
+  }
+
+  function openPopup(command) {
+    if (popup.pane || !view.g || !focusedPane) return;
+
+    const box = $('popup').getBoundingClientRect();
+    const cols = Math.max(20, Math.floor((box.width - 8) / cell.w));
+    const rows = Math.max(5, Math.floor((box.height - 8) / cell.h));
+
+    popup.g = view.g;
+    send(view.g, { op: 'popup', pane: focusedPane, data: command,
+                   cols, rows });
+  }
+
+  function closePopup() {
+    if (!popup.pane) return;
+
+    // Detaching is what ends it over there — it exists only for us.
+    send(popup.g, { op: 'detach', pane: popup.pane });
+    popup.term.dispose();
+    popup.term = null;
+    popup.pane = null;
+    popup.g = null;
+    $('popup').classList.remove('open');
+    $('popup').textContent = '';
+
+    const entry = terms.get(focusedPane);
+    if (entry) entry.term.focus();
+  }
+
+  // Runs for every terminal, popup included. Returning false keeps the key
+  // away from the shell.
+  function leaderHandler(event) {
+    if (event.type !== 'keydown') return true;
+
+    if (leaderArmed) {
+      armLeader(false);
+
+      // Prefix twice sends a literal Ctrl+A through to the shell.
+      if (event.ctrlKey && event.key.toLowerCase() === 'a') return true;
+
+      handleLeaderKey(event.key);
+      return false;
+    }
+
+    if (event.ctrlKey && !event.metaKey && event.key.toLowerCase() === 'a') {
+      armLeader(true);
+      return false;
+    }
+
+    return true;
+  }
+
+  function handleLeaderKey(key) {
+    // While a popup is up, the leader either dismisses it or is swallowed:
+    // the rest of the table targets panes the user cannot see.
+    if (popup.pane) {
+      if (key === 'i') closePopup();
+      return;
+    }
+
+    switch (key) {
+      case '"': sendCommand('split-below'); break;
+      case '%': sendCommand('split-beside'); break;
+      case 'x': sendCommand('close-pane'); break;
+      case 'H': sendCommand('resize-left'); break;
+      case 'J': sendCommand('resize-down'); break;
+      case 'K': sendCommand('resize-up'); break;
+      case 'L': sendCommand('resize-right'); break;
+      case 'z': toggleZoom(); break;
+      case 'o': cycleFocus(); break;
+      case 'h': case 'ArrowLeft': focusDirection('h'); break;
+      case 'j': case 'ArrowDown': focusDirection('j'); break;
+      case 'k': case 'ArrowUp': focusDirection('k'); break;
+      case 'l': case 'ArrowRight': focusDirection('l'); break;
+      case 'i': openPopup('lazygit'); break;
+      case 'f': case 'w': openPalette(); break;
+      case 'c': {
+        const session = findSession(view.g, view.key);
+        const pane = session && session.panes.find(p => p.id === focusedPane);
+        if (pane) send(view.g, { op: 'open', dir: pane.cwd });
+        break;
+      }
+      default: break; // unknown leader keys are swallowed, as natively
+    }
   }
 
   function setFocus(paneId) {

@@ -87,6 +87,19 @@ AppShell::AppShell()
     fleet.onChanged = [this](web::GatewayClient& client)
     {
         manager.refreshRemoteSessions(client);
+
+        // A session we asked the remote to create has now appeared.
+        if (pendingMirror.client == &client)
+        {
+            for (const auto& info: client.sessions())
+                if (info.key == pendingMirror.key)
+                {
+                    pendingMirror = {};
+                    manager.openRemoteSession(client, info);
+                    break;
+                }
+        }
+
         remoteHud.remoteChanged();
     };
 
@@ -332,17 +345,97 @@ void AppShell::hideClaudeHud()
         attached->view.focusActive();
 }
 
-void AppShell::closeActivePaneOrMirror()
+void AppShell::runSessionCommand(SessionCommand command, float cells)
 {
     auto* active = manager.active();
 
     if (active == nullptr)
         return;
 
-    if (active->isRemote())
+    // The pane tree belongs to whoever owns the shells in it. Sending the
+    // command rather than applying it keeps the two views identical: the
+    // owner reshapes, broadcasts, and the mirror follows.
+    if (isShapeCommand(command) && active->isRemote())
+    {
+        if (auto* pane = active->view.activePane())
+            active->remoteClient->command(pane->shellId(), command, cells);
+
+        return;
+    }
+
+    applySessionCommand(active->view, command, cells);
+}
+
+void AppShell::runPopupCommand(const std::string& command)
+{
+    auto* active = manager.active();
+
+    if (active == nullptr || popup.isShown())
+        return;
+
+    if (!active->isRemote())
+    {
+        showPopup(command);
+        return;
+    }
+
+    // A mirror's directory lives on the other machine, so running the
+    // command here would open it against a path that may not even exist.
+    // It runs over there, in a pane made for us, and displays here.
+    auto* pane = active->view.activePane();
+
+    if (pane == nullptr)
+        return;
+
+    const auto& screen = pane->screenModel();
+    auto* client = active->remoteClient;
+
+    // No lifetime guard needed: this callback is stored in the fleet's
+    // client, the fleet is a member of this shell, so it cannot outlive us.
+    client->popup(pane->shellId(),
+                  command,
+                  screen.columns(),
+                  screen.rows(),
+                  [this, client](const std::string& ephemeralPane)
+                  {
+                      if (popup.isShown())
+                          return;
+
+                      popupPrefixArmed = false;
+                      addSubview(popup);
+                      popup.setBounds(getLocalBounds());
+                      popup.showShell(std::make_unique<web::RemoteShell>(
+                          *client, ephemeralPane, /*ownsSize*/ true));
+                  });
+}
+
+void AppShell::newSessionHere()
+{
+    auto* active = manager.active();
+
+    if (active == nullptr)
+        return;
+
+    if (!active->isRemote())
+    {
+        manager.newSession(active->activeWorkingDirectory());
+        return;
+    }
+
+    auto* client = active->remoteClient;
+
+    // The remote answers with the new key before its roster push (those
+    // are coalesced), so record the intent and mirror it once the session
+    // actually shows up — see the fleet.onChanged handler.
+    client->open(active->activeWorkingDirectory(),
+                 [this, client](const std::string& key)
+                 { pendingMirror = {client, key}; });
+}
+
+void AppShell::detachMirror()
+{
+    if (auto* active = manager.active(); active != nullptr && active->isRemote())
         manager.close(*active);
-    else
-        active->view.closeActivePane();
 }
 
 void AppShell::showRemoteHud()
@@ -485,7 +578,7 @@ bool AppShell::handlePrefixed(const KeyEvent& event)
         }
         else if (!binding.popup.empty())
         {
-            showPopup(binding.popup);
+            runPopupCommand(binding.popup);
         }
 
         return true;
@@ -496,10 +589,10 @@ bool AppShell::handlePrefixed(const KeyEvent& event)
     // must mean "move focus", never resize.
     if (chars == "H" || chars == "J" || chars == "K" || chars == "L")
     {
-        if (paneTree != nullptr)
-            paneTree->resizeActive((char) std::tolower((unsigned char) chars[0]),
-                                   1.0f);
-
+        runSessionCommand(chars == "H"   ? SessionCommand::ResizeLeft
+                          : chars == "J" ? SessionCommand::ResizeDown
+                          : chars == "K" ? SessionCommand::ResizeUp
+                                         : SessionCommand::ResizeRight);
         return true;
     }
 
@@ -524,15 +617,28 @@ bool AppShell::handlePrefixed(const KeyEvent& event)
 
     if (arrowDirection != 0)
     {
-        if (paneTree != nullptr)
-        {
-            if (event.modifiers.control || event.modifiers.alt)
-                paneTree->resizeActive(arrowDirection,
-                                       event.modifiers.alt ? 5.0f : 1.0f);
-            else
-                paneTree->focusDirection(arrowDirection);
-        }
+        const auto resizing = event.modifiers.control || event.modifiers.alt;
 
+        const auto command = [&]
+        {
+            switch (arrowDirection)
+            {
+                case 'h':
+                    return resizing ? SessionCommand::ResizeLeft
+                                    : SessionCommand::FocusLeft;
+                case 'j':
+                    return resizing ? SessionCommand::ResizeDown
+                                    : SessionCommand::FocusDown;
+                case 'k':
+                    return resizing ? SessionCommand::ResizeUp
+                                    : SessionCommand::FocusUp;
+                default:
+                    return resizing ? SessionCommand::ResizeRight
+                                    : SessionCommand::FocusRight;
+            }
+        }();
+
+        runSessionCommand(command, event.modifiers.alt ? 5.0f : 1.0f);
         return true;
     }
 
@@ -567,41 +673,36 @@ bool AppShell::handlePrefixed(const KeyEvent& event)
     // quitting lazygit (or Ctrl+A i again) dismisses it.
     if (chars == "i")
     {
-        showPopup("lazygit");
+        runPopupCommand("lazygit");
         return true;
     }
 
     // Pane splits, in the pane's current directory: " below, % beside.
     if (chars == "\"")
     {
-        if (paneTree != nullptr)
-            paneTree->splitActive(false);
-
+        runSessionCommand(SessionCommand::SplitBelow);
         return true;
     }
 
     if (chars == "%")
     {
-        if (paneTree != nullptr)
-            paneTree->splitActive(true);
-
+        runSessionCommand(SessionCommand::SplitBeside);
         return true;
     }
 
     // Focus moves whether or not Ctrl is still down from the prefix roll.
     if (chars == "h" || chars == "j" || chars == "k" || chars == "l")
     {
-        if (paneTree != nullptr)
-            paneTree->focusDirection(chars[0]);
-
+        runSessionCommand(chars == "h"   ? SessionCommand::FocusLeft
+                          : chars == "j" ? SessionCommand::FocusDown
+                          : chars == "k" ? SessionCommand::FocusUp
+                                         : SessionCommand::FocusRight);
         return true;
     }
 
     if (chars == "z")
     {
-        if (paneTree != nullptr)
-            paneTree->toggleZoom();
-
+        runSessionCommand(SessionCommand::ToggleZoom);
         return true;
     }
 
@@ -626,24 +727,28 @@ bool AppShell::handlePrefixed(const KeyEvent& event)
 
     if (chars == "o")
     {
-        if (paneTree != nullptr)
-            paneTree->cycleFocus();
-
+        runSessionCommand(SessionCommand::CycleFocus);
         return true;
     }
 
     if (chars == "c")
     {
-        if (active != nullptr)
-            manager.newSession(active->activeWorkingDirectory());
-
+        newSessionHere();
         return true;
     }
 
-    // Kill the active pane; the session ends with its last pane.
+    // Kill the active pane; the session ends with its last pane. On a
+    // mirror this closes the pane over there and the mirror follows.
     if (chars == "x")
     {
-        closeActivePaneOrMirror();
+        runSessionCommand(SessionCommand::ClosePane);
+        return true;
+    }
+
+    // Stop viewing a mirror, leaving everything running over there.
+    if (chars == "D")
+    {
+        detachMirror();
         return true;
     }
 
@@ -674,23 +779,19 @@ bool AppShell::handleCommand(const KeyEvent& event)
 
     if (chars == "w")
     {
-        closeActivePaneOrMirror();
+        runSessionCommand(SessionCommand::ClosePane);
         return true;
     }
 
     if (chars == "n")
     {
-        if (auto* active = manager.active())
-            manager.newSession(active->activeWorkingDirectory());
-
+        newSessionHere();
         return true;
     }
 
     if (chars == "d")
     {
-        if (auto* active = manager.active())
-            active->view.splitActive(true);
-
+        runSessionCommand(SessionCommand::SplitBeside);
         return true;
     }
 

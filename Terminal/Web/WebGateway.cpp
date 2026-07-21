@@ -1,6 +1,10 @@
 #include "WebGateway.h"
+#include "../SessionCommand.h"
 #include "ScreenSerializer.h"
 #include "Wire.h"
+
+#include <cstdio>
+#include <random>
 
 #include <ResEmbed/ResEmbed.h>
 #include <eacp/Core/Core.h>
@@ -74,6 +78,16 @@ bool originAllowsWrites(const eacp::HTTP::Request& request)
             return true;
 
     return false;
+}
+
+std::string generateEphemeralId()
+{
+    auto device = std::random_device {};
+    auto engine = std::mt19937_64 {device()};
+    char buffer[32];
+    std::snprintf(
+        buffer, sizeof(buffer), "popup-%016llx", (unsigned long long) engine());
+    return buffer;
 }
 
 template <typename T>
@@ -410,6 +424,18 @@ void WebGateway::handleClientMessage(WsConnection* connection,
 
     if (op.op == "attach")
     {
+        // An ephemeral pane is born attached and empty — no snapshot, it
+        // has printed nothing yet.
+        if (auto found = ephemerals.find(op.pane); found != ephemerals.end())
+        {
+            client->panes.insert(op.pane);
+            connection->sendText(
+                Miro::toJSONString(AttachedEvent {.pane = op.pane,
+                                                  .cols = found->second.cols,
+                                                  .rows = found->second.rows}));
+            return;
+        }
+
         auto* pane = findPane(op.pane);
 
         if (pane == nullptr)
@@ -430,13 +456,40 @@ void WebGateway::handleClientMessage(WsConnection* connection,
     else if (op.op == "detach")
     {
         client->panes.erase(op.pane);
+
+        // Nobody left watching a popup means the command has no audience;
+        // it exists only for its viewer.
+        if (ephemerals.count(op.pane) > 0)
+            endEphemeral(op.pane);
     }
     else if (op.op == "input")
     {
-        if (auto* pane = findPane(op.pane))
+        if (auto found = ephemerals.find(op.pane); found != ephemerals.end())
+            found->second.pty->write(op.data);
+        else if (auto* pane = findPane(op.pane))
             pane->writeToShell(op.data);
         else
             paneError();
+    }
+    else if (op.op == "command")
+    {
+        runCommand(op);
+    }
+    else if (op.op == "popup")
+    {
+        startEphemeral(connection, op);
+    }
+    else if (op.op == "resize")
+    {
+        // Only ephemeral panes take their size from a viewer; a session
+        // pane's grid belongs to the GUI that owns it.
+        if (auto found = ephemerals.find(op.pane);
+            found != ephemerals.end() && op.cols > 0 && op.rows > 0)
+        {
+            found->second.cols = op.cols;
+            found->second.rows = op.rows;
+            found->second.pty->resize({op.cols, op.rows});
+        }
     }
     else if (op.op == "sessions")
     {
@@ -450,7 +503,11 @@ void WebGateway::handleClientMessage(WsConnection* connection,
     else if (op.op == "open")
     {
         if (!op.dir.empty())
-            manager.openProject(expandHome(op.dir));
+        {
+            auto& opened = manager.openProject(expandHome(op.dir));
+            connection->sendText(
+                Miro::toJSONString(OpenedEvent {.key = opened.key()}));
+        }
     }
     else
     {
@@ -461,9 +518,121 @@ void WebGateway::handleClientMessage(WsConnection* connection,
 
 void WebGateway::dropClient(WsConnection* connection)
 {
+    // A departing viewer takes its popups with it — they run on this
+    // machine but exist only for that viewer.
+    if (auto* client = clientFor(connection))
+    {
+        auto owned = std::vector<std::string> {};
+
+        for (const auto& paneId: client->panes)
+            if (ephemerals.count(paneId) > 0)
+                owned.push_back(paneId);
+
+        for (const auto& paneId: owned)
+            endEphemeral(paneId);
+    }
+
     std::erase_if(clients,
                   [connection](const Client& client)
                   { return client.connection.get() == connection; });
+}
+
+void WebGateway::runCommand(const wire::ClientOp& op)
+{
+    const auto command = commandFromName(op.command);
+
+    if (command == SessionCommand::None)
+        return;
+
+    auto* session = sessionForPane(op.pane);
+    auto* pane = findPane(op.pane);
+
+    if (session == nullptr || pane == nullptr)
+        return;
+
+    // Commands act on the pane the caller is in, so adopt it as active
+    // first — the same thing clicking into a pane does locally.
+    session->view.focusPane(pane);
+    applySessionCommand(session->view, command, op.cells > 0 ? op.cells : 1.0f);
+
+    sessionsChanged();
+}
+
+void WebGateway::startEphemeral(WsConnection* connection, const wire::ClientOp& op)
+{
+    if (op.data.empty())
+        return;
+
+    auto* pane = findPane(op.pane);
+
+    if (pane == nullptr)
+        return;
+
+    auto* client = clientFor(connection);
+
+    if (client == nullptr)
+        return;
+
+    const auto id = generateEphemeralId();
+    auto entry = Ephemeral {};
+    entry.pty = std::make_unique<Pty>();
+    entry.cols = op.cols > 0 ? op.cols : 80;
+    entry.rows = op.rows > 0 ? op.rows : 24;
+
+    auto guard = std::weak_ptr<bool> {alive};
+
+    const auto started = entry.pty->start(
+        {{entry.cols, entry.rows}, pane->workingDirectory(), op.data},
+        [this, guard, id](std::string data)
+        {
+            Threads::callAsync(
+                [this, guard, id, data = std::move(data)]
+                {
+                    if (!guard.expired())
+                        paneOutput(id, data);
+                });
+        },
+        [this, guard, id]
+        {
+            Threads::callAsync(
+                [this, guard, id]
+                {
+                    if (!guard.expired())
+                        endEphemeral(id);
+                });
+        });
+
+    if (!started)
+        return;
+
+    ephemerals[id] = std::move(entry);
+    client->panes.insert(id);
+
+    connection->sendText(Miro::toJSONString(PopupEvent {.pane = id}));
+    connection->sendText(Miro::toJSONString(
+        AttachedEvent {.pane = id,
+                       .cols = ephemerals[id].cols,
+                       .rows = ephemerals[id].rows}));
+}
+
+void WebGateway::endEphemeral(const std::string& id)
+{
+    auto found = ephemerals.find(id);
+
+    if (found == ephemerals.end())
+        return;
+
+    // Move the PTY out before announcing: the exit callback that brought
+    // us here belongs to it, and it must not die mid-invocation.
+    auto dying = std::move(found->second);
+    ephemerals.erase(found);
+
+    for (auto& client: clients)
+        if (client.panes.erase(id) > 0)
+            client.connection->sendText(
+                Miro::toJSONString(ExitEvent {.pane = id}));
+
+    Threads::callAsync([held = std::shared_ptr<Pty>(std::move(dying.pty))] {});
 }
 
 WebGateway::Client* WebGateway::clientFor(WsConnection* connection)
@@ -481,6 +650,16 @@ TerminalView* WebGateway::findPane(const std::string& id) const
         for (auto* pane: session->view.panes())
             if (pane->shellId() == id)
                 return pane;
+
+    return nullptr;
+}
+
+TermSession* WebGateway::sessionForPane(const std::string& id) const
+{
+    for (const auto& session: manager.all())
+        for (auto* pane: session->view.panes())
+            if (pane->shellId() == id)
+                return session.get();
 
     return nullptr;
 }

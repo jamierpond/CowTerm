@@ -8,6 +8,7 @@
 #include "Web/WebSocket.h"
 #include "Web/Wire.h"
 
+#include "SessionCommand.h"
 #include "TermParser.h"
 
 #include <NanoTest/NanoTest.h>
@@ -213,6 +214,50 @@ auto wireShapes = test("wire structs and binary frames round-trip") = []
     const auto back = term::web::wire::parseBinaryFrame(frame);
     check(back.pane == "pane1", "frame pane id");
     check(back.payload == std::string_view {"raw\x00里bytes", 12}, "frame payload");
+};
+
+auto commandNames = test("every session command has a stable wire name") = []
+{
+    using term::SessionCommand;
+
+    // The names are a protocol: the web UI sends these strings verbatim,
+    // so a rename here silently breaks every browser client.
+    constexpr auto expected = std::array {
+        std::pair {SessionCommand::SplitBeside, "split-beside"},
+        std::pair {SessionCommand::SplitBelow, "split-below"},
+        std::pair {SessionCommand::ClosePane, "close-pane"},
+        std::pair {SessionCommand::ResizeLeft, "resize-left"},
+        std::pair {SessionCommand::ResizeDown, "resize-down"},
+        std::pair {SessionCommand::ResizeUp, "resize-up"},
+        std::pair {SessionCommand::ResizeRight, "resize-right"},
+        std::pair {SessionCommand::ToggleZoom, "toggle-zoom"},
+        std::pair {SessionCommand::FocusLeft, "focus-left"},
+        std::pair {SessionCommand::FocusDown, "focus-down"},
+        std::pair {SessionCommand::FocusUp, "focus-up"},
+        std::pair {SessionCommand::FocusRight, "focus-right"},
+        std::pair {SessionCommand::CycleFocus, "cycle-focus"},
+    };
+
+    for (const auto& [command, name]: expected)
+    {
+        check(term::nameForCommand(command) == name, name);
+        check(term::commandFromName(name) == command, "parses back");
+    }
+
+    // Unknown names must be inert, so an older CowTerm ignores a command
+    // it doesn't have rather than doing something else.
+    check(term::commandFromName("split-diagonally") == SessionCommand::None,
+          "unknown name is inert");
+    check(term::commandFromName("") == SessionCommand::None, "empty is inert");
+
+    // Only tree-shape changes belong to the session's owner; view state is
+    // every viewer's own business.
+    check(term::isShapeCommand(SessionCommand::SplitBelow), "split is shape");
+    check(term::isShapeCommand(SessionCommand::ClosePane), "close is shape");
+    check(term::isShapeCommand(SessionCommand::ResizeUp), "resize is shape");
+    check(!term::isShapeCommand(SessionCommand::ToggleZoom), "zoom is local");
+    check(!term::isShapeCommand(SessionCommand::FocusLeft), "focus is local");
+    check(!term::isShapeCommand(SessionCommand::CycleFocus), "cycle is local");
 };
 
 auto layoutRoundTrip = test("session layout survives the wire as a tree") = []

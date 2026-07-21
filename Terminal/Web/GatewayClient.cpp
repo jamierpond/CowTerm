@@ -6,6 +6,7 @@
 #include <Miro/Reflect.h>
 
 #include <thread>
+#include <utility>
 
 namespace term::web
 {
@@ -217,6 +218,16 @@ void GatewayClient::handleEvent(const std::string& body)
         if (auto found = routes.find(event.pane); found != routes.end())
             found->second.onSize(event.cols, event.rows);
     }
+    else if (event.ev == "popup")
+    {
+        if (pendingPopup)
+            std::exchange(pendingPopup, {})(event.pane);
+    }
+    else if (event.ev == "opened")
+    {
+        if (pendingOpen)
+            std::exchange(pendingOpen, {})(event.key);
+    }
     else if (event.ev == "exit")
     {
         auto exited = PaneRoutes {};
@@ -284,14 +295,53 @@ void GatewayClient::activate(const std::string& sessionKey)
     sendOp({.op = "activate", .key = sessionKey});
 }
 
-void GatewayClient::open(const std::string& dir)
+void GatewayClient::open(const std::string& dir,
+                         std::function<void(const std::string&)> whenOpened)
 {
+    pendingOpen = std::move(whenOpened);
     sendOp({.op = "open", .dir = dir});
 }
 
-RemoteShell::RemoteShell(GatewayClient& clientToUse, std::string paneIdToUse)
+void GatewayClient::command(const std::string& paneId,
+                            SessionCommand action,
+                            float cells)
+{
+    const auto name = nameForCommand(action);
+
+    if (name.empty())
+        return;
+
+    sendOp({.op = "command",
+            .pane = paneId,
+            .command = std::string {name},
+            .cells = cells});
+}
+
+void GatewayClient::popup(const std::string& paneId,
+                          const std::string& commandLine,
+                          int cols,
+                          int rows,
+                          std::function<void(const std::string&)> whenReady)
+{
+    pendingPopup = std::move(whenReady);
+    sendOp({.op = "popup",
+            .pane = paneId,
+            .data = commandLine,
+            .cols = cols,
+            .rows = rows});
+}
+
+void GatewayClient::resize(const std::string& paneId, int cols, int rows)
+{
+    sendOp({.op = "resize", .pane = paneId, .cols = cols, .rows = rows});
+}
+
+RemoteShell::RemoteShell(GatewayClient& clientToUse,
+                         std::string paneIdToUse,
+                         bool ownsSizeToUse)
     : client(clientToUse)
     , paneId(std::move(paneIdToUse))
+    , ownsSize(ownsSizeToUse)
 {
     if (const auto* pane = client.findPane(paneId))
         remoteSize = {pane->cols, pane->rows};
@@ -314,14 +364,17 @@ void RemoteShell::write(std::string_view data)
     client.input(paneId, data);
 }
 
-void RemoteShell::resize(const PtySize&)
+void RemoteShell::resize(const PtySize& size)
 {
-    // The remote GUI owns its grid; this side only mirrors.
+    // A session pane's grid belongs to the GUI that displays it; only an
+    // ephemeral pane follows this viewer.
+    if (ownsSize)
+        client.resize(paneId, size.cols, size.rows);
 }
 
 std::optional<PtySize> RemoteShell::fixedSize() const
 {
-    if (remoteSize.cols > 0 && remoteSize.rows > 0)
+    if (!ownsSize && remoteSize.cols > 0 && remoteSize.rows > 0)
         return remoteSize;
 
     return {};

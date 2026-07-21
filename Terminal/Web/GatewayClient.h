@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../SessionCommand.h"
 #include "../Shell.h"
 #include "WebSocket.h"
 #include "Wire.h"
@@ -54,7 +55,29 @@ public:
     void detach(const std::string& paneId);
     void input(const std::string& paneId, std::string_view data);
     void activate(const std::string& sessionKey);
-    void open(const std::string& dir);
+
+    // whenOpened fires with the new session's key once the remote has
+    // created it, so the caller can mirror what it just asked for.
+    void open(const std::string& dir,
+              std::function<void(const std::string&)> whenOpened = {});
+
+    // Leader-table actions that change the pane tree. They act on the
+    // session owning paneId, which the remote focuses first.
+    void command(const std::string& paneId,
+                 SessionCommand action,
+                 float cells = 1.0f);
+
+    // Runs commandLine on the remote in paneId's directory, in a pane that
+    // exists only for us; whenReady names it so we can attach and display
+    // it here. One request at a time — the popup UI is single-instance.
+    void popup(const std::string& paneId,
+               const std::string& commandLine,
+               int cols,
+               int rows,
+               std::function<void(const std::string&)> whenReady);
+
+    // Ephemeral panes are ours to size, unlike session panes.
+    void resize(const std::string& paneId, int cols, int rows);
 
     // Roster or connection state moved (main thread).
     eacp::Callback onChanged = [] {};
@@ -79,6 +102,8 @@ private:
     std::map<std::string, PaneRoutes> routes;
 
     std::vector<wire::SessionInfo> model;
+    std::function<void(const std::string&)> pendingPopup;
+    std::function<void(const std::string&)> pendingOpen;
     std::unique_ptr<eacp::Threads::Timer> redial;
     std::shared_ptr<bool> alive = std::make_shared<bool>(true);
 };
@@ -119,7 +144,12 @@ private:
 class RemoteShell final : public Shell
 {
 public:
-    RemoteShell(GatewayClient& clientToUse, std::string paneIdToUse);
+    // ownsSize inverts who decides the grid: false for a session pane
+    // (the remote GUI displays it too, so it dictates), true for an
+    // ephemeral popup pane nobody else is watching.
+    RemoteShell(GatewayClient& clientToUse,
+                std::string paneIdToUse,
+                bool ownsSizeToUse = false);
 
     bool start(const PtyOptions& options,
                std::function<void(std::string)> onOutput,
@@ -138,6 +168,7 @@ public:
 private:
     GatewayClient& client;
     std::string paneId;
+    bool ownsSize = false;
     PtySize remoteSize {0, 0};
 };
 } // namespace term::web

@@ -106,20 +106,70 @@ base64 or JSON escaping.
 Client → server:
 ```
 { "op": "attach",   "pane": id }     subscribe; server replies with snapshot
-{ "op": "detach",   "pane": id }
+{ "op": "detach",   "pane": id }     (ends an ephemeral pane)
 { "op": "input",    "pane": id, "data": "…" }   keystrokes (xterm.js onData)
 { "op": "sessions" }                 request a sessions push
 { "op": "activate", "key": k }       pilot the GUI's active session
-{ "op": "open",     "dir": d }       open a project
+{ "op": "open",     "dir": d }       open a project; answered by "opened"
+{ "op": "command",  "pane": id, "command": name, "cells": n }
+{ "op": "popup",    "pane": id, "data": cmdline, "cols": c, "rows": r }
+{ "op": "resize",   "pane": id, "cols": c, "rows": r }   ephemeral panes only
 ```
 
 Server → client:
 ```
 text   { "ev": "attached", "pane", "cols", "rows" }   then the binary snapshot
 text   { "ev": "sessions", "sessions": […] }          pushed on every change
-text   { "ev": "error", "message" }
+text   { "ev": "popup",  "pane" }     an ephemeral pane is ready to attach
+text   { "ev": "opened", "key" }      the session an "open" op created
+text   { "ev": "exit",   "pane" }
+text   { "ev": "error",  "message" }
 binary pane output, id-prefixed as above
 ```
+
+Note the ordering contract: `opened` arrives *before* the roster push that
+contains the new session (roster pushes are coalesced to one per loop
+tick). A client that wants to display what it just created records the key
+and acts on the next `sessions` event — both clients do exactly this.
+
+## Parity: the leader table as a command vocabulary
+
+The goal is that Ctrl+A does the same thing whether the session is local, a
+native mirror, or open in a browser. That only works if the leader table
+stops being a pile of direct calls, so `Terminal/SessionCommand.h` names
+every session-changing action (`split-below`, `close-pane`, `resize-up`, …)
+and `AppShell` routes all of them — plus the Cmd-key equivalents — through
+one funnel. The names are the wire format for the `command` op, and a test
+pins them, since a rename would silently break every browser client.
+
+The vocabulary splits along one axis, and it is the whole design:
+
+- **Shape commands** (splits, close, resize) mutate the pane *tree*, which
+  belongs to the CowTerm owning the shells. From a mirror or a browser they
+  travel as a `command` op; the owner applies them and broadcasts, and every
+  viewer follows. Applying them locally would desync the views.
+- **View commands** (focus, zoom) decide only what *this* viewer looks at,
+  and each viewer is entitled to its own answer — as are copy mode, paste
+  and scrollback, which read the local screen model. These never travel.
+
+The command targets a pane, and the owner focuses that pane before applying,
+so commands act on the pane the user is actually in (tmux semantics) rather
+than on whatever the owner's GUI happens to have focused.
+
+### The popup (Ctrl+A i), the case that forced ephemeral panes
+
+`lazygit` against a mirror is the whole parity problem in miniature: the
+directory is on the *other* machine, so running it locally opens it against
+a path that may not exist. Instead the gateway spawns the command in an
+**ephemeral pane** — a PTY that belongs to no session, never appears in the
+roster or on the owner's screen, and exists solely for the viewer that asked
+for it. The requester attaches it like any other pane and displays it in its
+own popup; detaching (or the command exiting) tears it down, and a viewer
+disconnecting takes its popups with it.
+
+Ephemeral panes are also the one place the **client owns the grid**: nobody
+else is displaying them, so they size to the viewer via the `resize` op —
+which is why `Shell` exposes `fixedSize()` rather than a bare flag.
 
 ## Rendering
 

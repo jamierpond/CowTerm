@@ -1,10 +1,12 @@
 #pragma once
 
+#include "../Pty.h"
 #include "../Session.h"
 #include "WebSocket.h"
 
 #include <eacp/Network/Network.h>
 
+#include <map>
 #include <memory>
 #include <set>
 #include <string>
@@ -46,6 +48,17 @@ private:
         std::set<std::string> panes;
     };
 
+    // A command running on this machine purely for a remote viewer (the
+    // lazygit popup). It belongs to no session and never appears in the
+    // roster or on this machine's screen — the viewer that asked for it
+    // owns it, sizes it, and its exit tears it down.
+    struct Ephemeral
+    {
+        std::unique_ptr<Pty> pty;
+        int cols = 80;
+        int rows = 24;
+    };
+
     eacp::HTTP::Response route(const eacp::HTTP::Request& request);
     eacp::HTTP::Response paneRoute(const eacp::HTTP::Request& request,
                                    const std::string& id,
@@ -58,14 +71,20 @@ private:
 
     Client* clientFor(WsConnection* connection);
     TerminalView* findPane(const std::string& id) const;
+    TermSession* sessionForPane(const std::string& id) const;
     void paneOutput(const std::string& id, std::string_view data);
     std::string sessionsJson() const;
+
+    void runCommand(const wire::ClientOp& op);
+    void startEphemeral(WsConnection* connection, const wire::ClientOp& op);
+    void endEphemeral(const std::string& id);
 
     const AppConfig& config;
     SessionManager& manager;
     eacp::HTTP::Server http;
     std::unique_ptr<WsListener> socketListener;
     std::vector<Client> clients;
+    std::map<std::string, Ephemeral> ephemerals;
     bool running = false;
     bool broadcastPending = false;
     std::shared_ptr<bool> alive = std::make_shared<bool>(true);

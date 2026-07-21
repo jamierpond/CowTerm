@@ -20,6 +20,7 @@ add_executable(CowTerm
         Popup.cpp
         Projects.cpp
         Session.cpp
+        SessionCommand.cpp
         SessionView.cpp
         Switcher.cpp
         TermScreen.cpp
@@ -71,9 +72,20 @@ add_custom_command(TARGET CowTerm POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
         $<TARGET_FILE:CowTermDaemon> $<TARGET_FILE_DIR:CowTerm>)
 
-# JetBrains Mono (OFL) rides inside the binary; registered with the platform
-# font system at startup, so the default font needs no install step.
-res_embed_add(CowTerm DIRECTORY Resources)
+# JetBrains Mono (OFL) and the web UI page ride inside the binary; the fonts
+# are registered with the platform font system at startup and the page is
+# served by the web gateway, so neither needs an install step.
+#
+# The file list is globbed and passed as explicit DEPENDS: res_embed_add's
+# directory mode discovers files at build time and writes a depfile naming
+# only what the *previous* run saw, so a newly added resource — or an edit
+# to one that run missed — never re-triggers the generator, and the app
+# silently serves a stale (or absent) asset. CONFIGURE_DEPENDS re-globs when
+# files come and go; DEPENDS re-runs the generator when their contents change.
+file(GLOB COWTERM_RESOURCES CONFIGURE_DEPENDS
+        "${CMAKE_CURRENT_SOURCE_DIR}/Resources/*")
+
+res_embed_add(CowTerm DIRECTORY Resources DEPENDS ${COWTERM_RESOURCES})
 
 set(BUNDLE_ID "com.eacp.cowterm")
 

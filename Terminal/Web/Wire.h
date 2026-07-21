@@ -110,14 +110,47 @@ struct AnyEvent
     std::string ev;
     std::string pane;
     std::string message;
+    std::string key;
     int cols = 0;
     int rows = 0;
     std::vector<SessionInfo> sessions;
 
-    MIRO_REFLECT(ev, pane, message, cols, rows, sessions)
+    MIRO_REFLECT(ev, pane, message, key, cols, rows, sessions)
+};
+
+// Answers an "open" op, naming the session that was created, so the
+// caller can mirror the session it just asked for.
+struct OpenedEvent
+{
+    std::string ev = "opened";
+    std::string key;
+
+    MIRO_REFLECT(ev, key)
+};
+
+// Ephemeral panes (popups) are the one case where the CLIENT owns the
+// grid: nobody else is displaying them, so they size to the viewer.
+struct ResizeOp
+{
+    std::string op = "resize";
+    std::string pane;
+    int cols = 0;
+    int rows = 0;
+
+    MIRO_REFLECT(op, pane, cols, rows)
 };
 
 // One struct covers every client op; absent fields stay empty.
+//
+// "command" carries a SessionCommand name in `command`, targeted at the
+// session owning `pane` (which is focused first, so commands act on the
+// pane the user is actually in — tmux semantics). `cells` scales resizes.
+//
+// "popup" runs `data` as a command in a fresh ephemeral pane on the
+// serving machine, in the cwd of `pane`, sized `cols`x`rows`. The gateway
+// answers with a "popup" event naming the new pane, which the client
+// attaches like any other — that is how lazygit runs against the REMOTE
+// repo while being displayed locally.
 struct ClientOp
 {
     std::string op;
@@ -125,8 +158,20 @@ struct ClientOp
     std::string data;
     std::string key;
     std::string dir;
+    std::string command;
+    float cells = 1.0f;
+    int cols = 0;
+    int rows = 0;
 
-    MIRO_REFLECT(op, pane, data, key, dir)
+    MIRO_REFLECT(op, pane, data, key, dir, command, cells, cols, rows)
+};
+
+struct PopupEvent
+{
+    std::string ev = "popup";
+    std::string pane;
+
+    MIRO_REFLECT(ev, pane)
 };
 
 // Pane output rides binary frames as [u8 idLen][id][raw bytes].

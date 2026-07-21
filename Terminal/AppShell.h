@@ -7,6 +7,7 @@
 #include "PrDashboard.h"
 #include "RemoteHud.h"
 #include "Session.h"
+#include "SessionCommand.h"
 #include "Switcher.h"
 #include "TrayController.h"
 #include "Web/WebGateway.h"
@@ -53,10 +54,23 @@ private:
     void showRemoteHud();
     void hideRemoteHud();
 
-    // Ctrl+A x / w. A remote mirror's tree belongs to the owning GUI, so
-    // there is no pane to close here — the whole mirror closes instead,
-    // which only detaches (the shells keep running over there).
-    void closeActivePaneOrMirror();
+    // Every leader-table action that changes a session funnels through
+    // here, which is what makes a mirror behave like a local session:
+    // tree-shape commands travel to the CowTerm that owns the tree, view
+    // commands (focus, zoom) stay here, where this viewer's answer lives.
+    void runSessionCommand(SessionCommand command, float cells = 1.0f);
+
+    // Ctrl+A i and config popup bindings. On a mirror the command runs on
+    // the machine that owns the directory and is displayed here.
+    void runPopupCommand(const std::string& command);
+
+    // Ctrl+A c. On a mirror the new session is created over there, then
+    // mirrored here — the same "new session in this directory" gesture.
+    void newSessionHere();
+
+    // Ctrl+A D: stop viewing a mirror without touching the remote (a
+    // mirror has no last-pane-closes exit of its own).
+    void detachMirror();
     bool anyOverlayShown() const;
     void attachActive(TermSession& session);
     void setGlobalFontSize(float size);
@@ -82,6 +96,16 @@ private:
     RemoteHud remoteHud {config, fleet, web};
     Popup popup {config};
     TrayController tray {manager};
+    // A session this shell asked a remote to create, waiting for that
+    // remote's roster to catch up so it can be mirrored.
+    struct PendingMirror
+    {
+        web::GatewayClient* client = nullptr;
+        std::string key;
+    };
+
+    PendingMirror pendingMirror;
+
     TermSession* attached = nullptr;
     bool prefixArmed = false;
     bool popupPrefixArmed = false;

@@ -23,6 +23,7 @@ nano_add_executable(CowTermWebTests
             WebTests.cpp
             ../Terminal/Web/WebSocket.cpp
             ../Terminal/Web/ScreenSerializer.cpp
+            ../Terminal/SessionCommand.cpp
             ../Terminal/TermScreen.cpp
             ../Terminal/TermParser.cpp)
 

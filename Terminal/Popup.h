@@ -22,6 +22,11 @@ public:
     // goes to the session daemon and dies with the popup.
     void show(const std::string& command, const std::string& workingDirectory);
 
+    // Hosts a supplied shell instead of spawning one — the remote popup,
+    // where the command runs on another machine and only its bytes are
+    // here. Dismissing detaches, which is what ends it over there.
+    void showShell(std::unique_ptr<Shell> shell);
+
     // Ends the command (the toggle case) and tears the popup down on the
     // next loop tick — never inline, since the call usually originates
     // inside one of the terminal's own callbacks.
