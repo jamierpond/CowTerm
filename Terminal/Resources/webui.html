@@ -656,13 +656,16 @@
   }
 
   function setFocus(paneId) {
-    if (focusedPane === paneId)
-      return;
+    // Claiming keyboard focus happens even when this pane was already the
+    // focused one: a mousedown anywhere in the leaf's padding (rather than
+    // on the xterm itself) has by then moved DOM focus to <body>, and
+    // returning early there left the terminal unable to receive a key.
+    if (focusedPane !== paneId) {
+      focusedPane = paneId;
 
-    focusedPane = paneId;
-
-    for (const leaf of document.querySelectorAll('.leaf'))
-      leaf.classList.toggle('focused', leaf.dataset.pane === paneId);
+      for (const leaf of document.querySelectorAll('.leaf'))
+        leaf.classList.toggle('focused', leaf.dataset.pane === paneId);
+    }
 
     const entry = terms.get(paneId);
     if (entry)
