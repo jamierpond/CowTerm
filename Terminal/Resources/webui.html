@@ -63,7 +63,12 @@
     font: inherit; border-radius: 4px; padding: 1px 8px; cursor: pointer;
   }
   #status button:hover { color: var(--fg); border-color: var(--dim); }
-  #view { flex: 1; min-height: 0; padding: 4px; position: relative; }
+  /* Flex, so the tree's root — a lone .leaf as often as a .split — is
+     stretched to fill it. A .leaf's only child is absolutely positioned,
+     so a leaf left to size itself collapses to its 2px of border: the
+     terminal still paints, but over a box too small to click. */
+  #view { flex: 1; min-height: 0; padding: 4px; position: relative;
+    display: flex; }
   /* Zoom overlays the focused leaf on the whole view, so it works at any
      nesting depth rather than depending on the tree's shape. */
   #view.zoomed .leaf:not(.focused) { visibility: hidden; }
@@ -82,12 +87,17 @@
   }
   #leader.on { display: block; }
   #placeholder { color: var(--dim); padding: 40px; }
-  .split { display: flex; width: 100%; height: 100%; gap: 2px; }
+  /* Both node kinds default to filling their slot; a split's children then
+     take an inline flex-grow of the node's ratio, which wins over this. */
+  .split {
+    display: flex; gap: 2px; flex: 1 1 0; min-width: 0; min-height: 0;
+  }
   .split.h { flex-direction: row; }
   .split.v { flex-direction: column; }
   .leaf {
     overflow: hidden; position: relative; border: 1px solid var(--border);
-    border-radius: 3px; background: var(--bg); min-width: 0; min-height: 0;
+    border-radius: 3px; background: var(--bg); flex: 1 1 0;
+    min-width: 0; min-height: 0;
   }
   .leaf.focused { border-color: var(--accent); }
   .leaf .xt { position: absolute; inset: 2px; }
@@ -268,8 +278,9 @@
         if (!session) {
           clearView('session closed on ' + g.label);
         } else if (layoutSignature(session) !== view.layoutSig) {
-          buildView(); // splits changed shape or size — rebuild the tree
+          buildView(); // panes appeared, vanished or moved — rebuild the tree
         } else {
+          resizeInPlace(session);
           $('viewed-label').innerHTML = viewedLabel(session);
         }
       }
@@ -397,9 +408,24 @@
     renderSidebar();
   }
 
+  // Only the tree's *shape* forces a rebuild. Sizes deliberately sit
+  // outside it: a pane's grid can change on every roster push while the
+  // owner settles its layout, and tearing the DOM down for that re-homes
+  // every terminal, which drops keyboard focus for a frame — long enough
+  // to swallow whatever the user was typing. Size changes are applied to
+  // the live terminals instead, by resizeInPlace.
   const layoutSignature = session => JSON.stringify([
-    session.layout, session.panes.map(p => [p.id, p.cols, p.rows]),
+    session.layout, session.panes.map(p => p.id),
   ]);
+
+  function resizeInPlace(session) {
+    for (const pane of session.panes) {
+      const entry = terms.get(pane.id);
+
+      if (entry && (entry.term.cols !== pane.cols || entry.term.rows !== pane.rows))
+        entry.term.resize(pane.cols, pane.rows);
+    }
+  }
 
   function viewedLabel(session) {
     return '<span class="name">' + escapeHtml(session.name) + '</span> · '
@@ -438,9 +464,18 @@
     if (!focusedPane || !surviving.has(focusedPane))
       focusedPane = (session.panes.find(p => p.active) || session.panes[0]).id;
 
+    // Claim focus again on the next frame as well. Re-homing a terminal
+    // detaches its helper textarea, and the browser drops focus to <body>
+    // after the current task — so a focus() issued here alone is sometimes
+    // undone, and the keystroke after a split goes nowhere.
     const focused = terms.get(focusedPane);
-    if (focused)
+    if (focused) {
       focused.term.focus();
+      requestAnimationFrame(() => {
+        const entry = terms.get(focusedPane);
+        if (entry) entry.term.focus();
+      });
+    }
 
     $('viewed-label').innerHTML = viewedLabel(session);
     $('host-focus').style.display = '';
@@ -594,6 +629,18 @@
   // away from the shell.
   const modifierKeys = new Set(['Shift', 'Control', 'Alt', 'Meta', 'CapsLock']);
 
+  // xterm returns from its keydown as soon as a custom handler says false,
+  // without calling preventDefault — so the browser still performs the key's
+  // default action. For a focus command that is a real bug and not a
+  // cosmetic one: handleLeaderKey has already moved focus to another pane's
+  // textarea, so the default insert lands there and `Ctrl+A j` types a "j"
+  // into the pane it just moved to. Swallowing means swallowing.
+  const swallow = event => {
+    event.preventDefault();
+    event.stopPropagation();
+    return false;
+  };
+
   function leaderHandler(event) {
     if (event.type !== 'keydown') return true;
 
@@ -610,12 +657,12 @@
       if (event.ctrlKey && event.key.toLowerCase() === 'a') return true;
 
       handleLeaderKey(event.key);
-      return false;
+      return swallow(event);
     }
 
     if (event.ctrlKey && !event.metaKey && event.key.toLowerCase() === 'a') {
       armLeader(true);
-      return false;
+      return swallow(event);
     }
 
     return true;
@@ -668,8 +715,23 @@
     }
 
     const entry = terms.get(paneId);
-    if (entry)
-      entry.term.focus();
+    if (!entry)
+      return;
+
+    // Focus twice: now, and again once the event that brought us here has
+    // finished. setFocus runs during mousedown, and the browser's own
+    // default handling for that click lands *after* it — moving focus to
+    // the clicked <div>, which is not focusable, and so to <body>. The
+    // terminal then looks focused (the border is lit, the cursor blinks)
+    // while every keystroke goes nowhere.
+    entry.term.focus();
+
+    requestAnimationFrame(() => {
+      const current = terms.get(paneId);
+
+      if (current && !current.el.contains(document.activeElement))
+        current.term.focus();
+    });
   }
 
   // ---- sidebar ----

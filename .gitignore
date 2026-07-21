@@ -9,3 +9,8 @@ CMakeUserPresets.json
 .DS_Store
 .cache/clangd/index
 cowcrash.txt
+
+# Web UI driver scratch (pid + log of the isolated test instance)
+Test/WebUI/test.pid
+Test/WebUI/test-app.log
+Test/WebUI/node_modules/

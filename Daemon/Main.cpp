@@ -10,8 +10,13 @@
 #include <eacp/Core/Core.h>
 #include <eacp/Network/IPC/Messenger.h>
 
+#include <algorithm>
 #include <csignal>
 #include <map>
+
+#if !defined(_WIN32)
+#include <unistd.h>
+#endif
 #include <memory>
 #include <string>
 
@@ -219,6 +224,21 @@ struct Daemon
 
 int main()
 {
+    // The GUI spawns us, so we start holding copies of whatever it had
+    // open — including the web gateway's listening sockets when a crashed
+    // daemon is relaunched by an app that is already serving. We outlive
+    // the GUI by design, so an inherited listener would keep the port
+    // bound long after the app that owned it exited, and the next launch
+    // would fail to bind with nothing to show for it. Nothing is handed to
+    // us by descriptor; the IPC channel is opened below, by name.
+#if !defined(_WIN32)
+    constexpr auto highestPlausibleFd = 4096;
+    const auto limit = std::min((int) ::sysconf(_SC_OPEN_MAX), highestPlausibleFd);
+
+    for (auto descriptor = 3; descriptor < limit; ++descriptor)
+        ::close(descriptor);
+#endif
+
     try
     {
         return Apps::run<Daemon>();

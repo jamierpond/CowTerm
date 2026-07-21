@@ -1,5 +1,6 @@
 #include "Pty.h"
 
+#include <algorithm>
 #include <csignal>
 #include <cstdlib>
 #include <string>
@@ -33,6 +34,21 @@ constexpr int shutdownKillGraceMs = 250;
     // close its terminal — wedging quit. Reset it so a hangup ends the shell.
     for (auto sig: {SIGHUP, SIGINT, SIGQUIT, SIGTSTP, SIGPIPE, SIGCHLD})
         signal(sig, SIG_DFL);
+
+    // Everything above the tty belongs to us, not to the user's shell:
+    // the web gateway's listening sockets, the daemon's IPC channel, the
+    // session database, other panes' PTY masters. Inherited, they outlive
+    // us — a shell left holding the gateway's listener keeps the port
+    // bound after CowTerm exits, and the next launch cannot serve on it.
+    // forkpty has already dup'd the slave onto 0/1/2, so close the rest.
+    // _SC_OPEN_MAX follows RLIMIT_NOFILE, which can be enormous; the table
+    // is only ever as large as the highest fd we actually opened, so cap
+    // the sweep rather than issue millions of pointless close() calls.
+    constexpr auto highestPlausibleFd = 4096;
+    const auto limit = std::min((int) sysconf(_SC_OPEN_MAX), highestPlausibleFd);
+
+    for (auto descriptor = 3; descriptor < limit; ++descriptor)
+        close(descriptor);
 
     setenv("TERM", "xterm-256color", 1);
     setenv("COLORTERM", "truecolor", 1);

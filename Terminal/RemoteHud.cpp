@@ -346,9 +346,10 @@ void RemoteHud::paint(Context& context)
                            ? "serving :" + std::to_string(gateway.port())
                                  + (gateway.servesNetwork() ? " (network)"
                                                             : " (local only)")
-                           : std::string {config.webPort > 0
-                                              ? "gateway OFF — port busy?"
-                                              : "gateway disabled"};
+                           : (config.webPort > 0
+                                  ? "gateway OFF — :" + std::to_string(config.webPort)
+                                        + " is already bound"
+                                  : std::string {"gateway disabled"});
 
     context.setColor(gateway.isRunning() ? toColor(theme.ansi[2])
                                          : toColor(theme.ansi[1]));

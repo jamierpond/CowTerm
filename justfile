@@ -88,3 +88,12 @@ install: build
     cp "{{build_dir}}/Terminal/CowTerm" "$HOME/.local/bin/cowterm"
     cp "{{build_dir}}/Terminal/CowTermDaemon" "$HOME/.local/bin/CowTermDaemon"
     @echo "Installed to ~/.local/bin"
+
+# Drive the web UI in a real browser: leader keys, focus and layout live in
+# the page, so the C++ suite cannot reach them. Needs node + Playwright's
+# chromium (see Test/WebUI/README.md) and runs against an isolated instance
+# on :3697, leaving the CowTerm you actually use alone.
+[macos]
+test-webui: build
+    Test/WebUI/restart.sh --wipe
+    cd Test/WebUI && node drive.js && node parity.js
