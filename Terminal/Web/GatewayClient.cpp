@@ -19,11 +19,17 @@ namespace
 // while connected or mid-dial, so the tick is a flag test).
 constexpr int redialHz = 1;
 
+// What a dial found at the far end.
+struct Discovery
+{
+    std::uint16_t wsPort = 0;   // 0 = unreachable, or not a CowTerm gateway
+    bool isOurselves = false;   // the address loops back to this process
+};
+
 // The configured address is the remote's HTTP port; the websocket lives
 // wherever /api/v1/server says it does — the same discovery the browser
-// client performs, never an assumption about port layout. Returns 0 when
-// the remote is unreachable or isn't a CowTerm gateway.
-std::uint16_t discoverWsPort(const std::string& host, std::uint16_t httpPort)
+// client performs, never an assumption about port layout.
+Discovery discover(const std::string& host, std::uint16_t httpPort)
 {
     try
     {
@@ -33,22 +39,32 @@ std::uint16_t discoverWsPort(const std::string& host, std::uint16_t httpPort)
                 .perform();
 
         if (response.statusCode != 200)
-            return 0;
+            return {};
 
         auto info = wire::ServerInfo {};
         Miro::fromJSONString(info, response.content);
+
+        // Our own gateway answered. Connecting would splice this instance's
+        // output back into its own input: every pane byte goes out to the
+        // gateway, arrives as remote pane output, and is published again —
+        // an amplifying loop that saturates a core and never drains. An
+        // empty id means a peer too old to say; treat that as a stranger,
+        // since the old behaviour is what we already ship.
+        if (!info.instanceId.empty() && info.instanceId == wire::localInstanceId())
+            return {.wsPort = 0, .isOurselves = true};
 
         // "ws://host:port/"
         const auto colon = info.wsUrl.rfind(':');
 
         if (colon == std::string::npos)
-            return 0;
+            return {};
 
-        return (std::uint16_t) std::atoi(info.wsUrl.c_str() + colon + 1);
+        return {.wsPort =
+                    (std::uint16_t) std::atoi(info.wsUrl.c_str() + colon + 1)};
     }
     catch (const std::exception&)
     {
-        return 0;
+        return {};
     }
 }
 } // namespace
@@ -73,7 +89,7 @@ GatewayClient::GatewayClient(const std::string& addressToUse)
     redial = std::make_unique<Threads::Timer>(
         [this]
         {
-            if (!connected && !dialing)
+            if (!connected && !dialing && !selfLink)
                 dial();
         },
         redialHz);
@@ -110,18 +126,21 @@ void GatewayClient::dial()
          dialPort = port]
         {
             auto socket = WsConnection::Ptr {};
+            auto found = Discovery {};
 
             try
             {
-                if (const auto wsPort = discoverWsPort(dialHost, dialPort))
-                    socket = wsConnectClient(dialHost, wsPort);
+                found = discover(dialHost, dialPort);
+
+                if (found.wsPort != 0)
+                    socket = wsConnectClient(dialHost, found.wsPort);
             }
             catch (const TCP::Error&)
             {
             }
 
             Threads::callAsync(
-                [guard, this, socket]
+                [guard, this, socket, found]
                 {
                     if (guard.expired())
                     {
@@ -132,6 +151,19 @@ void GatewayClient::dial()
                     }
 
                     dialing = false;
+
+                    // A self-link is settled, not a transient failure: the
+                    // address cannot start pointing somewhere else while we
+                    // run. Latch it and stop the redial, so a misconfigured
+                    // remote costs one discovery rather than one a second
+                    // forever — and say so, so the HUD can explain itself.
+                    if (found.isOurselves)
+                    {
+                        if (!selfLink.exchange(true))
+                            onChanged();
+
+                        return;
+                    }
 
                     if (socket != nullptr)
                         adopt(socket);

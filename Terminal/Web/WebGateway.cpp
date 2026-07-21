@@ -267,6 +267,7 @@ HTTP::Response WebGateway::route(const HTTP::Request& request)
         auto info = ServerInfo {};
         info.wsUrl =
             "ws://" + host + ":" + std::to_string(socketListener->port()) + "/";
+        info.instanceId = localInstanceId();
         info.remotes = config.remotes;
 
         // Discovery (and only discovery) is cross-origin readable: the web

@@ -4,6 +4,8 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <cstdio>
+#include <random>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -15,6 +17,28 @@ namespace term::web::wire
 // never drift. All Miro-reflected: the same tolerant JSON machinery as the
 // config file, so additive protocol changes cost nothing on either side.
 // Documented in DESIGN-WEBUI.md.
+
+// Names this process for the lifetime of the run, so a gateway link can
+// tell a genuine peer from this very instance answering its own dial.
+// Address comparison cannot: "127.0.0.1", "localhost", the machine's LAN
+// name and its ::1 all reach the same gateway, while two CowTerms sharing
+// a machine on different ports are real peers that must keep working.
+// Identity travels in the discovery document instead, where it survives
+// every alias. Inline, so all translation units share the one static.
+inline const std::string& localInstanceId()
+{
+    static const auto id = []
+    {
+        auto device = std::random_device {};
+        auto engine = std::mt19937_64 {device()};
+        char buffer[24];
+        std::snprintf(
+            buffer, sizeof(buffer), "%016llx", (unsigned long long) engine());
+        return std::string {buffer};
+    }();
+
+    return id;
+}
 
 struct PaneInfo
 {
@@ -71,11 +95,17 @@ struct ServerInfo
     std::string version = "0.1.0";
     std::string wsUrl;
 
+    // Who is answering — see localInstanceId. Deliberately left empty here
+    // rather than defaulted to our own id: this struct is also the shape a
+    // *remote's* reply is parsed into, and a peer too old to send the field
+    // would otherwise inherit our id and read as a self-link.
+    std::string instanceId;
+
     // This instance's configured peers, so a browser hitting one CowTerm
     // can fan out to the whole fleet (the web UI's remotes come from here).
     std::vector<std::string> remotes;
 
-    MIRO_REFLECT(name, version, wsUrl, remotes)
+    MIRO_REFLECT(name, version, wsUrl, instanceId, remotes)
 };
 
 struct AttachedEvent

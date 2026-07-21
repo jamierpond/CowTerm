@@ -47,6 +47,11 @@ public:
     const std::string& hostName() const { return host; }
     bool isConnected() const { return connected; }
 
+    // This remote turned out to be the very instance holding it, so the
+    // link was refused and will not be retried. Permanent for the run: it
+    // takes a config edit (and a restart) to become a real peer.
+    bool isSelf() const { return selfLink; }
+
     // The remote's roster as of the last sessions push.
     const std::vector<wire::SessionInfo>& sessions() const { return model; }
     const wire::PaneInfo* findPane(const std::string& paneId) const;
@@ -96,6 +101,7 @@ private:
     WsConnection::Ptr connection;
     std::atomic<bool> connected {false};
     std::atomic<bool> dialing {false};
+    std::atomic<bool> selfLink {false};
 
     // Read on the socket thread for output routing; everything else main.
     std::mutex routesLock;

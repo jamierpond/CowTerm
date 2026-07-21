@@ -300,11 +300,14 @@ void RemoteHud::paint(Context& context)
 
         if (item.sessionKey.empty())
         {
-            context.setColor(toColor(theme.ansi[8]));
-            context.drawText(item.client->address()
-                                 + (item.client->isConnected()
-                                        ? " — no sessions"
-                                        : " — offline, retrying…"),
+            const auto* state = item.client->isSelf() ? " — this instance, ignored"
+                              : item.client->isConnected() ? " — no sessions"
+                                                           : " — offline, retrying…";
+
+            // A self-link is a config mistake, not a peer having a quiet
+            // moment; colour it like the warning it is.
+            context.setColor(toColor(theme.ansi[item.client->isSelf() ? 3 : 8]));
+            context.drawText(item.client->address() + state,
                              {rowRect.x + 12.0f, line1},
                              rowFont);
             continue;
