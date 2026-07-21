@@ -77,17 +77,17 @@ AppShell::AppShell()
 
     remoteHud.onClosed = [this] { hideRemoteHud(); };
 
-    // A chosen remote pane lands in the popup, full-window over the session
-    // — dismissing detaches from the remote shell, never kills it.
-    remoteHud.onAttachPane = [this](std::unique_ptr<Shell> shell)
-    {
-        if (popup.isShown())
-            return;
+    // A chosen remote session becomes a real session here: the whole pane
+    // tree, every leaf a live RemoteShell, switchable like any other.
+    remoteHud.onOpenSession =
+        [this](web::GatewayClient& client, const web::wire::SessionInfo& info)
+    { manager.openRemoteSession(client, info); };
 
-        popupPrefixArmed = false;
-        addSubview(popup);
-        popup.setBounds(getLocalBounds());
-        popup.showShell(std::move(shell));
+    // The owner reshaped or ended a session we mirror; follow it.
+    fleet.onChanged = [this](web::GatewayClient& client)
+    {
+        manager.refreshRemoteSessions(client);
+        remoteHud.remoteChanged();
     };
 
     // Branch a highlighted repo into a fresh worktree and drop a session in
@@ -330,6 +330,19 @@ void AppShell::hideClaudeHud()
 
     if (attached != nullptr)
         attached->view.focusActive();
+}
+
+void AppShell::closeActivePaneOrMirror()
+{
+    auto* active = manager.active();
+
+    if (active == nullptr)
+        return;
+
+    if (active->isRemote())
+        manager.close(*active);
+    else
+        active->view.closeActivePane();
 }
 
 void AppShell::showRemoteHud()
@@ -630,9 +643,7 @@ bool AppShell::handlePrefixed(const KeyEvent& event)
     // Kill the active pane; the session ends with its last pane.
     if (chars == "x")
     {
-        if (paneTree != nullptr)
-            paneTree->closeActivePane();
-
+        closeActivePaneOrMirror();
         return true;
     }
 
@@ -663,9 +674,7 @@ bool AppShell::handleCommand(const KeyEvent& event)
 
     if (chars == "w")
     {
-        if (auto* active = manager.active())
-            active->view.closeActivePane();
-
+        closeActivePaneOrMirror();
         return true;
     }
 

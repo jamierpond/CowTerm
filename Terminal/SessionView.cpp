@@ -36,7 +36,11 @@ std::unique_ptr<SessionView::Node> SessionView::makeLeaf(const std::string& dir,
 {
     auto node = std::make_unique<Node>();
     node->view = std::make_unique<TerminalView>(
-        config, dir.empty() ? fallbackDir : dir, shellId);
+        config,
+        dir.empty() ? fallbackDir : dir,
+        shellId,
+        std::string {},
+        shellFactory ? shellFactory(shellId) : nullptr);
 
     // Tree surgery (split, sibling promotion) moves views between nodes, so
     // the callbacks resolve their node by view at fire time, never by a
@@ -66,6 +70,21 @@ std::unique_ptr<SessionView::Node> SessionView::makeLeaf(const std::string& dir,
 
 void SessionView::restore(const std::vector<SavedPane>& saved)
 {
+    // Replacing an existing tree: its panes must leave the view before
+    // their nodes die, or the superview keeps dangling children.
+    if (root != nullptr)
+    {
+        auto leaves = std::vector<Node*> {};
+        collectLeaves(root.get(), leaves);
+
+        for (auto* leaf: leaves)
+            removeSubview(*leaf->view);
+
+        active = nullptr;
+        zoomed = nullptr;
+        root.reset();
+    }
+
     root = saved.empty() ? nullptr : buildFromSaved(saved, 0, 0);
 
     if (root == nullptr)
@@ -264,7 +283,7 @@ void SessionView::focusActive()
 
 void SessionView::splitActive(bool horizontal)
 {
-    if (active == nullptr)
+    if (active == nullptr || structuralLock)
         return;
 
     zoomed = nullptr;
@@ -345,6 +364,9 @@ void SessionView::removeLeaf(Node* leaf)
 
 void SessionView::closeActivePane()
 {
+    if (structuralLock)
+        return;
+
     if (active != nullptr && active->isLeaf())
         active->view->terminateShell();
 

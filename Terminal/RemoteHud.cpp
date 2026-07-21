@@ -33,8 +33,10 @@ std::string truncated(const std::string& text, std::size_t max)
 } // namespace
 
 RemoteHud::RemoteHud(const AppConfig& configToUse,
+                     web::RemoteFleet& fleetToUse,
                      const web::WebGateway& gatewayToUse)
     : config(configToUse)
+    , fleet(fleetToUse)
     , gateway(gatewayToUse)
     , theme(themeByName(configToUse.theme))
     , headerFont({config.font, 16.0f})
@@ -43,22 +45,6 @@ RemoteHud::RemoteHud(const AppConfig& configToUse,
 {
     setHandlesMouseEvents(true);
     setGrabsFocusOnMouseDown(true);
-
-    for (const auto& address: config.remotes)
-    {
-        auto client = std::make_unique<web::GatewayClient>(address);
-
-        client->onChanged = [this]
-        {
-            if (shown)
-            {
-                rebuild();
-                repaint();
-            }
-        };
-
-        remotes.push_back(std::move(client));
-    }
 }
 
 void RemoteHud::show()
@@ -69,14 +55,24 @@ void RemoteHud::show()
     repaint();
 }
 
+void RemoteHud::remoteChanged()
+{
+    if (shown)
+    {
+        rebuild();
+        repaint();
+    }
+}
+
 void RemoteHud::rebuild()
 {
     const auto previous = selected < (int) items.size()
-                              ? items[(std::size_t) selected].paneId
+                              ? items[(std::size_t) selected].client->address()
+                                    + items[(std::size_t) selected].sessionKey
                               : std::string {};
     items.clear();
 
-    for (const auto& remote: remotes)
+    for (const auto& remote: fleet.all())
     {
         if (!remote->isConnected() || remote->sessions().empty())
         {
@@ -88,27 +84,21 @@ void RemoteHud::rebuild()
 
         for (const auto& session: remote->sessions())
         {
-            for (const auto& pane: session.panes)
-            {
-                auto item = Item {};
-                item.client = remote.get();
-                item.sessionKey = session.key;
-                item.sessionName = session.name;
-                item.paneId = pane.id;
-                item.title = pane.title;
-                item.cwd = pane.cwd;
-                item.cols = pane.cols;
-                item.rows = pane.rows;
-                item.sessionActive = session.active;
-                item.claude = session.claude;
-                items.push_back(std::move(item));
-            }
+            auto item = Item {};
+            item.client = remote.get();
+            item.sessionKey = session.key;
+            item.name = session.name;
+            item.projectDir = session.projectDir;
+            item.paneCount = (int) session.panes.size();
+            item.activeThere = session.active;
+            item.claude = session.claude;
+            items.push_back(std::move(item));
         }
     }
 
     if (!previous.empty())
         for (std::size_t i = 0; i < items.size(); ++i)
-            if (items[i].paneId == previous)
+            if (items[i].client->address() + items[i].sessionKey == previous)
             {
                 selected = (int) i;
                 break;
@@ -127,12 +117,21 @@ void RemoteHud::choose()
 
     const auto item = items[(std::size_t) selected];
 
-    if (item.paneId.empty())
+    if (item.sessionKey.empty())
         return; // an offline placeholder row
 
-    shown = false;
-    onClosed();
-    onAttachPane(std::make_unique<web::RemoteShell>(*item.client, item.paneId));
+    // The roster entry may have moved under the HUD; open from live data.
+    for (const auto& session: item.client->sessions())
+    {
+        if (session.key == item.sessionKey)
+        {
+            const auto info = session; // copy: onOpenSession may mutate rosters
+            shown = false;
+            onClosed();
+            onOpenSession(*item.client, info);
+            return;
+        }
+    }
 }
 
 void RemoteHud::activateSelected()
@@ -261,14 +260,16 @@ void RemoteHud::paint(Context& context)
     context.strokeRect(panel);
 
     context.setColor(toColor(theme.ansi[6]));
-    context.drawText("⇄ remotes", {panel.x + 18.0f, panel.y + 30.0f}, headerFont);
+    context.drawText("⇄ remote sessions",
+                     {panel.x + 18.0f, panel.y + 30.0f},
+                     headerFont);
 
-    const auto online = (int) std::count_if(remotes.begin(),
-                                            remotes.end(),
+    const auto online = (int) std::count_if(fleet.all().begin(),
+                                            fleet.all().end(),
                                             [](const auto& remote)
                                             { return remote->isConnected(); });
     const auto summary = std::to_string(online) + "/"
-                         + std::to_string(remotes.size()) + " online";
+                         + std::to_string(fleet.all().size()) + " online";
     const auto summaryWidth =
         Graphics::TextMetrics::measureWidth(summary, detailFont);
     context.setColor(online > 0 ? toColor(theme.ansi[2]) : toColor(theme.ansi[8]));
@@ -297,7 +298,7 @@ void RemoteHud::paint(Context& context)
         const auto line1 = y + rowHeight * 0.40f;
         const auto line2 = y + rowHeight * 0.78f;
 
-        if (item.paneId.empty())
+        if (item.sessionKey.empty())
         {
             context.setColor(toColor(theme.ansi[8]));
             context.drawText(item.client->address()
@@ -314,23 +315,22 @@ void RemoteHud::paint(Context& context)
         context.drawText(item.claude ? "✳" : "⇄", {rowRect.x + 12.0f, line1}, rowFont);
 
         context.setColor(toColor(theme.foreground));
-        context.drawText(truncated(item.sessionName, 22),
-                         {rowRect.x + 36.0f, line1},
-                         rowFont);
+        context.drawText(
+            truncated(item.name, 26), {rowRect.x + 36.0f, line1}, rowFont);
 
-        // Right of line 1: where it lives and how big its grid is.
-        const auto meta = item.client->address() + " · "
-                          + std::to_string(item.cols) + "×"
-                          + std::to_string(item.rows)
-                          + (item.sessionActive ? " · active" : "");
+        const auto meta =
+            item.client->hostName() + " · " + std::to_string(item.paneCount)
+            + (item.paneCount == 1 ? " pane" : " panes")
+            + (item.activeThere ? " · on their screen" : "");
         const auto metaWidth = Graphics::TextMetrics::measureWidth(meta, detailFont);
         context.setColor(toColor(theme.ansi[8]));
         context.drawText(
             meta, {rowRect.right() - metaWidth - 12.0f, line1}, detailFont);
 
-        auto detail = item.title.empty() ? item.cwd : item.title;
         context.setColor(toColor(theme.ansi[8]));
-        context.drawText(truncated(detail, 84), {rowRect.x + 36.0f, line2}, detailFont);
+        context.drawText(truncated(item.projectDir, 84),
+                         {rowRect.x + 36.0f, line2},
+                         detailFont);
     }
 
     if (items.empty())
@@ -342,9 +342,6 @@ void RemoteHud::paint(Context& context)
                          detailFont);
     }
 
-    // Left of the hints: this instance's own serving state, so "which port
-    // am I on" is always one Ctrl+A r away — including the failure case,
-    // which otherwise dies silently (another instance holding the port).
     const auto local = gateway.isRunning()
                            ? "serving :" + std::to_string(gateway.port())
                                  + (gateway.servesNetwork() ? " (network)"
@@ -358,7 +355,7 @@ void RemoteHud::paint(Context& context)
     context.drawText(local, {panel.x + 18.0f, panel.bottom() - 10.0f}, detailFont);
 
     const auto hints =
-        std::string {"enter attach pane · a activate session there · esc close"};
+        std::string {"enter open here · a focus on their screen · esc close"};
     const auto hintsWidth = Graphics::TextMetrics::measureWidth(hints, detailFont);
     context.setColor(toColor(theme.ansi[8]));
     context.drawText(

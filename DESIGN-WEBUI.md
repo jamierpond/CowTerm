@@ -175,14 +175,37 @@ The pieces, top down:
   parsing, rendering, mouse reporting, copy mode all work unchanged.
   `terminate()`/`detach()` both only detach: closing a window here must
   never kill work running over there.
+- **Remote sessions are native sessions.** Opening one from the HUD calls
+  `SessionManager::openRemoteSession`, which builds a real `TermSession`
+  whose `SessionView` holds the owner's *entire pane tree* — every leaf a
+  live `RemoteShell`. It sits in the session roster next to local ones and
+  works with all the existing machinery: Ctrl+Tab switching, the palette,
+  the tray, directional pane focus, zoom, copy mode. Two hooks make this
+  possible without special-casing the view: `SessionView::shellFactory`
+  (where a leaf's process end comes from) and `SessionView::structuralLock`
+  (splits/closes are refused locally, because the owner's GUI owns the
+  tree's shape). `restore()` became re-entrant so a reshape over there
+  rebuilds the mirror here.
+- **Layout on the wire**: `SessionInfo.layout` carries the split tree —
+  the same encoding `SavedPane` already uses for session restore, with
+  pane ids in place of shell ids. A remote session is therefore restored
+  through the exact code path a relaunch uses, and the browser client
+  renders the same tree with nested flexbox.
+- **Lifetime**: `RemoteFleet` owns the gateway links for the app's
+  lifetime and is declared *before* `SessionManager` in `AppShell`, so
+  mirrors (whose panes point into those clients) are always torn down
+  first. Mirrors are never persisted — a relaunch re-opens them from the
+  live roster rather than resurrecting stale ids.
 - **Grid ownership**: each GUI owns its own panes' sizes. `Shell` grew
   `fixedSize()`; a `RemoteShell` reports the remote pane's dimensions (from
   the `attached` event) and the local view mirrors them instead of imposing
   its bounds — the tmux "other client is smaller" model, minus reflow.
-- **Remote HUD** (`Ctrl+A r`): every configured remote with its live
-  sessions/panes. Enter attaches the pane full-window in the popup;
-  `a` activates that session on the remote's GUI; offline remotes show as
-  retrying. The HUD is a view over `GatewayClient`s, never a connection
+- **Remote HUD** (`Ctrl+A r`): every configured remote's **sessions** (not
+  panes — panes belong inside a session, here as everywhere). Enter opens
+  the session as a native mirror; `a` focuses it on the owner's screen
+  instead; offline remotes show as retrying. `Ctrl+A x`/`w` on a mirror
+  closes the whole mirror (there is no local pane to close), which only
+  detaches. The HUD is a view over `RemoteFleet`, never a connection
   manager — links live for the app's lifetime.
 - **The client half of RFC 6455** lives in the same `WsConnection` as the
   server half (outbound masking + `wsConnectClient` handshake), so the two

@@ -29,15 +29,6 @@ void Popup::show(const std::string& command, const std::string& workingDirectory
     adopt(std::make_unique<TerminalView>(config, workingDirectory, "", command));
 }
 
-void Popup::showShell(std::unique_ptr<Shell> shell)
-{
-    if (terminal != nullptr)
-        return;
-
-    adopt(std::make_unique<TerminalView>(
-        config, std::string {}, "", "", std::move(shell)));
-}
-
 void Popup::adopt(std::unique_ptr<TerminalView> terminalToUse)
 {
     terminal = std::move(terminalToUse);

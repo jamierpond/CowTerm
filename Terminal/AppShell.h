@@ -52,6 +52,11 @@ private:
     void hideClaudeHud();
     void showRemoteHud();
     void hideRemoteHud();
+
+    // Ctrl+A x / w. A remote mirror's tree belongs to the owning GUI, so
+    // there is no pane to close here — the whole mirror closes instead,
+    // which only detaches (the shells keep running over there).
+    void closeActivePaneOrMirror();
     bool anyOverlayShown() const;
     void attachActive(TermSession& session);
     void setGlobalFontSize(float size);
@@ -59,6 +64,13 @@ private:
     void handleSessionNotify(TermSession& session, const std::string& text);
 
     AppConfig config = loadConfig();
+
+    // The fleet's gateway links outlive every session that borrows them:
+    // a remote session's panes are RemoteShells pointing into these
+    // clients, so this must be declared before the SessionManager and
+    // destroyed after it.
+    web::RemoteFleet fleet {config.remotes};
+
     SessionManager manager {config};
     Palette palette {config, manager};
     Switcher switcher {config, manager};
@@ -67,7 +79,7 @@ private:
 
     // The gateway precedes the HUD, which reads its serving state.
     web::WebGateway web {config, manager};
-    RemoteHud remoteHud {config, web};
+    RemoteHud remoteHud {config, fleet, web};
     Popup popup {config};
     TrayController tray {manager};
     TermSession* attached = nullptr;

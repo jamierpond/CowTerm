@@ -43,6 +43,7 @@ public:
     ~GatewayClient();
 
     const std::string& address() const { return displayAddress; }
+    const std::string& hostName() const { return host; }
     bool isConnected() const { return connected; }
 
     // The remote's roster as of the last sessions push.
@@ -80,6 +81,35 @@ private:
     std::vector<wire::SessionInfo> model;
     std::unique_ptr<eacp::Threads::Timer> redial;
     std::shared_ptr<bool> alive = std::make_shared<bool>(true);
+};
+
+// Owns the app's gateway links, one per configured remote, for the whole
+// app lifetime — remote sessions hold RemoteShells pointing into these
+// clients, so the fleet must outlive the SessionManager (it's declared
+// above it in AppShell). Fans every client's change signal into one hook.
+class RemoteFleet
+{
+public:
+    explicit RemoteFleet(const std::vector<std::string>& addresses)
+    {
+        for (const auto& address: addresses)
+        {
+            auto& client =
+                *clients.emplace_back(std::make_unique<GatewayClient>(address));
+            client.onChanged = [this, raw = &client] { onChanged(*raw); };
+        }
+    }
+
+    const std::vector<std::unique_ptr<GatewayClient>>& all() const
+    {
+        return clients;
+    }
+
+    // Roster or connection state moved on that client (main thread).
+    std::function<void(GatewayClient&)> onChanged = [](GatewayClient&) {};
+
+private:
+    std::vector<std::unique_ptr<GatewayClient>> clients;
 };
 
 // A pane whose process lives inside another CowTerm, reached through that

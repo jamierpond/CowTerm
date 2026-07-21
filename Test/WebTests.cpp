@@ -14,11 +14,13 @@
 
 #include <eacp/Network/TCP/Connection.h>
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <future>
 #include <string>
 #include <thread>
+#include <vector>
 
 using namespace nano;
 using namespace term;
@@ -211,6 +213,60 @@ auto wireShapes = test("wire structs and binary frames round-trip") = []
     const auto back = term::web::wire::parseBinaryFrame(frame);
     check(back.pane == "pane1", "frame pane id");
     check(back.payload == std::string_view {"raw\x00里bytes", 12}, "frame payload");
+};
+
+auto layoutRoundTrip = test("session layout survives the wire as a tree") = []
+{
+    // The shape a client must be able to rebuild: root splits horizontally
+    // 70/30, the left half splits vertically. Three leaves, one per pane.
+    auto session = term::web::wire::SessionInfo {};
+    session.key = "/work/repo";
+    session.name = "repo";
+    session.layout = {
+        {.split = true, .horizontal = true, .ratio = 0.7f, .first = 1, .second = 4},
+        {.split = true, .horizontal = false, .ratio = 0.4f, .first = 2, .second = 3},
+        {.pane = "aaa"},
+        {.pane = "bbb"},
+        {.pane = "ccc"},
+    };
+    session.panes = {{.id = "aaa", .cols = 80, .rows = 10},
+                     {.id = "bbb", .cols = 80, .rows = 14},
+                     {.id = "ccc", .cols = 40, .rows = 24}};
+
+    auto parsed = term::web::wire::SessionInfo {};
+    Miro::fromJSONString(parsed, Miro::toJSONString(session));
+
+    check(parsed.layout.size() == 5, "node count");
+    check(parsed.layout[0].split && parsed.layout[0].horizontal, "root split");
+    check(parsed.layout[0].ratio > 0.69f && parsed.layout[0].ratio < 0.71f,
+          "root ratio");
+    check(parsed.layout[1].split && !parsed.layout[1].horizontal, "nested split");
+    check(!parsed.layout[2].split && parsed.layout[2].pane == "aaa", "leaf pane id");
+
+    // Walk it the way a client does; every leaf must resolve to a pane.
+    auto leaves = std::vector<std::string> {};
+    auto walk = [&](auto&& self, int index) -> void
+    {
+        const auto& node = parsed.layout[(std::size_t) index];
+
+        if (!node.split)
+        {
+            leaves.push_back(node.pane);
+            return;
+        }
+
+        self(self, node.first);
+        self(self, node.second);
+    };
+    walk(walk, 0);
+
+    check(leaves.size() == parsed.panes.size(), "one leaf per pane");
+
+    for (const auto& id: leaves)
+        check(std::any_of(parsed.panes.begin(),
+                          parsed.panes.end(),
+                          [&](const auto& p) { return p.id == id; }),
+              "leaf resolves to a pane");
 };
 
 auto snapshotRoundTrip = test("serializeScreen reproduces the screen exactly") = []

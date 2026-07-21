@@ -41,8 +41,19 @@ public:
 
     // Builds leaves from a snapshot; empty or malformed input yields a
     // single pane in the fallback directory. Call after wiring callbacks.
+    // Re-entrant: calling again replaces the whole tree (how a remote
+    // session follows the owning GUI's layout changes).
     void restore(const std::vector<SavedPane>& saved);
     std::vector<SavedPane> snapshot() const;
+
+    // When set (before restore), every leaf's process end comes from here
+    // instead of the daemon/local spawn path — the remote-session case,
+    // where each shellId names a pane on another machine.
+    std::function<std::unique_ptr<Shell>(const std::string& shellId)> shellFactory;
+
+    // A tree whose shape is owned elsewhere (the remote GUI) refuses local
+    // structural edits; splits and closes there arrive via restore().
+    bool structuralLock = false;
 
     TerminalView* activePane();
     const TerminalView* activePane() const;

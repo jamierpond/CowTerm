@@ -3,6 +3,7 @@
 #include "Config.h"
 #include "MruStore.h"
 #include "SessionView.h"
+#include "Web/Wire.h"
 
 #include <Miro/Reflect.h>
 #include <emberstore/Emberstore.h>
@@ -13,6 +14,11 @@
 
 namespace term
 {
+namespace web
+{
+class GatewayClient;
+}
+
 struct SavedSession
 {
     std::string name;
@@ -51,6 +57,14 @@ public:
     std::string activeTitle() const;
     std::string activeWorkingDirectory() const;
 
+    // Set when this session mirrors one on another CowTerm: its panes are
+    // RemoteShells over this gateway, its layout follows the owner's, and
+    // it is never persisted. remoteKey is the session's key over there.
+    bool isRemote() const { return remoteClient != nullptr; }
+    web::GatewayClient* remoteClient = nullptr;
+    std::string remoteKey;
+    std::string remoteSig;
+
     std::string name;
     std::string projectDir;
     std::string lastNotify;
@@ -82,6 +96,17 @@ public:
 
     // Always creates a fresh session (openProject dedupes by directory).
     TermSession& newSession(const std::string& dir);
+
+    // Opens (or refocuses) a native mirror of a session living on another
+    // CowTerm: the full pane tree, every leaf a RemoteShell over the
+    // gateway. First-class in every way except persistence and structural
+    // edits — the remote GUI owns the tree's shape.
+    TermSession& openRemoteSession(web::GatewayClient& client,
+                                   const web::wire::SessionInfo& info);
+
+    // The remote's roster moved: re-shape any open mirrors whose layout
+    // changed, and close mirrors of sessions that ended over there.
+    void refreshRemoteSessions(web::GatewayClient& client);
     void switchTo(TermSession& session);
     void switchToIndex(int index);
     void switchToLast();

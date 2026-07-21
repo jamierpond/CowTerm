@@ -1,5 +1,6 @@
 #include "Session.h"
 #include "Projects.h"
+#include "Web/GatewayClient.h"
 
 #include <eacp/Core/Threads/Async.h>
 #include <emberstore/AppDatabase.h>
@@ -9,6 +10,8 @@
 
 namespace term
 {
+namespace wire = web::wire;
+
 namespace
 {
 constexpr auto persistDelay = eacp::Time::MS {500};
@@ -128,6 +131,126 @@ TermSession& SessionManager::createSession(const std::string& name,
     session.view.restore(panes);
     onSessionsChanged();
     return session;
+}
+
+namespace
+{
+// The wire layout uses the same tree encoding as SavedPane, with pane ids
+// for shell ids — a remote session restores through the exact machinery a
+// local relaunch does.
+std::vector<SavedPane> savedFromLayout(const wire::SessionInfo& info)
+{
+    auto out = std::vector<SavedPane> {};
+    out.reserve(info.layout.size());
+
+    for (const auto& node: info.layout)
+    {
+        auto pane = SavedPane {};
+        pane.split = node.split;
+        pane.horizontal = node.horizontal;
+        pane.ratio = node.ratio;
+        pane.first = node.first;
+        pane.second = node.second;
+        pane.shellId = node.pane;
+
+        for (const auto& paneInfo: info.panes)
+            if (paneInfo.id == node.pane)
+                pane.cwd = paneInfo.cwd;
+
+        out.push_back(std::move(pane));
+    }
+
+    return out;
+}
+
+// Shape + occupants + ratios; deliberately not pane sizes or titles, which
+// change constantly and never require rebuilding the tree.
+std::string remoteLayoutSig(const wire::SessionInfo& info)
+{
+    auto sig = std::string {};
+
+    for (const auto& node: info.layout)
+    {
+        sig += node.split ? 's' : 'l';
+        sig += node.horizontal ? 'h' : 'v';
+        sig += std::to_string((int) (node.ratio * 1000)) + ":"
+               + std::to_string(node.first) + ":" + std::to_string(node.second)
+               + ":" + node.pane + ";";
+    }
+
+    return sig;
+}
+} // namespace
+
+TermSession& SessionManager::openRemoteSession(web::GatewayClient& client,
+                                               const wire::SessionInfo& info)
+{
+    const auto dir = "remote://" + client.address() + "/" + info.key;
+
+    if (auto* existing = find(dir))
+    {
+        switchTo(*existing);
+        return *existing;
+    }
+
+    auto& session = *sessions.emplace_back(std::make_unique<TermSession>(
+        config, client.hostName() + ":" + info.name, dir, std::string {}));
+
+    session.remoteClient = &client;
+    session.remoteKey = info.key;
+    session.remoteSig = remoteLayoutSig(info);
+    session.view.structuralLock = true;
+    session.view.shellFactory = [&client](const std::string& shellId)
+    { return std::make_unique<web::RemoteShell>(client, shellId); };
+
+    wireSession(session);
+    session.view.restore(savedFromLayout(info));
+    onSessionsChanged();
+    switchTo(session);
+    return session;
+}
+
+void SessionManager::refreshRemoteSessions(web::GatewayClient& client)
+{
+    auto ended = std::vector<TermSession*> {};
+
+    for (auto& session: sessions)
+    {
+        if (session->remoteClient != &client)
+            continue;
+
+        const wire::SessionInfo* found = nullptr;
+
+        for (const auto& info: client.sessions())
+            if (info.key == session->remoteKey)
+                found = &info;
+
+        if (found == nullptr)
+        {
+            // Gone while connected means it ended over there; offline just
+            // means the panes go quiet until the redial re-attaches them.
+            if (client.isConnected())
+                ended.push_back(session.get());
+
+            continue;
+        }
+
+        if (auto sig = remoteLayoutSig(*found); sig != session->remoteSig)
+        {
+            session->remoteSig = std::move(sig);
+            session->view.restore(savedFromLayout(*found));
+
+            // restore() built fresh panes; the one that had the keyboard is
+            // gone, so hand focus to the new tree when we're looking at it.
+            if (activeSession == session.get())
+                session->view.focusActive();
+
+            onSessionsChanged();
+        }
+    }
+
+    for (auto* session: ended)
+        close(*session);
 }
 
 TermSession& SessionManager::openProject(const std::string& dir)
@@ -346,18 +469,23 @@ void SessionManager::writeState()
         [&](SavedState& state)
         {
             state.sessions.clear();
+            state.activeIndex = 0;
 
+            // Remote mirrors never persist: their shells live on another
+            // machine and a relaunch re-opens them from the live roster.
             for (auto& session: sessions)
+            {
+                if (session->isRemote())
+                    continue;
+
+                if (session.get() == activeSession)
+                    state.activeIndex = (int) state.sessions.size();
+
                 state.sessions.push_back({session->name,
                                           session->projectDir,
                                           session->activeWorkingDirectory(),
                                           session->view.snapshot()});
-
-            state.activeIndex = 0;
-
-            for (std::size_t i = 0; i < sessions.size(); ++i)
-                if (sessions[i].get() == activeSession)
-                    state.activeIndex = (int) i;
+            }
         });
 }
 } // namespace term
