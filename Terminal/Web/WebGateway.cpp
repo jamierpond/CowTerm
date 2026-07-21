@@ -53,6 +53,29 @@ bool isLoopbackHost(const std::string& value)
     return false;
 }
 
+// A browser stamps Origin on cross-site requests; a "simple" POST needs no
+// CORS preflight, so a malicious page could fire input at this gateway and
+// the Host header would still look right. The Origin is the tell: writes
+// are only accepted from our own pages (or non-browser clients, which send
+// no Origin at all).
+bool originAllowsWrites(const eacp::HTTP::Request& request)
+{
+    const auto origin = request.getHeader("Origin");
+
+    if (origin.empty() || request.type == "GET")
+        return true;
+
+    if (origin == "http://" + request.getHeader("Host"))
+        return true;
+
+    for (const auto* allowed:
+         {"http://127.0.0.1", "http://localhost", "http://[::1]"})
+        if (origin.rfind(allowed, 0) == 0)
+            return true;
+
+    return false;
+}
+
 template <typename T>
 HTTP::Response jsonResponse(const T& value, int status = 200)
 {
@@ -193,6 +216,9 @@ HTTP::Response WebGateway::route(const HTTP::Request& request)
     if (config.webBind != "any" && !isLoopbackHost(request.getHeader("Host")))
         return HTTP::makePlainTextResponse(403, "loopback only");
 
+    if (!originAllowsWrites(request))
+        return HTTP::makePlainTextResponse(403, "cross-origin writes refused");
+
     const auto path = request.pathWithoutQuery();
 
     if (request.type == "GET" && (path == "/" || path == "/index.html"))
@@ -225,7 +251,16 @@ HTTP::Response WebGateway::route(const HTTP::Request& request)
         auto info = ServerInfo {};
         info.wsUrl =
             "ws://" + host + ":" + std::to_string(socketListener->port()) + "/";
-        return jsonResponse(info);
+        info.remotes = config.remotes;
+
+        // Discovery (and only discovery) is cross-origin readable: the web
+        // UI served by one CowTerm fans out to its peers' gateways, and the
+        // browser needs this one GET from a foreign origin. Everything
+        // else stays same-origin; the live surface is the websocket, whose
+        // handshake does its own origin policing.
+        auto response = jsonResponse(info);
+        response.setHeader("Access-Control-Allow-Origin", "*");
+        return response;
     }
 
     if (request.type == "GET" && path == "/api/v1/sessions")

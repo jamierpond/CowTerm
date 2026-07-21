@@ -54,7 +54,11 @@ struct ServerInfo
     std::string version = "0.1.0";
     std::string wsUrl;
 
-    MIRO_REFLECT(name, version, wsUrl)
+    // This instance's configured peers, so a browser hitting one CowTerm
+    // can fan out to the whole fleet (the web UI's remotes come from here).
+    std::vector<std::string> remotes;
+
+    MIRO_REFLECT(name, version, wsUrl, remotes)
 };
 
 struct AttachedEvent

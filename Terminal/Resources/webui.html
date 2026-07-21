@@ -1,8 +1,10 @@
 <!doctype html>
-<!-- CowTerm web UI. Served embedded from the app (GET /); talks to the REST
-     API for discovery and the WebSocket for everything live. Terminal
-     emulation is xterm.js — the server ships raw PTY bytes, this page just
-     plays them. Protocol: DESIGN-WEBUI.md in the repo. -->
+<!-- CowTerm web UI. Served embedded from the app (GET /); one tab is the
+     pane of glass for the whole fleet: the serving CowTerm plus every peer
+     in its "remotes" config, each over its own gateway websocket (discovery
+     via that host's /api/v1/server, which is the one CORS-open endpoint).
+     Terminal emulation is xterm.js — gateways ship raw PTY bytes, this page
+     just plays them. Protocol: DESIGN-WEBUI.md in the repo. -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -13,6 +15,7 @@
   :root {
     --bg: #1a1b26; --panel: #16161e; --fg: #c0caf5; --dim: #565f89;
     --accent: #7aa2f7; --claude: #bb9af7; --border: #292e42;
+    --ok: #9ece6a; --bad: #f7768e;
   }
   * { box-sizing: border-box; }
   body {
@@ -20,7 +23,7 @@
     color: var(--fg); font: 13px/1.5 "JetBrains Mono", ui-monospace, monospace;
   }
   #sidebar {
-    width: 260px; min-width: 260px; background: var(--panel);
+    width: 280px; min-width: 280px; background: var(--panel);
     border-right: 1px solid var(--border); overflow-y: auto; padding: 8px;
   }
   #sidebar h1 {
@@ -28,9 +31,18 @@
     font-weight: normal; letter-spacing: 1px;
   }
   #sidebar h1 b { color: var(--fg); }
-  .session { margin-bottom: 6px; }
+  .gateway { margin-bottom: 10px; }
+  .gateway-name {
+    padding: 3px 8px; font-size: 11px; color: var(--dim);
+    text-transform: lowercase; letter-spacing: 0.5px;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .gateway-name .dot { font-size: 9px; }
+  .gateway-name .dot.on { color: var(--ok); }
+  .gateway-name .dot.off { color: var(--bad); }
+  .session { margin-bottom: 2px; }
   .session-name {
-    padding: 4px 8px; color: var(--dim); cursor: pointer; border-radius: 4px;
+    padding: 3px 8px; color: var(--dim); cursor: pointer; border-radius: 4px;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
   .session-name:hover { background: var(--border); }
@@ -49,8 +61,6 @@
     padding: 5px 12px; font-size: 11px; color: var(--dim);
     border-bottom: 1px solid var(--border); display: flex; gap: 12px;
   }
-  #status .ok { color: #9ece6a; }
-  #status .bad { color: #f7768e; }
   #term-wrap { flex: 1; padding: 8px; overflow: auto; }
   #placeholder { color: var(--dim); padding: 40px; }
 </style>
@@ -58,14 +68,13 @@
 <body>
   <nav id="sidebar">
     <h1><b>cow</b>term</h1>
-    <div id="sessions"></div>
+    <div id="gateways"></div>
   </nav>
   <main id="main">
     <div id="status">
-      <span id="conn" class="bad">connecting…</span>
-      <span id="attached-label"></span>
+      <span id="attached-label">pick a pane on the left</span>
     </div>
-    <div id="term-wrap"><div id="placeholder">pick a pane on the left</div></div>
+    <div id="term-wrap"><div id="placeholder"></div></div>
   </main>
 
 <script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.min.js"></script>
@@ -79,8 +88,6 @@
     return;
   }
 
-  const state = { ws: null, term: null, pane: null, sessions: [] };
-
   const $ = id => document.getElementById(id);
 
   const theme = {
@@ -93,34 +100,128 @@
     brightCyan: '#7dcfff', brightWhite: '#c0caf5',
   };
 
-  function renderSessions() {
-    const root = $('sessions');
-    root.textContent = '';
+  // One Gateway per CowTerm instance: the serving one ("local", relative
+  // URLs) plus each peer in its remotes list. Each keeps its own websocket
+  // and rediscovers/redials on loss.
+  const gateways = [];
+  const attached = { gateway: null, pane: null };
+  let term = null;
 
-    for (const session of state.sessions) {
-      const box = document.createElement('div');
-      box.className = 'session' + (session.active ? ' active' : '');
+  function makeGateway(base, label) {
+    return {
+      base, label, ws: null, online: false, sessions: [], retryTimer: null,
+    };
+  }
 
-      const name = document.createElement('div');
-      name.className = 'session-name';
-      name.innerHTML = (session.claude ? '<span class="claude">✳ </span>' : '')
-        + escapeHtml(session.name);
-      name.title = session.projectDir || session.name;
-      name.onclick = () => send({ op: 'activate', key: session.key });
-      box.appendChild(name);
-
-      for (const pane of session.panes || []) {
-        const row = document.createElement('div');
-        row.className = 'pane' + (pane.id === state.pane ? ' attached' : '');
-        const title = pane.title || shortPath(pane.cwd) || pane.id.slice(0, 8);
-        row.innerHTML = escapeHtml(title)
-          + ' <span class="cwd">' + escapeHtml(shortPath(pane.cwd)) + '</span>';
-        row.onclick = () => attach(pane);
-        box.appendChild(row);
-      }
-
-      root.appendChild(box);
+  async function connectGateway(g) {
+    let info;
+    try {
+      info = await (await fetch(g.base + '/api/v1/server')).json();
+    } catch {
+      return scheduleRetry(g);
     }
+
+    // The serving instance's peer list seeds the fleet, once.
+    if (g.label === 'local' && !gateways.seeded) {
+      gateways.seeded = true;
+      for (const address of info.remotes || []) {
+        const remote = makeGateway('http://' + address, address.replace(/:2697$/, ''));
+        gateways.push(remote);
+        connectGateway(remote);
+      }
+    }
+
+    const ws = new WebSocket(info.wsUrl);
+    ws.binaryType = 'arraybuffer';
+    g.ws = ws;
+
+    ws.onopen = () => {
+      g.online = true;
+      render();
+
+      if (attached.gateway === g && attached.pane)
+        send(g, { op: 'attach', pane: attached.pane });
+    };
+
+    ws.onmessage = event => {
+      if (typeof event.data === 'string')
+        handleEvent(g, JSON.parse(event.data));
+      else
+        handleBinary(g, event.data);
+    };
+
+    ws.onclose = () => {
+      g.online = false;
+      g.ws = null;
+      render();
+      scheduleRetry(g);
+    };
+  }
+
+  function scheduleRetry(g) {
+    if (!g.retryTimer)
+      g.retryTimer = setTimeout(() => {
+        g.retryTimer = null;
+        connectGateway(g);
+      }, 2000);
+  }
+
+  function send(g, message) {
+    if (g.ws && g.ws.readyState === WebSocket.OPEN)
+      g.ws.send(JSON.stringify(message));
+  }
+
+  function handleEvent(g, message) {
+    if (message.ev === 'sessions') {
+      g.sessions = message.sessions || [];
+      render();
+    } else if (message.ev === 'attached') {
+      if (attached.gateway === g && attached.pane === message.pane && term)
+        term.resize(message.cols, message.rows);
+    } else if (message.ev === 'exit') {
+      if (attached.gateway === g && attached.pane === message.pane && term)
+        term.write('\r\n\x1b[90m[shell exited]\x1b[0m\r\n');
+    } else if (message.ev === 'error') {
+      console.warn('cowterm[' + g.label + ']:', message.message);
+    }
+  }
+
+  function handleBinary(g, buffer) {
+    const bytes = new Uint8Array(buffer);
+    const idLength = bytes[0];
+    const id = new TextDecoder().decode(bytes.subarray(1, 1 + idLength));
+
+    if (attached.gateway === g && attached.pane === id && term)
+      term.write(bytes.subarray(1 + idLength));
+  }
+
+  function attach(g, pane) {
+    if (attached.gateway && attached.pane
+        && (attached.gateway !== g || attached.pane !== pane.id))
+      send(attached.gateway, { op: 'detach', pane: attached.pane });
+
+    attached.gateway = g;
+    attached.pane = pane.id;
+    $('attached-label').textContent = g.label + ' · ' + (pane.title || pane.id)
+      + ' — ' + pane.cols + '×' + pane.rows;
+
+    if (term) { term.dispose(); term = null; }
+    $('term-wrap').textContent = '';
+
+    // Each GUI owns its panes' sizes; mirror the owner exactly.
+    term = new Terminal({
+      cols: pane.cols, rows: pane.rows, theme,
+      fontFamily: '"JetBrains Mono", ui-monospace, monospace',
+      fontSize: 13, cursorBlink: true, allowProposedApi: true,
+      scrollback: 5000,
+    });
+    term.open($('term-wrap'));
+    term.onData(data => send(attached.gateway,
+                             { op: 'input', pane: attached.pane, data }));
+    term.focus();
+
+    send(g, { op: 'attach', pane: pane.id });
+    render();
   }
 
   function shortPath(p) {
@@ -135,98 +236,60 @@
     return div.innerHTML;
   }
 
-  function attach(pane) {
-    state.pane = pane.id;
-    $('attached-label').textContent = (pane.title || pane.id) + ' — '
-      + pane.cols + '×' + pane.rows;
+  function render() {
+    const root = $('gateways');
+    root.textContent = '';
 
-    if (state.term) { state.term.dispose(); state.term = null; }
-    $('term-wrap').textContent = '';
+    for (const g of gateways) {
+      const box = document.createElement('div');
+      box.className = 'gateway';
 
-    // The GUI owns the grid size in v1; mirror it exactly.
-    const term = new Terminal({
-      cols: pane.cols, rows: pane.rows, theme,
-      fontFamily: '"JetBrains Mono", ui-monospace, monospace',
-      fontSize: 13, cursorBlink: true, allowProposedApi: true,
-      scrollback: 5000,
-    });
-    state.term = term;
-    term.open($('term-wrap'));
-    term.onData(data => send({ op: 'input', pane: state.pane, data }));
-    term.focus();
+      const name = document.createElement('div');
+      name.className = 'gateway-name';
+      name.innerHTML = escapeHtml(g.label)
+        + ' <span class="dot ' + (g.online ? 'on' : 'off') + '">●</span>';
+      box.appendChild(name);
 
-    send({ op: 'attach', pane: pane.id });
-    renderSessions();
-  }
+      if (!g.online) {
+        const off = document.createElement('div');
+        off.className = 'pane';
+        off.innerHTML = '<span class="cwd">offline — retrying…</span>';
+        box.appendChild(off);
+      }
 
-  function send(message) {
-    if (state.ws && state.ws.readyState === WebSocket.OPEN)
-      state.ws.send(JSON.stringify(message));
-  }
+      for (const session of g.sessions) {
+        const sbox = document.createElement('div');
+        sbox.className = 'session' + (session.active ? ' active' : '');
 
-  function handleBinary(buffer) {
-    const bytes = new Uint8Array(buffer);
-    const idLength = bytes[0];
-    const id = new TextDecoder().decode(bytes.subarray(1, 1 + idLength));
+        const sname = document.createElement('div');
+        sname.className = 'session-name';
+        sname.innerHTML = (session.claude ? '<span class="claude">✳ </span>' : '')
+          + escapeHtml(session.name);
+        sname.title = session.projectDir || session.name;
+        sname.onclick = () => send(g, { op: 'activate', key: session.key });
+        sbox.appendChild(sname);
 
-    if (id === state.pane && state.term)
-      state.term.write(bytes.subarray(1 + idLength));
-  }
+        for (const pane of session.panes || []) {
+          const row = document.createElement('div');
+          const isAttached = attached.gateway === g && attached.pane === pane.id;
+          row.className = 'pane' + (isAttached ? ' attached' : '');
+          const title = pane.title || shortPath(pane.cwd) || pane.id.slice(0, 8);
+          row.innerHTML = escapeHtml(title)
+            + ' <span class="cwd">' + escapeHtml(shortPath(pane.cwd)) + '</span>';
+          row.onclick = () => attach(g, pane);
+          sbox.appendChild(row);
+        }
 
-  function handleEvent(message) {
-    if (message.ev === 'sessions') {
-      state.sessions = message.sessions || [];
-      renderSessions();
-    } else if (message.ev === 'attached') {
-      if (state.term)
-        state.term.resize(message.cols, message.rows);
-    } else if (message.ev === 'exit') {
-      if (message.pane === state.pane && state.term)
-        state.term.write('\r\n\x1b[90m[shell exited]\x1b[0m\r\n');
-    } else if (message.ev === 'error') {
-      console.warn('cowterm:', message.message);
+        box.appendChild(sbox);
+      }
+
+      root.appendChild(box);
     }
   }
 
-  async function connect() {
-    let wsUrl;
-    try {
-      const info = await (await fetch('/api/v1/server')).json();
-      wsUrl = info.wsUrl;
-    } catch {
-      $('conn').textContent = 'server unreachable — retrying…';
-      setTimeout(connect, 2000);
-      return;
-    }
-
-    const ws = new WebSocket(wsUrl);
-    ws.binaryType = 'arraybuffer';
-    state.ws = ws;
-
-    ws.onopen = () => {
-      $('conn').textContent = 'connected';
-      $('conn').className = 'ok';
-
-      // Re-attach after a reconnect so the stream resumes with a snapshot.
-      if (state.pane)
-        send({ op: 'attach', pane: state.pane });
-    };
-
-    ws.onmessage = event => {
-      if (typeof event.data === 'string')
-        handleEvent(JSON.parse(event.data));
-      else
-        handleBinary(event.data);
-    };
-
-    ws.onclose = () => {
-      $('conn').textContent = 'disconnected — retrying…';
-      $('conn').className = 'bad';
-      setTimeout(connect, 1500);
-    };
-  }
-
-  connect();
+  const local = makeGateway('', 'local');
+  gateways.push(local);
+  connectGateway(local);
 })();
 </script>
 </body>

@@ -163,7 +163,9 @@ The pieces, top down:
 - **Config**: the served side sets `webBind: "any"`; the piloting side lists
   it in `remotes: ["studio.local:2697"]`.
 - **`GatewayClient`** (`Terminal/Web/GatewayClient.*`): the native end of a
-  remote gateway. Dials in the background (never blocks the UI), holds the
+  remote gateway. Discovers the websocket via `GET /api/v1/server` exactly
+  like the browser does (the configured address is the HTTP port, never the
+  WS port). Dials in the background (never blocks the UI), holds the
   remote's session roster live, redials on loss and re-attaches its panes —
   every attach opens with a server-side snapshot, so reconnects self-heal.
   One websocket multiplexes all of that machine's panes, as designed.
