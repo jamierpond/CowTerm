@@ -94,8 +94,12 @@ std::string generateShellId()
 }
 
 std::unique_ptr<Shell> shellFor(const std::string& shellId,
-                                const std::string& command)
+                                const std::string& command,
+                                std::unique_ptr<Shell> shellOverride)
 {
+    if (shellOverride != nullptr)
+        return shellOverride;
+
     if (command.empty())
         return makeShell(shellId);
 
@@ -106,14 +110,15 @@ std::unique_ptr<Shell> shellFor(const std::string& shellId,
 TerminalView::TerminalView(const AppConfig& config,
                            const std::string& workingDirectory,
                            const std::string& shellIdToUse,
-                           const std::string& commandToRun)
+                           const std::string& commandToRun,
+                           std::unique_ptr<Shell> shellOverride)
     : theme(themeByName(config.theme))
     , fontName(config.font)
     , screen(80, 24, theme)
     , parser(screen, theme)
     , fontSize(config.fontSize)
     , paneShellId(shellIdToUse.empty() ? generateShellId() : shellIdToUse)
-    , shell(shellFor(paneShellId, commandToRun))
+    , shell(shellFor(paneShellId, commandToRun, std::move(shellOverride)))
     , blinkTimer(
           [this]
           {
@@ -203,6 +208,15 @@ void TerminalView::flushOutput()
     if (data.empty())
         return;
 
+    // A remote pane's grid follows the remote GUI, announced just before
+    // its snapshot arrives — resize ahead of parsing so the snapshot lands
+    // on the dimensions it was serialized for.
+    if (const auto fixed = shell->fixedSize();
+        fixed && (fixed->cols != screen.columns() || fixed->rows != screen.rows()))
+    {
+        screen.resize(fixed->cols, fixed->rows);
+    }
+
     parser.feed(data);
     onOutput(data);
 
@@ -255,6 +269,19 @@ void TerminalView::resized()
 
 void TerminalView::applyGridSize()
 {
+    // A fixed-size shell (remote pane) keeps its own dimensions no matter
+    // what this view's bounds say; overflow clips, a smaller grid floats.
+    if (const auto fixed = shell->fixedSize())
+    {
+        if (fixed->cols != screen.columns() || fixed->rows != screen.rows())
+        {
+            screen.resize(fixed->cols, fixed->rows);
+            scrollOffset = std::min(scrollOffset, screen.scrollbackSize());
+        }
+
+        return;
+    }
+
     const auto bounds = getLocalBounds();
     const auto cellW = atlas->cellWidth();
     const auto cellH = atlas->cellHeight();

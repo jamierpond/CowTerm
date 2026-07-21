@@ -37,11 +37,20 @@ struct AppConfig
     std::vector<KeyBinding> bindings = {{.key = "u", .send = "cd ..\n"},
                                         {.key = "n", .send = "nvim .\n"}};
 
-    // The web UI's HTTP port (loopback only; the WebSocket stream rides one
-    // port up). 0 disables the gateway. 2697 spells COWS on a phone pad.
+    // The web UI's HTTP port (the WebSocket stream rides one port up).
+    // 0 disables the gateway. 2697 spells COWS on a phone pad.
     int webPort = 2697;
 
-    MIRO_REFLECT(searchDirs, font, fontSize, theme, bindings, webPort)
+    // "loopback" serves this machine only (the default); "any" also serves
+    // the local network, which is what lets another CowTerm remote-pilot
+    // this one. No auth yet — bind to the network deliberately.
+    std::string webBind = "loopback";
+
+    // Other CowTerm gateways to pilot, as "host" or "host:port" (their
+    // webPort, default 2697). They appear in the remote HUD (Ctrl+A r).
+    std::vector<std::string> remotes = {};
+
+    MIRO_REFLECT(searchDirs, font, fontSize, theme, bindings, webPort, webBind, remotes)
 };
 
 inline constexpr float minFontSize = 7.0f;

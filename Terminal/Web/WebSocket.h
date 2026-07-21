@@ -12,17 +12,20 @@
 
 namespace term::web
 {
-// One accepted browser socket, RFC 6455 server side. Frames are read on a
+// One live websocket, RFC 6455, either side of the wire: a server-accepted
+// browser/peer socket (unmasked sends, masked receives required) or a
+// client dial-out via wsConnectClient (masked sends). Frames are read on a
 // dedicated thread that holds a shared_ptr to this object, so the connection
-// lives exactly as long as either the gateway or its own thread needs it.
-// Callbacks fire on the reader thread — the gateway marshals to the main
-// loop itself, alive-guarded, like every other cross-thread hop in the app.
+// lives exactly as long as either its owner or its own thread needs it.
+// Callbacks fire on the reader thread — receivers marshal for themselves,
+// alive-guarded, like every other cross-thread hop in the app.
 class WsConnection : public std::enable_shared_from_this<WsConnection>
 {
 public:
     using Ptr = std::shared_ptr<WsConnection>;
 
-    explicit WsConnection(eacp::TCP::Connection socketToUse);
+    explicit WsConnection(eacp::TCP::Connection socketToUse,
+                          bool maskOutboundToUse = false);
 
     // Spawns the reader thread. Set the callbacks first.
     void start();
@@ -36,6 +39,12 @@ public:
     bool isOpen() const { return open; }
 
     std::function<void(const std::string&)> onText = [](const std::string&) {};
+
+    // Unset, binary frames fall through to onText — the server treats every
+    // inbound frame as a JSON control message. The native client sets this
+    // to receive pane output.
+    std::function<void(const std::string&)> onBinary;
+
     std::function<void()> onClosed = [] {};
 
 private:
@@ -46,16 +55,26 @@ private:
     eacp::TCP::Connection socket;
     std::mutex sendLock;
     std::atomic<bool> open {true};
+    bool maskOutbound = false;
+    std::uint64_t maskState = 0;
 };
 
-// Accept loop + HTTP upgrade handshake on its own loopback port. Rejects
-// anything that isn't a well-formed loopback websocket upgrade (the Host /
-// Origin check is the DNS-rebinding guard — see DESIGN-WEBUI.md).
+// Dials a gateway's websocket port and completes the client half of the
+// RFC 6455 upgrade, returning a not-yet-started masked connection (wire
+// callbacks, then start()). Throws TCP::Error on any network or handshake
+// failure. Blocks up to the connect timeout — call it off the main thread.
+WsConnection::Ptr wsConnectClient(const std::string& host, std::uint16_t port);
+
+// Accept loop + HTTP upgrade handshake on its own port. When bound to
+// loopback it also requires a loopback Host/Origin (the DNS-rebinding
+// guard — see DESIGN-WEBUI.md); bound to the network, any Host is let
+// through since peers legitimately dial by machine name.
 class WsListener
 {
 public:
     // Throws TCP::Error when the port is taken.
-    explicit WsListener(int port);
+    explicit WsListener(int port,
+                        eacp::BindInterface bindTo = eacp::BindInterface::loopback);
     ~WsListener();
 
     int port() const;
@@ -68,6 +87,7 @@ private:
     void acceptLoop();
 
     eacp::TCP::Listener listener;
+    bool requireLoopbackHost = true;
     std::atomic<bool> stopping {false};
     std::thread acceptor;
 };

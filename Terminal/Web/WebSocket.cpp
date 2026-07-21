@@ -4,6 +4,7 @@
 #include <eacp/Network/HTTP/HttpProtocol.h>
 
 #include <cctype>
+#include <random>
 
 namespace term::web
 {
@@ -39,8 +40,10 @@ bool isLoopbackHost(const std::string& value)
 }
 } // namespace
 
-WsConnection::WsConnection(TCP::Connection socketToUse)
+WsConnection::WsConnection(TCP::Connection socketToUse, bool maskOutboundToUse)
     : socket(std::move(socketToUse))
+    , maskOutbound(maskOutboundToUse)
+    , maskState(std::random_device {}())
 {
 }
 
@@ -68,33 +71,57 @@ void WsConnection::sendFrame(std::uint8_t opcode, std::string_view payload)
         return;
 
     auto frame = std::string {};
-    frame.reserve(payload.size() + 10);
+    frame.reserve(payload.size() + 14);
     frame.push_back((char) (0x80 | opcode));
 
-    // Server frames are never masked.
+    // Server frames go bare; client frames carry the RFC-mandated mask.
+    const auto maskBit = maskOutbound ? 0x80 : 0x00;
+
     if (payload.size() < 126)
     {
-        frame.push_back((char) payload.size());
+        frame.push_back((char) (maskBit | payload.size()));
     }
     else if (payload.size() <= 0xffff)
     {
-        frame.push_back((char) 126);
+        frame.push_back((char) (maskBit | 126));
         frame.push_back((char) ((payload.size() >> 8) & 0xff));
         frame.push_back((char) (payload.size() & 0xff));
     }
     else
     {
-        frame.push_back((char) 127);
+        frame.push_back((char) (maskBit | 127));
 
         for (auto shift = 56; shift >= 0; shift -= 8)
             frame.push_back((char) ((payload.size() >> shift) & 0xff));
     }
 
-    frame += payload;
-
     try
     {
         auto lock = std::scoped_lock {sendLock};
+
+        if (maskOutbound)
+        {
+            // xorshift64 walks the mask state under the send lock; the mask
+            // hides payload bytes from broken proxies, not from anyone.
+            maskState ^= maskState << 13;
+            maskState ^= maskState >> 7;
+            maskState ^= maskState << 17;
+
+            char mask[4];
+
+            for (auto i = 0; i < 4; ++i)
+                mask[i] = (char) ((maskState >> (i * 8)) & 0xff);
+
+            frame.append(mask, 4);
+
+            for (std::size_t i = 0; i < payload.size(); ++i)
+                frame.push_back((char) (payload[i] ^ mask[i % 4]));
+        }
+        else
+        {
+            frame += payload;
+        }
+
         socket.send(frame);
     }
     catch (const TCP::Error&)
@@ -170,16 +197,26 @@ void WsConnection::readLoop()
             if (length > maxFramePayload)
                 break;
 
-            // Clients must mask (RFC 6455 §5.1); a bare frame is a broken
-            // peer, not a soft error.
-            if (!masked)
+            // On the server side clients must mask (RFC 6455 §5.1); a bare
+            // frame is a broken peer, not a soft error. On the client side
+            // the server's frames arrive bare.
+            if (!masked && !maskOutbound)
                 break;
 
-            const auto mask = readExact(4);
-            auto payload = readExact((std::size_t) length);
+            auto payload = std::string {};
 
-            for (std::size_t i = 0; i < payload.size(); ++i)
-                payload[i] = (char) (payload[i] ^ mask[i % 4]);
+            if (masked)
+            {
+                const auto mask = readExact(4);
+                payload = readExact((std::size_t) length);
+
+                for (std::size_t i = 0; i < payload.size(); ++i)
+                    payload[i] = (char) (payload[i] ^ mask[i % 4]);
+            }
+            else
+            {
+                payload = readExact((std::size_t) length);
+            }
 
             if (opcode == Op::Close)
             {
@@ -212,9 +249,11 @@ void WsConnection::readLoop()
 
             if (fin && messageOpcode != 0)
             {
-                // Binary client frames share the text path: the protocol is
-                // JSON control messages either way.
-                onText(message);
+                if (messageOpcode == Op::Binary && onBinary)
+                    onBinary(message);
+                else
+                    onText(message);
+
                 message.clear();
                 messageOpcode = 0;
             }
@@ -228,13 +267,14 @@ void WsConnection::readLoop()
     onClosed();
 }
 
-WsListener::WsListener(int port)
+WsListener::WsListener(int port, BindInterface bindTo)
     : listener(TCP::Listener::bind(
           (std::uint16_t) port,
           // No accept deadline, and accepted sockets read without an io
           // timeout — an idle browser tab is not a dead peer.
           {.connect = Time::MS {0}, .io = Time::MS {0}},
-          BindInterface::loopback))
+          bindTo))
+    , requireLoopbackHost(bindTo == BindInterface::loopback)
     , acceptor([this] { acceptLoop(); })
 {
 }
@@ -271,7 +311,7 @@ int WsListener::port() const
 
 namespace
 {
-bool handshake(TCP::Connection& socket);
+bool handshake(TCP::Connection& socket, bool requireLoopbackHost);
 } // namespace
 
 void WsListener::acceptLoop()
@@ -288,9 +328,11 @@ void WsListener::acceptLoop()
             // onConnection is copied because the thread may outlive this
             // listener; it only fires for handshakes that complete.
             std::thread(
-                [socket = std::move(socket), deliver = onConnection]() mutable
+                [socket = std::move(socket),
+                 deliver = onConnection,
+                 loopbackOnly = requireLoopbackHost]() mutable
                 {
-                    if (!handshake(socket))
+                    if (!handshake(socket, loopbackOnly))
                         return;
 
                     deliver(std::make_shared<WsConnection>(std::move(socket)));
@@ -310,7 +352,7 @@ void WsListener::acceptLoop()
 
 namespace
 {
-bool handshake(TCP::Connection& socket)
+bool handshake(TCP::Connection& socket, bool requireLoopbackHost)
 {
     try
     {
@@ -344,9 +386,12 @@ bool handshake(TCP::Connection& socket)
         for (auto& c: lowered)
             c = (char) std::tolower((unsigned char) c);
 
+        const auto hostAllowed =
+            !requireLoopbackHost
+            || (isLoopbackHost(host) && (origin.empty() || isLoopbackHost(origin)));
+
         const auto valid = lowered.find("websocket") != std::string::npos
-                           && !key.empty() && isLoopbackHost(host)
-                           && (origin.empty() || isLoopbackHost(origin));
+                           && !key.empty() && hostAllowed;
 
         if (!valid)
         {
@@ -368,4 +413,72 @@ bool handshake(TCP::Connection& socket)
     }
 }
 } // namespace
+
+WsConnection::Ptr wsConnectClient(const std::string& host, std::uint16_t port)
+{
+    // io stays unbounded: after the upgrade this socket idles between
+    // frames, and a quiet remote is not a dead one.
+    auto socket = TCP::Connection::connect(
+        {host, port}, {.connect = Time::MS {5000}, .io = Time::MS {0}});
+
+    std::uint8_t nonce[16];
+    auto engine = std::mt19937 {std::random_device {}()};
+
+    for (auto& byte: nonce)
+        byte = (std::uint8_t) (engine() & 0xff);
+
+    const auto key = base64(nonce, sizeof(nonce));
+
+    socket.send("GET / HTTP/1.1\r\n"
+                "Host: "
+                + host + ":" + std::to_string(port)
+                + "\r\n"
+                  "Upgrade: websocket\r\n"
+                  "Connection: Upgrade\r\n"
+                  "Sec-WebSocket-Key: "
+                + key
+                + "\r\n"
+                  "Sec-WebSocket-Version: 13\r\n\r\n");
+
+    const auto statusLine = socket.receiveLine();
+
+    if (statusLine.find("101") == std::string::npos)
+        throw TCP::Error {"websocket upgrade refused: " + statusLine};
+
+    auto acceptValue = std::string {};
+
+    while (true)
+    {
+        const auto line = socket.receiveLine();
+
+        if (line.empty())
+            break;
+
+        const auto colon = line.find(':');
+
+        if (colon == std::string::npos)
+            continue;
+
+        auto name = line.substr(0, colon);
+
+        for (auto& c: name)
+            c = (char) std::tolower((unsigned char) c);
+
+        if (name == "sec-websocket-accept")
+        {
+            acceptValue = line.substr(colon + 1);
+
+            const auto start = acceptValue.find_first_not_of(' ');
+            acceptValue = start == std::string::npos
+                              ? std::string {}
+                              : acceptValue.substr(start);
+        }
+    }
+
+    if (acceptValue != websocketAcceptKey(key))
+        throw TCP::Error {"websocket accept key mismatch"};
+
+    return std::make_shared<WsConnection>(std::move(socket),
+                                          /*maskOutbound*/ true);
+}
 } // namespace term::web

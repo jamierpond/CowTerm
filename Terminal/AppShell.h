@@ -5,6 +5,7 @@
 #include "Palette.h"
 #include "Popup.h"
 #include "PrDashboard.h"
+#include "RemoteHud.h"
 #include "Session.h"
 #include "Switcher.h"
 #include "TrayController.h"
@@ -49,6 +50,8 @@ private:
     void hidePrDashboard();
     void showClaudeHud();
     void hideClaudeHud();
+    void showRemoteHud();
+    void hideRemoteHud();
     bool anyOverlayShown() const;
     void attachActive(TermSession& session);
     void setGlobalFontSize(float size);
@@ -61,9 +64,12 @@ private:
     Switcher switcher {config, manager};
     PrDashboard prDashboard {config, manager};
     ClaudeHud claudeHud {config, manager};
+
+    // The gateway precedes the HUD, which reads its serving state.
+    web::WebGateway web {config, manager};
+    RemoteHud remoteHud {config, web};
     Popup popup {config};
     TrayController tray {manager};
-    web::WebGateway web {config, manager};
     TermSession* attached = nullptr;
     bool prefixArmed = false;
     bool popupPrefixArmed = false;

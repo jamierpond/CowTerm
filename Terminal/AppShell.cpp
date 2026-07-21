@@ -20,6 +20,10 @@ AppShell::AppShell()
         attachActive(session);
         updateTitle();
         tray.refresh();
+
+        // Fires on focus moves and pane-tree changes too — the web/remote
+        // clients' roster (active markers, closed panes) rides on it.
+        web.sessionsChanged();
     };
 
     manager.onSessionsChanged = [this]
@@ -39,6 +43,8 @@ AppShell::AppShell()
         {
             if (manager.active() == raw)
                 updateTitle();
+
+            web.sessionsChanged();
         };
 
         web.wirePane(pane);
@@ -68,6 +74,21 @@ AppShell::AppShell()
     prDashboard.onClosed = [this] { hidePrDashboard(); };
 
     claudeHud.onClosed = [this] { hideClaudeHud(); };
+
+    remoteHud.onClosed = [this] { hideRemoteHud(); };
+
+    // A chosen remote pane lands in the popup, full-window over the session
+    // — dismissing detaches from the remote shell, never kills it.
+    remoteHud.onAttachPane = [this](std::unique_ptr<Shell> shell)
+    {
+        if (popup.isShown())
+            return;
+
+        popupPrefixArmed = false;
+        addSubview(popup);
+        popup.setBounds(getLocalBounds());
+        popup.showShell(std::move(shell));
+    };
 
     // Branch a highlighted repo into a fresh worktree and drop a session in
     // it. Returns git's error on failure so the palette can show it in place.
@@ -166,7 +187,7 @@ void AppShell::attachActive(TermSession& session)
 bool AppShell::anyOverlayShown() const
 {
     return palette.isShown() || switcher.isShown() || prDashboard.isShown()
-           || claudeHud.isShown() || popup.isShown();
+           || claudeHud.isShown() || remoteHud.isShown() || popup.isShown();
 }
 
 void AppShell::resized()
@@ -180,6 +201,7 @@ void AppShell::resized()
     switcher.setBounds(bounds);
     prDashboard.setBounds(bounds);
     claudeHud.setBounds(bounds);
+    remoteHud.setBounds(bounds);
     popup.setBounds(bounds);
 }
 
@@ -305,6 +327,25 @@ void AppShell::showClaudeHud()
 void AppShell::hideClaudeHud()
 {
     removeSubview(claudeHud);
+
+    if (attached != nullptr)
+        attached->view.focusActive();
+}
+
+void AppShell::showRemoteHud()
+{
+    if (anyOverlayShown())
+        return;
+
+    addSubview(remoteHud);
+    remoteHud.setBounds(getLocalBounds());
+    remoteHud.show();
+    remoteHud.focus();
+}
+
+void AppShell::hideRemoteHud()
+{
+    removeSubview(remoteHud);
 
     if (attached != nullptr)
         attached->view.focusActive();
@@ -499,6 +540,13 @@ bool AppShell::handlePrefixed(const KeyEvent& event)
     if (chars == "a")
     {
         showClaudeHud();
+        return true;
+    }
+
+    // The remote HUD: other CowTerms on the network, ready to pilot.
+    if (chars == "r")
+    {
+        showRemoteHud();
         return true;
     }
 

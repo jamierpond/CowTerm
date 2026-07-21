@@ -3,6 +3,7 @@
 #include "Pty.h"
 
 #include <memory>
+#include <optional>
 #include <string>
 
 namespace term
@@ -26,6 +27,11 @@ public:
 
     virtual void write(std::string_view data) = 0;
     virtual void resize(const PtySize& size) = 0;
+
+    // Non-empty when something other than this pane's layout owns the grid
+    // size — a remote CowTerm's pane keeps its own GUI's dimensions, and the
+    // local view mirrors them instead of imposing its bounds.
+    virtual std::optional<PtySize> fixedSize() const { return {}; }
 
     virtual std::string foregroundProcess() const = 0;
     virtual std::string currentWorkingDirectory() const = 0;

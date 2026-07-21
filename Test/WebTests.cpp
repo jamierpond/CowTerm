@@ -6,6 +6,7 @@
 #include "Web/ScreenSerializer.h"
 #include "Web/Sha1.h"
 #include "Web/WebSocket.h"
+#include "Web/Wire.h"
 
 #include "TermParser.h"
 
@@ -15,6 +16,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <future>
 #include <string>
 #include <thread>
 
@@ -147,6 +149,68 @@ auto websocketRejectsForeignHost = test("WsListener rejects a non-loopback Host"
 
     std::this_thread::sleep_for(50ms);
     check(!accepted, "no connection surfaced");
+};
+
+auto clientConversation = test("wsConnectClient talks to WsListener end to end") = []
+{
+    auto listener = web::WsListener {0};
+
+    listener.onConnection = [](web::WsConnection::Ptr connection)
+    {
+        auto* raw = connection.get();
+
+        // Echo text back as text; announce binary via a binary frame. The
+        // reader thread keeps the connection alive on its own.
+        connection->onText = [raw](const std::string& text)
+        { raw->sendText("pong:" + text); };
+        connection->onBinary = [raw](const std::string& bytes)
+        { raw->sendBinary("bin:" + bytes); };
+        connection->start();
+    };
+
+    auto client = web::wsConnectClient("127.0.0.1", listener.port());
+
+    auto text = std::promise<std::string> {};
+    auto binary = std::promise<std::string> {};
+    client->onText = [&](const std::string& reply) { text.set_value(reply); };
+    client->onBinary = [&](const std::string& reply) { binary.set_value(reply); };
+    client->start();
+
+    // The client's frames are masked (the server enforces RFC 6455 §5.1,
+    // so an unmasked send would kill the conversation, not echo).
+    client->sendText("moo");
+
+    auto textFuture = text.get_future();
+    check(textFuture.wait_for(3s) == std::future_status::ready, "text reply");
+    check(textFuture.get() == "pong:moo", "text payload");
+
+    client->sendBinary(std::string {"\x00\xff\x1b", 3});
+
+    auto binaryFuture = binary.get_future();
+    check(binaryFuture.wait_for(3s) == std::future_status::ready, "binary reply");
+    check(binaryFuture.get() == "bin:" + std::string {"\x00\xff\x1b", 3},
+          "binary payload");
+
+    client->close();
+};
+
+auto wireShapes = test("wire structs and binary frames round-trip") = []
+{
+    // Control bytes (arrow keys are ESC sequences) must survive the JSON
+    // hop — this is the exact payload shape the input op carries.
+    auto op = term::web::wire::ClientOp {.op = "input",
+                                         .pane = "abc123",
+                                         .data = "\x1b[A\ttab\"quote"};
+    auto parsed = term::web::wire::ClientOp {};
+    Miro::fromJSONString(parsed, Miro::toJSONString(op));
+    check(parsed.op == "input" && parsed.pane == "abc123", "op fields");
+    check(parsed.data == "\x1b[A\ttab\"quote", "escaped payload");
+
+    const auto frame = term::web::wire::binaryFrame(
+        "pane1", std::string_view {"raw\x00里bytes", 12});
+    const auto back = term::web::wire::parseBinaryFrame(frame);
+    check(back.pane == "pane1", "frame pane id");
+    check(back.payload == std::string_view {"raw\x00里bytes", 12}, "frame payload");
 };
 
 auto snapshotRoundTrip = test("serializeScreen reproduces the screen exactly") = []

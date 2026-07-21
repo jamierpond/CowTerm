@@ -24,11 +24,20 @@ public:
     WebGateway(const AppConfig& configToUse, SessionManager& managerToUse);
     ~WebGateway();
 
-    // AppShell forwards these from its SessionManager hooks.
+    // AppShell forwards these from its SessionManager hooks. sessionsChanged
+    // coalesces: any burst within one loop tick becomes a single push, so
+    // callers can fire it on every title twitch without spamming clients.
     void wirePane(TerminalView& pane);
     void sessionsChanged();
 
     bool isRunning() const { return running; }
+
+    // The actually-served HTTP port (0 while the gateway is off — disabled
+    // by config, or its ports were taken by another instance).
+    int port() const;
+
+    // Whether this gateway is reachable beyond loopback.
+    bool servesNetwork() const { return running && config.webBind == "any"; }
 
 private:
     struct Client
@@ -45,6 +54,7 @@ private:
     void adoptSocket(const WsConnection::Ptr& connection);
     void handleClientMessage(WsConnection* connection, const std::string& body);
     void dropClient(WsConnection* connection);
+    void broadcastSessions();
 
     Client* clientFor(WsConnection* connection);
     TerminalView* findPane(const std::string& id) const;
@@ -57,6 +67,7 @@ private:
     std::unique_ptr<WsListener> socketListener;
     std::vector<Client> clients;
     bool running = false;
+    bool broadcastPending = false;
     std::shared_ptr<bool> alive = std::make_shared<bool>(true);
 };
 } // namespace term::web

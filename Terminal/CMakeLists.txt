@@ -28,9 +28,11 @@ add_executable(CowTerm
         TrayController.cpp
         DaemonClient.cpp
         GlyphAtlas.cpp
+        RemoteHud.cpp
         Web/WebSocket.cpp
         Web/ScreenSerializer.cpp
-        Web/WebGateway.cpp)
+        Web/WebGateway.cpp
+        Web/GatewayClient.cpp)
 
 # Portable core (parser, screen, sessions, palette) + per-platform PTY,
 # glyph raster and notifications.

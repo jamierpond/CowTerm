@@ -1,5 +1,6 @@
 #include "WebGateway.h"
 #include "ScreenSerializer.h"
+#include "Wire.h"
 
 #include <ResEmbed/ResEmbed.h>
 #include <eacp/Core/Core.h>
@@ -11,90 +12,10 @@
 namespace term::web
 {
 using namespace eacp;
+using namespace wire;
 
 namespace
 {
-// Wire shapes, all Miro-reflected: the same tolerant JSON machinery as the
-// config file, so additive protocol changes cost nothing on either side.
-struct PaneInfo
-{
-    std::string id;
-    std::string title;
-    std::string cwd;
-    int cols = 0;
-    int rows = 0;
-    bool active = false;
-
-    MIRO_REFLECT(id, title, cwd, cols, rows, active)
-};
-
-struct SessionInfo
-{
-    std::string key;
-    std::string name;
-    std::string projectDir;
-    bool active = false;
-    bool claude = false;
-    std::vector<PaneInfo> panes;
-
-    MIRO_REFLECT(key, name, projectDir, active, claude, panes)
-};
-
-struct SessionsEvent
-{
-    std::string ev = "sessions";
-    std::vector<SessionInfo> sessions;
-
-    MIRO_REFLECT(ev, sessions)
-};
-
-struct ServerInfo
-{
-    std::string name = "cowterm";
-    std::string version = "0.1.0";
-    std::string wsUrl;
-
-    MIRO_REFLECT(name, version, wsUrl)
-};
-
-struct AttachedEvent
-{
-    std::string ev = "attached";
-    std::string pane;
-    int cols = 0;
-    int rows = 0;
-
-    MIRO_REFLECT(ev, pane, cols, rows)
-};
-
-struct ExitEvent
-{
-    std::string ev = "exit";
-    std::string pane;
-
-    MIRO_REFLECT(ev, pane)
-};
-
-struct ErrorEvent
-{
-    std::string ev = "error";
-    std::string message;
-
-    MIRO_REFLECT(ev, message)
-};
-
-// One struct covers every client op; absent fields stay empty.
-struct ClientOp
-{
-    std::string op;
-    std::string pane;
-    std::string data;
-    std::string key;
-    std::string dir;
-
-    MIRO_REFLECT(op, pane, data, key, dir)
-};
-
 struct OpenRequest
 {
     std::string dir;
@@ -140,29 +61,25 @@ HTTP::Response jsonResponse(const T& value, int status = 200)
     HTTP::Json::setJson(response, value);
     return response;
 }
-
-// Pane output rides binary frames as [u8 idLen][id][raw bytes].
-std::string binaryFrame(const std::string& id, std::string_view data)
-{
-    auto frame = std::string {};
-    frame.reserve(1 + id.size() + data.size());
-    frame.push_back((char) (std::uint8_t) std::min<std::size_t>(id.size(), 255));
-    frame += id.substr(0, 255);
-    frame += data;
-    return frame;
-}
 } // namespace
 
 WebGateway::WebGateway(const AppConfig& configToUse, SessionManager& managerToUse)
     : config(configToUse)
     , manager(managerToUse)
+    , http(HTTP::ServerOptions {
+          .threading = HTTP::ServerThreadingMode::EventLoop,
+          .bindTo = configToUse.webBind == "any" ? BindInterface::any
+                                                 : BindInterface::loopback})
 {
     if (config.webPort <= 0)
         return;
 
     try
     {
-        socketListener = std::make_unique<WsListener>(config.webPort + 1);
+        socketListener = std::make_unique<WsListener>(
+            config.webPort + 1,
+            config.webBind == "any" ? BindInterface::any
+                                    : BindInterface::loopback);
     }
     catch (const TCP::Error&)
     {
@@ -204,6 +121,11 @@ WebGateway::~WebGateway()
     http.stop();
 }
 
+int WebGateway::port() const
+{
+    return running ? http.boundPort() : 0;
+}
+
 void WebGateway::wirePane(TerminalView& pane)
 {
     pane.onOutput = [this, &pane](std::string_view data)
@@ -211,6 +133,24 @@ void WebGateway::wirePane(TerminalView& pane)
 }
 
 void WebGateway::sessionsChanged()
+{
+    if (!running || broadcastPending || clients.empty())
+        return;
+
+    broadcastPending = true;
+
+    Threads::callAsync(
+        [this, guard = std::weak_ptr<bool> {alive}]
+        {
+            if (guard.expired())
+                return;
+
+            broadcastPending = false;
+            broadcastSessions();
+        });
+}
+
+void WebGateway::broadcastSessions()
 {
     if (clients.empty())
         return;
@@ -248,8 +188,9 @@ HTTP::Response WebGateway::route(const HTTP::Request& request)
 {
     // The one funnel every REST request passes through: the loopback Host
     // check (anti DNS-rebinding) lives here, and bearer-token auth slots in
-    // beside it later.
-    if (!isLoopbackHost(request.getHeader("Host")))
+    // beside it later. Bound to the network, peers legitimately dial by
+    // machine name, so the check only applies to loopback binds.
+    if (config.webBind != "any" && !isLoopbackHost(request.getHeader("Host")))
         return HTTP::makePlainTextResponse(403, "loopback only");
 
     const auto path = request.pathWithoutQuery();
@@ -271,9 +212,19 @@ HTTP::Response WebGateway::route(const HTTP::Request& request)
 
     if (request.type == "GET" && path == "/api/v1/server")
     {
+        // The WS host must be whatever name the client dialed us by — a
+        // LAN peer reaching "studio.local:2697" needs the socket there too.
+        auto host = request.getHeader("Host");
+
+        if (const auto colon = host.rfind(':'); colon != std::string::npos)
+            host = host.substr(0, colon);
+
+        if (host.empty())
+            host = "127.0.0.1";
+
         auto info = ServerInfo {};
         info.wsUrl =
-            "ws://127.0.0.1:" + std::to_string(socketListener->port()) + "/";
+            "ws://" + host + ":" + std::to_string(socketListener->port()) + "/";
         return jsonResponse(info);
     }
 

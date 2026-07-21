@@ -27,7 +27,7 @@ nano_add_executable(CowTermWebTests
             ../Terminal/TermParser.cpp)
 
 target_include_directories(CowTermWebTests PRIVATE ../Terminal)
-target_link_libraries(CowTermWebTests PRIVATE eacp-network)
+target_link_libraries(CowTermWebTests PRIVATE eacp-network Miro)
 
 # forkpty/openpty live in libutil on Linux; on Apple they are in libSystem.
 if (NOT APPLE)

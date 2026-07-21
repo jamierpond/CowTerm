@@ -28,11 +28,14 @@ public:
     // adopted. Empty generates a fresh one. A non-empty command runs that
     // command instead of an interactive shell, in an in-process PTY the
     // daemon never sees — the terminal is ephemeral by construction and
-    // ends with the command (the lazygit popup).
+    // ends with the command (the lazygit popup). A non-null shellOverride
+    // supplies the process end wholesale (a remote CowTerm's pane) and
+    // wins over both.
     TerminalView(const AppConfig& config,
                  const std::string& workingDirectory,
                  const std::string& shellIdToUse = {},
-                 const std::string& commandToRun = {});
+                 const std::string& commandToRun = {},
+                 std::unique_ptr<Shell> shellOverride = {});
     ~TerminalView() override;
 
     const std::string& shellId() const { return paneShellId; }

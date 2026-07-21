@@ -1,9 +1,10 @@
-# CowTerm Web UI — design
+# CowTerm Web UI + remote control — design
 
 Goal: browse to `http://127.0.0.1:$port/` and see your sessions, attach to any
 pane, type into it, and watch it render correctly — from any browser, and
-eventually from any machine ("remote pilot"). No auth yet, but nothing in the
-shape of the thing should need reworking when auth arrives.
+from any other CowTerm on the network ("remote pilot", see **CowTerm ↔
+CowTerm** below). No auth yet, but nothing in the shape of the thing should
+need reworking when auth arrives.
 
 ## Where the gateway lives
 
@@ -47,10 +48,14 @@ Two listeners, both loopback-only:
 
 ### Security posture now (pre-auth)
 
-- Both listeners bind loopback only (`BindInterface::loopback`).
-- Every HTTP request and WS handshake validates that `Host` (and `Origin`
-  when a browser sends one) is loopback — this closes DNS-rebinding, which
-  is the one attack that works against an unauthenticated localhost server.
+- Both listeners bind loopback by default; `webBind: "any"` in the config
+  opts into serving the local network (what remote piloting needs — an
+  explicit, deliberate act while there's no auth).
+- On a loopback bind, every HTTP request and WS handshake validates that
+  `Host` (and `Origin` when a browser sends one) is loopback — this closes
+  DNS-rebinding, which is the one attack that works against an
+  unauthenticated localhost server. On a network bind the check is moot
+  (peers dial by machine name) and drops away.
 - `webPort = 0` disables the gateway entirely.
 
 ### Auth later (designed for, not built)
@@ -143,6 +148,47 @@ Known v1 limits, all deliberate:
   stream fine — the tap is at `TerminalView`, above the Shell abstraction —
   but popup panes aren't listed since they belong to no session.
 - xterm.js + fit addon load from CDN; offline shows a plain message.
+
+## CowTerm ↔ CowTerm remote control
+
+A CowTerm pilots another CowTerm through **exactly the surface the browser
+uses** — same REST discovery, same websocket, same ops, same binary frames.
+There is no second protocol, so the two piloting surfaces cannot diverge:
+anything the web UI learns to do, a peer CowTerm can do, by construction.
+The message shapes live once, in `Terminal/Web/Wire.h`, shared verbatim by
+server (`WebGateway`) and native client (`GatewayClient`).
+
+The pieces, top down:
+
+- **Config**: the served side sets `webBind: "any"`; the piloting side lists
+  it in `remotes: ["studio.local:2697"]`.
+- **`GatewayClient`** (`Terminal/Web/GatewayClient.*`): the native end of a
+  remote gateway. Dials in the background (never blocks the UI), holds the
+  remote's session roster live, redials on loss and re-attaches its panes —
+  every attach opens with a server-side snapshot, so reconnects self-heal.
+  One websocket multiplexes all of that machine's panes, as designed.
+- **`RemoteShell`**: the keystone. It implements the existing `Shell`
+  interface — the same abstraction that already hides "in-process PTY" vs
+  "daemon-held PTY" — so a remote pane *is just a pane* to `TerminalView`:
+  parsing, rendering, mouse reporting, copy mode all work unchanged.
+  `terminate()`/`detach()` both only detach: closing a window here must
+  never kill work running over there.
+- **Grid ownership**: each GUI owns its own panes' sizes. `Shell` grew
+  `fixedSize()`; a `RemoteShell` reports the remote pane's dimensions (from
+  the `attached` event) and the local view mirrors them instead of imposing
+  its bounds — the tmux "other client is smaller" model, minus reflow.
+- **Remote HUD** (`Ctrl+A r`): every configured remote with its live
+  sessions/panes. Enter attaches the pane full-window in the popup;
+  `a` activates that session on the remote's GUI; offline remotes show as
+  retrying. The HUD is a view over `GatewayClient`s, never a connection
+  manager — links live for the app's lifetime.
+- **The client half of RFC 6455** lives in the same `WsConnection` as the
+  server half (outbound masking + `wsConnectClient` handshake), so the two
+  ends are tested against each other in `Test/WebTests.cpp`.
+
+"Two cowterms remote-controlling each other" is just both machines setting
+`webBind: "any"` and listing each other in `remotes` — the roles are fully
+symmetric, and each side can also be piloted from a browser at any time.
 
 ## Wiring into the app (kept deliberately thin)
 

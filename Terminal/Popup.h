@@ -22,6 +22,10 @@ public:
     // goes to the session daemon and dies with the popup.
     void show(const std::string& command, const std::string& workingDirectory);
 
+    // Hosts a supplied shell instead — the remote-pane case, where the
+    // process end lives in another CowTerm and dismissing only detaches.
+    void showShell(std::unique_ptr<Shell> shell);
+
     // Ends the command (the toggle case) and tears the popup down on the
     // next loop tick — never inline, since the call usually originates
     // inside one of the terminal's own callbacks.
@@ -42,6 +46,7 @@ public:
     void paint(eacp::Graphics::Context& context) override;
 
 private:
+    void adopt(std::unique_ptr<TerminalView> terminalToUse);
     eacp::Graphics::Rect panelBounds() const;
 
     const AppConfig& config;
