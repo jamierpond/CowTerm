@@ -1,6 +1,7 @@
 #include "GatewayClient.h"
 
 #include <eacp/Core/Core.h>
+#include <eacp/Network/HTTP/Http.h>
 
 #include <Miro/Reflect.h>
 
@@ -16,6 +17,39 @@ namespace
 // Timer intervals are Hz: check the link once a second (dial() is a no-op
 // while connected or mid-dial, so the tick is a flag test).
 constexpr int redialHz = 1;
+
+// The configured address is the remote's HTTP port; the websocket lives
+// wherever /api/v1/server says it does — the same discovery the browser
+// client performs, never an assumption about port layout. Returns 0 when
+// the remote is unreachable or isn't a CowTerm gateway.
+std::uint16_t discoverWsPort(const std::string& host, std::uint16_t httpPort)
+{
+    try
+    {
+        const auto response =
+            HTTP::Request {"http://" + host + ":" + std::to_string(httpPort)
+                           + "/api/v1/server"}
+                .perform();
+
+        if (response.statusCode != 200)
+            return 0;
+
+        auto info = wire::ServerInfo {};
+        Miro::fromJSONString(info, response.content);
+
+        // "ws://host:port/"
+        const auto colon = info.wsUrl.rfind(':');
+
+        if (colon == std::string::npos)
+            return 0;
+
+        return (std::uint16_t) std::atoi(info.wsUrl.c_str() + colon + 1);
+    }
+    catch (const std::exception&)
+    {
+        return 0;
+    }
+}
 } // namespace
 
 GatewayClient::GatewayClient(const std::string& addressToUse)
@@ -78,7 +112,8 @@ void GatewayClient::dial()
 
             try
             {
-                socket = wsConnectClient(dialHost, dialPort);
+                if (const auto wsPort = discoverWsPort(dialHost, dialPort))
+                    socket = wsConnectClient(dialHost, wsPort);
             }
             catch (const TCP::Error&)
             {
