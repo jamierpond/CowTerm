@@ -1,5 +1,7 @@
 #include "TerminalView.h"
 
+#include "Debug.h"
+
 #include <eacp/Core/App/Clipboard.h>
 
 #include <algorithm>
@@ -113,6 +115,7 @@ TerminalView::TerminalView(const AppConfig& config,
     , parser(screen, theme)
     , fontSize(config.fontSize)
     , paneShellId(shellIdToUse.empty() ? generateShellId() : shellIdToUse)
+    , commandTerminal(!commandToRun.empty())
     , shell(shellFor(paneShellId, commandToRun))
     , blinkTimer(
           [this]
@@ -232,6 +235,30 @@ void TerminalView::sendText(std::string_view text)
     sendAndScrollToBottom(bytes);
 }
 
+std::string TerminalView::debugScreenText() const
+{
+    auto out = std::string {};
+    const auto rows = screen.rows();
+    const auto cols = screen.columns();
+
+    for (int r = 0; r < rows; ++r)
+    {
+        const auto& line = screen.lineAt(r, 0);
+        auto rowText = std::string {};
+
+        for (int c = 0; c < cols && c < (int) line.size(); ++c)
+            appendUtf8(rowText, line[(std::size_t) c].ch);
+
+        while (!rowText.empty() && rowText.back() == ' ')
+            rowText.pop_back();
+
+        out += rowText;
+        out += '\n';
+    }
+
+    return out;
+}
+
 void TerminalView::resized()
 {
     GPUView::resized();
@@ -263,6 +290,10 @@ void TerminalView::applyGridSize()
 
     const auto cols = std::max(2, (int) ((bounds.w - 2 * marginX) / cellW));
     const auto rows = std::max(1, (int) ((bounds.h - 2 * marginY) / cellH));
+
+    if (commandTerminal)
+        debugLog("[grid] popup bounds w=%.1f h=%.1f cell=%.2fx%.2f font=%.1f -> %dx%d\n",
+                 bounds.w, bounds.h, cellW, cellH, fontSize, cols, rows);
 
     if (cols == screen.columns() && rows == screen.rows())
         return;

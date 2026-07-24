@@ -59,6 +59,22 @@ endif ()
 
 target_link_libraries(CowTerm PRIVATE eacp-sprites eacp-text eacp-network emberstore)
 
+# Stamp the git SHA into a generated header on every build so the running app
+# can report exactly which commit it came from (window title + startup log).
+set(_version_in  ${CMAKE_CURRENT_SOURCE_DIR}/Version.h.in)
+set(_version_out ${CMAKE_CURRENT_BINARY_DIR}/generated/CowTermVersion.h)
+add_custom_target(CowTermVersion
+        BYPRODUCTS ${_version_out}
+        COMMAND ${CMAKE_COMMAND}
+                -DSRC=${CMAKE_SOURCE_DIR}
+                -DIN=${_version_in}
+                -DOUT=${_version_out}
+                -DCOWTERM_PROJECT_VERSION=${PROJECT_VERSION}
+                -P ${CMAKE_SOURCE_DIR}/cmake/GitVersion.cmake
+        COMMENT "Stamping git version")
+add_dependencies(CowTerm CowTermVersion)
+target_include_directories(CowTerm PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/generated)
+
 # The session daemon rides inside the bundle, next to the app binary, so
 # the client can launch it with no install step.
 add_dependencies(CowTerm CowTermDaemon)

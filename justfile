@@ -58,6 +58,14 @@ run: build
 run: build
     "./{{build_dir}}/Terminal/CowTerm"
 
+# Build and run with popup tracing on. Reproduce the lazygit popup (Ctrl+A i),
+# then read /tmp/cowterm-popup.log — it records the popup's grid size, what the
+# command drew, and whether/why it closed. Quit the normal instance first so
+# they don't share a daemon.
+[macos]
+debug-popup: build
+    COWTERM_POPUP_DEBUG=1 "{{build_dir}}/Terminal/CowTerm.app/Contents/MacOS/CowTerm"
+
 # Build, then install the app to the usual place for this OS.
 [macos]
 install: build

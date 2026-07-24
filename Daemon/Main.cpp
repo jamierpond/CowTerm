@@ -212,7 +212,7 @@ struct Daemon
     IPC::Messenger* client = nullptr;
     int idleTicks = 0;
 
-    IPC::MessageServer server {term::proto::serverName};
+    IPC::MessageServer server {term::proto::serverName()};
     Threads::Timer idleTimer {[this] { checkIdle(); }, 10};
 };
 } // namespace

@@ -1,4 +1,5 @@
 #include "AppShell.h"
+#include "CowTermVersion.h"
 #include "GitWorktree.h"
 #include "Notifier.h"
 
@@ -202,6 +203,9 @@ void AppShell::updateTitle()
 
     if (!session->activeTitle().empty())
         title += " — " + session->activeTitle();
+
+    // Trailing build tag so it is always clear which commit is running.
+    title += "  ·  " + versionTag();
 
     onWindowTitleChanged(title);
 }

@@ -1,5 +1,6 @@
 #include "Session.h"
 #include "Projects.h"
+#include "Protocol.h"
 
 #include <eacp/Core/Threads/Async.h>
 #include <emberstore/AppDatabase.h>
@@ -46,10 +47,21 @@ std::string TermSession::activeWorkingDirectory() const
     return pane != nullptr ? pane->workingDirectory() : projectDir;
 }
 
+namespace
+{
+// A named instance stores its sessions under its own app key so restoring the
+// test instance never reads or clobbers the user's live session list.
+std::string storeName()
+{
+    const auto suffix = proto::instanceSuffix();
+    return suffix.empty() ? std::string {"cowterm"} : "cowterm-" + suffix;
+}
+} // namespace
+
 SessionManager::SessionManager(const AppConfig& configToUse)
     : config(configToUse)
     , db(emberstore::databaseForApp(
-          "tamber", "cowterm", emberstore::Durability::Atomic))
+          "tamber", storeName(), emberstore::Durability::Atomic))
     , mru(db)
     , saved(db.document<SavedState>("sessions"))
 {

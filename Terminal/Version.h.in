@@ -1,0 +1,18 @@
+#pragma once
+
+#include <string>
+
+// Generated at build time from cmake/GitVersion.cmake — do not edit the copy in
+// the build tree. The template lives at Terminal/Version.h.in.
+namespace term
+{
+inline constexpr auto appVersion = "@COWTERM_PROJECT_VERSION@";
+inline constexpr auto gitSha = "@COWTERM_GIT_SHA@";
+inline constexpr bool gitDirty = @COWTERM_GIT_DIRTY@ != 0;
+
+// Short label for the title bar / logs, e.g. "e5c6236" or "e5c6236*" (dirty).
+inline std::string versionTag()
+{
+    return std::string {gitSha} + (gitDirty ? "*" : "");
+}
+} // namespace term

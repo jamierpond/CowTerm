@@ -37,6 +37,12 @@ public:
 
     const std::string& shellId() const { return paneShellId; }
 
+    // Debug tracing: is this the ephemeral command terminal (the popup)?
+    bool isCommandTerminal() const { return commandTerminal; }
+
+    // Debug tracing: the visible grid as plain text, blanks trimmed.
+    std::string debugScreenText() const;
+
     // Ends the shell process on purpose (pane closed). The destructor only
     // detaches, so shells held by the daemon survive teardown.
     void terminateShell();
@@ -173,6 +179,7 @@ private:
     // as opaque red, and batching turns a screen of cells into one draw call.
     std::optional<eacp::Text::GlyphRenderer> glyphs;
     std::string paneShellId;
+    bool commandTerminal = false;
     std::unique_ptr<Shell> shell;
 
     std::mutex outputLock;

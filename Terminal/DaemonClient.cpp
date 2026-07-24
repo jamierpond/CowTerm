@@ -74,7 +74,7 @@ void DaemonClient::initialize(const Callback& whenReady)
     // First dial is short: the daemon is either already there or not
     // installed at all. The second, after launching it, allows startup time.
     auto first = std::make_shared<std::unique_ptr<IPC::Messenger>>(
-        std::make_unique<IPC::Messenger>(proto::serverName, Time::MS {600}));
+        std::make_unique<IPC::Messenger>(proto::serverName(), Time::MS {600}));
 
     (*first)->onConnected = [first, adopt, whenReady]
     {
@@ -87,7 +87,7 @@ void DaemonClient::initialize(const Callback& whenReady)
         launchDaemon();
 
         auto second = std::make_shared<std::unique_ptr<IPC::Messenger>>(
-            std::make_unique<IPC::Messenger>(proto::serverName, Time::MS {4000}));
+            std::make_unique<IPC::Messenger>(proto::serverName(), Time::MS {4000}));
 
         (*second)->onConnected = [second, adopt, whenReady]
         {

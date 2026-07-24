@@ -1,7 +1,10 @@
 #include "AppShell.h"
+#include "CowTermVersion.h"
 #include "DaemonClient.h"
 
 #include <eacp/Core/App/App.h>
+
+#include <cstdio>
 
 using namespace eacp;
 
@@ -30,7 +33,10 @@ struct TerminalApp
     TerminalApp()
     {
         shell.onWindowTitleChanged = [this](const std::string& title)
-        { window.setTitle(title.empty() ? "CowTerm" : title); };
+        {
+            window.setTitle(title.empty() ? "CowTerm  ·  " + term::versionTag()
+                                          : title);
+        };
 
         shell.onBringToFront = [this]
         {
@@ -61,6 +67,11 @@ struct TerminalApp
 
 int main()
 {
+    std::fprintf(stderr,
+                 "CowTerm %s (%s)\n",
+                 term::appVersion,
+                 term::versionTag().c_str());
+
     term::registerEmbeddedFonts();
     return Apps::run<TerminalApp>();
 }

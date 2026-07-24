@@ -1,5 +1,8 @@
 #include "Popup.h"
 
+#include "CowTermVersion.h"
+#include "Debug.h"
+
 #include <eacp/Core/Threads/EventLoop.h>
 
 namespace term
@@ -31,12 +34,33 @@ void Popup::show(const std::string& command, const std::string& workingDirectory
     terminal->interceptKey = [this](const Graphics::KeyEvent& event)
     { return interceptKey(event); };
 
-    terminal->onShellExit = [this] { dismiss(); };
+    terminal->onShellExit = [this]
+    {
+        debugLog("[popup] onShellExit -> dismiss (command shell ended)\n");
+        dismiss();
+    };
+
+    debugLog("[popup] show build=%s command='%s' local=%.1fx%.1f\n",
+             versionTag().c_str(), command.c_str(),
+             getLocalBounds().w, getLocalBounds().h);
 
     addSubview(*terminal);
     resized();
     terminal->focus();
     repaint();
+
+    // Snapshot what the command actually drew, so a failed render (e.g.
+    // lazygit's "Not enough space") is visible in the log.
+    Threads::delay(Time::MS {1500})
+        .then(
+            [this, guard = std::weak_ptr<bool> {alive}]
+            {
+                if (guard.expired() || terminal == nullptr)
+                    return;
+
+                debugLog("[popup] screen @1.5s:\n%s----\n",
+                         terminal->debugScreenText().c_str());
+            });
 }
 
 void Popup::dismiss()
@@ -44,6 +68,7 @@ void Popup::dismiss()
     if (terminal == nullptr || closing)
         return;
 
+    debugLog("[popup] dismiss\n");
     closing = true;
     terminal->terminateShell();
 
