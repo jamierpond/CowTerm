@@ -9,3 +9,4 @@ CMakeUserPresets.json
 .DS_Store
 .cache/clangd/index
 cowcrash.txt
+/build-noipo
