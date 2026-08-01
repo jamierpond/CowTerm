@@ -1,6 +1,5 @@
 #include "TrayController.h"
 #include "DaemonClient.h"
-#include "Notifier.h"
 
 #include <eacp/Core/App/App.h>
 
@@ -47,7 +46,6 @@ TrayController::TrayController(SessionManager& sessionsToUse)
 {
     icon.setIcon(makeIcon());
     icon.setTooltip("CowTerm");
-    Notifier::attachTray(icon);
     refresh();
 }
 

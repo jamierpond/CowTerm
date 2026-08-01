@@ -77,8 +77,6 @@ void initialize(std::function<void(const std::string&)> onActivate)
                           }];
 }
 
-void attachTray(eacp::Graphics::TrayIcon&) {}
-
 void notify(const std::string& sessionKey,
             const std::string& title,
             const std::string& body)
