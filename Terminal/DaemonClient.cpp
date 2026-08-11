@@ -1,6 +1,7 @@
 #include "DaemonClient.h"
 #include "Protocol.h"
-#include "Shell.h"
+
+#include "CowTermCore/Shell.h"
 
 #include <eacp/Core/Process/Process.h>
 
@@ -340,5 +341,16 @@ std::unique_ptr<Shell> makeShell(const std::string& shellId)
         return std::make_unique<RemoteShell>(shellId);
 
     return std::make_unique<LocalShell>();
+}
+
+TerminalConfig terminalConfig(const AppConfig& config)
+{
+    auto result = TerminalConfig {};
+    result.font = config.font;
+    result.fontSize = config.fontSize;
+    result.theme = themeByName(config.theme);
+    result.makeShell = [](const std::string& shellId) { return makeShell(shellId); };
+
+    return result;
 }
 } // namespace term

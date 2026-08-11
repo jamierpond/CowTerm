@@ -1,6 +1,9 @@
 #pragma once
 
-#include "Pty.h"
+#include "Config.h"
+
+#include "CowTermCore/Pty.h"
+#include "CowTermTerminal/TerminalView.h"
 
 #include <eacp/Core/Threads/Timer.h>
 #include <eacp/Network/IPC/Messenger.h>
@@ -12,6 +15,14 @@
 
 namespace term
 {
+// A daemon-backed shell when the daemon answers, a local one otherwise.
+// Defined in DaemonClient.cpp.
+std::unique_ptr<Shell> makeShell(const std::string& shellId);
+
+// The widget's slice of the user's config, wired to the daemon-backed
+// factory above — how the app builds every TerminalView.
+TerminalConfig terminalConfig(const AppConfig& config);
+
 // The app's end of the session daemon: one Messenger conversation carrying
 // every pane. Shells are keyed by stable id — spawn adopts a still-running
 // shell (replaying its recent output) or starts a fresh one; release stops

@@ -7,7 +7,7 @@ project(CowTerm VERSION 0.1.0 LANGUAGES C CXX)
 # build (the eacp-* targets and the eacp_* CMake helpers) comes from that
 # package.
 
-# The app carries Objective-C++ sources (Cocoa glyph atlas + notifications).
+# The app carries Objective-C++ sources (notifications, trash).
 if (APPLE)
     enable_language(OBJCXX)
 endif ()
@@ -77,6 +77,8 @@ endif ()
 # eacp's C++20 modules are precompiled; skip module scanning as eacp does.
 set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
 
+# The libraries (see Lib/CMakeLists.txt), then the product built on them.
+add_subdirectory(Lib)
 add_subdirectory(Daemon)
 add_subdirectory(Terminal)
 

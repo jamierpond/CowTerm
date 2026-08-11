@@ -1,7 +1,9 @@
 #include "Popup.h"
 
 #include "CowTermVersion.h"
-#include "Debug.h"
+#include "DaemonClient.h"
+
+#include "CowTermCore/Debug.h"
 
 #include <eacp/Core/Threads/EventLoop.h>
 
@@ -29,7 +31,8 @@ void Popup::show(const std::string& command, const std::string& workingDirectory
     if (terminal != nullptr)
         return;
 
-    terminal = std::make_unique<TerminalView>(config, workingDirectory, "", command);
+    terminal = std::make_unique<TerminalView>(terminalConfig(config),
+                                              workingDirectory, "", command);
 
     terminal->interceptKey = [this](const Graphics::KeyEvent& event)
     { return interceptKey(event); };

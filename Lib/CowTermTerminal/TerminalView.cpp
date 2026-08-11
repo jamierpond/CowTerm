@@ -1,6 +1,6 @@
 #include "TerminalView.h"
 
-#include "Debug.h"
+#include "CowTermCore/Debug.h"
 
 #include <eacp/Core/App/Clipboard.h>
 
@@ -95,28 +95,29 @@ std::string generateShellId()
     return buffer;
 }
 
-std::unique_ptr<Shell> shellFor(const std::string& shellId,
+std::unique_ptr<Shell> shellFor(const TerminalConfig& config,
+                                const std::string& shellId,
                                 const std::string& command)
 {
     if (command.empty())
-        return makeShell(shellId);
+        return config.makeShell(shellId);
 
     return std::make_unique<LocalShell>();
 }
 } // namespace
 
-TerminalView::TerminalView(const AppConfig& config,
+TerminalView::TerminalView(const TerminalConfig& config,
                            const std::string& workingDirectory,
                            const std::string& shellIdToUse,
                            const std::string& commandToRun)
-    : theme(themeByName(config.theme))
+    : theme(config.theme)
     , fontName(config.font)
     , screen(80, 24, theme)
     , parser(screen, theme)
     , fontSize(config.fontSize)
     , paneShellId(shellIdToUse.empty() ? generateShellId() : shellIdToUse)
     , commandTerminal(!commandToRun.empty())
-    , shell(shellFor(paneShellId, commandToRun))
+    , shell(shellFor(config, paneShellId, commandToRun))
     , blinkTimer(
           [this]
           {

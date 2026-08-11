@@ -2,7 +2,7 @@
 
 #include "Pty.h"
 
-#include <memory>
+#include <functional>
 #include <string>
 
 namespace term
@@ -65,8 +65,4 @@ public:
 private:
     Pty pty;
 };
-
-// A daemon-backed shell when the daemon answers, a local one otherwise.
-// Defined in DaemonClient.cpp.
-std::unique_ptr<Shell> makeShell(const std::string& shellId);
 } // namespace term

@@ -1,4 +1,5 @@
 #include "SessionView.h"
+#include "DaemonClient.h"
 
 #include <algorithm>
 
@@ -36,7 +37,7 @@ std::unique_ptr<SessionView::Node> SessionView::makeLeaf(const std::string& dir,
 {
     auto node = std::make_unique<Node>();
     node->view = std::make_unique<TerminalView>(
-        config, dir.empty() ? fallbackDir : dir, shellId);
+        terminalConfig(config), dir.empty() ? fallbackDir : dir, shellId);
 
     // Tree surgery (split, sibling promotion) moves views between nodes, so
     // the callbacks resolve their node by view at fire time, never by a

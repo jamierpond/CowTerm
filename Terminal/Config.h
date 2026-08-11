@@ -1,6 +1,6 @@
 #pragma once
 
-#include "TermTypes.h"
+#include "CowTermCore/TermTypes.h"
 
 #include <Miro/Reflect.h>
 
@@ -39,9 +39,6 @@ struct AppConfig
 
     MIRO_REFLECT(searchDirs, font, fontSize, theme, bindings)
 };
-
-inline constexpr float minFontSize = 7.0f;
-inline constexpr float maxFontSize = 40.0f;
 
 AppConfig loadConfig();
 

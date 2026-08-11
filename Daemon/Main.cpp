@@ -4,7 +4,7 @@
 // shells by stable id, and streams input/output through this process.
 
 #include "Protocol.h"
-#include "Pty.h"
+#include "CowTermCore/Pty.h"
 
 #include <eacp/Core/App/App.h>
 #include <eacp/Core/Core.h>

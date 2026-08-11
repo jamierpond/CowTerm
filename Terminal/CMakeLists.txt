@@ -17,6 +17,9 @@ else ()
     set(COWTERM_EXECUTABLE_TARGET CowTerm)
 endif ()
 
+# The emulator and the terminal widget live in Lib/ (CowTerm::Terminal);
+# what remains here is the product around them — sessions, splits, palette,
+# switcher, daemon client, tray.
 add_executable(${COWTERM_EXECUTABLE_TARGET}
         Main.cpp
         AppShell.cpp
@@ -32,18 +35,12 @@ add_executable(${COWTERM_EXECUTABLE_TARGET}
         Session.cpp
         SessionView.cpp
         Switcher.cpp
-        TermScreen.cpp
-        TermParser.cpp
-        TerminalView.cpp
         TrayController.cpp
-        DaemonClient.cpp
-        GlyphAtlas.cpp)
+        DaemonClient.cpp)
 
-# Portable core (parser, screen, sessions, palette) + per-platform PTY,
-# glyph raster and notifications.
+# Per-platform notifications and trash.
 if (APPLE)
     target_sources(${COWTERM_EXECUTABLE_TARGET} PRIVATE
-            Pty-Posix.cpp
             Notifier-macOS.mm
             Trash-macOS.mm)
 
@@ -52,12 +49,11 @@ if (APPLE)
             "-framework Foundation")
 elseif (WIN32)
     target_sources(${COWTERM_EXECUTABLE_TARGET} PRIVATE
-            Pty-Windows.cpp
             Notifier-Windows.cpp
             Trash-Windows.cpp)
 
-    # The parser and screen sources hold Unicode literals (box drawing,
-    # powerline glyphs); MSVC assumes the ANSI codepage without this.
+    # The dashboard and switcher sources hold Unicode literals (powerline
+    # glyphs); MSVC assumes the ANSI codepage without this.
     target_compile_options(${COWTERM_EXECUTABLE_TARGET} PRIVATE /utf-8)
 
     target_link_libraries(${COWTERM_EXECUTABLE_TARGET} PRIVATE
@@ -70,7 +66,7 @@ elseif (WIN32)
 endif ()
 
 target_link_libraries(${COWTERM_EXECUTABLE_TARGET} PRIVATE
-        eacp-sprites eacp-text eacp-network emberstore)
+        CowTerm::Terminal eacp-sprites eacp-text eacp-network emberstore)
 
 # Stamp the git SHA into a generated header on every build so the running app
 # can report exactly which commit it came from (window title + startup log).
