@@ -15,6 +15,8 @@ set windows-shell := ["powershell.exe", "-NoLogo", "-NoProfile", "-Command"]
 build_dir  := "build"
 generator  := "Ninja"
 build_type := "Release"
+signing_identity := ""
+allow_adhoc_signing := "OFF"
 
 # Default: show the recipe list.
 default:
@@ -22,11 +24,11 @@ default:
 
 # Configure the CMake build tree (idempotent; first run fetches deps via CPM).
 configure:
-    cmake -S . -B {{build_dir}} -G "{{generator}}" -DCMAKE_BUILD_TYPE={{build_type}}
+    cmake -S . -B {{build_dir}} -G "{{generator}}" -DCMAKE_BUILD_TYPE={{build_type}} -DCOWTERM_MACOS_SIGNING_IDENTITY="{{signing_identity}}" -DCOWTERM_MACOS_ALLOW_ADHOC_SIGNING={{allow_adhoc_signing}}
 
 # Build the app; CowTermDaemon builds as a dependency and is bundled alongside it.
 build: configure
-    cmake --build {{build_dir}} --target CowTerm
+    cmake --build {{build_dir}} --target CowTermApp
 
 # Build and run the unit tests (regression coverage, incl. the quit-hang fix).
 test: configure
@@ -64,13 +66,14 @@ run: build
 # they don't share a daemon.
 [macos]
 debug-popup: build
-    COWTERM_POPUP_DEBUG=1 "{{build_dir}}/Terminal/CowTerm.app/Contents/MacOS/CowTerm"
+    open -n --env COWTERM_POPUP_DEBUG=1 "{{build_dir}}/Terminal/CowTerm.app"
 
 # Build, then install the app to the usual place for this OS.
 [macos]
 install: build
     rm -rf "/Applications/CowTerm.app"
     cp -R "{{build_dir}}/Terminal/CowTerm.app" "/Applications/CowTerm.app"
+    codesign --verify --deep --strict --verbose=2 "/Applications/CowTerm.app"
     @echo "Installed CowTerm.app to /Applications"
 
 [windows]

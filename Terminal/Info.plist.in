@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+        "https://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>English</string>
+	<key>CFBundleDisplayName</key>
+	<string>${MACOSX_BUNDLE_BUNDLE_NAME}</string>
+	<key>CFBundleExecutable</key>
+	<string>${MACOSX_BUNDLE_EXECUTABLE_NAME}</string>
+	<key>CFBundleGetInfoString</key>
+	<string>${MACOSX_BUNDLE_INFO_STRING}</string>
+	<key>CFBundleIconFile</key>
+	<string>${MACOSX_BUNDLE_ICON_FILE}</string>
+	<key>CFBundleIdentifier</key>
+	<string>${MACOSX_BUNDLE_GUI_IDENTIFIER}</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleLongVersionString</key>
+	<string>${MACOSX_BUNDLE_LONG_VERSION_STRING}</string>
+	<key>CFBundleName</key>
+	<string>${MACOSX_BUNDLE_BUNDLE_NAME}</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>${MACOSX_BUNDLE_SHORT_VERSION_STRING}</string>
+	<key>CFBundleSignature</key>
+	<string>????</string>
+	<key>CFBundleVersion</key>
+	<string>${MACOSX_BUNDLE_BUNDLE_VERSION}</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>${CMAKE_OSX_DEPLOYMENT_TARGET}</string>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+	<key>NSHumanReadableCopyright</key>
+	<string>${MACOSX_BUNDLE_COPYRIGHT}</string>
+
+	<!--
+	  CowTerm is a host for user-selected commands and agents. These strings
+	  do not grant access; they let macOS explain requests made by tools whose
+	  responsible application is CowTerm.
+	-->
+	<key>NSAppleEventsUsageDescription</key>
+	<string>Commands and agents running in CowTerm may automate other applications when you ask them to.</string>
+	<key>NSAudioCaptureUsageDescription</key>
+	<string>Commands and agents running in CowTerm may capture system audio when you ask them to.</string>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>Commands and agents running in CowTerm may communicate with Bluetooth devices when you ask them to.</string>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>Commands and agents running in CowTerm may access your calendars when you ask them to.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Commands and agents running in CowTerm may use the camera when you ask them to.</string>
+	<key>NSContactsUsageDescription</key>
+	<string>Commands and agents running in CowTerm may access your contacts when you ask them to.</string>
+	<key>NSDesktopFolderUsageDescription</key>
+	<string>Commands and agents running in CowTerm may access files on your Desktop when you ask them to.</string>
+	<key>NSDocumentsFolderUsageDescription</key>
+	<string>Commands and agents running in CowTerm may access files in Documents when you ask them to.</string>
+	<key>NSDownloadsFolderUsageDescription</key>
+	<string>Commands and agents running in CowTerm may access files in Downloads when you ask them to.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Commands and agents running in CowTerm may connect to devices and services on your local network.</string>
+	<key>NSLocationUsageDescription</key>
+	<string>Commands and agents running in CowTerm may use your location when you ask them to.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Commands and agents running in CowTerm may use your location while CowTerm is open.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Commands and agents running in CowTerm may use the microphone when you ask them to.</string>
+	<key>NSNetworkVolumesUsageDescription</key>
+	<string>Commands and agents running in CowTerm may access files on network volumes when you ask them to.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Commands and agents running in CowTerm may access your photo library when you ask them to.</string>
+	<key>NSRemindersFullAccessUsageDescription</key>
+	<string>Commands and agents running in CowTerm may access your reminders when you ask them to.</string>
+	<key>NSRemovableVolumesUsageDescription</key>
+	<string>Commands and agents running in CowTerm may access files on removable volumes when you ask them to.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Commands and agents running in CowTerm may use speech recognition when you ask them to.</string>
+	<key>NSSystemAdministrationUsageDescription</key>
+	<string>A command or agent running in CowTerm requested an administrative operation.</string>
+</dict>
+</plist>

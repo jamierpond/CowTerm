@@ -54,16 +54,24 @@ CPMAddPackage(
 # find_package(ResEmbed) (via eacp_set_gui_subsystem) and need the Find modules.
 list(APPEND CMAKE_MODULE_PATH "${eacp_SOURCE_DIR}/CMake")
 
+# This cache entry exists on every platform so cross-platform `just` recipes
+# can pass it without producing an "unused variable" warning. It only affects
+# the macOS packaging target.
+set(COWTERM_MACOS_SIGNING_IDENTITY "" CACHE STRING
+        "Certificate name or SHA-1 used to sign CowTerm; empty auto-detects")
+
 # eacp runs eacp_default_setup() only when it is the root project. We are the
-# root now, so reproduce the parts the app relies on: the macOS bundle
-# Info.plist template that set_default_target_setting() stamps onto the app
-# (NSHighResolutionCapable et al.), and the deployment target. eacp_setup_apple
-# is a macro keyed off CMAKE_CURRENT_SOURCE_DIR, so it can't be reused verbatim
-# from here; point the plist var straight at eacp's template instead.
+# root now, so reproduce the deployment target and point its target helper at
+# CowTerm's own plist. A terminal is the responsible application for many
+# privacy requests made by its child commands, so the generic eacp plist is not
+# sufficient here.
 if (APPLE)
     set(CMAKE_OSX_DEPLOYMENT_TARGET "11.0" CACHE STRING "")
-    set(EACP_MACOS_PLIST "${eacp_SOURCE_DIR}/CMake/macOSBundleInfo.plist.in"
-            CACHE INTERNAL "eacp macOS bundle Info.plist template")
+    set(EACP_MACOS_PLIST "${CMAKE_CURRENT_SOURCE_DIR}/Terminal/Info.plist.in"
+            CACHE INTERNAL "CowTerm macOS bundle Info.plist template" FORCE)
+
+    option(COWTERM_MACOS_ALLOW_ADHOC_SIGNING
+            "Allow disposable macOS builds whose privacy grants reset" OFF)
 endif ()
 
 # eacp's C++20 modules are precompiled; skip module scanning as eacp does.
