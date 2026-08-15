@@ -16,7 +16,10 @@ build_dir  := "build"
 generator  := "Ninja"
 build_type := "Release"
 signing_identity := ""
-allow_adhoc_signing := "OFF"
+# Ad-hoc by default: no code-signing identity is needed to build locally. The
+# cost is that macOS privacy grants (screen capture) are re-prompted after each
+# rebuild, since an ad-hoc signature's designated requirement is its cdhash.
+allow_adhoc_signing := "ON"
 
 # Default: show the recipe list.
 default:
@@ -26,9 +29,20 @@ default:
 configure:
     cmake -S . -B {{build_dir}} -G "{{generator}}" -DCMAKE_BUILD_TYPE={{build_type}} -DCOWTERM_MACOS_SIGNING_IDENTITY="{{signing_identity}}" -DCOWTERM_MACOS_ALLOW_ADHOC_SIGNING={{allow_adhoc_signing}}
 
-# Build the app; CowTermDaemon builds as a dependency and is bundled alongside it.
+# Build the app; CowTermDaemon builds as a dependency and is bundled alongside
+# it. CowTermApp (the always-run packaging + signing target) exists only on
+# macOS; elsewhere the executable target copies the daemon via POST_BUILD.
+[macos]
 build: configure
     cmake --build {{build_dir}} --target CowTermApp
+
+[windows]
+build: configure
+    cmake --build {{build_dir}} --target CowTerm
+
+[linux]
+build: configure
+    cmake --build {{build_dir}} --target CowTerm
 
 # Build and run the unit tests (regression coverage, incl. the quit-hang fix).
 test: configure

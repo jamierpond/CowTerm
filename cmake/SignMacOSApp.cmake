@@ -41,18 +41,56 @@ set(identity "${SIGNING_IDENTITY}")
 # Prefer an Apple Development certificate for local builds. Developer ID is a
 # useful fallback, as is any other valid code-signing identity explicitly
 # installed by the developer (including a local certificate).
+#
+# Only identities in unlocked keychains are considered. A locked keychain still
+# advertises its identities through `security find-identity`, but codesign then
+# fails with errSecInternalComponent (or blocks on an unlock prompt) because it
+# cannot reach the private key. Release keychains are commonly kept locked, so
+# discovery must not hand the build an identity it cannot actually use.
 if (identity STREQUAL "")
     execute_process(
-            COMMAND "${SECURITY_EXECUTABLE}" find-identity -v -p codesigning
-            RESULT_VARIABLE identity_result
-            OUTPUT_VARIABLE identity_output
-            ERROR_VARIABLE identity_error)
+            COMMAND "${SECURITY_EXECUTABLE}" list-keychains -d user
+            RESULT_VARIABLE keychain_result
+            OUTPUT_VARIABLE keychain_output
+            ERROR_VARIABLE keychain_error)
 
-    if (NOT identity_result EQUAL 0)
+    if (NOT keychain_result EQUAL 0)
         message(FATAL_ERROR
-                "Could not inspect the macOS code-signing identities:\n"
-                "${identity_error}")
+                "Could not list the macOS keychains:\n${keychain_error}")
     endif ()
+
+    string(REGEX MATCHALL "\"[^\"]+\"" keychains "${keychain_output}")
+
+    set(identity_output "")
+    set(locked_keychains "")
+
+    foreach (keychain IN LISTS keychains)
+        string(REGEX REPLACE "^\"|\"$" "" keychain "${keychain}")
+
+        # show-keychain-info only succeeds on an unlocked keychain.
+        execute_process(
+                COMMAND "${SECURITY_EXECUTABLE}" show-keychain-info "${keychain}"
+                RESULT_VARIABLE unlocked_result
+                OUTPUT_QUIET
+                ERROR_QUIET)
+
+        if (NOT unlocked_result EQUAL 0)
+            get_filename_component(keychain_name "${keychain}" NAME)
+            list(APPEND locked_keychains "${keychain_name}")
+            continue ()
+        endif ()
+
+        execute_process(
+                COMMAND "${SECURITY_EXECUTABLE}" find-identity -v -p codesigning
+                        "${keychain}"
+                RESULT_VARIABLE find_result
+                OUTPUT_VARIABLE find_output
+                ERROR_QUIET)
+
+        if (find_result EQUAL 0)
+            string(APPEND identity_output "${find_output}")
+        endif ()
+    endforeach ()
 
     string(REGEX MATCH "\"Apple Development:[^\"]+\"" identity_match
             "${identity_output}")
@@ -70,16 +108,26 @@ if (identity STREQUAL "")
 endif ()
 
 if (identity STREQUAL "")
+    set(locked_note "")
+    if (NOT locked_keychains STREQUAL "")
+        string(JOIN ", " locked_list ${locked_keychains})
+        set(locked_note
+                "Locked keychains were skipped: ${locked_list}. Unlock one with "
+                "`security unlock-keychain <name>` to sign with its certificate.\n")
+    endif ()
+
     if (ALLOW_ADHOC)
         set(identity "-")
         message(WARNING
                 "CowTerm is being ad-hoc signed. macOS privacy grants will not "
                 "survive a rebuild. Install an Apple Development certificate "
-                "and build without COWTERM_MACOS_ALLOW_ADHOC_SIGNING.")
+                "and build without COWTERM_MACOS_ALLOW_ADHOC_SIGNING.\n"
+                ${locked_note})
     else ()
         message(FATAL_ERROR
                 "CowTerm needs a stable macOS code-signing identity so privacy "
-                "grants survive rebuilds, but none was found.\n"
+                "grants survive rebuilds, but no usable one was found.\n"
+                ${locked_note}
                 "Create an Apple Development certificate in Xcode under "
                 "Settings > Accounts > Manage Certificates, or configure with "
                 "-DCOWTERM_MACOS_SIGNING_IDENTITY=<certificate name or SHA-1>.\n"
