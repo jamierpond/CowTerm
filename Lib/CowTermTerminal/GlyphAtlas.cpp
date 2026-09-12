@@ -42,13 +42,25 @@ GlyphAtlas::GlyphAtlas(const std::string& fontName, float size, float scaleToUse
 
     backingScale = request.scale;
 
-    auto rasterizer = makeOwned<Text::GlyphRasterizer>(request);
-
     // 1024 rather than the old fixed 2048: it grows on demand now, so starting
     // smaller costs nothing and a session that only ever shows ASCII never
     // allocates more.
+    //
+    // eacp's atlas now holds many faces and is built from a factory rather than
+    // from one rasterizer, so that a document can mix sizes in a single texture
+    // and a single batch. A terminal has exactly one face, which is what
+    // passing `request` as the default face says: the factory is only ever
+    // called for that one, and glyph() never asks for another.
     impl = makeOwned<Text::GlyphAtlas>(
-        OwningPointer<Text::GlyphSource> {std::move(rasterizer)}, 1024, 4096);
+        [](const Text::FontRequest& face)
+        {
+            auto rasterizer = makeOwned<Text::GlyphRasterizer>(face);
+
+            return OwningPointer<Text::GlyphSource> {std::move(rasterizer)};
+        },
+        request,
+        1024,
+        4096);
 
     const auto metrics = impl->metrics();
 
