@@ -1,6 +1,8 @@
 #pragma once
 
 #include "Config.h"
+
+#include <eacp/UI/UI.h>
 #include "Session.h"
 
 #include <map>
@@ -42,7 +44,7 @@ struct PrItem
 // gh runs on a worker thread and the last fetch is cached on disk, so the
 // panel opens instantly with slightly-stale rows while fresh ones stream in.
 // Typing filters the list fuzzily, like the palette.
-class PrDashboard final : public eacp::Graphics::View
+class PrDashboard final : public eacp::UI::Component
 {
 public:
     PrDashboard(const AppConfig& configToUse, SessionManager& sessionsToUse);
@@ -53,10 +55,10 @@ public:
 
     eacp::Callback onClosed = [] {};
 
-    void paint(eacp::Graphics::Context& context) override;
-    void keyDown(const eacp::Graphics::KeyEvent& event) override;
-    void mouseDown(const eacp::Graphics::MouseEvent& event) override;
-    void mouseMoved(const eacp::Graphics::MouseEvent& event) override;
+    void paint(eacp::UI::Graphics& g) override;
+    bool keyDown(const eacp::UI::KeyEvent& event) override;
+    void mouseDown(const eacp::UI::MouseEvent& event) override;
+    void mouseMove(const eacp::UI::MouseEvent& event) override;
 
 private:
     void refresh();
@@ -73,8 +75,8 @@ private:
     void moveSelection(int delta);
     void popQueryChar();
     const PrItem* selectedItem() const;
-    int rowAt(eacp::Graphics::Point pos) const;
-    eacp::Graphics::Rect panelBounds() const;
+    int rowAt(eacp::UI::Point pos) const;
+    eacp::UI::Rect panelBounds() const;
 
     const AppConfig& config;
     SessionManager& sessions;
@@ -100,8 +102,8 @@ private:
 
     std::shared_ptr<bool> alive = std::make_shared<bool>(true);
 
-    eacp::Graphics::Font queryFont;
-    eacp::Graphics::Font rowFont;
-    eacp::Graphics::Font detailFont;
+    eacp::UI::Font queryFont;
+    eacp::UI::Font rowFont;
+    eacp::UI::Font detailFont;
 };
 } // namespace term

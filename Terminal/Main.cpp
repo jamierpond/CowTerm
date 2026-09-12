@@ -18,6 +18,11 @@ Graphics::WindowOptions windowOptions()
     options.minWidth = 300;
     options.minHeight = 200;
     options.title = "CowTerm";
+
+    // What the desktop matches against com.eacp.cowterm.desktop to label the
+    // window and pick its icon; without it every eacp app shows up as "eacp"
+    // with a placeholder. The same identifier the macOS bundle uses.
+    options.appId = "com.eacp.cowterm";
     options.backgroundColor =
         term::toColor(term::themeByName(term::loadConfig().theme).background);
 

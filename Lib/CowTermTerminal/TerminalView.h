@@ -149,6 +149,12 @@ private:
     void send(std::string_view bytes);
     void sendAndScrollToBottom(std::string_view bytes);
     bool handleCommandShortcut(const eacp::Graphics::KeyEvent& event);
+
+    // Copy and paste where the platform actually puts them. macOS has Cmd+C/V
+    // through handleCommandShortcut; everywhere else that modifier is the
+    // Super/Windows key, which the desktop reserves, so it is Ctrl+Shift+C/V --
+    // shifted because plain Ctrl+C is SIGINT and belongs to the shell.
+    bool handleClipboardShortcut(const eacp::Graphics::KeyEvent& event);
     bool handleSpecialKey(const eacp::Graphics::KeyEvent& event);
     void copySelection();
     void applyGridSize();

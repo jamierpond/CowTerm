@@ -16,6 +16,13 @@ nano_add_executable(CowTermTests
 
 target_include_directories(CowTermTests PRIVATE ../Lib/CowTermCore)
 
+# The parser and screen do pull in eacp (Rgb and friends), so these link the
+# library rather than compiling its sources in the way the PTY tests do.
+nano_add_executable(CowTermScreenTests
+        SOURCES
+            ScreenColorTests.cpp
+        TARGETS CowTerm::Core)
+
 # forkpty/openpty live in libutil on Linux; on Apple they are in libSystem.
 if (NOT APPLE)
     target_link_libraries(CowTermTests PRIVATE util)

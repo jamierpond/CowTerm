@@ -13,6 +13,8 @@
 #include <eacp/Core/Utils/WinInclude.h>
 #endif
 
+#include <system_error>
+
 namespace term
 {
 using namespace eacp;
@@ -41,7 +43,17 @@ std::string daemonExecutablePath()
     auto path = std::filesystem::path {buffer};
     return (path.parent_path() / "CowTermDaemon.exe").string();
 #else
-    return {};
+    // /proc/self/exe is the Linux equivalent of _NSGetExecutablePath: resolve it
+    // rather than leaning on argv[0], which a caller controls. Returning empty
+    // here is what left the daemon unreachable on Linux, silently dropping the
+    // app back to in-process shells that die with the window.
+    auto code = std::error_code {};
+    const auto self = std::filesystem::read_symlink("/proc/self/exe", code);
+
+    if (code)
+        return {};
+
+    return (self.parent_path() / "CowTermDaemon").string();
 #endif
 }
 

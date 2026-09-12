@@ -25,6 +25,13 @@ SessionView::SessionView(const AppConfig& configToUse, std::string fallbackDirTo
     , theme(themeByName(configToUse.theme))
 {
     setHandlesMouseEvents(true);
+
+    // Added before any pane, so it stays behind them: subviews stack in the
+    // order they arrive. The gutter colour is the clear colour, so the gutters
+    // cost nothing to draw.
+    chromeHost.setBackgroundColour(toColor(theme.paneBorder));
+    chromeHost.setRootComponent(chrome);
+    addSubview(chromeHost);
 }
 
 SessionView::~SessionView()
@@ -240,7 +247,9 @@ void SessionView::setActive(Node* leaf)
     }
 
     onActivePaneChanged();
-    repaint();
+
+    // The ring follows the active pane, and focus moves without a relayout.
+    updateChrome();
 }
 
 void SessionView::focusActive()
@@ -499,8 +508,12 @@ void SessionView::layoutNode(Node& node, Rect rect)
 
 void SessionView::layout()
 {
+    chromeHost.setBounds(getLocalBounds());
+
     if (root != nullptr)
         layoutNode(*root, getLocalBounds());
+
+    updateChrome();
 
     repaint();
 }
@@ -510,19 +523,30 @@ void SessionView::resized()
     layout();
 }
 
-void SessionView::paint(eacp::Graphics::Context& context)
+void SessionView::Chrome::paint(eacp::UI::Graphics& g)
 {
-    if (root == nullptr || root->isLeaf() || zoomed != nullptr)
+    if (!showActive)
         return;
 
-    context.setColor(toColor(theme.paneBorder));
-    context.fillRect(getLocalBounds());
+    g.setColour(activeBorder);
+    g.fillRect(activeBounds);
+}
 
-    if (active != nullptr)
+void SessionView::updateChrome()
+{
+    // A single pane, or a zoomed one, covers the view whole: there is no gutter
+    // to show and no ring to put round the only thing on screen.
+    const auto split = root != nullptr && !root->isLeaf() && zoomed == nullptr;
+
+    chrome.showActive = split && active != nullptr;
+    chrome.activeBorder = toColor(theme.paneBorderActive);
+
+    if (chrome.showActive)
     {
-        context.setColor(toColor(theme.paneBorderActive));
         const auto b = active->bounds;
-        context.fillRect({b.x - 1.5f, b.y - 1.5f, b.w + 3.0f, b.h + 3.0f});
+        chrome.activeBounds = {b.x - 1.5f, b.y - 1.5f, b.w + 3.0f, b.h + 3.0f};
     }
+
+    chrome.repaint();
 }
 } // namespace term

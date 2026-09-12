@@ -42,13 +42,22 @@ GlyphAtlas::GlyphAtlas(const std::string& fontName, float size, float scaleToUse
 
     backingScale = request.scale;
 
-    auto rasterizer = makeOwned<Text::GlyphRasterizer>(request);
-
+    // One atlas now holds many faces and builds each one itself, so it takes a
+    // factory rather than a single finished rasterizer. `request` is face 0,
+    // which supplies the scale every glyph in the atlas is rasterized at.
+    //
     // 1024 rather than the old fixed 2048: it grows on demand now, so starting
     // smaller costs nothing and a session that only ever shows ASCII never
     // allocates more.
     impl = makeOwned<Text::GlyphAtlas>(
-        OwningPointer<Text::GlyphSource> {std::move(rasterizer)}, 1024, 4096);
+        [](const Text::FontRequest& face)
+        {
+            return OwningPointer<Text::GlyphSource> {
+                makeOwned<Text::GlyphRasterizer>(face)};
+        },
+        request,
+        1024,
+        4096);
 
     const auto metrics = impl->metrics();
 
