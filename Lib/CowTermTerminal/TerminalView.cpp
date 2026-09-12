@@ -5,6 +5,7 @@
 #include <eacp/Core/App/Clipboard.h>
 
 #include <algorithm>
+#include <cctype>
 #include <cstdio>
 #include <random>
 
@@ -658,6 +659,13 @@ void TerminalView::render(GPU::Frame& frame)
         drawGlyphs(
             row, screen.lineAt(row, scrollOffset), marginY + (float) row * cellH);
 
+    // The backgrounds have to reach the pass before the glyphs do. A sprite
+    // batch is drawn when the pass ends -- after every glyph -- so left queued
+    // it would land on top of the text rather than behind it, and a second
+    // begin() before then discards it outright, which is what used to happen
+    // below and why no cell background was ever drawn.
+    sprites->flush();
+
     // Every cell's glyph is queued by now, so the whole screen submits as one
     // instanced draw rather than one call per character.
     glyphs->flush(pass, atlas->atlas());
@@ -675,6 +683,8 @@ void TerminalView::render(GPU::Frame& frame)
         else
             drawCursor();
 
+        // Same order again: the block first, then the glyph that sits on it.
+        sprites->flush();
         glyphs->flush(pass, atlas->atlas());
     }
 
@@ -713,6 +723,39 @@ bool TerminalView::handleCommandShortcut(const KeyEvent& event)
     }
 
     return true;
+}
+
+bool TerminalView::handleClipboardShortcut(const KeyEvent& event)
+{
+    // macOS already has these on Command, and Ctrl+Shift+C there is the shell's.
+    if constexpr (eacp::Platform::isMac())
+        return false;
+
+    const auto& mods = event.modifiers;
+
+    if (!mods.control || !mods.shift || mods.command || mods.alt)
+        return false;
+
+    // Ctrl turns `characters` into a control code, so the unmodified spelling is
+    // the one to read; Shift leaves it upper case.
+    auto chars = event.charactersIgnoringModifiers;
+
+    for (auto& character: chars)
+        character = (char) std::tolower((unsigned char) character);
+
+    if (chars == "c")
+    {
+        copySelection();
+        return true;
+    }
+
+    if (chars == "v")
+    {
+        paste();
+        return true;
+    }
+
+    return false;
 }
 
 bool TerminalView::handleSpecialKey(const KeyEvent& event)
@@ -835,6 +878,9 @@ void TerminalView::keyDown(const KeyEvent& event)
         return;
 
     if (copyMode && handleCopyModeKey(event))
+        return;
+
+    if (handleClipboardShortcut(event))
         return;
 
     if (handleCommandShortcut(event))

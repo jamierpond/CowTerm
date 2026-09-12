@@ -1,6 +1,8 @@
 #pragma once
 
 #include "Config.h"
+
+#include <eacp/UI/UI.h>
 #include "Session.h"
 
 #include <eacp/Core/Threads/Timer.h>
@@ -18,7 +20,7 @@ namespace term
 // Rows needing attention sort first. Enter jumps to that session and focuses
 // the pane the conversation runs in; while shown the list refreshes itself
 // once a second, so state changes appear live.
-class ClaudeHud final : public eacp::Graphics::View
+class ClaudeHud final : public eacp::UI::Component
 {
 public:
     ClaudeHud(const AppConfig& configToUse, SessionManager& sessionsToUse);
@@ -28,10 +30,10 @@ public:
 
     eacp::Callback onClosed = [] {};
 
-    void paint(eacp::Graphics::Context& context) override;
-    void keyDown(const eacp::Graphics::KeyEvent& event) override;
-    void mouseDown(const eacp::Graphics::MouseEvent& event) override;
-    void mouseMoved(const eacp::Graphics::MouseEvent& event) override;
+    void paint(eacp::UI::Graphics& g) override;
+    bool keyDown(const eacp::UI::KeyEvent& event) override;
+    void mouseDown(const eacp::UI::MouseEvent& event) override;
+    void mouseMove(const eacp::UI::MouseEvent& event) override;
 
 private:
     struct Item
@@ -51,8 +53,8 @@ private:
     void choose();
     void cancel();
     void moveSelection(int delta);
-    int rowAt(eacp::Graphics::Point pos) const;
-    eacp::Graphics::Rect panelBounds() const;
+    int rowAt(eacp::UI::Point pos) const;
+    eacp::UI::Rect panelBounds() const;
 
     const AppConfig& config;
     SessionManager& sessions;
@@ -66,8 +68,8 @@ private:
     // state move underneath us as conversations progress.
     std::unique_ptr<eacp::Threads::Timer> tick;
 
-    eacp::Graphics::Font headerFont;
-    eacp::Graphics::Font rowFont;
-    eacp::Graphics::Font detailFont;
+    eacp::UI::Font headerFont;
+    eacp::UI::Font rowFont;
+    eacp::UI::Font detailFont;
 };
 } // namespace term

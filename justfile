@@ -70,9 +70,14 @@ run: build
 run: build
     & "{{build_dir}}\Terminal\CowTerm.exe"
 
+# Absolute path on purpose. eacp decides standalone-vs-plugin by comparing
+# /proc/self/exe against the path dladdr reports for the module, and dladdr
+# reports the path as invoked -- so launching as ./build/... makes the two
+# differ, eacp concludes it is a plugin, and main() returns without ever
+# running the event loop (the app exits silently in milliseconds).
 [linux]
 run: build
-    "./{{build_dir}}/Terminal/CowTerm"
+    "$(pwd)/{{build_dir}}/Terminal/CowTerm"
 
 # Build and run with popup tracing on. Reproduce the lazygit popup (Ctrl+A i),
 # then read /tmp/cowterm-popup.log — it records the popup's grid size, what the
@@ -99,11 +104,27 @@ install: build
     ie4uinit.exe -show
     Write-Host "Installed CowTerm to $env:LOCALAPPDATA\Programs\CowTerm"
 
-# The Linux backends aren't wired up in CMake yet (Terminal/CMakeLists.txt
-# only branches on APPLE/WIN32), so this is here for parity and untested.
+# Terminal/CMakeLists.txt now has a LINUX branch (notifications via notify-send,
+# deletes via the freedesktop trash spec), so this installs a real build.
+#
+# The .desktop file and the icon are what make the shell show "CowTerm" and the
+# app's own icon rather than a placeholder: it matches them to the window by the
+# app_id the window carries (Main.cpp's WindowOptions::appId), which is why the
+# file is named for that id and repeats it in StartupWMClass.
 [linux]
 install: build
-    mkdir -p "$HOME/.local/bin"
+    mkdir -p "$HOME/.local/bin" "$HOME/.local/share/applications" "$HOME/.local/share/icons/hicolor/scalable/apps"
     cp "{{build_dir}}/Terminal/CowTerm" "$HOME/.local/bin/cowterm"
     cp "{{build_dir}}/Terminal/CowTermDaemon" "$HOME/.local/bin/CowTermDaemon"
-    @echo "Installed to ~/.local/bin"
+    # One size per directory, because a shell picks the nearest and scales it:
+    # handing it only 512 leaves a 32px panel icon downscaled from a picture
+    # eight times too big, which is where the detail turns to mush.
+    for size in 16 24 32 48 64 128 256 512; do \
+        mkdir -p "$HOME/.local/share/icons/hicolor/${size}x${size}/apps"; \
+        magick "Terminal/Icon.png" -resize "${size}x${size}" "$HOME/.local/share/icons/hicolor/${size}x${size}/apps/com.eacp.cowterm.png"; \
+    done
+    cp "Terminal/Icon.svg" "$HOME/.local/share/icons/hicolor/scalable/apps/com.eacp.cowterm.svg"
+    sed "s|^Exec=cowterm$|Exec=$HOME/.local/bin/cowterm|" "Terminal/com.eacp.cowterm.desktop" > "$HOME/.local/share/applications/com.eacp.cowterm.desktop"
+    -update-desktop-database "$HOME/.local/share/applications" 2>/dev/null
+    -gtk-update-icon-cache -f -t "$HOME/.local/share/icons/hicolor" 2>/dev/null
+    @echo "Installed to ~/.local/bin, with a desktop entry and icon"

@@ -63,10 +63,20 @@ elseif (WIN32)
             user32
             ole32
             shell32)
+elseif (LINUX)
+    # notify-send for desktop notifications, the freedesktop.org trash spec for
+    # deletes: both are plain filesystem/process work, so nothing to link.
+    target_sources(${COWTERM_EXECUTABLE_TARGET} PRIVATE
+            Notifier-Linux.cpp
+            Trash-Linux.cpp)
 endif ()
 
+# eacp-ui is the portable component/painter tier: one ComponentHost (a GPUView)
+# draws the whole overlay tree through eacp-text's glyph batcher, with no
+# per-platform branches. The overlays use it rather than Graphics::Context,
+# which is the native 2D tier and exists only on macOS and Windows.
 target_link_libraries(${COWTERM_EXECUTABLE_TARGET} PRIVATE
-        CowTerm::Terminal eacp-sprites eacp-text eacp-network emberstore)
+        CowTerm::Terminal eacp-sprites eacp-text eacp-ui eacp-network emberstore)
 
 # Stamp the git SHA into a generated header on every build so the running app
 # can report exactly which commit it came from (window title + startup log).

@@ -9,6 +9,8 @@
 #include "Switcher.h"
 #include "TrayController.h"
 
+#include <eacp/UI/UI.h>
+
 namespace term
 {
 // Root content view: hosts the active session's terminal, the palette
@@ -38,6 +40,12 @@ private:
     bool handlePrefixed(const eacp::Graphics::KeyEvent& event);
     bool handleCommand(const eacp::Graphics::KeyEvent& event);
     bool popupKey(const eacp::Graphics::KeyEvent& event);
+    // The overlays are UI components, not native views: one ComponentHost (a
+    // GPUView) carries whichever is open, which is why they raise and lower as
+    // a single subview rather than one apiece.
+    void showOverlay(eacp::UI::Component& overlay);
+    void hideOverlay();
+    void raiseOverlay();
     void showPalette();
     void hidePalette();
     void showSwitcher(bool reverse);
@@ -61,6 +69,7 @@ private:
     PrDashboard prDashboard {config, manager};
     ClaudeHud claudeHud {config, manager};
     Popup popup {config};
+    eacp::UI::ComponentHost overlayHost;
     TrayController tray {manager};
     TermSession* attached = nullptr;
     bool prefixArmed = false;

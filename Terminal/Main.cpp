@@ -18,6 +18,13 @@ Graphics::WindowOptions windowOptions()
     options.minWidth = 300;
     options.minHeight = 200;
     options.title = "CowTerm";
+
+    // TODO(linux): options.appId = "com.eacp.cowterm"; — what the desktop
+    // matches against com.eacp.cowterm.desktop to label the window and pick
+    // its icon; without it every eacp app shows up as "eacp" with a
+    // placeholder. WindowOptions::appId only exists in the Linux box's local
+    // eacp (upstream Window-Linux.cpp still hardcodes app_id "eacp"); restore
+    // this line once that change is pushed and the CPM pin moved onto it.
     options.backgroundColor =
         term::toColor(term::themeByName(term::loadConfig().theme).background);
 

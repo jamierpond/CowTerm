@@ -36,15 +36,19 @@ include(CPM)
 # helpers (res_embed_add, eacp_set_gui_subsystem, eacp_set_app_icon, ...) that
 # the app's CMakeLists call. Examples/tests are top-level-only in eacp, so they
 # stay off here. Point CPM at a local checkout with -DCPM_eacp_SOURCE=/path.
-# Temporarily pinned to the fork's fix-stale-mouse-targets commit: upstream
-# main plus the View hover/drag use-after-free fix (eyalamirmusic/eacp PR #38,
-# the mouseExited crash). Once that merges, repoint at eyalamirmusic/eacp main.
-# Before this it tracked upstream main directly for eacp-text (GlyphAtlas.h)
-# and the IPC::Messenger layer the session daemon and DaemonClient ride on.
+# Tracks upstream eacp's default branch, `develop` (not `main`, which lags it).
+# Provides eacp-text (GlyphAtlas.h) and the IPC::Messenger layer the session
+# daemon and DaemonClient ride on.
+#
+# NOTE: this drops the fork's fix-stale-mouse-targets commit (e4573f9,
+# eyalamirmusic/eacp PR #38). View::removeSubview on develop still clears
+# hoveredView/mouseDownTarget for direct children only, so removing a nested
+# subtree while hovered can leave the root pointing at a destroyed view and
+# make the next mouseExited a use-after-free. Re-apply if that crash resurfaces.
 CPMAddPackage(
         NAME eacp
-        GITHUB_REPOSITORY jamierpond/eacp
-        GIT_TAG e4573f9c857ba6aad2ea4f5c88fe353de05b3278
+        GITHUB_REPOSITORY eyalamirmusic/eacp
+        GIT_TAG e027186eadb3e13110094fede1ad53f843261d03
         OPTIONS
             "EACP_ENABLE_EXAMPLES OFF"
             "EACP_ENABLE_TESTS OFF")

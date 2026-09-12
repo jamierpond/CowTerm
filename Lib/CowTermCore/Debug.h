@@ -6,6 +6,16 @@
 
 namespace term
 {
+// Every route out of the app says which one it was, always. A terminal that
+// disappears looks exactly like one that crashed, and which of the two it was
+// is the first thing worth knowing -- a clean quit prints this, a crash does
+// not.
+inline void noteQuit(const char* reason)
+{
+    std::fprintf(stderr, "CowTerm: quitting (%s)\n", reason);
+    std::fflush(stderr);
+}
+
 // Opt-in tracing for the popup sizing investigation. Set COWTERM_POPUP_DEBUG=1
 // (logs to /tmp/cowterm-popup.log) or to a path of your choosing. A no-op when
 // the variable is unset, so it is inert on the normal launch path.

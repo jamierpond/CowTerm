@@ -1,6 +1,5 @@
 #include "ClaudeHud.h"
 
-#include <eacp/Graphics/Primitives/TextMetrics.h>
 
 #include <algorithm>
 #include <ctime>
@@ -8,16 +7,32 @@
 namespace term
 {
 using namespace eacp;
-using Graphics::Color;
-using Graphics::Context;
-using Graphics::KeyEvent;
-using Graphics::MouseEvent;
-using Graphics::Point;
-using Graphics::Rect;
-namespace KeyCode = Graphics::KeyCode;
+using UI::Color;
+using UI::KeyEvent;
+using UI::MouseEvent;
+using UI::Point;
+using UI::Rect;
+namespace KeyCode = UI::KeyCode;
 
 namespace
 {
+// The painter measures and draws in the face currently in force, so these keep
+// the old call shape -- text, position, font -- rather than making every call
+// site set the font first.
+void drawText(UI::Graphics& g,
+              const std::string& text,
+              UI::Point position,
+              const UI::Font& font)
+{
+    g.setFont(font);
+    g.drawText(text, position);
+}
+
+float measureWidth(UI::Graphics& g, const std::string& text, const UI::Font& font)
+{
+    g.setFont(font);
+    return g.measureText(text);
+}
 constexpr float panelWidth = 760.0f;
 constexpr float rowHeight = 48.0f;
 constexpr float headerHeight = 46.0f;
@@ -65,8 +80,8 @@ ClaudeHud::ClaudeHud(const AppConfig& configToUse, SessionManager& sessionsToUse
     , rowFont({config.font, 14.0f})
     , detailFont({config.font, 12.0f})
 {
-    setHandlesMouseEvents(true);
-    setGrabsFocusOnMouseDown(true);
+    setInterceptsMouseClicks(true);
+    setWantsKeyboardFocus(true);
 }
 
 void ClaudeHud::show()
@@ -186,18 +201,18 @@ void ClaudeHud::moveSelection(int delta)
     }
 }
 
-void ClaudeHud::keyDown(const KeyEvent& event)
+bool ClaudeHud::keyDown(const KeyEvent& event)
 {
     if (event.keyCode == KeyCode::Escape)
     {
         cancel();
-        return;
+        return true;
     }
 
     if (event.keyCode == KeyCode::Return)
     {
         choose();
-        return;
+        return true;
     }
 
     const auto& chars = event.charactersIgnoringModifiers;
@@ -206,14 +221,14 @@ void ClaudeHud::keyDown(const KeyEvent& event)
         || (event.modifiers.control && chars == "p"))
     {
         moveSelection(-1);
-        return;
+        return true;
     }
 
     if (event.keyCode == KeyCode::DownArrow || chars == "j"
         || (event.modifiers.control && chars == "n"))
     {
         moveSelection(1);
-        return;
+        return true;
     }
 
     // Everything else is swallowed while the HUD owns the keyboard.
@@ -243,9 +258,9 @@ int ClaudeHud::rowAt(Point pos) const
     return row < std::min((int) items.size(), maxRows) ? row : -1;
 }
 
-void ClaudeHud::mouseMoved(const MouseEvent& event)
+void ClaudeHud::mouseMove(const MouseEvent& event)
 {
-    if (const auto row = rowAt(event.pos); row >= 0 && row != selected)
+    if (const auto row = rowAt(event.position); row >= 0 && row != selected)
     {
         selected = row;
         repaint();
@@ -254,7 +269,7 @@ void ClaudeHud::mouseMoved(const MouseEvent& event)
 
 void ClaudeHud::mouseDown(const MouseEvent& event)
 {
-    const auto row = rowAt(event.pos);
+    const auto row = rowAt(event.position);
 
     if (row >= 0)
     {
@@ -263,28 +278,27 @@ void ClaudeHud::mouseDown(const MouseEvent& event)
         return;
     }
 
-    if (!panelBounds().contains(event.pos))
+    if (!panelBounds().contains(event.position))
         cancel();
 }
 
-void ClaudeHud::paint(Context& context)
+void ClaudeHud::paint(UI::Graphics& g)
 {
     const auto panel = panelBounds();
     const auto now = (std::int64_t) std::time(nullptr);
 
-    context.setColor(Color::black(0.38f));
-    context.fillRect(getLocalBounds());
+    g.setColour(Color::black(0.38f));
+    g.fillRect(getLocalBounds());
 
-    context.setColor(toColor(theme.background).brighter(0.04f));
-    context.fillRoundedRect(panel, 12.0f);
+    g.setColour(toColor(theme.background).brighter(0.04f));
+    g.fillRoundedRect(panel, 12.0f);
 
-    context.setColor(toColor(theme.selection, 0.8f));
-    context.setLineWidth(1.0f);
-    context.strokeRect(panel);
+    g.setColour(toColor(theme.selection, 0.8f));
+    g.drawRect(panel, 1.0f);
 
     // Header: the roster in one line — how many are running, how many wait.
-    context.setColor(toColor(theme.ansi[5]));
-    context.drawText("✳ claude", {panel.x + 18.0f, panel.y + 30.0f}, headerFont);
+    g.setColour(toColor(theme.ansi[5]));
+    drawText(g, "✳ claude", {panel.x + 18.0f, panel.y + 30.0f}, headerFont);
 
     const auto waiting = (int) std::count_if(items.begin(),
                                              items.end(),
@@ -297,13 +311,13 @@ void ClaudeHud::paint(Context& context)
         summary += " · " + std::to_string(waiting) + " waiting";
 
     const auto summaryWidth =
-        Graphics::TextMetrics::measureWidth(summary, detailFont);
-    context.setColor(waiting > 0 ? toColor(theme.ansi[3]) : toColor(theme.ansi[8]));
-    context.drawText(
+        measureWidth(g, summary, detailFont);
+    g.setColour(waiting > 0 ? toColor(theme.ansi[3]) : toColor(theme.ansi[8]));
+    drawText(g, 
         summary, {panel.right() - summaryWidth - 16.0f, panel.y + 30.0f}, detailFont);
 
-    context.setColor(toColor(theme.selection));
-    context.drawLine({panel.x + 12.0f, panel.y + headerHeight - 2.0f},
+    g.setColour(toColor(theme.selection));
+    g.drawLine({panel.x + 12.0f, panel.y + headerHeight - 2.0f},
                      {panel.right() - 12.0f, panel.y + headerHeight - 2.0f});
 
     const auto rows = std::min((int) items.size(), maxRows);
@@ -317,19 +331,19 @@ void ClaudeHud::paint(Context& context)
 
         if (i == selected)
         {
-            context.setColor(toColor(theme.selection, 0.85f));
-            context.fillRoundedRect(rowRect, 6.0f);
+            g.setColour(toColor(theme.selection, 0.85f));
+            g.fillRoundedRect(rowRect, 6.0f);
         }
 
         const auto line1 = y + rowHeight * 0.40f;
         const auto line2 = y + rowHeight * 0.78f;
 
-        context.setColor(item.attention ? toColor(theme.ansi[3])
+        g.setColour(item.attention ? toColor(theme.ansi[3])
                                         : toColor(theme.ansi[5]));
-        context.drawText("✳", {rowRect.x + 12.0f, line1}, rowFont);
+        drawText(g, "✳", {rowRect.x + 12.0f, line1}, rowFont);
 
-        context.setColor(toColor(theme.foreground));
-        context.drawText(
+        g.setColour(toColor(theme.foreground));
+        drawText(g, 
             truncated(item.sessionName, 24), {rowRect.x + 36.0f, line1}, rowFont);
 
         // Right of line 1: the last notification's age, loud while unseen.
@@ -337,10 +351,10 @@ void ClaudeHud::paint(Context& context)
         {
             const auto age = formatAge(now - item.notifyAt);
             const auto text = item.attention ? "● " + age : age;
-            const auto width = Graphics::TextMetrics::measureWidth(text, detailFont);
-            context.setColor(item.attention ? toColor(theme.ansi[3])
+            const auto width = measureWidth(g, text, detailFont);
+            g.setColour(item.attention ? toColor(theme.ansi[3])
                                             : toColor(theme.ansi[8]));
-            context.drawText(text, {rowRect.right() - width - 12.0f, line1}, detailFont);
+            drawText(g, text, {rowRect.right() - width - 12.0f, line1}, detailFont);
         }
 
         // Line 2: conversation title (falling back to the cwd), and the last
@@ -350,21 +364,21 @@ void ClaudeHud::paint(Context& context)
         if (item.attention && !item.notify.empty())
             detail += "  ·  " + item.notify;
 
-        context.setColor(toColor(theme.ansi[8]));
-        context.drawText(truncated(detail, 84), {rowRect.x + 36.0f, line2}, detailFont);
+        g.setColour(toColor(theme.ansi[8]));
+        drawText(g, truncated(detail, 84), {rowRect.x + 36.0f, line2}, detailFont);
     }
 
     if (items.empty())
     {
-        context.setColor(toColor(theme.ansi[8]));
-        context.drawText(
+        g.setColour(toColor(theme.ansi[8]));
+        drawText(g, 
             "no claude instances running",
             {panel.x + 18.0f, panel.y + headerHeight + rowHeight * 0.55f},
             rowFont);
     }
 
-    context.setColor(toColor(theme.ansi[8]));
-    context.drawText("enter jump to conversation · esc close",
+    g.setColour(toColor(theme.ansi[8]));
+    drawText(g, "enter jump to conversation · esc close",
                      {panel.x + 18.0f, panel.bottom() - 10.0f},
                      detailFont);
 }

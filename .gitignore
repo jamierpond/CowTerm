@@ -10,3 +10,4 @@ CMakeUserPresets.json
 .cache/clangd/index
 cowcrash.txt
 /build-noipo
+build-asan
