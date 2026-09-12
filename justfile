@@ -113,10 +113,17 @@ install: build
 # file is named for that id and repeats it in StartupWMClass.
 [linux]
 install: build
-    mkdir -p "$HOME/.local/bin" "$HOME/.local/share/applications" "$HOME/.local/share/icons/hicolor/512x512/apps"
+    mkdir -p "$HOME/.local/bin" "$HOME/.local/share/applications" "$HOME/.local/share/icons/hicolor/scalable/apps"
     cp "{{build_dir}}/Terminal/CowTerm" "$HOME/.local/bin/cowterm"
     cp "{{build_dir}}/Terminal/CowTermDaemon" "$HOME/.local/bin/CowTermDaemon"
-    cp "Terminal/Icon.png" "$HOME/.local/share/icons/hicolor/512x512/apps/com.eacp.cowterm.png"
+    # One size per directory, because a shell picks the nearest and scales it:
+    # handing it only 512 leaves a 32px panel icon downscaled from a picture
+    # eight times too big, which is where the detail turns to mush.
+    for size in 16 24 32 48 64 128 256 512; do \
+        mkdir -p "$HOME/.local/share/icons/hicolor/${size}x${size}/apps"; \
+        magick "Terminal/Icon.png" -resize "${size}x${size}" "$HOME/.local/share/icons/hicolor/${size}x${size}/apps/com.eacp.cowterm.png"; \
+    done
+    cp "Terminal/Icon.svg" "$HOME/.local/share/icons/hicolor/scalable/apps/com.eacp.cowterm.svg"
     sed "s|^Exec=cowterm$|Exec=$HOME/.local/bin/cowterm|" "Terminal/com.eacp.cowterm.desktop" > "$HOME/.local/share/applications/com.eacp.cowterm.desktop"
     -update-desktop-database "$HOME/.local/share/applications" 2>/dev/null
     -gtk-update-icon-cache -f -t "$HOME/.local/share/icons/hicolor" 2>/dev/null
