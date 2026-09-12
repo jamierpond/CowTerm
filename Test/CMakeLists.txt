@@ -23,6 +23,14 @@ nano_add_executable(CowTermScreenTests
             ScreenColorTests.cpp
         TARGETS CowTerm::Core)
 
+# Renders a real pane off-screen and reads the pixels back, so it needs the GPU
+# terminal rather than the model alone. Every case self-skips without a device,
+# the way eacp's own GPU suites do.
+nano_add_executable(CowTermRenderTests
+        SOURCES
+            RenderBackgroundTests.cpp
+        TARGETS CowTerm::Terminal)
+
 # forkpty/openpty live in libutil on Linux; on Apple they are in libSystem.
 if (NOT APPLE)
     target_link_libraries(CowTermTests PRIVATE util)
