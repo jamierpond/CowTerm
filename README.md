@@ -110,8 +110,9 @@ One overlay, everything fuzzy-searchable (Wim-style scoring + MRU):
 - **Open sessions** first, most-recently-used first. Sessions running a
   Claude Code conversation show `✳`, its title, and a `claude` badge — and
   match the query "claude".
-- **Projects** below: depth-1 directories under `searchDirs`, Enter spawns a
-  session there (or switches if one exists).
+- **Projects** below: depth-1 directories under `searchDirs` (hidden ones
+  too, so `~/.config` is a hit), Enter spawns a session there (or switches
+  if one exists).
 
 Type to rank; `Enter` opens, `Esc` closes, arrows or `Ctrl+P/N` move.
 
