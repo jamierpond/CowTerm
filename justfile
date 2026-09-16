@@ -21,33 +21,40 @@ signing_identity := ""
 # rebuild, since an ad-hoc signature's designated requirement is its cdhash.
 allow_adhoc_signing := "ON"
 
+# A Linux build needs the Wayland, text and libcurl development packages that
+# eacp looks for with pkg-config, plus a compiler and ninja. Scripts/with-linux-deps
+# uses the system's own if they are installed and otherwise borrows them from the
+# pinned dev shell in flake.nix, so the recipes below work either way. It expands
+# to nothing on macOS and Windows, which need none of it.
+deps := if os() == "linux" { "Scripts/with-linux-deps" } else { "" }
+
 # Default: show the recipe list.
 default:
     @just --list
 
 # Configure the CMake build tree (idempotent; first run fetches deps via CPM).
 configure:
-    cmake -S . -B {{build_dir}} -G "{{generator}}" -DCMAKE_BUILD_TYPE={{build_type}} -DCOWTERM_MACOS_SIGNING_IDENTITY="{{signing_identity}}" -DCOWTERM_MACOS_ALLOW_ADHOC_SIGNING={{allow_adhoc_signing}}
+    {{deps}} cmake -S . -B {{build_dir}} -G "{{generator}}" -DCMAKE_BUILD_TYPE={{build_type}} -DCOWTERM_MACOS_SIGNING_IDENTITY="{{signing_identity}}" -DCOWTERM_MACOS_ALLOW_ADHOC_SIGNING={{allow_adhoc_signing}}
 
 # Build the app; CowTermDaemon builds as a dependency and is bundled alongside
 # it. CowTermApp (the always-run packaging + signing target) exists only on
 # macOS; elsewhere the executable target copies the daemon via POST_BUILD.
 [macos]
 build: configure
-    cmake --build {{build_dir}} --target CowTermApp
+    {{deps}} cmake --build {{build_dir}} --target CowTermApp
 
 [windows]
 build: configure
-    cmake --build {{build_dir}} --target CowTerm
+    {{deps}} cmake --build {{build_dir}} --target CowTerm
 
 [linux]
 build: configure
-    cmake --build {{build_dir}} --target CowTerm
+    {{deps}} cmake --build {{build_dir}} --target CowTerm
 
 # Build and run the unit tests (regression coverage, incl. the quit-hang fix).
 test: configure
-    cmake --build {{build_dir}} --target CowTermTests
-    ctest --test-dir {{build_dir}} --output-on-failure
+    {{deps}} cmake --build {{build_dir}} --target CowTermTests
+    {{deps}} ctest --test-dir {{build_dir}} --output-on-failure
 
 # Remove the build tree.
 [unix]
@@ -75,9 +82,17 @@ run: build
 # reports the path as invoked -- so launching as ./build/... makes the two
 # differ, eacp concludes it is a plugin, and main() returns without ever
 # running the event loop (the app exits silently in milliseconds).
+#
+# Under {{deps}} like the build, because on this OS the app needs its
+# dependencies at *run* time too. volk dlopens libvulkan.so.1 when the first
+# GPUView is created, and a binary the dev shell built cannot see a
+# /usr/lib one -- so without the shell around it the loader is simply absent,
+# every view falls back to rendering off-screen, and the window opens empty.
+# When the deps are installed system-wide instead, with-linux-deps execs
+# straight through and this costs nothing.
 [linux]
 run: build
-    "$(pwd)/{{build_dir}}/Terminal/CowTerm"
+    {{deps}} "$(pwd)/{{build_dir}}/Terminal/CowTerm"
 
 # Build and run with popup tracing on. Reproduce the lazygit popup (Ctrl+A i),
 # then read /tmp/cowterm-popup.log — it records the popup's grid size, what the
@@ -111,11 +126,21 @@ install: build
 # app's own icon rather than a placeholder: it matches them to the window by the
 # app_id the window carries (Main.cpp's WindowOptions::appId), which is why the
 # file is named for that id and repeats it in StartupWMClass.
+# The executables go in libexec rather than on PATH, with a generated launcher
+# in front of them, because on this OS the app needs its build dependencies at
+# run time too -- see Scripts/write-launcher. They have to sit together in one
+# directory either way: DaemonClient.cpp finds CowTermDaemon next to
+# /proc/self/exe, so separating them is what leaves the app falling back to
+# in-process shells that die with the window.
 [linux]
 install: build
-    mkdir -p "$HOME/.local/bin" "$HOME/.local/share/applications" "$HOME/.local/share/icons/hicolor/scalable/apps"
-    cp "{{build_dir}}/Terminal/CowTerm" "$HOME/.local/bin/cowterm"
-    cp "{{build_dir}}/Terminal/CowTermDaemon" "$HOME/.local/bin/CowTermDaemon"
+    mkdir -p "$HOME/.local/bin" "$HOME/.local/libexec/cowterm" "$HOME/.local/share/applications" "$HOME/.local/share/icons/hicolor/scalable/apps"
+    cp "{{build_dir}}/Terminal/CowTerm" "$HOME/.local/libexec/cowterm/CowTerm"
+    cp "{{build_dir}}/Terminal/CowTermDaemon" "$HOME/.local/libexec/cowterm/CowTermDaemon"
+    {{deps}} Scripts/write-launcher "$HOME/.local/libexec/cowterm/CowTerm" "$HOME/.local/bin/cowterm"
+    # Earlier installs put both executables directly on PATH; leaving the old
+    # daemon there would shadow nothing but would still confuse a `which`.
+    rm -f "$HOME/.local/bin/CowTermDaemon"
     # One size per directory, because a shell picks the nearest and scales it:
     # handing it only 512 leaves a 32px panel icon downscaled from a picture
     # eight times too big, which is where the detail turns to mush.

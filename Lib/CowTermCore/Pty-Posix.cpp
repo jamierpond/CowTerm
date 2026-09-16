@@ -4,6 +4,7 @@
 #include <cstdlib>
 #include <string>
 
+#include <pwd.h>
 #include <sys/ioctl.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -24,7 +25,11 @@ namespace
 constexpr int shutdownPollMs = 10;
 constexpr int shutdownKillGraceMs = 250;
 
-[[noreturn]] void execShell(const std::string& workingDirectory,
+// The shell arrives resolved rather than being looked up here: this runs in the
+// forked child of a threaded process, where getpwuid -- which takes a lock and
+// allocates -- can deadlock if another thread held that lock at fork time.
+[[noreturn]] void execShell(const std::string& shell,
+                            const std::string& workingDirectory,
                             const std::string& command)
 {
     // SIGHUP is deliberately included: the daemon sets it to SIG_IGN so the
@@ -45,24 +50,48 @@ constexpr int shutdownKillGraceMs = 250;
         if (const auto* home = getenv("HOME"))
             chdir(home);
 
-    const auto* shell = getenv("SHELL");
-
-    if (shell == nullptr || shell[0] == '\0')
-        shell = "/bin/zsh";
+    // So anything the shell starts agrees with the shell actually running,
+    // even when the app was launched without SHELL set. Never overwrites a
+    // value the session already chose.
+    setenv("SHELL", shell.c_str(), 0);
 
     // A leading dash asks the shell to start as a login shell, so the user's
     // usual profile and prompt come up.
-    auto shellPath = std::string {shell};
-    const auto slash = shellPath.find_last_of('/');
+    const auto slash = shell.find_last_of('/');
     const auto loginName =
-        "-" + (slash == std::string::npos ? shellPath : shellPath.substr(slash + 1));
+        "-" + (slash == std::string::npos ? shell : shell.substr(slash + 1));
 
     if (command.empty())
-        execl(shell, loginName.c_str(), (char*) nullptr);
+        execl(shell.c_str(), loginName.c_str(), (char*) nullptr);
     else
-        execl(shell, loginName.c_str(), "-c", command.c_str(), (char*) nullptr);
+        execl(shell.c_str(), loginName.c_str(), "-c", command.c_str(), (char*) nullptr);
 
     _exit(127);
+}
+
+// Which shell a session runs. SHELL is what a login session sets and what the
+// user means, but it is not always there -- a desktop entry, a service manager
+// or a bare `env -i` launch can all arrive without it, and then the account's
+// own shell from the passwd database is the next best answer.
+std::string loginShell()
+{
+    if (const auto* shell = getenv("SHELL"); shell != nullptr && shell[0] != '\0')
+        return shell;
+
+    if (const auto* pw = getpwuid(getuid());
+        pw != nullptr && pw->pw_shell != nullptr && pw->pw_shell[0] != '\0')
+        return pw->pw_shell;
+
+    // Last resort, and the reason this function exists: zsh is the default
+    // shell on macOS but a stock Ubuntu has no /bin/zsh at all, so hardcoding
+    // it made execl fail, the session die the instant it opened, and the app
+    // quit with "last session closed" before drawing a prompt. Only /bin/sh is
+    // guaranteed to be there.
+#if defined(__APPLE__)
+    return "/bin/zsh";
+#else
+    return "/bin/sh";
+#endif
 }
 
 winsize toWinsize(const PtySize& size)
@@ -88,13 +117,16 @@ bool Pty::start(const PtyOptions& options,
 
     auto ws = toWinsize(options.size);
     auto masterFd = -1;
+
+    // Before the fork on purpose; see execShell.
+    const auto shell = loginShell();
     const auto child = forkpty(&masterFd, nullptr, nullptr, &ws);
 
     if (child < 0)
         return false;
 
     if (child == 0)
-        execShell(options.workingDirectory, options.command);
+        execShell(shell, options.workingDirectory, options.command);
 
     fd = masterFd;
     pid = child;
