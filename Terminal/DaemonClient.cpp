@@ -1,6 +1,7 @@
 #include "DaemonClient.h"
 #include "Protocol.h"
-#include "Shell.h"
+
+#include "CowTermCore/Shell.h"
 
 #include <eacp/Core/Process/Process.h>
 
@@ -11,6 +12,8 @@
 #elif defined(_WIN32)
 #include <eacp/Core/Utils/WinInclude.h>
 #endif
+
+#include <system_error>
 
 namespace term
 {
@@ -40,7 +43,17 @@ std::string daemonExecutablePath()
     auto path = std::filesystem::path {buffer};
     return (path.parent_path() / "CowTermDaemon.exe").string();
 #else
-    return {};
+    // /proc/self/exe is the Linux equivalent of _NSGetExecutablePath: resolve it
+    // rather than leaning on argv[0], which a caller controls. Returning empty
+    // here is what left the daemon unreachable on Linux, silently dropping the
+    // app back to in-process shells that die with the window.
+    auto code = std::error_code {};
+    const auto self = std::filesystem::read_symlink("/proc/self/exe", code);
+
+    if (code)
+        return {};
+
+    return (self.parent_path() / "CowTermDaemon").string();
 #endif
 }
 
@@ -74,7 +87,7 @@ void DaemonClient::initialize(const Callback& whenReady)
     // First dial is short: the daemon is either already there or not
     // installed at all. The second, after launching it, allows startup time.
     auto first = std::make_shared<std::unique_ptr<IPC::Messenger>>(
-        std::make_unique<IPC::Messenger>(proto::serverName, Time::MS {600}));
+        std::make_unique<IPC::Messenger>(proto::serverName(), Time::MS {600}));
 
     (*first)->onConnected = [first, adopt, whenReady]
     {
@@ -87,7 +100,7 @@ void DaemonClient::initialize(const Callback& whenReady)
         launchDaemon();
 
         auto second = std::make_shared<std::unique_ptr<IPC::Messenger>>(
-            std::make_unique<IPC::Messenger>(proto::serverName, Time::MS {4000}));
+            std::make_unique<IPC::Messenger>(proto::serverName(), Time::MS {4000}));
 
         (*second)->onConnected = [second, adopt, whenReady]
         {
@@ -340,5 +353,16 @@ std::unique_ptr<Shell> makeShell(const std::string& shellId)
         return std::make_unique<RemoteShell>(shellId);
 
     return std::make_unique<LocalShell>();
+}
+
+TerminalConfig terminalConfig(const AppConfig& config)
+{
+    auto result = TerminalConfig {};
+    result.font = config.font;
+    result.fontSize = config.fontSize;
+    result.theme = themeByName(config.theme);
+    result.makeShell = [](const std::string& shellId) { return makeShell(shellId); };
+
+    return result;
 }
 } // namespace term

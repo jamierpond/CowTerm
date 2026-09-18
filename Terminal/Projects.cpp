@@ -47,10 +47,7 @@ std::vector<ProjectDir> scanProjects(const AppConfig& config)
             if (!entry.is_directory(error))
                 continue;
 
-            const auto name = entry.path().filename().string();
-
-            if (!name.empty() && name[0] != '.')
-                add(entry.path());
+            add(entry.path());
         }
     }
 

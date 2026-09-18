@@ -100,11 +100,13 @@ WorktreeResult createWorktree(const std::string& repoPath, const std::string& br
     const auto path = repoPath + "-" + dirLeaf(branch);
     const auto base = resolveBaseBranch(repoPath);
 
-    // git -C <repo> worktree add <path> -b <branch> <base>; the start-point
-    // cuts the branch from mainline rather than the source row's HEAD. 2>&1
-    // folds git's diagnostics into the captured stream so failures surface
-    // verbatim.
-    const auto git = "git -C " + shellQuote(repoPath) + " worktree add " + shellQuote(path)
+    // git -C <repo> worktree add --no-track <path> -b <branch> <base>; the
+    // start-point cuts the branch from mainline rather than the source row's
+    // HEAD. --no-track stops the new branch inheriting <base> as its upstream
+    // when <base> is a remote-tracking ref (e.g. origin/develop), which would
+    // otherwise leave `git push` tracking the wrong remote branch. 2>&1 folds
+    // git's diagnostics into the captured stream so failures surface verbatim.
+    const auto git = "git -C " + shellQuote(repoPath) + " worktree add --no-track " + shellQuote(path)
                      + " -b " + shellQuote(branch) + " " + shellQuote(base) + " 2>&1";
 
     const auto result = runViaLoginShell(git);

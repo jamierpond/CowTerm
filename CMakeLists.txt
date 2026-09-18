@@ -7,7 +7,7 @@ project(CowTerm VERSION 0.1.0 LANGUAGES C CXX)
 # build (the eacp-* targets and the eacp_* CMake helpers) comes from that
 # package.
 
-# The app carries Objective-C++ sources (Cocoa glyph atlas + notifications).
+# The app carries Objective-C++ sources (notifications, trash).
 if (APPLE)
     enable_language(OBJCXX)
 endif ()
@@ -36,15 +36,19 @@ include(CPM)
 # helpers (res_embed_add, eacp_set_gui_subsystem, eacp_set_app_icon, ...) that
 # the app's CMakeLists call. Examples/tests are top-level-only in eacp, so they
 # stay off here. Point CPM at a local checkout with -DCPM_eacp_SOURCE=/path.
-# Temporarily pinned to the fork's fix-stale-mouse-targets commit: upstream
-# main plus the View hover/drag use-after-free fix (eyalamirmusic/eacp PR #38,
-# the mouseExited crash). Once that merges, repoint at eyalamirmusic/eacp main.
-# Before this it tracked upstream main directly for eacp-text (GlyphAtlas.h)
-# and the IPC::Messenger layer the session daemon and DaemonClient ride on.
+# Tracks upstream eacp's default branch, `develop` (not `main`, which lags it).
+# Provides eacp-text (GlyphAtlas.h) and the IPC::Messenger layer the session
+# daemon and DaemonClient ride on.
+#
+# NOTE: this drops the fork's fix-stale-mouse-targets commit (e4573f9,
+# eyalamirmusic/eacp PR #38). View::removeSubview on develop still clears
+# hoveredView/mouseDownTarget for direct children only, so removing a nested
+# subtree while hovered can leave the root pointing at a destroyed view and
+# make the next mouseExited a use-after-free. Re-apply if that crash resurfaces.
 CPMAddPackage(
         NAME eacp
-        GITHUB_REPOSITORY jamierpond/eacp
-        GIT_TAG e4573f9c857ba6aad2ea4f5c88fe353de05b3278
+        GITHUB_REPOSITORY eyalamirmusic/eacp
+        GIT_TAG e027186eadb3e13110094fede1ad53f843261d03
         OPTIONS
             "EACP_ENABLE_EXAMPLES OFF"
             "EACP_ENABLE_TESTS OFF")
@@ -54,21 +58,31 @@ CPMAddPackage(
 # find_package(ResEmbed) (via eacp_set_gui_subsystem) and need the Find modules.
 list(APPEND CMAKE_MODULE_PATH "${eacp_SOURCE_DIR}/CMake")
 
+# This cache entry exists on every platform so cross-platform `just` recipes
+# can pass it without producing an "unused variable" warning. It only affects
+# the macOS packaging target.
+set(COWTERM_MACOS_SIGNING_IDENTITY "" CACHE STRING
+        "Certificate name or SHA-1 used to sign CowTerm; empty auto-detects")
+
 # eacp runs eacp_default_setup() only when it is the root project. We are the
-# root now, so reproduce the parts the app relies on: the macOS bundle
-# Info.plist template that set_default_target_setting() stamps onto the app
-# (NSHighResolutionCapable et al.), and the deployment target. eacp_setup_apple
-# is a macro keyed off CMAKE_CURRENT_SOURCE_DIR, so it can't be reused verbatim
-# from here; point the plist var straight at eacp's template instead.
+# root now, so reproduce the deployment target and point its target helper at
+# CowTerm's own plist. A terminal is the responsible application for many
+# privacy requests made by its child commands, so the generic eacp plist is not
+# sufficient here.
 if (APPLE)
     set(CMAKE_OSX_DEPLOYMENT_TARGET "11.0" CACHE STRING "")
-    set(EACP_MACOS_PLIST "${eacp_SOURCE_DIR}/CMake/macOSBundleInfo.plist.in"
-            CACHE INTERNAL "eacp macOS bundle Info.plist template")
+    set(EACP_MACOS_PLIST "${CMAKE_CURRENT_SOURCE_DIR}/Terminal/Info.plist.in"
+            CACHE INTERNAL "CowTerm macOS bundle Info.plist template" FORCE)
+
+    option(COWTERM_MACOS_ALLOW_ADHOC_SIGNING
+            "Allow disposable macOS builds whose privacy grants reset" OFF)
 endif ()
 
 # eacp's C++20 modules are precompiled; skip module scanning as eacp does.
 set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
 
+# The libraries (see Lib/CMakeLists.txt), then the product built on them.
+add_subdirectory(Lib)
 add_subdirectory(Daemon)
 add_subdirectory(Terminal)
 

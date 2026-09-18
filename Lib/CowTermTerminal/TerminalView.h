@@ -1,21 +1,42 @@
 #pragma once
 
-#include "Config.h"
 #include "GlyphAtlas.h"
-#include "Shell.h"
-#include "TermParser.h"
-#include "TermScreen.h"
+
+#include "CowTermCore/Shell.h"
+#include "CowTermCore/TermParser.h"
+#include "CowTermCore/TermScreen.h"
 
 #include <eacp/Core/Threads/EventLoop.h>
 #include <eacp/Core/Threads/Timer.h>
 #include <eacp/Sprites/Sprites.h>
 
+#include <functional>
 #include <memory>
 #include <mutex>
 #include <optional>
 
 namespace term
 {
+inline constexpr float minFontSize = 7.0f;
+inline constexpr float maxFontSize = 40.0f;
+
+// Everything the widget takes from its host. A consumer fills the
+// presentation fields and, when shells should outlive the widget, replaces
+// makeShell — the default runs the shell in-process, so an embedded
+// terminal works with no daemon at all. The CowTerm app passes its
+// daemon-backed factory (terminalConfig in DaemonClient.h).
+struct TerminalConfig
+{
+    std::string font = "JetBrains Mono";
+    float fontSize = 13.0f;
+    Theme theme;
+
+    // Builds the shell behind an interactive pane, keyed by its stable id.
+    // Command panes (a non-empty commandToRun) always run in-process.
+    std::function<std::unique_ptr<Shell>(const std::string& shellId)> makeShell =
+        [](const std::string&) { return std::make_unique<LocalShell>(); };
+};
+
 // The terminal: a GPU-rendered cell grid over a live PTY. Output is parsed
 // into the screen model and drawn from a glyph atlas; every visible pixel is
 // composited on the GPU each frame (backgrounds, glyphs, decorations,
@@ -29,13 +50,19 @@ public:
     // command instead of an interactive shell, in an in-process PTY the
     // daemon never sees — the terminal is ephemeral by construction and
     // ends with the command (the lazygit popup).
-    TerminalView(const AppConfig& config,
+    TerminalView(const TerminalConfig& config,
                  const std::string& workingDirectory,
                  const std::string& shellIdToUse = {},
                  const std::string& commandToRun = {});
     ~TerminalView() override;
 
     const std::string& shellId() const { return paneShellId; }
+
+    // Debug tracing: is this the ephemeral command terminal (the popup)?
+    bool isCommandTerminal() const { return commandTerminal; }
+
+    // Debug tracing: the visible grid as plain text, blanks trimmed.
+    std::string debugScreenText() const;
 
     // Ends the shell process on purpose (pane closed). The destructor only
     // detaches, so shells held by the daemon survive teardown.
@@ -122,6 +149,12 @@ private:
     void send(std::string_view bytes);
     void sendAndScrollToBottom(std::string_view bytes);
     bool handleCommandShortcut(const eacp::Graphics::KeyEvent& event);
+
+    // Copy and paste where the platform actually puts them. macOS has Cmd+C/V
+    // through handleCommandShortcut; everywhere else that modifier is the
+    // Super/Windows key, which the desktop reserves, so it is Ctrl+Shift+C/V --
+    // shifted because plain Ctrl+C is SIGINT and belongs to the shell.
+    bool handleClipboardShortcut(const eacp::Graphics::KeyEvent& event);
     bool handleSpecialKey(const eacp::Graphics::KeyEvent& event);
     void copySelection();
     void applyGridSize();
@@ -173,6 +206,7 @@ private:
     // as opaque red, and batching turns a screen of cells into one draw call.
     std::optional<eacp::Text::GlyphRenderer> glyphs;
     std::string paneShellId;
+    bool commandTerminal = false;
     std::unique_ptr<Shell> shell;
 
     std::mutex outputLock;

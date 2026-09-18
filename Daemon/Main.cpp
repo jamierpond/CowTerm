@@ -4,7 +4,7 @@
 // shells by stable id, and streams input/output through this process.
 
 #include "Protocol.h"
-#include "Pty.h"
+#include "CowTermCore/Pty.h"
 
 #include <eacp/Core/App/App.h>
 #include <eacp/Core/Core.h>
@@ -212,7 +212,7 @@ struct Daemon
     IPC::Messenger* client = nullptr;
     int idleTicks = 0;
 
-    IPC::MessageServer server {term::proto::serverName};
+    IPC::MessageServer server {term::proto::serverName()};
     Threads::Timer idleTimer {[this] { checkIdle(); }, 10};
 };
 } // namespace

@@ -4,6 +4,7 @@
 #include "Session.h"
 
 #include <eacp/Core/Threads/Timer.h>
+#include <eacp/UI/UI.h>
 
 #include <memory>
 #include <vector>
@@ -17,7 +18,7 @@ namespace term
 // the frozen order (Shift reverses); releasing Ctrl commits the highlight.
 // The order never re-sorts mid-walk — only the committed session floats to the
 // top of the MRU, ready for the next flip.
-class Switcher final : public eacp::Graphics::View
+class Switcher final : public eacp::UI::Component
 {
 public:
     Switcher(const AppConfig& configToUse, SessionManager& sessionsToUse);
@@ -37,10 +38,10 @@ public:
     // terminal focus.
     eacp::Callback onClosed = [] {};
 
-    void paint(eacp::Graphics::Context& context) override;
-    void keyDown(const eacp::Graphics::KeyEvent& event) override;
-    void mouseDown(const eacp::Graphics::MouseEvent& event) override;
-    void mouseMoved(const eacp::Graphics::MouseEvent& event) override;
+    void paint(eacp::UI::Graphics& g) override;
+    bool keyDown(const eacp::UI::KeyEvent& event) override;
+    void mouseDown(const eacp::UI::MouseEvent& event) override;
+    void mouseMove(const eacp::UI::MouseEvent& event) override;
 
 private:
     void commit();
@@ -49,8 +50,8 @@ private:
     void stopPolling();
 
     float cardWidth() const;
-    eacp::Graphics::Rect panelBounds() const;
-    int cardAt(eacp::Graphics::Point pos) const;
+    eacp::UI::Rect panelBounds() const;
+    int cardAt(eacp::UI::Point pos) const;
 
     const AppConfig& config;
     SessionManager& sessions;
@@ -61,9 +62,9 @@ private:
     int selected = 0;
     bool shown = false;
 
-    eacp::Graphics::Font titleFont;
-    eacp::Graphics::Font labelFont;
-    eacp::Graphics::Font detailFont;
+    eacp::UI::Font titleFont;
+    eacp::UI::Font labelFont;
+    eacp::UI::Font detailFont;
 
     // Polls the modifier keys while open so releasing Ctrl commits, the way the
     // macOS app switcher commits when you let go of Cmd. eacp no longer pushes

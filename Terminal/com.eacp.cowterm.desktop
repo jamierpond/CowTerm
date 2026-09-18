@@ -1,0 +1,17 @@
+[Desktop Entry]
+Type=Application
+Name=CowTerm
+GenericName=Terminal Emulator
+Comment=A GPU-accelerated terminal emulator and session manager
+# Rewritten to the installed path by `just install`; the shell will not launch a
+# relative Exec, and eacp reads its own image path to find the daemon beside it.
+Exec=cowterm
+Icon=com.eacp.cowterm
+Terminal=false
+Categories=System;TerminalEmulator;
+Keywords=shell;prompt;command;commandline;cmd;
+StartupNotify=true
+# Must match Graphics::WindowOptions::appId, which is the xdg_toplevel app_id
+# the compositor reports: this is the join between the running window and this
+# file, and so between the window and the icon below.
+StartupWMClass=com.eacp.cowterm

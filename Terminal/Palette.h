@@ -1,6 +1,8 @@
 #pragma once
 
 #include "Config.h"
+
+#include <eacp/UI/UI.h>
 #include "Session.h"
 
 #include <functional>
@@ -32,7 +34,7 @@ struct PaletteItem
 // then known project dirs that aren't open yet. Empty query lists by
 // recency, Wim-style; Enter switches or spawns. CPU-painted chrome over the
 // GPU terminal.
-class Palette final : public eacp::Graphics::View
+class Palette final : public eacp::UI::Component
 {
 public:
     Palette(const AppConfig& configToUse, SessionManager& sessionsToUse);
@@ -57,10 +59,10 @@ public:
     std::function<std::string(const std::string& worktreePath)> onRemoveWorktree =
         [](const std::string&) { return std::string {}; };
 
-    void paint(eacp::Graphics::Context& context) override;
-    void keyDown(const eacp::Graphics::KeyEvent& event) override;
-    void mouseDown(const eacp::Graphics::MouseEvent& event) override;
-    void mouseMoved(const eacp::Graphics::MouseEvent& event) override;
+    void paint(eacp::UI::Graphics& g) override;
+    bool keyDown(const eacp::UI::KeyEvent& event) override;
+    void mouseDown(const eacp::UI::MouseEvent& event) override;
+    void mouseMove(const eacp::UI::MouseEvent& event) override;
 
 private:
     void rebuild();
@@ -70,22 +72,22 @@ private:
     void peekSelected();
     void moveSelection(int delta);
     void popQueryChar();
-    int rowAt(eacp::Graphics::Point pos) const;
-    eacp::Graphics::Rect panelBounds() const;
+    int rowAt(eacp::UI::Point pos) const;
+    eacp::UI::Rect panelBounds() const;
 
     // The worktree branch-name sub-prompt.
     void beginWorktree();
     void worktreeKeyDown(const eacp::Graphics::KeyEvent& event);
     void createWorktreeFromInput();
     void exitWorktree();
-    void paintWorktree(eacp::Graphics::Context& context);
+    void paintWorktree(eacp::UI::Graphics& context);
 
     // The "trash this worktree?" y/n confirmation.
     void beginRemoveWorktree();
     void confirmDeleteKeyDown(const eacp::Graphics::KeyEvent& event);
     void performRemoveWorktree();
     void exitConfirmDelete();
-    void paintConfirmDelete(eacp::Graphics::Context& context);
+    void paintConfirmDelete(eacp::UI::Graphics& context);
 
     const AppConfig& config;
     SessionManager& sessions;
@@ -112,8 +114,8 @@ private:
     std::string deleteTargetName;
     std::string deleteError;
 
-    eacp::Graphics::Font queryFont;
-    eacp::Graphics::Font rowFont;
-    eacp::Graphics::Font detailFont;
+    eacp::UI::Font queryFont;
+    eacp::UI::Font rowFont;
+    eacp::UI::Font detailFont;
 };
 } // namespace term

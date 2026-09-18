@@ -1,8 +1,11 @@
 #include "TerminalView.h"
 
+#include "CowTermCore/Debug.h"
+
 #include <eacp/Core/App/Clipboard.h>
 
 #include <algorithm>
+#include <cctype>
 #include <cstdio>
 #include <random>
 
@@ -93,27 +96,29 @@ std::string generateShellId()
     return buffer;
 }
 
-std::unique_ptr<Shell> shellFor(const std::string& shellId,
+std::unique_ptr<Shell> shellFor(const TerminalConfig& config,
+                                const std::string& shellId,
                                 const std::string& command)
 {
     if (command.empty())
-        return makeShell(shellId);
+        return config.makeShell(shellId);
 
     return std::make_unique<LocalShell>();
 }
 } // namespace
 
-TerminalView::TerminalView(const AppConfig& config,
+TerminalView::TerminalView(const TerminalConfig& config,
                            const std::string& workingDirectory,
                            const std::string& shellIdToUse,
                            const std::string& commandToRun)
-    : theme(themeByName(config.theme))
+    : theme(config.theme)
     , fontName(config.font)
     , screen(80, 24, theme)
     , parser(screen, theme)
     , fontSize(config.fontSize)
     , paneShellId(shellIdToUse.empty() ? generateShellId() : shellIdToUse)
-    , shell(shellFor(paneShellId, commandToRun))
+    , commandTerminal(!commandToRun.empty())
+    , shell(shellFor(config, paneShellId, commandToRun))
     , blinkTimer(
           [this]
           {
@@ -232,6 +237,30 @@ void TerminalView::sendText(std::string_view text)
     sendAndScrollToBottom(bytes);
 }
 
+std::string TerminalView::debugScreenText() const
+{
+    auto out = std::string {};
+    const auto rows = screen.rows();
+    const auto cols = screen.columns();
+
+    for (int r = 0; r < rows; ++r)
+    {
+        const auto& line = screen.lineAt(r, 0);
+        auto rowText = std::string {};
+
+        for (int c = 0; c < cols && c < (int) line.size(); ++c)
+            appendUtf8(rowText, line[(std::size_t) c].ch);
+
+        while (!rowText.empty() && rowText.back() == ' ')
+            rowText.pop_back();
+
+        out += rowText;
+        out += '\n';
+    }
+
+    return out;
+}
+
 void TerminalView::resized()
 {
     GPUView::resized();
@@ -263,6 +292,10 @@ void TerminalView::applyGridSize()
 
     const auto cols = std::max(2, (int) ((bounds.w - 2 * marginX) / cellW));
     const auto rows = std::max(1, (int) ((bounds.h - 2 * marginY) / cellH));
+
+    if (commandTerminal)
+        debugLog("[grid] popup bounds w=%.1f h=%.1f cell=%.2fx%.2f font=%.1f -> %dx%d\n",
+                 bounds.w, bounds.h, cellW, cellH, fontSize, cols, rows);
 
     if (cols == screen.columns() && rows == screen.rows())
         return;
@@ -626,6 +659,13 @@ void TerminalView::render(GPU::Frame& frame)
         drawGlyphs(
             row, screen.lineAt(row, scrollOffset), marginY + (float) row * cellH);
 
+    // The backgrounds have to reach the pass before the glyphs do. A sprite
+    // batch is drawn when the pass ends -- after every glyph -- so left queued
+    // it would land on top of the text rather than behind it, and a second
+    // begin() before then discards it outright, which is what used to happen
+    // below and why no cell background was ever drawn.
+    sprites->flush();
+
     // Every cell's glyph is queued by now, so the whole screen submits as one
     // instanced draw rather than one call per character.
     glyphs->flush(pass, atlas->atlas());
@@ -643,6 +683,8 @@ void TerminalView::render(GPU::Frame& frame)
         else
             drawCursor();
 
+        // Same order again: the block first, then the glyph that sits on it.
+        sprites->flush();
         glyphs->flush(pass, atlas->atlas());
     }
 
@@ -681,6 +723,39 @@ bool TerminalView::handleCommandShortcut(const KeyEvent& event)
     }
 
     return true;
+}
+
+bool TerminalView::handleClipboardShortcut(const KeyEvent& event)
+{
+    // macOS already has these on Command, and Ctrl+Shift+C there is the shell's.
+    if constexpr (eacp::Platform::isMac())
+        return false;
+
+    const auto& mods = event.modifiers;
+
+    if (!mods.control || !mods.shift || mods.command || mods.alt)
+        return false;
+
+    // Ctrl turns `characters` into a control code, so the unmodified spelling is
+    // the one to read; Shift leaves it upper case.
+    auto chars = event.charactersIgnoringModifiers;
+
+    for (auto& character: chars)
+        character = (char) std::tolower((unsigned char) character);
+
+    if (chars == "c")
+    {
+        copySelection();
+        return true;
+    }
+
+    if (chars == "v")
+    {
+        paste();
+        return true;
+    }
+
+    return false;
 }
 
 bool TerminalView::handleSpecialKey(const KeyEvent& event)
@@ -803,6 +878,9 @@ void TerminalView::keyDown(const KeyEvent& event)
         return;
 
     if (copyMode && handleCopyModeKey(event))
+        return;
+
+    if (handleClipboardShortcut(event))
         return;
 
     if (handleCommandShortcut(event))

@@ -1,26 +1,43 @@
 #include "Palette.h"
 
+#include <cstdio>
+
 #include "FuzzyMatch.h"
 #include "GitWorktree.h"
 #include "Projects.h"
 
-#include <eacp/Graphics/Primitives/TextMetrics.h>
 
 #include <algorithm>
 
 namespace term
 {
 using namespace eacp;
-using Graphics::Color;
-using Graphics::Context;
-using Graphics::KeyEvent;
-using Graphics::MouseEvent;
-using Graphics::Point;
-using Graphics::Rect;
-namespace KeyCode = Graphics::KeyCode;
+using UI::Color;
+using UI::KeyEvent;
+using UI::MouseEvent;
+using UI::Point;
+using UI::Rect;
+namespace KeyCode = UI::KeyCode;
 
 namespace
 {
+// The painter measures and draws in the face currently in force, so these keep
+// the old call shape -- text, position, font -- rather than making every call
+// site set the font first.
+void drawText(UI::Graphics& g,
+              const std::string& text,
+              UI::Point position,
+              const UI::Font& font)
+{
+    g.setFont(font);
+    g.drawText(text, position);
+}
+
+float measureWidth(UI::Graphics& g, const std::string& text, const UI::Font& font)
+{
+    g.setFont(font);
+    return g.measureText(text);
+}
 constexpr float panelWidth = 680.0f;
 constexpr float rowHeight = 34.0f;
 constexpr float headerHeight = 46.0f;
@@ -54,8 +71,8 @@ Palette::Palette(const AppConfig& configToUse, SessionManager& sessionsToUse)
     , rowFont({config.font, 14.0f})
     , detailFont({config.font, 12.0f})
 {
-    setHandlesMouseEvents(true);
-    setGrabsFocusOnMouseDown(true);
+    setInterceptsMouseClicks(true);
+    setWantsKeyboardFocus(true);
 }
 
 void Palette::show()
@@ -243,45 +260,56 @@ void Palette::popQueryChar()
     }
 }
 
-void Palette::keyDown(const KeyEvent& event)
+bool Palette::keyDown(const KeyEvent& event)
 {
+    // TEMPORARY diagnostic: the crash is a null read at the first key compare,
+    // and -O2 inlining cannot say whether the null is the palette or the event.
+    std::fprintf(stderr,
+                 "[palette] keyDown this=%p event=%p code=%d worktree=%d confirm=%d\n",
+                 (const void*) this,
+                 (const void*) &event,
+                 (int) event.keyCode,
+                 (int) worktreeMode,
+                 (int) confirmDeleteMode);
+    std::fflush(stderr);
+
     if (worktreeMode)
     {
         worktreeKeyDown(event);
-        return;
+        return true;
     }
 
     if (confirmDeleteMode)
     {
         confirmDeleteKeyDown(event);
-        return;
+        return true;
     }
 
     if (event.keyCode == KeyCode::Escape
         || (event.modifiers.command && event.charactersIgnoringModifiers == "k"))
     {
         cancel();
-        return;
+        return true;
     }
 
     if (event.keyCode == KeyCode::Return)
     {
         choose();
-        return;
+        return true;
     }
 
     if (event.keyCode == KeyCode::UpArrow
         || (event.modifiers.control && event.charactersIgnoringModifiers == "p"))
     {
         moveSelection(-1);
-        return;
+        return true;
     }
 
     if (event.keyCode == KeyCode::DownArrow
         || (event.modifiers.control && event.charactersIgnoringModifiers == "n"))
     {
         moveSelection(1);
-        return;
+        return true;
     }
 
     if (event.keyCode == KeyCode::Delete)
@@ -290,25 +318,25 @@ void Palette::keyDown(const KeyEvent& event)
         applyQuery();
         peekSelected();
         repaint();
-        return;
+        return true;
     }
 
     // Ctrl+W on the highlighted repo: branch off it into a fresh worktree.
     if (event.modifiers.control && event.charactersIgnoringModifiers == "w")
     {
         beginWorktree();
-        return;
+        return true;
     }
 
     // Ctrl+X on a highlighted worktree: move it to the trash (with a confirm).
     if (event.modifiers.control && event.charactersIgnoringModifiers == "x")
     {
         beginRemoveWorktree();
-        return;
+        return true;
     }
 
     if (event.modifiers.command || event.modifiers.control)
-        return;
+        return true;
 
     const auto& text = event.characters;
 
@@ -320,6 +348,8 @@ void Palette::keyDown(const KeyEvent& event)
         peekSelected();
         repaint();
     }
+
+    return true;
 }
 
 void Palette::beginWorktree()
@@ -528,12 +558,12 @@ int Palette::rowAt(Point pos) const
     return row < std::min((int) visible.size(), maxRows) ? row : -1;
 }
 
-void Palette::mouseMoved(const MouseEvent& event)
+void Palette::mouseMove(const MouseEvent& event)
 {
     if (worktreeMode || confirmDeleteMode)
         return;
 
-    if (const auto row = rowAt(event.pos); row >= 0 && row != selected)
+    if (const auto row = rowAt(event.position); row >= 0 && row != selected)
     {
         selected = row;
         peekSelected();
@@ -547,7 +577,7 @@ void Palette::mouseDown(const MouseEvent& event)
     if (worktreeMode || confirmDeleteMode)
         return;
 
-    const auto row = rowAt(event.pos);
+    const auto row = rowAt(event.position);
 
     if (row >= 0)
     {
@@ -556,11 +586,11 @@ void Palette::mouseDown(const MouseEvent& event)
         return;
     }
 
-    if (!panelBounds().contains(event.pos))
+    if (!panelBounds().contains(event.position))
         cancel();
 }
 
-void Palette::paintWorktree(Context& context)
+void Palette::paintWorktree(UI::Graphics& g)
 {
     const auto bounds = getLocalBounds();
     const auto width = std::min(panelWidth, bounds.w - 60.0f);
@@ -568,56 +598,55 @@ void Palette::paintWorktree(Context& context)
     const auto panel = Rect {
         (bounds.w - width) / 2.0f, std::max(bounds.h * 0.14f, 20.0f), width, height};
 
-    context.setColor(Color::black(0.38f));
-    context.fillRect(bounds);
+    g.setColour(Color::black(0.38f));
+    g.fillRect(bounds);
 
-    context.setColor(toColor(theme.background).brighter(0.04f));
-    context.fillRoundedRect(panel, 12.0f);
+    g.setColour(toColor(theme.background).brighter(0.04f));
+    g.fillRoundedRect(panel, 12.0f);
 
-    context.setColor(toColor(theme.selection, 0.8f));
-    context.setLineWidth(1.0f);
-    context.strokeRect(panel);
+    g.setColour(toColor(theme.selection, 0.8f));
+    g.drawRect(panel, 1.0f);
 
     // Header: what we're doing, and which repo it branches from.
-    context.setColor(toColor(theme.ansi[5]));
-    context.drawText("new worktree", {panel.x + 18.0f, panel.y + 30.0f}, queryFont);
+    g.setColour(toColor(theme.ansi[5]));
+    drawText(g, "new worktree", {panel.x + 18.0f, panel.y + 30.0f}, queryFont);
 
     const auto headWidth =
-        Graphics::TextMetrics::measureWidth("new worktree", queryFont);
-    context.setColor(toColor(theme.ansi[8]));
-    context.drawText("·  " + truncated(worktreeRepoName, 40),
+        measureWidth(g, "new worktree", queryFont);
+    g.setColour(toColor(theme.ansi[8]));
+    drawText(g, "·  " + truncated(worktreeRepoName, 40),
                      {panel.x + 18.0f + headWidth + 12.0f, panel.y + 30.0f},
                      queryFont);
 
-    context.setColor(toColor(theme.selection));
-    context.drawLine({panel.x + 12.0f, panel.y + headerHeight - 2.0f},
+    g.setColour(toColor(theme.selection));
+    g.drawLine({panel.x + 12.0f, panel.y + headerHeight - 2.0f},
                      {panel.right() - 12.0f, panel.y + headerHeight - 2.0f});
 
     // Branch-name field.
     const auto branchY = panel.y + headerHeight + rowHeight * 0.7f;
-    context.setColor(toColor(theme.ansi[8]));
-    context.drawText("branch", {panel.x + 18.0f, branchY}, detailFont);
-    context.setColor(toColor(theme.foreground));
-    context.drawText("› " + branchName + "▏", {panel.x + 88.0f, branchY}, rowFont);
+    g.setColour(toColor(theme.ansi[8]));
+    drawText(g, "branch", {panel.x + 18.0f, branchY}, detailFont);
+    g.setColour(toColor(theme.foreground));
+    drawText(g, "› " + branchName + "▏", {panel.x + 88.0f, branchY}, rowFont);
 
     // Hint, or git's complaint if the last attempt failed.
     const auto hintY = panel.y + headerHeight + rowHeight * 1.9f;
 
     if (!worktreeError.empty())
     {
-        context.setColor(toColor(theme.ansi[1]));
-        context.drawText(truncated(worktreeError, 66), {panel.x + 18.0f, hintY}, detailFont);
+        g.setColour(toColor(theme.ansi[1]));
+        drawText(g, truncated(worktreeError, 66), {panel.x + 18.0f, hintY}, detailFont);
     }
     else
     {
-        context.setColor(toColor(theme.ansi[8]));
-        context.drawText("Enter: create worktree · Esc: back",
+        g.setColour(toColor(theme.ansi[8]));
+        drawText(g, "Enter: create worktree · Esc: back",
                          {panel.x + 18.0f, hintY},
                          detailFont);
     }
 }
 
-void Palette::paintConfirmDelete(Context& context)
+void Palette::paintConfirmDelete(UI::Graphics& g)
 {
     const auto bounds = getLocalBounds();
     const auto width = std::min(panelWidth, bounds.w - 60.0f);
@@ -625,36 +654,35 @@ void Palette::paintConfirmDelete(Context& context)
     const auto panel = Rect {
         (bounds.w - width) / 2.0f, std::max(bounds.h * 0.14f, 20.0f), width, height};
 
-    context.setColor(Color::black(0.38f));
-    context.fillRect(bounds);
+    g.setColour(Color::black(0.38f));
+    g.fillRect(bounds);
 
-    context.setColor(toColor(theme.background).brighter(0.04f));
-    context.fillRoundedRect(panel, 12.0f);
+    g.setColour(toColor(theme.background).brighter(0.04f));
+    g.fillRoundedRect(panel, 12.0f);
 
     // Red-tinted border flags this as the destructive branch.
-    context.setColor(toColor(theme.ansi[1], 0.8f));
-    context.setLineWidth(1.0f);
-    context.strokeRect(panel);
+    g.setColour(toColor(theme.ansi[1], 0.8f));
+    g.drawRect(panel, 1.0f);
 
     // Header: what we're doing, and which worktree it targets.
-    context.setColor(toColor(theme.ansi[1]));
-    context.drawText("trash worktree", {panel.x + 18.0f, panel.y + 30.0f}, queryFont);
+    g.setColour(toColor(theme.ansi[1]));
+    drawText(g, "trash worktree", {panel.x + 18.0f, panel.y + 30.0f}, queryFont);
 
     const auto headWidth =
-        Graphics::TextMetrics::measureWidth("trash worktree", queryFont);
-    context.setColor(toColor(theme.ansi[8]));
-    context.drawText("·  " + truncated(deleteTargetName, 40),
+        measureWidth(g, "trash worktree", queryFont);
+    g.setColour(toColor(theme.ansi[8]));
+    drawText(g, "·  " + truncated(deleteTargetName, 40),
                      {panel.x + 18.0f + headWidth + 12.0f, panel.y + 30.0f},
                      queryFont);
 
-    context.setColor(toColor(theme.selection));
-    context.drawLine({panel.x + 12.0f, panel.y + headerHeight - 2.0f},
+    g.setColour(toColor(theme.selection));
+    g.drawLine({panel.x + 12.0f, panel.y + headerHeight - 2.0f},
                      {panel.right() - 12.0f, panel.y + headerHeight - 2.0f});
 
     // The question.
     const auto questionY = panel.y + headerHeight + rowHeight * 0.7f;
-    context.setColor(toColor(theme.foreground));
-    context.drawText("Move this worktree to the Trash?",
+    g.setColour(toColor(theme.foreground));
+    drawText(g, "Move this worktree to the Trash?",
                      {panel.x + 18.0f, questionY},
                      rowFont);
 
@@ -663,51 +691,50 @@ void Palette::paintConfirmDelete(Context& context)
 
     if (!deleteError.empty())
     {
-        context.setColor(toColor(theme.ansi[1]));
-        context.drawText(truncated(deleteError, 66), {panel.x + 18.0f, hintY}, detailFont);
+        g.setColour(toColor(theme.ansi[1]));
+        drawText(g, truncated(deleteError, 66), {panel.x + 18.0f, hintY}, detailFont);
     }
     else
     {
-        context.setColor(toColor(theme.ansi[8]));
-        context.drawText("y: move to Trash · n: cancel",
+        g.setColour(toColor(theme.ansi[8]));
+        drawText(g, "y: move to Trash · n: cancel",
                          {panel.x + 18.0f, hintY},
                          detailFont);
     }
 }
 
-void Palette::paint(Context& context)
+void Palette::paint(UI::Graphics& g)
 {
     if (worktreeMode)
     {
-        paintWorktree(context);
+        paintWorktree(g);
         return;
     }
 
     if (confirmDeleteMode)
     {
-        paintConfirmDelete(context);
+        paintConfirmDelete(g);
         return;
     }
 
     const auto panel = panelBounds();
 
-    context.setColor(Color::black(0.38f));
-    context.fillRect(getLocalBounds());
+    g.setColour(Color::black(0.38f));
+    g.fillRect(getLocalBounds());
 
-    context.setColor(toColor(theme.background).brighter(0.04f));
-    context.fillRoundedRect(panel, 12.0f);
+    g.setColour(toColor(theme.background).brighter(0.04f));
+    g.fillRoundedRect(panel, 12.0f);
 
-    context.setColor(toColor(theme.selection, 0.8f));
-    context.setLineWidth(1.0f);
-    context.strokeRect(panel);
+    g.setColour(toColor(theme.selection, 0.8f));
+    g.drawRect(panel, 1.0f);
 
     // Query line
     const auto queryText = "› " + query + "▏";
-    context.setColor(toColor(theme.foreground));
-    context.drawText(queryText, {panel.x + 18.0f, panel.y + 30.0f}, queryFont);
+    g.setColour(toColor(theme.foreground));
+    drawText(g, queryText, {panel.x + 18.0f, panel.y + 30.0f}, queryFont);
 
-    context.setColor(toColor(theme.selection));
-    context.drawLine({panel.x + 12.0f, panel.y + headerHeight - 2.0f},
+    g.setColour(toColor(theme.selection));
+    g.drawLine({panel.x + 12.0f, panel.y + headerHeight - 2.0f},
                      {panel.right() - 12.0f, panel.y + headerHeight - 2.0f});
 
     // Rows
@@ -722,8 +749,8 @@ void Palette::paint(Context& context)
 
         if (i == selected)
         {
-            context.setColor(toColor(theme.selection, 0.85f));
-            context.fillRoundedRect(rowRect, 6.0f);
+            g.setColour(toColor(theme.selection, 0.85f));
+            g.fillRoundedRect(rowRect, 6.0f);
         }
 
         const auto baseline = y + rowHeight * 0.62f;
@@ -734,35 +761,35 @@ void Palette::paint(Context& context)
         const auto iconColor =
             item.claude ? toColor(theme.ansi[5])
                         : (open ? toColor(theme.ansi[2]) : toColor(theme.ansi[8]));
-        context.setColor(iconColor);
-        context.drawText(icon, {x, baseline}, rowFont);
+        g.setColour(iconColor);
+        drawText(g, icon, {x, baseline}, rowFont);
         x += 24.0f;
 
-        context.setColor(toColor(theme.foreground));
-        context.drawText(truncated(item.label, 32), {x, baseline}, rowFont);
-        x += Graphics::TextMetrics::measureWidth(truncated(item.label, 32), rowFont)
+        g.setColour(toColor(theme.foreground));
+        drawText(g, truncated(item.label, 32), {x, baseline}, rowFont);
+        x += measureWidth(g, truncated(item.label, 32), rowFont)
              + 14.0f;
 
         const auto detail = !item.status.empty() ? truncated(item.status, 48)
                                                  : truncated(item.detail, 48);
-        context.setColor(toColor(theme.ansi[8]));
-        context.drawText(detail, {x, baseline}, detailFont);
+        g.setColour(toColor(theme.ansi[8]));
+        drawText(g, detail, {x, baseline}, detailFont);
 
         if (item.claude)
         {
             const auto badge = std::string {"claude"};
             const auto badgeWidth =
-                Graphics::TextMetrics::measureWidth(badge, detailFont);
-            context.setColor(toColor(theme.ansi[5]));
-            context.drawText(
+                measureWidth(g, badge, detailFont);
+            g.setColour(toColor(theme.ansi[5]));
+            drawText(g, 
                 badge, {rowRect.right() - badgeWidth - 12.0f, baseline}, detailFont);
         }
     }
 
     if (visible.empty())
     {
-        context.setColor(toColor(theme.ansi[8]));
-        context.drawText(
+        g.setColour(toColor(theme.ansi[8]));
+        drawText(g, 
             "no matches",
             {panel.x + 18.0f, panel.y + headerHeight + rowHeight * 0.62f},
             rowFont);

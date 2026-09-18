@@ -1,7 +1,9 @@
 #pragma once
 
 #include "Config.h"
-#include "TerminalView.h"
+#include "CowTermTerminal/TerminalView.h"
+
+#include <eacp/UI/UI.h>
 
 #include <Miro/Reflect.h>
 
@@ -31,8 +33,8 @@ struct SavedPane
 // One session's pane tree: every leaf is a live GPU terminal, splits carry
 // an orientation (horizontal = side by side) and a ratio. Handles layout
 // with gutters, splitting, closing, directional focus, keyboard resize and
-// zoom. The chrome — gutters and the active-pane border — is CPU painted
-// beneath the panes.
+// zoom. The chrome — gutters and the active-pane border — is drawn on the GPU
+// beneath the panes, like everything else this app puts on screen.
 class SessionView final : public eacp::Graphics::View
 {
 public:
@@ -83,7 +85,23 @@ public:
     eacp::Callback onEmpty = [] {};
 
     void resized() override;
-    void paint(eacp::Graphics::Context& context) override;
+    // The chrome, on the GPU. The host fills the view and every pane's own
+    // surface covers its rect, so what is left showing is exactly the gutters
+    // between them — which is why the gutter colour is the host's clear colour
+    // and the only thing painted is the ring around the active pane.
+    struct Chrome final : eacp::UI::Component
+    {
+        void paint(eacp::UI::Graphics& g) override;
+
+        eacp::UI::Color activeBorder;
+        eacp::UI::Rect activeBounds;
+        bool showActive = false;
+    };
+
+    void updateChrome();
+
+    eacp::UI::ComponentHost chromeHost;
+    Chrome chrome;
 
 private:
     struct Node

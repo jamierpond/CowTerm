@@ -2,20 +2,18 @@
 
 #include <eacp/Core/Threads/EventLoop.h>
 #include <eacp/Graphics/Graphics/Keyboard.h>
-#include <eacp/Graphics/Primitives/TextMetrics.h>
 
 #include <algorithm>
 
 namespace term
 {
 using namespace eacp;
-using Graphics::Color;
-using Graphics::Context;
-using Graphics::KeyEvent;
-using Graphics::MouseEvent;
-using Graphics::Point;
-using Graphics::Rect;
-namespace KeyCode = Graphics::KeyCode;
+using UI::Color;
+using UI::KeyEvent;
+using UI::MouseEvent;
+using UI::Point;
+using UI::Rect;
+namespace KeyCode = UI::KeyCode;
 
 namespace
 {
@@ -44,15 +42,17 @@ std::string truncated(const std::string& text, std::size_t max)
     return text.substr(0, max - 1) + "…";
 }
 
-// Centre text horizontally on cx, drawn at baseline y.
-void drawCentered(Context& context,
+// Centre text horizontally on cx, drawn at baseline y. Measurement follows the
+// font in force, so the face is set before measuring rather than passed to both.
+void drawCentered(UI::Graphics& g,
                   const std::string& text,
                   float cx,
                   float y,
-                  const Graphics::Font& font)
+                  const UI::Font& font)
 {
-    const auto w = Graphics::TextMetrics::measureWidth(text, font);
-    context.drawText(text, {cx - w / 2.0f, y}, font);
+    g.setFont(font);
+    const auto w = g.measureText(text);
+    g.drawText(text, {cx - w / 2.0f, y});
 }
 } // namespace
 
@@ -64,8 +64,8 @@ Switcher::Switcher(const AppConfig& configToUse, SessionManager& sessionsToUse)
     , labelFont({config.font, 13.0f})
     , detailFont({config.font, 12.0f})
 {
-    setHandlesMouseEvents(true);
-    setGrabsFocusOnMouseDown(true);
+    setInterceptsMouseClicks(true);
+    setWantsKeyboardFocus(true);
 }
 
 bool Switcher::begin(bool reverse)
@@ -163,18 +163,18 @@ void Switcher::stopPolling()
         });
 }
 
-void Switcher::keyDown(const KeyEvent& event)
+bool Switcher::keyDown(const KeyEvent& event)
 {
     if (event.keyCode == KeyCode::Escape)
     {
         cancel();
-        return;
+        return true;
     }
 
     if (event.keyCode == KeyCode::Return)
     {
         commit();
-        return;
+        return true;
     }
 
     // Tab (with Ctrl still held) and the arrows walk the frozen order; Shift
@@ -182,40 +182,41 @@ void Switcher::keyDown(const KeyEvent& event)
     if (event.keyCode == KeyCode::Tab)
     {
         step(event.modifiers.shift);
-        return;
+        return true;
     }
 
     if (event.keyCode == KeyCode::LeftArrow || event.keyCode == KeyCode::UpArrow)
     {
         step(true);
-        return;
+        return true;
     }
 
     if (event.keyCode == KeyCode::RightArrow || event.keyCode == KeyCode::DownArrow)
     {
         step(false);
-        return;
+        return true;
     }
 
     // Everything else is swallowed while the switcher owns the keyboard.
+    return true;
 }
 
 void Switcher::mouseDown(const MouseEvent& event)
 {
-    if (const auto card = cardAt(event.pos); card >= 0)
+    if (const auto card = cardAt(event.position); card >= 0)
     {
         selected = card;
         commit();
         return;
     }
 
-    if (!panelBounds().contains(event.pos))
+    if (!panelBounds().contains(event.position))
         cancel();
 }
 
-void Switcher::mouseMoved(const MouseEvent& event)
+void Switcher::mouseMove(const MouseEvent& event)
 {
-    if (const auto card = cardAt(event.pos); card >= 0 && card != selected)
+    if (const auto card = cardAt(event.position); card >= 0 && card != selected)
     {
         selected = card;
         peekSelected();
@@ -267,7 +268,7 @@ int Switcher::cardAt(Point pos) const
     return -1;
 }
 
-void Switcher::paint(Context& context)
+void Switcher::paint(UI::Graphics& g)
 {
     if (order.empty())
         return;
@@ -275,15 +276,14 @@ void Switcher::paint(Context& context)
     const auto panel = panelBounds();
     const auto cardW = cardWidth();
 
-    context.setColor(Color::black(0.38f));
-    context.fillRect(getLocalBounds());
+    g.setColour(Color::black(0.38f));
+    g.fillRect(getLocalBounds());
 
-    context.setColor(toColor(theme.background).brighter(0.05f));
-    context.fillRoundedRect(panel, 14.0f);
+    g.setColour(toColor(theme.background).brighter(0.05f));
+    g.fillRoundedRect(panel, 14.0f);
 
-    context.setColor(toColor(theme.selection, 0.8f));
-    context.setLineWidth(1.0f);
-    context.strokeRect(panel);
+    g.setColour(toColor(theme.selection, 0.8f));
+    g.drawRect(panel, 1.0f);
 
     auto x = panel.x + pad;
     const auto cardTop = panel.y + pad;
@@ -296,18 +296,18 @@ void Switcher::paint(Context& context)
         const auto highlighted = i == selected;
         const auto claude = session->isClaude();
 
-        context.setColor(highlighted ? toColor(theme.selection, 0.9f)
-                                      : toColor(theme.foreground, 0.06f));
-        context.fillRoundedRect(cardRect, 8.0f);
+        g.setColour(highlighted ? toColor(theme.selection, 0.9f)
+                                : toColor(theme.foreground, 0.06f));
+        g.fillRoundedRect(cardRect, 8.0f);
 
         const auto icon = claude ? "✳" : "●";
-        context.setColor(claude ? toColor(theme.ansi[5]) : toColor(theme.ansi[2]));
-        drawCentered(context, icon, cx, cardTop + 26.0f, titleFont);
+        g.setColour(claude ? toColor(theme.ansi[5]) : toColor(theme.ansi[2]));
+        drawCentered(g, icon, cx, cardTop + 26.0f, titleFont);
 
         const auto maxChars = (std::size_t) std::max(4, (int) (cardW / 8.5f));
-        context.setColor(toColor(theme.foreground, highlighted ? 1.0f : 0.82f));
+        g.setColour(toColor(theme.foreground, highlighted ? 1.0f : 0.82f));
         drawCentered(
-            context, truncated(session->name, maxChars), cx, cardTop + 50.0f, labelFont);
+            g, truncated(session->name, maxChars), cx, cardTop + 50.0f, labelFont);
 
         x += cardW + gap;
     }
@@ -324,8 +324,8 @@ void Switcher::paint(Context& context)
         if (const auto panes = session->view.paneCount(); panes > 1)
             detail += "  ·  " + std::to_string(panes) + " panes";
 
-        context.setColor(toColor(theme.ansi[8]));
-        drawCentered(context,
+        g.setColour(toColor(theme.ansi[8]));
+        drawCentered(g,
                      truncated(detail, 72),
                      panel.x + panel.w / 2.0f,
                      panel.y + panelHeight - 14.0f,

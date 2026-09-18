@@ -1,5 +1,6 @@
 #include "PrDashboard.h"
 
+
 #include "Command.h"
 #include "FuzzyMatch.h"
 #include "Projects.h"
@@ -17,16 +18,32 @@
 namespace term
 {
 using namespace eacp;
-using Graphics::Color;
-using Graphics::Context;
-using Graphics::KeyEvent;
-using Graphics::MouseEvent;
-using Graphics::Point;
-using Graphics::Rect;
-namespace KeyCode = Graphics::KeyCode;
+using UI::Color;
+using UI::KeyEvent;
+using UI::MouseEvent;
+using UI::Point;
+using UI::Rect;
+namespace KeyCode = UI::KeyCode;
 
 namespace
 {
+// The painter measures and draws in the face currently in force, so these keep
+// the old call shape -- text, position, font -- rather than making every call
+// site set the font first.
+void drawText(UI::Graphics& g,
+              const std::string& text,
+              UI::Point position,
+              const UI::Font& font)
+{
+    g.setFont(font);
+    g.drawText(text, position);
+}
+
+float measureWidth(UI::Graphics& g, const std::string& text, const UI::Font& font)
+{
+    g.setFont(font);
+    return g.measureText(text);
+}
 constexpr float panelWidth = 960.0f;
 constexpr float rowHeight = 32.0f;
 constexpr float headerHeight = 46.0f;
@@ -361,8 +378,8 @@ PrDashboard::PrDashboard(const AppConfig& configToUse, SessionManager& sessionsT
     , rowFont({config.font, 14.0f})
     , detailFont({config.font, 12.0f})
 {
-    setHandlesMouseEvents(true);
-    setGrabsFocusOnMouseDown(true);
+    setInterceptsMouseClicks(true);
+    setWantsKeyboardFocus(true);
 }
 
 PrDashboard::~PrDashboard()
@@ -720,32 +737,32 @@ void PrDashboard::popQueryChar()
     }
 }
 
-void PrDashboard::keyDown(const KeyEvent& event)
+bool PrDashboard::keyDown(const KeyEvent& event)
 {
     if (event.keyCode == KeyCode::Escape)
     {
         cancel();
-        return;
+        return true;
     }
 
     if (event.keyCode == KeyCode::Return)
     {
         choose();
-        return;
+        return true;
     }
 
     if (event.keyCode == KeyCode::UpArrow
         || (event.modifiers.control && event.charactersIgnoringModifiers == "p"))
     {
         moveSelection(-1);
-        return;
+        return true;
     }
 
     if (event.keyCode == KeyCode::DownArrow
         || (event.modifiers.control && event.charactersIgnoringModifiers == "n"))
     {
         moveSelection(1);
-        return;
+        return true;
     }
 
     if (event.modifiers.control)
@@ -762,7 +779,7 @@ void PrDashboard::keyDown(const KeyEvent& event)
         else if (chars == "y" && item != nullptr)
             copyUrl(*item);
 
-        return;
+        return true;
     }
 
     if (event.keyCode == KeyCode::Delete)
@@ -770,11 +787,11 @@ void PrDashboard::keyDown(const KeyEvent& event)
         popQueryChar();
         applyQuery();
         repaint();
-        return;
+        return true;
     }
 
     if (event.modifiers.command)
-        return;
+        return true;
 
     const auto& text = event.characters;
 
@@ -785,6 +802,8 @@ void PrDashboard::keyDown(const KeyEvent& event)
         applyQuery();
         repaint();
     }
+
+    return true;
 }
 
 Rect PrDashboard::panelBounds() const
@@ -811,9 +830,9 @@ int PrDashboard::rowAt(Point pos) const
     return row < std::min((int) visible.size(), maxRows) ? row : -1;
 }
 
-void PrDashboard::mouseMoved(const MouseEvent& event)
+void PrDashboard::mouseMove(const MouseEvent& event)
 {
-    if (const auto row = rowAt(event.pos); row >= 0 && row != selected)
+    if (const auto row = rowAt(event.position); row >= 0 && row != selected)
     {
         selected = row;
         repaint();
@@ -822,7 +841,7 @@ void PrDashboard::mouseMoved(const MouseEvent& event)
 
 void PrDashboard::mouseDown(const MouseEvent& event)
 {
-    const auto row = rowAt(event.pos);
+    const auto row = rowAt(event.position);
 
     if (row >= 0)
     {
@@ -831,43 +850,42 @@ void PrDashboard::mouseDown(const MouseEvent& event)
         return;
     }
 
-    if (!panelBounds().contains(event.pos))
+    if (!panelBounds().contains(event.position))
         cancel();
 }
 
-void PrDashboard::paint(Context& context)
+void PrDashboard::paint(UI::Graphics& g)
 {
     const auto panel = panelBounds();
     const auto now = (std::int64_t) std::time(nullptr);
 
-    context.setColor(Color::black(0.38f));
-    context.fillRect(getLocalBounds());
+    g.setColour(Color::black(0.38f));
+    g.fillRect(getLocalBounds());
 
-    context.setColor(toColor(theme.background).brighter(0.04f));
-    context.fillRoundedRect(panel, 12.0f);
+    g.setColour(toColor(theme.background).brighter(0.04f));
+    g.fillRoundedRect(panel, 12.0f);
 
-    context.setColor(toColor(theme.selection, 0.8f));
-    context.setLineWidth(1.0f);
-    context.strokeRect(panel);
+    g.setColour(toColor(theme.selection, 0.8f));
+    g.drawRect(panel, 1.0f);
 
     // Header: title, filter query, and the fetch state on the right.
-    context.setColor(toColor(theme.ansi[5]));
-    context.drawText("prs", {panel.x + 18.0f, panel.y + 30.0f}, queryFont);
+    g.setColour(toColor(theme.ansi[5]));
+    drawText(g, "prs", {panel.x + 18.0f, panel.y + 30.0f}, queryFont);
 
     const auto queryText = "› " + query + "▏";
-    context.setColor(toColor(theme.foreground));
-    context.drawText(queryText, {panel.x + 66.0f, panel.y + 30.0f}, queryFont);
+    g.setColour(toColor(theme.foreground));
+    drawText(g, queryText, {panel.x + 66.0f, panel.y + 30.0f}, queryFont);
 
     if (!status.empty())
     {
-        const auto width = Graphics::TextMetrics::measureWidth(status, detailFont);
-        context.setColor(toColor(theme.ansi[8]));
-        context.drawText(
+        const auto width = measureWidth(g, status, detailFont);
+        g.setColour(toColor(theme.ansi[8]));
+        drawText(g, 
             status, {panel.right() - width - 16.0f, panel.y + 30.0f}, detailFont);
     }
 
-    context.setColor(toColor(theme.selection));
-    context.drawLine({panel.x + 12.0f, panel.y + headerHeight - 2.0f},
+    g.setColour(toColor(theme.selection));
+    g.drawLine({panel.x + 12.0f, panel.y + headerHeight - 2.0f},
                      {panel.right() - 12.0f, panel.y + headerHeight - 2.0f});
 
     const auto rows = std::min((int) visible.size(), maxRows);
@@ -881,8 +899,8 @@ void PrDashboard::paint(Context& context)
 
         if (i == selected)
         {
-            context.setColor(toColor(theme.selection, 0.85f));
-            context.fillRoundedRect(rowRect, 6.0f);
+            g.setColour(toColor(theme.selection, 0.85f));
+            g.fillRoundedRect(rowRect, 6.0f);
         }
 
         const auto baseline = y + rowHeight * 0.62f;
@@ -895,21 +913,21 @@ void PrDashboard::paint(Context& context)
                               : failed  ? toColor(theme.ansi[1])
                               : running ? toColor(theme.ansi[3])
                                         : toColor(theme.ansi[8]);
-        context.setColor(dotColor);
-        context.drawText(success || failed || running ? "●" : "○",
+        g.setColour(dotColor);
+        drawText(g, success || failed || running ? "●" : "○",
                          {rowRect.x + 12.0f, baseline},
                          rowFont);
 
         // Age of the last push.
-        context.setColor(toColor(theme.ansi[8]));
-        context.drawText(formatAge(now - epochFromIso(item.pushedAt)),
+        g.setColour(toColor(theme.ansi[8]));
+        drawText(g, formatAge(now - epochFromIso(item.pushedAt)),
                          {rowRect.x + 34.0f, baseline},
                          detailFont);
 
         // Repo (name only; the slug is in the filter haystack).
         const auto repoName = item.repo.substr(item.repo.rfind('/') + 1);
-        context.setColor(toColor(theme.ansi[4]));
-        context.drawText(
+        g.setColour(toColor(theme.ansi[4]));
+        drawText(g, 
             truncated(repoName, 18), {rowRect.x + 76.0f, baseline}, rowFont);
 
         // Title, flexible width between the repo column and the review block.
@@ -919,8 +937,8 @@ void PrDashboard::paint(Context& context)
         const auto titleChars =
             (std::size_t) std::max(8.0f, (titleRight - titleX) / 7.2f);
         const auto title = (item.draft ? "◌ " : "") + item.title;
-        context.setColor(toColor(theme.foreground, item.draft ? 0.6f : 1.0f));
-        context.drawText(truncated(title, titleChars), {titleX, baseline}, rowFont);
+        g.setColour(toColor(theme.foreground, item.draft ? 0.6f : 1.0f));
+        drawText(g, truncated(title, titleChars), {titleX, baseline}, rowFont);
 
         // Review state: decision mark plus requested reviewers.
         const auto approved = item.reviewDecision == "APPROVED";
@@ -933,11 +951,11 @@ void PrDashboard::paint(Context& context)
         if (!review.empty())
         {
             const auto text = truncated(review, 20);
-            const auto width = Graphics::TextMetrics::measureWidth(text, detailFont);
-            context.setColor(approved  ? toColor(theme.ansi[2])
+            const auto width = measureWidth(g, text, detailFont);
+            g.setColour(approved  ? toColor(theme.ansi[2])
                              : changes ? toColor(theme.ansi[1])
                                        : toColor(theme.ansi[8]));
-            context.drawText(
+            drawText(g, 
                 text,
                 {rowRect.right() - sessionColumn - 12.0f - width, baseline},
                 detailFont);
@@ -947,18 +965,18 @@ void PrDashboard::paint(Context& context)
         const auto sessionText =
             item.sessionName.empty() ? "—" : truncated(item.sessionName, 16);
         const auto sessionWidth =
-            Graphics::TextMetrics::measureWidth(sessionText, detailFont);
-        context.setColor(item.sessionName.empty() ? toColor(theme.ansi[8])
+            measureWidth(g, sessionText, detailFont);
+        g.setColour(item.sessionName.empty() ? toColor(theme.ansi[8])
                                                   : toColor(theme.ansi[6]));
-        context.drawText(sessionText,
+        drawText(g, sessionText,
                          {rowRect.right() - sessionWidth - 12.0f, baseline},
                          detailFont);
     }
 
     if (visible.empty())
     {
-        context.setColor(toColor(theme.ansi[8]));
-        context.drawText(
+        g.setColour(toColor(theme.ansi[8]));
+        drawText(g, 
             allItems.empty() && refreshing ? "loading PRs…" : "no matches",
             {panel.x + 18.0f, panel.y + headerHeight + rowHeight * 0.62f},
             rowFont);
@@ -969,13 +987,13 @@ void PrDashboard::paint(Context& context)
 
     if (!busy.empty())
     {
-        context.setColor(toColor(theme.ansi[3]));
-        context.drawText(busy, {panel.x + 18.0f, hintY}, detailFont);
+        g.setColour(toColor(theme.ansi[3]));
+        drawText(g, busy, {panel.x + 18.0f, hintY}, detailFont);
     }
     else
     {
-        context.setColor(toColor(theme.ansi[8]));
-        context.drawText(
+        g.setColour(toColor(theme.ansi[8]));
+        drawText(g, 
             "enter worktree · ^o browser · ^s session · ^y copy · ^r refresh",
             {panel.x + 18.0f, hintY},
             detailFont);

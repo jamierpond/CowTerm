@@ -21,13 +21,58 @@ of its dependencies with [CPM](https://github.com/cpm-cmake/CPM.cmake)
 
 ```bash
 cmake -S . -B build -G Ninja
-cmake --build build --target CowTerm
+cmake --build build --target CowTermApp
 open build/Terminal/CowTerm.app
 ```
 
 The `CowTermDaemon` binary is built and copied into the app bundle
 automatically. To build against a local eacp checkout instead of fetching it,
 pass `-DCPM_eacp_SOURCE=/path/to/eacp`.
+
+### macOS code signing and privacy permissions
+
+CowTerm requires certificate-backed signing for normal macOS builds. This is
+important for a terminal: macOS attributes privacy requests from many child
+commands to their responsible application, and remembers the decision using
+that application's code-signing requirement. An ad-hoc signature changes
+identity after every rebuild, causing Screen Recording and similar permissions
+to be requested again.
+
+Create an **Apple Development** certificate in Xcode under **Settings →
+Accounts → Manage Certificates**. CowTerm auto-detects it:
+
+```bash
+just build
+```
+
+To select a particular identity, pass its certificate name or SHA-1:
+
+```bash
+just signing_identity="Apple Development: Your Name (TEAMID)" build
+```
+
+The build copies and signs `CowTermDaemon` first, then signs and verifies the
+completed app bundle. It fails rather than silently produce an unstable app
+when no identity exists. Disposable CI or local builds can explicitly opt into
+ad-hoc signing:
+
+```bash
+just allow_adhoc_signing=ON build
+```
+
+After switching an existing installation from ad-hoc to stable signing, use
+CowTerm's **Kill everything & quit** once so the old persistent daemon exits,
+then reset only the stale Screen Recording decision:
+
+```bash
+tccutil reset ScreenCapture com.eacp.cowterm
+```
+
+Launch CowTerm, grant access once, and restart it. Future builds signed by the
+same identity satisfy the same privacy authorization. Purpose strings in
+CowTerm's plist allow macOS to explain camera, microphone, system-audio,
+automation, and other requests made by user-selected commands; they never grant
+those permissions without user consent.
 
 ## Keys
 
@@ -65,8 +110,9 @@ One overlay, everything fuzzy-searchable (Wim-style scoring + MRU):
 - **Open sessions** first, most-recently-used first. Sessions running a
   Claude Code conversation show `✳`, its title, and a `claude` badge — and
   match the query "claude".
-- **Projects** below: depth-1 directories under `searchDirs`, Enter spawns a
-  session there (or switches if one exists).
+- **Projects** below: depth-1 directories under `searchDirs` (hidden ones
+  too, so `~/.config` is a hit), Enter spawns a session there (or switches
+  if one exists).
 
 Type to rank; `Enter` opens, `Esc` closes, arrows or `Ctrl+P/N` move.
 

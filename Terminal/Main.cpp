@@ -1,7 +1,10 @@
 #include "AppShell.h"
+#include "CowTermVersion.h"
 #include "DaemonClient.h"
 
 #include <eacp/Core/App/App.h>
+
+#include <cstdio>
 
 using namespace eacp;
 
@@ -15,6 +18,13 @@ Graphics::WindowOptions windowOptions()
     options.minWidth = 300;
     options.minHeight = 200;
     options.title = "CowTerm";
+
+    // TODO(linux): options.appId = "com.eacp.cowterm"; — what the desktop
+    // matches against com.eacp.cowterm.desktop to label the window and pick
+    // its icon; without it every eacp app shows up as "eacp" with a
+    // placeholder. WindowOptions::appId only exists in the Linux box's local
+    // eacp (upstream Window-Linux.cpp still hardcodes app_id "eacp"); restore
+    // this line once that change is pushed and the CPM pin moved onto it.
     options.backgroundColor =
         term::toColor(term::themeByName(term::loadConfig().theme).background);
 
@@ -30,7 +40,10 @@ struct TerminalApp
     TerminalApp()
     {
         shell.onWindowTitleChanged = [this](const std::string& title)
-        { window.setTitle(title.empty() ? "CowTerm" : title); };
+        {
+            window.setTitle(title.empty() ? "CowTerm  ·  " + term::versionTag()
+                                          : title);
+        };
 
         shell.onBringToFront = [this]
         {
@@ -61,6 +74,11 @@ struct TerminalApp
 
 int main()
 {
+    std::fprintf(stderr,
+                 "CowTerm %s (%s)\n",
+                 term::appVersion,
+                 term::versionTag().c_str());
+
     term::registerEmbeddedFonts();
     return Apps::run<TerminalApp>();
 }

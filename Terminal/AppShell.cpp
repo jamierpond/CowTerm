@@ -1,4 +1,7 @@
 #include "AppShell.h"
+
+#include "CowTermCore/Debug.h"
+#include "CowTermVersion.h"
 #include "GitWorktree.h"
 #include "Notifier.h"
 
@@ -46,7 +49,11 @@ AppShell::AppShell()
         onBringToFront();
     };
 
-    manager.onAllClosed = [] { Apps::quit(); };
+    manager.onAllClosed = []
+    {
+        noteQuit("last session closed");
+        Apps::quit();
+    };
 
     manager.onNotify = [this](TermSession& session, const std::string& text)
     {
@@ -123,31 +130,8 @@ void AppShell::attachActive(TermSession& session)
         addSubview(session.view);
 
         // A live peek swaps the attached terminal while an overlay is open;
-        // re-raise the overlay so it stays on top and keeps keyboard focus.
-        if (palette.isShown())
-        {
-            removeSubview(palette);
-            addSubview(palette);
-            palette.focus();
-        }
-        else if (switcher.isShown())
-        {
-            removeSubview(switcher);
-            addSubview(switcher);
-            switcher.focus();
-        }
-        else if (prDashboard.isShown())
-        {
-            removeSubview(prDashboard);
-            addSubview(prDashboard);
-            prDashboard.focus();
-        }
-        else if (claudeHud.isShown())
-        {
-            removeSubview(claudeHud);
-            addSubview(claudeHud);
-            claudeHud.focus();
-        }
+        // re-raise the overlay host so it stays on top and keeps keyboard focus.
+        raiseOverlay();
     }
 
     session.view.setBounds(getLocalBounds());
@@ -169,10 +153,7 @@ void AppShell::resized()
     if (attached != nullptr)
         attached->view.setBounds(bounds);
 
-    palette.setBounds(bounds);
-    switcher.setBounds(bounds);
-    prDashboard.setBounds(bounds);
-    claudeHud.setBounds(bounds);
+    overlayHost.setBounds(bounds);
     popup.setBounds(bounds);
 }
 
@@ -203,6 +184,9 @@ void AppShell::updateTitle()
     if (!session->activeTitle().empty())
         title += " — " + session->activeTitle();
 
+    // Trailing build tag so it is always clear which commit is running.
+    title += "  ·  " + versionTag();
+
     onWindowTitleChanged(title);
 }
 
@@ -219,20 +203,47 @@ void AppShell::handleSessionNotify(TermSession& session, const std::string& text
     Notifier::notify(session.key(), session.name, text);
 }
 
+void AppShell::showOverlay(eacp::UI::Component& overlay)
+{
+    // setRootComponent sizes the component to the host, so the host is what
+    // gets the bounds; the overlay follows it.
+    overlayHost.setRootComponent(overlay);
+    removeSubview(overlayHost);
+    addSubview(overlayHost);
+    overlayHost.setBounds(getLocalBounds());
+    overlay.grabKeyboardFocus();
+}
+
+void AppShell::hideOverlay()
+{
+    removeSubview(overlayHost);
+}
+
+// Re-raise whichever overlay is open above a freshly attached terminal view.
+void AppShell::raiseOverlay()
+{
+    if (palette.isShown())
+        showOverlay(palette);
+    else if (switcher.isShown())
+        showOverlay(switcher);
+    else if (prDashboard.isShown())
+        showOverlay(prDashboard);
+    else if (claudeHud.isShown())
+        showOverlay(claudeHud);
+}
+
 void AppShell::showPalette()
 {
     if (palette.isShown())
         return;
 
-    addSubview(palette);
-    palette.setBounds(getLocalBounds());
+    showOverlay(palette);
     palette.show();
-    palette.focus();
 }
 
 void AppShell::hidePalette()
 {
-    removeSubview(palette);
+    hideOverlay();
 
     if (attached != nullptr)
         attached->view.focusActive();
@@ -243,23 +254,21 @@ void AppShell::showSwitcher(bool reverse)
     if (switcher.isShown() || palette.isShown() || popup.isShown())
         return;
 
-    addSubview(switcher);
-    switcher.setBounds(getLocalBounds());
+    showOverlay(switcher);
 
     // begin() only opens with two or more sessions to flip between; if it
     // declines, take the overlay back down and leave the pane focused.
     if (!switcher.begin(reverse))
     {
-        removeSubview(switcher);
+        hideOverlay();
         return;
     }
 
-    switcher.focus();
 }
 
 void AppShell::hideSwitcher()
 {
-    removeSubview(switcher);
+    hideOverlay();
 
     if (attached != nullptr)
         attached->view.focusActive();
@@ -270,15 +279,13 @@ void AppShell::showPrDashboard()
     if (anyOverlayShown())
         return;
 
-    addSubview(prDashboard);
-    prDashboard.setBounds(getLocalBounds());
+    showOverlay(prDashboard);
     prDashboard.show();
-    prDashboard.focus();
 }
 
 void AppShell::hidePrDashboard()
 {
-    removeSubview(prDashboard);
+    hideOverlay();
 
     if (attached != nullptr)
         attached->view.focusActive();
@@ -289,15 +296,13 @@ void AppShell::showClaudeHud()
     if (anyOverlayShown())
         return;
 
-    addSubview(claudeHud);
-    claudeHud.setBounds(getLocalBounds());
+    showOverlay(claudeHud);
     claudeHud.show();
-    claudeHud.focus();
 }
 
 void AppShell::hideClaudeHud()
 {
-    removeSubview(claudeHud);
+    hideOverlay();
 
     if (attached != nullptr)
         attached->view.focusActive();
@@ -632,6 +637,7 @@ bool AppShell::handleCommand(const KeyEvent& event)
 
     if (chars == "q")
     {
+        noteQuit("leader q");
         Apps::quit();
         return true;
     }

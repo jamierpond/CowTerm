@@ -1,4 +1,5 @@
 #include "Config.h"
+#include "Protocol.h"
 
 #include <eacp/Core/Utils/FilePath.h>
 #include <eacp/Core/Utils/Files.h>
@@ -9,7 +10,11 @@ namespace
 {
 eacp::FilePath configPath()
 {
-    return eacp::FilePath::homeDirectory() / ".config" / "cowterm.json";
+    // A named instance reads its own config file so its settings (and web
+    // port) never collide with the user's live instance.
+    const auto suffix = proto::instanceSuffix();
+    const auto file = suffix.empty() ? "cowterm.json" : "cowterm." + suffix + ".json";
+    return eacp::FilePath::homeDirectory() / ".config" / file;
 }
 } // namespace
 

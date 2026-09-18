@@ -1,13 +1,27 @@
 #pragma once
 
+#include <cstdlib>
 #include <string>
 #include <string_view>
 #include <vector>
 
 namespace term::proto
 {
+// A named instance ($COWTERM_INSTANCE) keeps its own daemon, config and store
+// so a second copy can run fully isolated from the user's live session — used
+// by the test/debug harness. Empty (the default) is the normal instance.
+inline std::string instanceSuffix()
+{
+    const auto* name = std::getenv("COWTERM_INSTANCE");
+    return name != nullptr ? std::string {name} : std::string {};
+}
+
 // The IPC name the daemon serves and the app dials.
-constexpr auto serverName = "cowtermd";
+inline std::string serverName()
+{
+    const auto suffix = instanceSuffix();
+    return suffix.empty() ? std::string {"cowtermd"} : "cowtermd-" + suffix;
+}
 
 // One Messenger message: a verb line ("verb arg1 arg2..."), then an
 // optional raw payload after the first newline. The payload is untouched
