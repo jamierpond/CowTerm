@@ -58,7 +58,9 @@ run: build
 run: build
     "./{{build_dir}}/Terminal/CowTerm"
 
-# Build, then install the app to the usual place for this OS.
+# Build, then install the app to the usual place for this OS. On Windows a
+# running CowTerm locks its exe against overwrite but not rename, so the copy
+# falls back to renaming the live exe aside (*.exe.old, cleaned up next run).
 [macos]
 install: build
     rm -rf "/Applications/CowTerm.app"
@@ -68,8 +70,7 @@ install: build
 [windows]
 install: build
     New-Item -ItemType Directory -Force -Path "$env:LOCALAPPDATA\Programs\CowTerm" | Out-Null
-    Copy-Item -Force "{{build_dir}}\Terminal\CowTerm.exe" "$env:LOCALAPPDATA\Programs\CowTerm"
-    Copy-Item -Force "{{build_dir}}\Terminal\CowTermDaemon.exe" "$env:LOCALAPPDATA\Programs\CowTerm"
+    $dir = "$env:LOCALAPPDATA\Programs\CowTerm"; foreach ($exe in 'CowTerm.exe','CowTermDaemon.exe') { $t = Join-Path $dir $exe; if (Test-Path "$t.old") { try { Remove-Item -Force "$t.old" -ErrorAction Stop } catch {} }; try { Copy-Item -Force "{{build_dir}}\Terminal\$exe" $dir -ErrorAction Stop } catch { Rename-Item -Force $t "$exe.old"; Copy-Item -Force "{{build_dir}}\Terminal\$exe" $dir } }
     $exe = "$env:LOCALAPPDATA\Programs\CowTerm\CowTerm.exe"; $ws = New-Object -ComObject WScript.Shell; @([Environment]::GetFolderPath('Desktop'), [Environment]::GetFolderPath('Programs')) | ForEach-Object { $s = $ws.CreateShortcut((Join-Path $_ 'CowTerm.lnk')); $s.TargetPath = $exe; $s.WorkingDirectory = (Split-Path $exe); $s.IconLocation = $exe; $s.Description = 'CowTerm'; $s.Save() }; Write-Host "Added Desktop and Start Menu shortcuts"
     ie4uinit.exe -show
     Write-Host "Installed CowTerm to $env:LOCALAPPDATA\Programs\CowTerm"
