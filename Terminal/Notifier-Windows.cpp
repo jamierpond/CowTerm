@@ -1,7 +1,8 @@
 #include "Notifier.h"
 
 #include <eacp/Core/Threads/EventLoop.h>
-#include <eacp/Graphics/Helpers/StringUtils-Windows.h>
+#include <eacp/Core/Utils/Strings.h>
+#include <eacp/Core/Utils/WinInclude.h>
 
 #include <shellapi.h>
 
@@ -109,10 +110,10 @@ void notify(const std::string& sessionKey,
     auto data = makeIconData();
     data.uFlags = NIF_INFO;
     wcsncpy_s(data.szInfoTitle,
-              eacp::Graphics::toWideString(title).c_str(),
+              eacp::Strings::widen(title).c_str(),
               _TRUNCATE);
     wcsncpy_s(data.szInfo,
-              eacp::Graphics::toWideString(body).c_str(),
+              eacp::Strings::widen(body).c_str(),
               _TRUNCATE);
     Shell_NotifyIconW(NIM_MODIFY, &data);
 }

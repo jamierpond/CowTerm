@@ -48,7 +48,7 @@ include(CPM)
 CPMAddPackage(
         NAME eacp
         GITHUB_REPOSITORY eyalamirmusic/eacp
-        GIT_TAG e027186eadb3e13110094fede1ad53f843261d03
+        GIT_TAG 80b93a9a5b5618733fb64b6650965920f7a96bd0
         OPTIONS
             "EACP_ENABLE_EXAMPLES OFF"
             "EACP_ENABLE_TESTS OFF")

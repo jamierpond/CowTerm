@@ -1,7 +1,7 @@
 #include "Pty.h"
 
 #include <eacp/Core/Utils/WinInclude.h>
-#include <eacp/Graphics/Helpers/StringUtils-Windows.h>
+#include <eacp/Core/Utils/Strings.h>
 
 #include <tlhelp32.h>
 #include <winternl.h>
@@ -14,8 +14,8 @@ namespace term
 {
 namespace
 {
-using eacp::Graphics::fromWideString;
-using eacp::Graphics::toWideString;
+using eacp::Strings::narrow;
+using eacp::Strings::widen;
 
 std::wstring envVariable(const wchar_t* name)
 {
@@ -52,7 +52,7 @@ bool isDirectory(const std::wstring& path)
 
 std::wstring startDirectory(const std::string& requested)
 {
-    if (auto wide = toWideString(requested); !wide.empty() && isDirectory(wide))
+    if (auto wide = widen(requested); !wide.empty() && isDirectory(wide))
         return wide;
 
     return envVariable(L"USERPROFILE");
@@ -156,7 +156,7 @@ std::wstring devShellCommand()
 
 std::string baseName(const std::wstring& exeFile)
 {
-    auto name = fromWideString(exeFile);
+    auto name = narrow(exeFile);
 
     if (name.size() > 4)
     {
@@ -229,7 +229,7 @@ bool Pty::start(const PtyOptions& options,
 
     if (!options.command.empty())
     {
-        const auto wide = toWideString(options.command);
+        const auto wide = widen(options.command);
         commandLine +=
             isCmd ? L" /c " + wide : L" -NoLogo -Command \"" + wide + L"\"";
     }
@@ -484,7 +484,7 @@ std::string processWorkingDirectory(DWORD pid)
             while (path.size() > 3 && path.back() == L'\\')
                 path.pop_back();
 
-            result = fromWideString(path);
+            result = narrow(path);
         }
     }
 
