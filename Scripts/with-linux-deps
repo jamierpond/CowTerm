@@ -1,0 +1,58 @@
+#!/bin/sh
+# Run a build command with CowTerm's Linux build dependencies in scope.
+#
+# On Linux, eacp finds Wayland, FreeType/HarfBuzz/fontconfig and libcurl through
+# pkg-config, and fails configuration outright when they are missing. Two ways
+# to have them, and this script takes whichever the machine offers:
+#
+#   - installed system-wide (`sudo apt-get install libwayland-dev
+#     wayland-protocols libwayland-bin libxkbcommon-dev libdecor-0-dev
+#     libfreetype-dev libharfbuzz-dev libfontconfig-dev libcurl4-openssl-dev`,
+#     as the READMEs describe) -- then the command runs unchanged;
+#   - from the pinned dev shell in flake.nix -- no sudo, no system packages.
+#
+# The pkg-config probe comes first, so being inside the dev shell already (via
+# `nix develop` or direnv) runs the command directly rather than nesting a
+# second one.
+set -e
+
+modules='wayland-client wayland-cursor xkbcommon libdecor-0 wayland-scanner
+         wayland-protocols freetype2 harfbuzz fontconfig libcurl'
+
+if pkg-config --exists $modules 2>/dev/null; then
+    exec "$@"
+fi
+
+# A multi-user install puts nix in the default profile and adds it to PATH from
+# /etc/profile.d/nix.sh, but that only holds if nothing later rebuilds PATH --
+# a desktop session or a dotfile manager that sets PATH wholesale can drop the
+# entry while leaving the rest of the nix environment in place. Look in the two
+# standard install locations as well, so a machine that has nix is not told it
+# does not.
+for nix in nix \
+           "$HOME/.nix-profile/bin/nix" \
+           /nix/var/nix/profiles/default/bin/nix; do
+    if command -v "$nix" >/dev/null 2>&1; then
+        exec "$nix" develop --command "$@"
+    fi
+done
+
+cat >&2 <<'MSG'
+CowTerm's Linux build dependencies are missing, and there is no nix to fall back
+on. Install them with your package manager -- on Debian/Ubuntu:
+
+  sudo apt-get install libwayland-dev wayland-protocols libwayland-bin \
+      libxkbcommon-dev libdecor-0-dev libfreetype-dev libharfbuzz-dev \
+      libfontconfig-dev libcurl4-openssl-dev pkg-config
+
+Vulkan is separate, and needed to *run* rather than to build: eacp compiles
+against headers CPM fetches and opens the loader by name at runtime, so no -dev
+package goes with it, but without a loader and a driver every view falls back to
+rendering off-screen and the window comes up empty.
+
+  sudo apt-get install libvulkan1 mesa-vulkan-drivers
+
+or install nix, which makes flake.nix supply all of it -- Vulkan included --
+without touching the system.
+MSG
+exit 1

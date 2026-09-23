@@ -40,18 +40,15 @@ include(CPM)
 # Provides eacp-text (GlyphAtlas.h) and the IPC::Messenger layer the session
 # daemon and DaemonClient ride on.
 #
-# Pinned to the fork branch `cowterm/stale-mouse-targets`: upstream develop
-# (e027186e) plus the stale-mouse-target fix (e4573f9, eyalamirmusic/eacp
-# PR #38, still open). Without it View::removeSubview clears
+# NOTE: this drops the fork's fix-stale-mouse-targets commit (e4573f9,
+# eyalamirmusic/eacp PR #38). View::removeSubview on develop still clears
 # hoveredView/mouseDownTarget for direct children only, so removing a nested
-# subtree while hovered leaves the root pointing at a destroyed view and the
-# next mouseEntered/Exited is a use-after-free (crashes in View::getBounds
-# under NSTrackingArea). Once #38 lands upstream, point back at
-# eyalamirmusic/eacp develop.
+# subtree while hovered can leave the root pointing at a destroyed view and
+# make the next mouseExited a use-after-free. Re-apply if that crash resurfaces.
 CPMAddPackage(
         NAME eacp
-        GITHUB_REPOSITORY jamierpond/eacp
-        GIT_TAG 56b3920907e3a1e40a49c51eea0de691a29a369f
+        GITHUB_REPOSITORY eyalamirmusic/eacp
+        GIT_TAG 80b93a9a5b5618733fb64b6650965920f7a96bd0
         OPTIONS
             "EACP_ENABLE_EXAMPLES OFF"
             "EACP_ENABLE_TESTS OFF")

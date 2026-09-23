@@ -11,3 +11,7 @@ CMakeUserPresets.json
 cowcrash.txt
 /build-noipo
 build-asan
+
+# nix / direnv
+/.direnv/
+/result
