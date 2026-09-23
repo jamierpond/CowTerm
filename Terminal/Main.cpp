@@ -1,5 +1,8 @@
 #include "AppShell.h"
 #include "CowTermVersion.h"
+#if defined(__APPLE__)
+#include "Cli.h"
+#endif
 #include "DaemonClient.h"
 
 #include <eacp/Core/App/App.h>
@@ -72,8 +75,16 @@ struct TerminalApp
     Graphics::Window window {windowOptions()};
 };
 
-int main()
+int main(int argc, char** argv)
 {
+#if defined(__APPLE__)
+    if (term::isCliInvocation(argc, argv))
+        return term::runCli(argc, argv);
+#else
+    (void) argc;
+    (void) argv;
+#endif
+
     std::fprintf(stderr,
                  "CowTerm %s (%s)\n",
                  term::appVersion,

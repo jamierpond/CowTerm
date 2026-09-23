@@ -31,48 +31,68 @@ pass `-DCPM_eacp_SOURCE=/path/to/eacp`.
 
 ### macOS code signing and privacy permissions
 
-CowTerm requires certificate-backed signing for normal macOS builds. This is
-important for a terminal: macOS attributes privacy requests from many child
-commands to their responsible application, and remembers the decision using
-that application's code-signing requirement. An ad-hoc signature changes
-identity after every rebuild, causing Screen Recording and similar permissions
-to be requested again.
+macOS remembers Screen Recording (and other privacy grants) against the
+responsible app's designated requirement. For a terminal that's CowTerm, for
+every command it runs. An ad-hoc signature's requirement is its cdhash, so each
+rebuild is a new app and the prompt comes back. A certificate-backed signature
+keeps the grant across rebuilds.
 
-Create an **Apple Development** certificate in Xcode under **Settings →
-Accounts → Manage Certificates**. CowTerm auto-detects it:
+The build auto-detects a code-signing identity (Apple Development, then
+Developer ID, then any) and fails if none is usable. `Developer ID Application:
+Tamber, Incorporated` works; it lives in a dedicated build keychain that the
+tamber-web/eacp release scripts create (and know the password to). The usual
+failure is that keychain being locked: the build names it, and `just signing`
+lists identities per keychain with lock state. Unlock it with:
 
 ```bash
-just build
+security unlock-keychain ~/Library/Keychains/tamber-codesign.keychain-db
 ```
 
-To select a particular identity, pass its certificate name or SHA-1:
+To pick an identity explicitly: `just signing_identity="<name or SHA-1>" build`.
+A disposable ad-hoc build: `just allow_adhoc_signing=ON build`. `just install`
+refuses to install an ad-hoc bundle.
+
+Moving an install from ad-hoc to stable signing, once:
 
 ```bash
-just signing_identity="Apple Development: Your Name (TEAMID)" build
-```
-
-The build copies and signs `CowTermDaemon` first, then signs and verifies the
-completed app bundle. It fails rather than silently produce an unstable app
-when no identity exists. Disposable CI or local builds can explicitly opt into
-ad-hoc signing:
-
-```bash
-just allow_adhoc_signing=ON build
-```
-
-After switching an existing installation from ad-hoc to stable signing, use
-CowTerm's **Kill everything & quit** once so the old persistent daemon exits,
-then reset only the stale Screen Recording decision:
-
-```bash
+just install                                  # needs the unlocked keychain
+# CowTerm: Kill everything & quit (so the old daemon exits)
 tccutil reset ScreenCapture com.eacp.cowterm
+# launch CowTerm, then in it:
+ct screen-cap request                         # grant in System Settings
+# restart CowTerm
 ```
 
-Launch CowTerm, grant access once, and restart it. Future builds signed by the
-same identity satisfy the same privacy authorization. Purpose strings in
-CowTerm's plist allow macOS to explain camera, microphone, system-audio,
-automation, and other requests made by user-selected commands; they never grant
-those permissions without user consent.
+Later builds signed by the same identity keep the grant. Purpose strings in
+CowTerm's plist let macOS explain camera, microphone, system-audio, automation
+and other requests made by commands you run; they never grant anything without
+your consent.
+
+### Screen capture for agents
+
+`ct` is the CowTerm executable's CLI mode: same signed binary, same grant.
+`just install` symlinks it to `~/.local/bin/ct`; an alias works too:
+
+```bash
+alias ct=/Applications/CowTerm.app/Contents/MacOS/CowTerm
+```
+
+Everything but `help`/`version` only runs from a CowTerm shell (exit 3
+otherwise): the grant belongs to the terminal hosting the shell, so from iTerm
+or ssh it would prompt for the wrong app.
+
+```bash
+ct screen-cap status        # granted / not granted, plus CowTerm's signature
+ct screen-cap request       # ask for Screen Recording
+ct screenshot               # = ct screen-cap shot; prints the PNG path
+ct screen-cap shot -o f.png --display 2 --window <id> --rect x,y,w,h --interactive
+ct start-whole-screen-recording [--duration 30] [--audio]   # prints the .mov path
+ct stop-screen-recording    # finalises, prints the path
+ct screen-cap record status
+```
+
+Output defaults to `$COWTERM_CAPTURE_DIR`, else `~/Pictures/CowTerm`. Captures
+exit 2 with a hint when Screen Recording isn't granted.
 
 ## Keys
 

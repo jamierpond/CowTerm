@@ -1,7 +1,5 @@
 #include "Palette.h"
 
-#include <cstdio>
-
 #include "FuzzyMatch.h"
 #include "GitWorktree.h"
 #include "Projects.h"
@@ -262,17 +260,6 @@ void Palette::popQueryChar()
 
 bool Palette::keyDown(const KeyEvent& event)
 {
-    // TEMPORARY diagnostic: the crash is a null read at the first key compare,
-    // and -O2 inlining cannot say whether the null is the palette or the event.
-    std::fprintf(stderr,
-                 "[palette] keyDown this=%p event=%p code=%d worktree=%d confirm=%d\n",
-                 (const void*) this,
-                 (const void*) &event,
-                 (int) event.keyCode,
-                 (int) worktreeMode,
-                 (int) confirmDeleteMode);
-    std::fflush(stderr);
-
     if (worktreeMode)
     {
         worktreeKeyDown(event);

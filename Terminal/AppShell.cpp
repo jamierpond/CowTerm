@@ -212,6 +212,13 @@ void AppShell::showOverlay(eacp::UI::Component& overlay)
     addSubview(overlayHost);
     overlayHost.setBounds(getLocalBounds());
     overlay.grabKeyboardFocus();
+
+    // Taking the host out of the view tree above dropped it as the window's
+    // first responder, and grabKeyboardFocus() does nothing when the same
+    // component is already focused -- so a re-raise (a peek swapping the
+    // terminal under an open overlay) would leave the overlay drawn but deaf.
+    // Ask for the keyboard at the native level too.
+    overlayHost.focus();
 }
 
 void AppShell::hideOverlay()

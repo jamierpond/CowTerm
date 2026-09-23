@@ -16,10 +16,12 @@ build_dir  := "build"
 generator  := "Ninja"
 build_type := "Release"
 signing_identity := ""
-# Ad-hoc by default: no code-signing identity is needed to build locally. The
-# cost is that macOS privacy grants (screen capture) are re-prompted after each
-# rebuild, since an ad-hoc signature's designated requirement is its cdhash.
-allow_adhoc_signing := "ON"
+# Certificate-signed by default, so macOS privacy grants (Screen Recording)
+# survive rebuilds. The build fails if no identity is usable (usually: the
+# keychain holding it is locked -- see `just signing`). `just
+# allow_adhoc_signing=ON build` makes a disposable ad-hoc build instead; its
+# designated requirement is a cdhash, so every rebuild re-prompts.
+allow_adhoc_signing := "OFF"
 
 # Default: show the recipe list.
 default:
@@ -88,12 +90,33 @@ debug-popup: build
     open -n --env COWTERM_POPUP_DEBUG=1 "{{build_dir}}/Terminal/CowTerm.app"
 
 # Build, then install the app to the usual place for this OS.
+# Refuses an ad-hoc bundle: installing one would throw away the stable identity
+# the Screen Recording grant is keyed on. Also links `ct` (the CowTerm
+# executable's CLI mode) into ~/.local/bin.
 [macos]
 install: build
+    @if codesign --display --requirements - "{{build_dir}}/Terminal/CowTerm.app" 2>&1 | grep -q cdhash; then \
+        echo "error: {{build_dir}}/Terminal/CowTerm.app is ad-hoc signed; refusing to install it." >&2; \
+        echo "       Unlock the signing keychain (see \`just signing\`) and rebuild." >&2; \
+        exit 1; \
+    fi
     rm -rf "/Applications/CowTerm.app"
     cp -R "{{build_dir}}/Terminal/CowTerm.app" "/Applications/CowTerm.app"
     codesign --verify --deep --strict --verbose=2 "/Applications/CowTerm.app"
-    @echo "Installed CowTerm.app to /Applications"
+    mkdir -p "$HOME/.local/bin"
+    ln -sf "/Applications/CowTerm.app/Contents/MacOS/CowTerm" "$HOME/.local/bin/ct"
+    @echo "Installed CowTerm.app to /Applications (ct -> ~/.local/bin/ct)"
+
+# List code-signing identities per keychain and whether each is unlocked --
+# the one-look answer to "why did the build go ad-hoc?".
+[macos]
+signing:
+    #!/bin/sh
+    security list-keychains -d user | tr -d '"' | while read -r kc; do
+        if security show-keychain-info "$kc" >/dev/null 2>&1; then state=unlocked; else state=LOCKED; fi
+        echo "$kc ($state)"
+        security find-identity -v -p codesigning "$kc" | sed -n 's/^ *[0-9]*) /    /p'
+    done
 
 [windows]
 install: build

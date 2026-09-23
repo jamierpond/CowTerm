@@ -42,11 +42,14 @@ add_executable(${COWTERM_EXECUTABLE_TARGET}
 if (APPLE)
     target_sources(${COWTERM_EXECUTABLE_TARGET} PRIVATE
             Notifier-macOS.mm
-            Trash-macOS.mm)
+            Trash-macOS.mm
+            Cli.mm)
 
     target_link_libraries(${COWTERM_EXECUTABLE_TARGET} PRIVATE
             "-framework UserNotifications"
-            "-framework Foundation")
+            "-framework Foundation"
+            "-framework CoreGraphics"
+            "-framework ApplicationServices")
 elseif (WIN32)
     target_sources(${COWTERM_EXECUTABLE_TARGET} PRIVATE
             Notifier-Windows.cpp

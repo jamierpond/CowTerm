@@ -62,7 +62,7 @@ if (identity STREQUAL "")
     string(REGEX MATCHALL "\"[^\"]+\"" keychains "${keychain_output}")
 
     set(identity_output "")
-    set(locked_keychains "")
+    set(locked_note "")
 
     foreach (keychain IN LISTS keychains)
         string(REGEX REPLACE "^\"|\"$" "" keychain "${keychain}")
@@ -75,8 +75,19 @@ if (identity STREQUAL "")
                 ERROR_QUIET)
 
         if (NOT unlocked_result EQUAL 0)
-            get_filename_component(keychain_name "${keychain}" NAME)
-            list(APPEND locked_keychains "${keychain_name}")
+            # Worth reporting only if unlocking it would actually help.
+            execute_process(
+                    COMMAND "${SECURITY_EXECUTABLE}" find-identity -v -p codesigning
+                            "${keychain}"
+                    OUTPUT_VARIABLE locked_output
+                    ERROR_QUIET)
+            string(REGEX MATCHALL "\"[^\"]+\"" locked_names "${locked_output}")
+            list(REMOVE_DUPLICATES locked_names)
+            if (NOT locked_names STREQUAL "")
+                string(JOIN ", " names ${locked_names})
+                string(APPEND locked_note
+                        "  ${names}\n    security unlock-keychain ${keychain}\n")
+            endif ()
             continue ()
         endif ()
 
@@ -108,12 +119,10 @@ if (identity STREQUAL "")
 endif ()
 
 if (identity STREQUAL "")
-    set(locked_note "")
-    if (NOT locked_keychains STREQUAL "")
-        string(JOIN ", " locked_list ${locked_keychains})
+    if (NOT locked_note STREQUAL "")
         set(locked_note
-                "Locked keychains were skipped: ${locked_list}. Unlock one with "
-                "`security unlock-keychain <name>` to sign with its certificate.\n")
+                "Signing identities exist, but only in locked keychains. "
+                "Unlock one and rebuild:\n${locked_note}")
     endif ()
 
     if (ALLOW_ADHOC)
