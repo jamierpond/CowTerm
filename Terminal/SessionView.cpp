@@ -311,6 +311,13 @@ void SessionView::removeLeaf(Node* leaf)
     auto sibling =
         std::move(parent->first.get() == leaf ? parent->second : parent->first);
 
+    // The sibling's contents move up into the parent and the sibling node
+    // dies with this scope. If the sibling was the active leaf, the parent is
+    // now that leaf; left alone, `active` would point at a node whose view
+    // has just been moved out.
+    if (active == sibling.get())
+        active = parent;
+
     // The parent split collapses into the surviving subtree. The old
     // children (including `leaf`) are destroyed by the reassignments.
     parent->view = std::move(sibling->view);

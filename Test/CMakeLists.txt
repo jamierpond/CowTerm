@@ -31,6 +31,18 @@ nano_add_executable(CowTermRenderTests
             RenderBackgroundTests.cpp
         TARGETS CowTerm::Terminal)
 
+# The split tree, with real (in-process) panes. SessionView lives in the app
+# rather than a library, so its sources compile straight in; the test supplies
+# its own terminalConfig() so no pane ever talks to the session daemon.
+nano_add_executable(CowTermSessionViewTests
+        SOURCES
+            SessionViewTests.cpp
+            ../Terminal/SessionView.cpp
+            ../Terminal/Config.cpp
+        TARGETS CowTerm::Terminal eacp-ui)
+
+target_include_directories(CowTermSessionViewTests PRIVATE ../Terminal)
+
 # forkpty/openpty live in libutil on Linux; on Apple they are in libSystem.
 if (NOT APPLE)
     target_link_libraries(CowTermTests PRIVATE util)
