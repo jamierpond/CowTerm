@@ -30,6 +30,10 @@ allow_adhoc_signing := "OFF"
 # to nothing on macOS and Windows, which need none of it.
 deps := if os() == "linux" { "Scripts/with-linux-deps" } else { "" }
 
+# The app's bundle id (Terminal/CMakeLists.txt BUNDLE_ID); dev runs reset its
+# privacy grants.
+bundle_id := "com.eacp.cowterm"
+
 # Default: show the recipe list.
 default:
     @just --list
@@ -71,8 +75,14 @@ clean:
 rebuild: clean build
 
 # Build, then launch the app.
+#
+# Every dev build is ad-hoc signed with a fresh cdhash, so macOS keeps the
+# old privacy grant switched on in System Settings while refusing it to the
+# new binary. Resetting before launch makes the app ask again for real.
 [macos]
 run: build
+    @echo "[run] resetting Accessibility for {{bundle_id}}"
+    -@tccutil reset Accessibility {{bundle_id}}
     open "{{build_dir}}/Terminal/CowTerm.app"
 
 [windows]
