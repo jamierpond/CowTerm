@@ -44,8 +44,9 @@ add_executable(${COWTERM_EXECUTABLE_TARGET}
         DaemonClient.cpp)
 
 # Per-platform halves of ct, shell commands, the places watcher,
-# notifications, privacy grants and trash. Windows and Linux have no privacy grants (no TCC), so they share
-# Permissions-Default.cpp, which reports every grant in force.
+# notifications, privacy grants and trash. Windows and Linux have no privacy
+# grants (no TCC), so they share Permissions-Default.cpp, which reports every
+# grant in force.
 if (APPLE)
     target_sources(${COWTERM_EXECUTABLE_TARGET} PRIVATE
             Cli-macOS.mm
