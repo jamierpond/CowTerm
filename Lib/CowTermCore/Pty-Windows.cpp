@@ -8,6 +8,8 @@
 
 #include <algorithm>
 #include <cctype>
+#include <mutex>
+#include <thread>
 #include <vector>
 
 namespace term
@@ -98,9 +100,8 @@ std::wstring base64(const std::vector<unsigned char>& bytes)
 
         out.push_back(table[b0 >> 2]);
         out.push_back(table[((b0 & 0x03) << 4) | (b1 >> 4)]);
-        out.push_back(i + 1 < bytes.size()
-                          ? table[((b1 & 0x0f) << 2) | (b2 >> 6)]
-                          : L'=');
+        out.push_back(i + 1 < bytes.size() ? table[((b1 & 0x0f) << 2) | (b2 >> 6)]
+                                           : L'=');
         out.push_back(i + 2 < bytes.size() ? table[b2 & 0x3f] : L'=');
     }
 
@@ -174,6 +175,36 @@ std::string baseName(const std::wstring& exeFile)
 }
 } // namespace
 
+// ConPTY state. The pseudoconsole is guarded by consoleLock: the waiter thread
+// closes it when the shell exits, which must not race resize() on the UI
+// thread.
+struct Pty::Native
+{
+    void closeConsole()
+    {
+        auto lock = std::lock_guard {consoleLock};
+
+        if (console != nullptr)
+        {
+            ClosePseudoConsole(console);
+            console = nullptr;
+        }
+    }
+
+    HPCON console = nullptr;
+    HANDLE process = nullptr;
+    HANDLE inputWrite = nullptr;
+    HANDLE outputRead = nullptr;
+    std::thread reader;
+    std::thread waiter;
+    std::mutex consoleLock;
+};
+
+Pty::Pty()
+    : native(std::make_unique<Native>())
+{
+}
+
 Pty::~Pty()
 {
     shutdown();
@@ -183,7 +214,7 @@ bool Pty::start(const PtyOptions& options,
                 std::function<void(std::string)> onOutput,
                 std::function<void()> onExit)
 {
-    if (process != nullptr)
+    if (native->process != nullptr)
         return false;
 
     auto inputRead = HANDLE {};
@@ -277,12 +308,12 @@ bool Pty::start(const PtyOptions& options,
 
     CloseHandle(info.hThread);
 
-    console = pseudoConsole;
-    process = info.hProcess;
-    inputWrite = inWrite;
-    outputRead = outRead;
+    native->console = pseudoConsole;
+    native->process = info.hProcess;
+    native->inputWrite = inWrite;
+    native->outputRead = outRead;
 
-    reader = std::thread(
+    native->reader = std::thread(
         [readHandle = outRead,
          output = std::move(onOutput),
          exit = std::move(onExit)]
@@ -307,11 +338,11 @@ bool Pty::start(const PtyOptions& options,
     // the reader would never see the shell exit on its own. Waiting on the
     // process and closing the console is what breaks the pipe and lets the
     // reader finish (delivering onExit).
-    waiter = std::thread(
-        [this, processHandle = info.hProcess]
+    native->waiter = std::thread(
+        [state = native.get(), processHandle = info.hProcess]
         {
             WaitForSingleObject(processHandle, INFINITE);
-            closeConsole();
+            state->closeConsole();
         });
 
     return true;
@@ -321,11 +352,11 @@ void Pty::write(std::string_view data)
 {
     auto remaining = data;
 
-    while (inputWrite != nullptr && !remaining.empty())
+    while (native->inputWrite != nullptr && !remaining.empty())
     {
         auto written = DWORD {0};
 
-        if (!WriteFile(inputWrite,
+        if (!WriteFile(native->inputWrite,
                        remaining.data(),
                        (DWORD) remaining.size(),
                        &written,
@@ -338,10 +369,10 @@ void Pty::write(std::string_view data)
 
 void Pty::resize(const PtySize& size)
 {
-    auto lock = std::lock_guard {consoleLock};
+    auto lock = std::lock_guard {native->consoleLock};
 
-    if (console != nullptr)
-        ResizePseudoConsole((HPCON) console, toCoord(size));
+    if (native->console != nullptr)
+        ResizePseudoConsole(native->console, toCoord(size));
 }
 
 namespace
@@ -495,19 +526,19 @@ std::string processWorkingDirectory(DWORD pid)
 
 std::string Pty::foregroundProcess() const
 {
-    if (process == nullptr)
+    if (native->process == nullptr)
         return {};
 
-    const auto info = inspectProcessTree(GetProcessId(process));
+    const auto info = inspectProcessTree(GetProcessId(native->process));
     return baseName(info.youngestName.empty() ? info.rootName : info.youngestName);
 }
 
 std::string Pty::currentWorkingDirectory() const
 {
-    if (process == nullptr)
+    if (native->process == nullptr)
         return {};
 
-    const auto rootPid = GetProcessId(process);
+    const auto rootPid = GetProcessId(native->process);
     const auto info = inspectProcessTree(rootPid);
 
     // The youngest descendant has the truthful cwd (PowerShell keeps its
@@ -521,36 +552,27 @@ std::string Pty::currentWorkingDirectory() const
 
 bool Pty::isRunning() const
 {
-    return process != nullptr && WaitForSingleObject(process, 0) == WAIT_TIMEOUT;
-}
-
-void Pty::closeConsole()
-{
-    auto lock = std::lock_guard {consoleLock};
-
-    if (console != nullptr)
-    {
-        ClosePseudoConsole((HPCON) console);
-        console = nullptr;
-    }
+    return native->process != nullptr
+           && WaitForSingleObject(native->process, 0) == WAIT_TIMEOUT;
 }
 
 void Pty::shutdown()
 {
     // Closing the pseudoconsole ends the console session, which terminates
     // the attached shell the way closing a console window would.
-    closeConsole();
+    native->closeConsole();
 
-    if (process != nullptr && WaitForSingleObject(process, 2000) == WAIT_TIMEOUT)
-        TerminateProcess(process, 1);
+    if (native->process != nullptr
+        && WaitForSingleObject(native->process, 2000) == WAIT_TIMEOUT)
+        TerminateProcess(native->process, 1);
 
-    if (waiter.joinable())
-        waiter.join();
+    if (native->waiter.joinable())
+        native->waiter.join();
 
-    if (reader.joinable())
-        reader.join();
+    if (native->reader.joinable())
+        native->reader.join();
 
-    for (auto* handle: {&process, &inputWrite, &outputRead})
+    for (auto* handle: {&native->process, &native->inputWrite, &native->outputRead})
     {
         if (*handle != nullptr)
         {

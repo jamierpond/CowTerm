@@ -3,6 +3,7 @@
 #include <csignal>
 #include <cstdlib>
 #include <string>
+#include <thread>
 
 #include <pwd.h>
 #include <sys/ioctl.h>
@@ -64,7 +65,11 @@ constexpr int shutdownKillGraceMs = 250;
     if (command.empty())
         execl(shell.c_str(), loginName.c_str(), (char*) nullptr);
     else
-        execl(shell.c_str(), loginName.c_str(), "-c", command.c_str(), (char*) nullptr);
+        execl(shell.c_str(),
+              loginName.c_str(),
+              "-c",
+              command.c_str(),
+              (char*) nullptr);
 
     _exit(127);
 }
@@ -103,6 +108,18 @@ winsize toWinsize(const PtySize& size)
 }
 } // namespace
 
+struct Pty::Native
+{
+    int fd = -1;
+    long pid = -1;
+    std::thread reader;
+};
+
+Pty::Pty()
+    : native(std::make_unique<Native>())
+{
+}
+
 Pty::~Pty()
 {
     shutdown();
@@ -112,7 +129,7 @@ bool Pty::start(const PtyOptions& options,
                 std::function<void(std::string)> onOutput,
                 std::function<void()> onExit)
 {
-    if (fd >= 0)
+    if (native->fd >= 0)
         return false;
 
     auto ws = toWinsize(options.size);
@@ -128,10 +145,10 @@ bool Pty::start(const PtyOptions& options,
     if (child == 0)
         execShell(shell, options.workingDirectory, options.command);
 
-    fd = masterFd;
-    pid = child;
+    native->fd = masterFd;
+    native->pid = child;
 
-    reader = std::thread(
+    native->reader = std::thread(
         [masterFd, output = std::move(onOutput), exit = std::move(onExit)]
         {
             char buffer[65536];
@@ -162,9 +179,9 @@ void Pty::write(std::string_view data)
 {
     auto remaining = data;
 
-    while (fd >= 0 && !remaining.empty())
+    while (native->fd >= 0 && !remaining.empty())
     {
-        const auto written = ::write(fd, remaining.data(), remaining.size());
+        const auto written = ::write(native->fd, remaining.data(), remaining.size());
 
         if (written > 0)
         {
@@ -181,19 +198,19 @@ void Pty::write(std::string_view data)
 
 void Pty::resize(const PtySize& size)
 {
-    if (fd < 0)
+    if (native->fd < 0)
         return;
 
     auto ws = toWinsize(size);
-    ioctl(fd, TIOCSWINSZ, &ws);
+    ioctl(native->fd, TIOCSWINSZ, &ws);
 }
 
 std::string Pty::foregroundProcess() const
 {
-    if (fd < 0)
+    if (native->fd < 0)
         return {};
 
-    const auto pgid = tcgetpgrp(fd);
+    const auto pgid = tcgetpgrp(native->fd);
 
     if (pgid <= 0)
         return {};
@@ -231,19 +248,21 @@ std::string Pty::foregroundProcess() const
 
 std::string Pty::currentWorkingDirectory() const
 {
-    if (pid <= 0)
+    if (native->pid <= 0)
         return {};
 
 #if defined(__APPLE__)
     auto info = proc_vnodepathinfo {};
 
-    if (proc_pidinfo((pid_t) pid, PROC_PIDVNODEPATHINFO, 0, &info, sizeof(info)) > 0)
+    if (proc_pidinfo(
+            (pid_t) native->pid, PROC_PIDVNODEPATHINFO, 0, &info, sizeof(info))
+        > 0)
         return info.pvi_cdir.vip_path;
 
     return {};
 #else
     char path[4096] = {};
-    const auto link = "/proc/" + std::to_string(pid) + "/cwd";
+    const auto link = "/proc/" + std::to_string(native->pid) + "/cwd";
     const auto count = readlink(link.c_str(), path, sizeof(path) - 1);
     return count > 0 ? std::string {path, (std::size_t) count} : std::string {};
 #endif
@@ -251,10 +270,10 @@ std::string Pty::currentWorkingDirectory() const
 
 bool Pty::isRunning() const
 {
-    if (pid < 0)
+    if (native->pid < 0)
         return false;
 
-    return ::kill((pid_t) pid, 0) == 0;
+    return ::kill((pid_t) native->pid, 0) == 0;
 }
 
 void Pty::shutdown()
@@ -265,38 +284,38 @@ void Pty::shutdown()
     // the vnode, but that read only returns once the slave side is gone. So end
     // the shell first — that closes the slave, the reader's read() returns EOF
     // and unwinds — and only then join the reader and close the fd.
-    if (pid > 0)
+    if (native->pid > 0)
     {
         // Signal the whole foreground process group (forkpty made the child a
         // session leader, so its pid is the group id). SIGHUP alone would leave
         // grandchildren holding the slave open, so the master would never see
         // EOF and the reader would never unwind; the group hangs them all up.
-        ::kill((pid_t) -pid, SIGHUP);
+        ::kill((pid_t) -native->pid, SIGHUP);
 
         // Reap the shell, escalating to an unignorable SIGKILL if it does not
         // hang up promptly. A shell that traps or ignores SIGHUP must never be
         // able to wedge our own shutdown, so we never block indefinitely here.
         for (int elapsedMs = 0;; elapsedMs += shutdownPollMs)
         {
-            if (waitpid((pid_t) pid, nullptr, WNOHANG) != 0)
+            if (waitpid((pid_t) native->pid, nullptr, WNOHANG) != 0)
                 break;
 
             if (elapsedMs == shutdownKillGraceMs)
-                ::kill((pid_t) -pid, SIGKILL);
+                ::kill((pid_t) -native->pid, SIGKILL);
 
             usleep(shutdownPollMs * 1000);
         }
 
-        pid = -1;
+        native->pid = -1;
     }
 
-    if (reader.joinable())
-        reader.join();
+    if (native->reader.joinable())
+        native->reader.join();
 
-    if (fd >= 0)
+    if (native->fd >= 0)
     {
-        close(fd);
-        fd = -1;
+        close(native->fd);
+        native->fd = -1;
     }
 }
 } // namespace term
