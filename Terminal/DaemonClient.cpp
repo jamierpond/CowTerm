@@ -4,16 +4,8 @@
 #include "CowTermCore/Shell.h"
 
 #include <eacp/Core/Process/Process.h>
-
-#include <filesystem>
-
-#if defined(__APPLE__)
-#include <mach-o/dyld.h>
-#elif defined(_WIN32)
-#include <eacp/Core/Utils/WinInclude.h>
-#endif
-
-#include <system_error>
+#include <eacp/Core/Utils/Files.h>
+#include <eacp/Core/Utils/StdPath.h>
 
 namespace term
 {
@@ -23,38 +15,21 @@ namespace
 {
 std::unique_ptr<DaemonClient> instance;
 
+// The daemon ships beside the app's executable (inside the bundle on macOS)
+// and shares its extension, so this is the one name on every platform. The
+// path comes from the OS rather than argv[0], which a caller controls; without
+// it the daemon is unreachable and the app falls back to in-process shells
+// that die with the window.
 std::string daemonExecutablePath()
 {
-#if defined(__APPLE__)
-    char buffer[4096] = {};
-    auto size = (std::uint32_t) sizeof(buffer);
+    const auto self = toStdPath(Files::executablePath());
 
-    if (_NSGetExecutablePath(buffer, &size) != 0)
+    if (self.empty())
         return {};
 
-    auto path = std::filesystem::path {buffer};
-    return (path.parent_path() / "CowTermDaemon").string();
-#elif defined(_WIN32)
-    wchar_t buffer[MAX_PATH] = {};
-
-    if (GetModuleFileNameW(nullptr, buffer, MAX_PATH) == 0)
-        return {};
-
-    auto path = std::filesystem::path {buffer};
-    return (path.parent_path() / "CowTermDaemon.exe").string();
-#else
-    // /proc/self/exe is the Linux equivalent of _NSGetExecutablePath: resolve it
-    // rather than leaning on argv[0], which a caller controls. Returning empty
-    // here is what left the daemon unreachable on Linux, silently dropping the
-    // app back to in-process shells that die with the window.
-    auto code = std::error_code {};
-    const auto self = std::filesystem::read_symlink("/proc/self/exe", code);
-
-    if (code)
-        return {};
-
-    return (self.parent_path() / "CowTermDaemon").string();
-#endif
+    return FilePath {self.parent_path()
+                     / ("CowTermDaemon" + self.extension().string())}
+        .str();
 }
 
 void launchDaemon()

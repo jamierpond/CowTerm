@@ -3,6 +3,12 @@
 # app — the wire format is the product's, not the library's.
 add_executable(CowTermDaemon Main.cpp)
 
+if (WIN32)
+    target_sources(CowTermDaemon PRIVATE Signals-Windows.cpp)
+else ()
+    target_sources(CowTermDaemon PRIVATE Signals-Posix.cpp)
+endif ()
+
 target_include_directories(CowTermDaemon PRIVATE ../Terminal)
 target_link_libraries(CowTermDaemon PRIVATE CowTerm::Core eacp-network)
 

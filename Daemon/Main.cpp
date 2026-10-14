@@ -1,16 +1,16 @@
-// cowtermd: the session daemon. Owns every PTY so shells survive the GUI —
+// term: the session daemon. Owns every PTY so shells survive the GUI —
 // quit, crash or update the app and the processes keep running here. The
 // app dials in over eacp IPC (one Messenger conversation), spawns or adopts
 // shells by stable id, and streams input/output through this process.
 
 #include "Protocol.h"
+#include "Signals.h"
 #include "CowTermCore/Pty.h"
 
 #include <eacp/Core/App/App.h>
 #include <eacp/Core/Core.h>
 #include <eacp/Network/IPC/Messenger.h>
 
-#include <csignal>
 #include <map>
 #include <memory>
 #include <string>
@@ -35,12 +35,7 @@ struct Daemon
 {
     Daemon()
     {
-        // The GUI dying must never take the daemon with it. Windows has no
-        // hangup signal; a detached process simply keeps running.
-#if !defined(_WIN32)
-        signal(SIGHUP, SIG_IGN);
-        signal(SIGPIPE, SIG_IGN);
-#endif
+        term::ignoreHangups();
 
         // The daemon is a headless PTY server with no UI. Its executable
         // lives inside CowTerm.app/Contents/MacOS, so [NSBundle mainBundle]

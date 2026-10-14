@@ -699,13 +699,7 @@ void PrDashboard::openInBrowser(const PrItem& item)
     if (item.url.empty())
         return;
 
-#if defined(__APPLE__)
-    runViaLoginShellAsync("open " + shellQuote(item.url), [](CommandOutput) {});
-#elif defined(_WIN32)
-    runViaLoginShellAsync("start \"\" " + shellQuote(item.url), [](CommandOutput) {});
-#else
-    runViaLoginShellAsync("xdg-open " + shellQuote(item.url), [](CommandOutput) {});
-#endif
+    term::openInBrowser(item.url);
 
     cancel();
 }

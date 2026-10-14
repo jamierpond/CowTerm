@@ -38,9 +38,10 @@ add_executable(${COWTERM_EXECUTABLE_TARGET}
         TrayController.cpp
         DaemonClient.cpp)
 
-# Per-platform notifications and trash.
+# Per-platform shell commands, notifications and trash.
 if (APPLE)
     target_sources(${COWTERM_EXECUTABLE_TARGET} PRIVATE
+            Command-Posix.cpp
             Notifier-macOS.mm
             Trash-macOS.mm
             Cli.mm
@@ -60,6 +61,7 @@ if (APPLE)
             "-framework AppKit")
 elseif (WIN32)
     target_sources(${COWTERM_EXECUTABLE_TARGET} PRIVATE
+            Command-Windows.cpp
             Notifier-Windows.cpp
             Trash-Windows.cpp)
 
@@ -78,6 +80,7 @@ elseif (LINUX)
     # notify-send for desktop notifications, the freedesktop.org trash spec for
     # deletes: both are plain filesystem/process work, so nothing to link.
     target_sources(${COWTERM_EXECUTABLE_TARGET} PRIVATE
+            Command-Posix.cpp
             Notifier-Linux.cpp
             Trash-Linux.cpp)
 endif ()
