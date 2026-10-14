@@ -29,11 +29,13 @@ std::string baseName(std::string path)
     return slash == std::string::npos ? path : path.substr(slash + 1);
 }
 
-// A shell at its prompt says nothing the cwd doesn't.
+// A shell at its prompt says nothing the cwd doesn't. The last three are
+// Windows', named as the Pty reports them (without .exe).
 bool isShell(const std::string& command)
 {
-    constexpr auto shells = std::array<std::string_view, 6> {
-        "zsh", "bash", "fish", "sh", "nu", "login"};
+    constexpr auto shells = std::array<std::string_view, 9> {
+        "zsh", "bash", "fish", "sh", "nu", "login",
+        "pwsh", "powershell", "cmd"};
 
     auto name = baseName(command);
 

@@ -157,3 +157,13 @@ auto tParsesIds = test("RudderContexts/parsesIds") = []
     check(!parseRudderContextId("pane:"));
     check(!parseRudderContextId("3"));
 };
+
+auto tWindowsShellIsItsCwd = test("RudderContexts/windowsShellIsItsCwd") = []
+{
+    const auto contexts =
+        rudderContexts({{"w", "C:/Users/me/src", {{"w1", "", "pwsh", "C:/Users/me/src"}}}},
+                       {},
+                       "C:/Users/me");
+
+    check(contexts[0].title == "~/src", "pwsh at its prompt is its cwd, compacted");
+};

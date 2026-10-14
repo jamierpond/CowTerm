@@ -1,6 +1,7 @@
 #include "Pty.h"
 
 #include <eacp/Core/Utils/WinInclude.h>
+#include <eacp/Core/Utils/FilePath.h>
 #include <eacp/Core/Utils/Strings.h>
 
 #include <tlhelp32.h>
@@ -521,7 +522,9 @@ std::string processWorkingDirectory(DWORD pid)
             while (path.size() > 3 && path.back() == L'\\')
                 path.pop_back();
 
-            result = narrow(path);
+            // With '/' separators, as eacp's FilePath writes them (and so
+            // FilePath::homeDirectory(), which the cwd is compared against).
+            result = eacp::FilePath::fromWide(path).str();
         }
     }
 
