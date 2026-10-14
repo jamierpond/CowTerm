@@ -6,13 +6,23 @@ CPMAddPackage(
         GIT_TAG main
 )
 
-# The PTY teardown lives in Pty-Posix.cpp, which has no eacp dependencies, so we
-# compile it straight into the test binary rather than through the library
-# target.
-nano_add_executable(CowTermTests
-        SOURCES
-            PtyTests.cpp
-            ../Lib/CowTermCore/Pty-Posix.cpp)
+# The PTY teardown, with each platform's own cases beside the shared ones.
+# Pty-Posix.cpp has no eacp dependencies, so it compiles straight into the test
+# binary rather than through the library target; ConPTY's Pty-Windows.cpp leans
+# on eacp's string helpers, so there the binary links the library instead.
+if (WIN32)
+    nano_add_executable(CowTermTests
+            SOURCES
+                PtyTests.cpp
+                PtyTests-Windows.cpp
+            TARGETS CowTerm::Core)
+else ()
+    nano_add_executable(CowTermTests
+            SOURCES
+                PtyTests.cpp
+                PtyTests-Posix.cpp
+                ../Lib/CowTermCore/Pty-Posix.cpp)
+endif ()
 
 target_include_directories(CowTermTests PRIVATE ../Lib/CowTermCore)
 
@@ -30,6 +40,12 @@ nano_add_executable(CowTermRenderTests
         SOURCES
             RenderBackgroundTests.cpp
         TARGETS CowTerm::Terminal)
+
+if (WIN32)
+    target_sources(CowTermRenderTests PRIVATE RenderBackgroundTests-Windows.cpp)
+else ()
+    target_sources(CowTermRenderTests PRIVATE RenderBackgroundTests-Posix.cpp)
+endif ()
 
 # The split tree, with real (in-process) panes. SessionView lives in the app
 # rather than a library, so its sources compile straight in; the test supplies
@@ -63,6 +79,6 @@ nano_add_executable(CowTermRudderTests
 target_include_directories(CowTermRudderTests PRIVATE ../Terminal)
 
 # forkpty/openpty live in libutil on Linux; on Apple they are in libSystem.
-if (NOT APPLE)
+if (LINUX)
     target_link_libraries(CowTermTests PRIVATE util)
 endif ()

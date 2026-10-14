@@ -1,3 +1,5 @@
+#include "RenderBackgroundTests.h"
+
 #include <CowTermTerminal/TerminalView.h>
 
 #include <eacp/Core/Threads/EventLoop.h>
@@ -24,6 +26,7 @@
 using namespace nano;
 using namespace eacp;
 using namespace term;
+using namespace term::tests;
 
 namespace
 {
@@ -60,7 +63,8 @@ int pixelsColoured(const Graphics::Image& image, Rgb expected)
 }
 
 // A pane running one command, its output parsed as it arrives. The trailing
-// sleep keeps the shell up: the point is the frame, not the exit.
+// sleep keeps the shell up: the point is the frame, not the exit. (PowerShell
+// knows sleep as Start-Sleep, so that part reads the same on Windows.)
 Graphics::Image renderAfter(const std::string& command)
 {
     auto config = TerminalConfig {};
@@ -82,7 +86,7 @@ auto tAnsiBackgroundReachesThePixels =
 {
     // Five glyphs and five blank cells, all on red: the blanks are pure
     // background, so this cannot pass on glyph ink alone.
-    const auto image = renderAfter("printf '\\033[41mHELLO     \\033[0m'");
+    const auto image = renderAfter(redHelloCommand);
 
     if (image.width() == 0)
         return;
@@ -99,7 +103,7 @@ auto tBackgroundSurvivesTheCursorPass =
     // begin() on the same renderer, and begin() clears whatever is queued.
     // With the backgrounds left queued until then, the cursor pass threw the
     // whole frame's worth away and the terminal drew none at all.
-    const auto image = renderAfter("printf '\\033[41mHELLO     \\033[0m'");
+    const auto image = renderAfter(redHelloCommand);
 
     if (image.width() == 0)
         return;
@@ -112,7 +116,7 @@ auto tPlainTextHasNoBackground = test("Render/plainTextPaintsNoBackground") = []
 {
     // The other direction, so the checks above cannot pass by painting red
     // over everything.
-    const auto image = renderAfter("printf 'HELLO'");
+    const auto image = renderAfter(plainHelloCommand);
 
     if (image.width() == 0)
         return;

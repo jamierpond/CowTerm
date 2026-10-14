@@ -6,8 +6,12 @@
 // the tty lock: the app went unresponsive and needed a force quit (see the hang
 // report in cowcrash.txt). These tests drive real shells through shutdown() and
 // assert it always returns quickly, so that ordering can never come back.
+//
+// The cases here hold on every platform; the shell commands they run, and the
+// teardown hazard peculiar to each PTY, live in PtyTests-Posix.cpp and
+// PtyTests-Windows.cpp.
 
-#include "Pty.h"
+#include "PtyTests.h"
 
 #include <NanoTest/NanoTest.h>
 
@@ -20,10 +24,8 @@
 using namespace nano;
 using namespace std::chrono_literals;
 
-namespace
+namespace term::tests
 {
-using term::Pty;
-
 std::unique_ptr<Pty> startShell(const std::string& command)
 {
     auto pty = std::make_unique<Pty>();
@@ -72,33 +74,28 @@ bool shutsDownWithin(std::unique_ptr<Pty> pty, std::chrono::milliseconds budget)
     return false;
 }
 
-constexpr auto budget = 2000ms;
-} // namespace
+} // namespace term::tests
+
+using namespace term::tests;
 
 // A shell with nothing to do still tears down without hanging.
 auto normalShell = test("Pty shutdown returns promptly for a normal shell") = []
 {
-    check(shutsDownWithin(startShell("sleep 3"), budget));
+    check(shutsDownWithin(startShell(idleCommand), budget));
 };
 
 // The exact crash: a silent shell leaves the reader thread parked in read() on
-// the master fd. Closing that fd out from under the read used to deadlock.
+// the master fd (ReadFile on the output pipe on Windows). Closing it out from
+// under the read used to deadlock.
 auto silentShell = test("Pty shutdown does not deadlock while the reader is blocked") = []
 {
-    check(shutsDownWithin(startShell("sleep 3"), budget));
-};
-
-// A shell that traps SIGHUP must not be able to wedge quit: shutdown escalates
-// to an unignorable SIGKILL after a short grace period.
-auto stubbornShell = test("Pty shutdown kills a shell that ignores SIGHUP") = []
-{
-    check(shutsDownWithin(startShell("trap '' HUP; sleep 3"), budget));
+    check(shutsDownWithin(startShell(idleCommand), budget));
 };
 
 // terminate()/detach() and ~Pty can both call shutdown(); the second is a no-op.
 auto doubleShutdown = test("Pty shutdown is safe to call twice") = []
 {
-    auto pty = startShell("sleep 3");
+    auto pty = startShell(idleCommand);
     pty->shutdown();
     check(shutsDownWithin(std::move(pty), budget));
 };

@@ -99,10 +99,10 @@ add_subdirectory(Lib)
 add_subdirectory(Daemon)
 add_subdirectory(Terminal)
 
-# Regression tests for the POSIX PTY teardown (the quit-hang fix). The Pty
-# sources are POSIX-only, so the suite is gated off Windows.
+# Unit tests, including the PTY teardown regressions (the quit-hang fix) for
+# both the POSIX PTY and ConPTY.
 option(COWTERM_ENABLE_TESTS "Build CowTerm unit tests" ON)
-if (COWTERM_ENABLE_TESTS AND NOT WIN32)
+if (COWTERM_ENABLE_TESTS)
     enable_testing()
     add_subdirectory(Test)
 endif ()
