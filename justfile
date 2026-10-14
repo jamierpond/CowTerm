@@ -128,7 +128,9 @@ debug-popup: build
 # falls back to renaming the live exe aside (*.exe.old, cleaned up next run).
 # On macOS it refuses an ad-hoc bundle: installing one would throw away the
 # stable identity the Screen Recording grant is keyed on. Also links `ct` (the
-# CowTerm executable's CLI mode) into ~/.local/bin.
+# CowTerm executable's CLI mode) into ~/.local/bin. On Windows `ct` is a ct.cmd
+# there instead: CowTerm.exe is a GUI executable, which a shell would not wait
+# for, and a batch file makes it.
 [macos]
 install: build
     @if codesign --display --requirements - "{{build_dir}}/Terminal/CowTerm.app" 2>&1 | grep -q cdhash; then \
@@ -160,6 +162,7 @@ install: build
     $dir = "$env:LOCALAPPDATA\Programs\CowTerm"; foreach ($exe in 'CowTerm.exe','CowTermDaemon.exe') { $t = Join-Path $dir $exe; if (Test-Path "$t.old") { try { Remove-Item -Force "$t.old" -ErrorAction Stop } catch {} }; try { Copy-Item -Force "{{build_dir}}\Terminal\$exe" $dir -ErrorAction Stop } catch { Rename-Item -Force $t "$exe.old"; Copy-Item -Force "{{build_dir}}\Terminal\$exe" $dir } }
     $exe = "$env:LOCALAPPDATA\Programs\CowTerm\CowTerm.exe"; $ws = New-Object -ComObject WScript.Shell; @([Environment]::GetFolderPath('Desktop'), [Environment]::GetFolderPath('Programs')) | ForEach-Object { $s = $ws.CreateShortcut((Join-Path $_ 'CowTerm.lnk')); $s.TargetPath = $exe; $s.WorkingDirectory = (Split-Path $exe); $s.IconLocation = $exe; $s.Description = 'CowTerm'; $s.Save() }; Write-Host "Added Desktop and Start Menu shortcuts"
     ie4uinit.exe -show
+    $exe = "$env:LOCALAPPDATA\Programs\CowTerm\CowTerm.exe"; $bin = "$HOME\.local\bin"; New-Item -ItemType Directory -Force -Path $bin | Out-Null; Set-Content -Encoding ascii "$bin\ct.cmd" "@if `"%~1`"==`"`" (`"$exe`" help) else (`"$exe`" %*)"; Write-Host "Added ct ($bin\ct.cmd)"
     Write-Host "Installed CowTerm to $env:LOCALAPPDATA\Programs\CowTerm"
 
 # Terminal/CMakeLists.txt now has a LINUX branch (notifications via notify-send,
