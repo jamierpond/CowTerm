@@ -251,6 +251,12 @@ bool Pty::start(const PtyOptions& options,
 
     auto startup = STARTUPINFOEXW {};
     startup.StartupInfo.cb = sizeof startup;
+
+    // Null standard handles, explicitly. Left unset, a child inherits ours
+    // whenever they are pipes or files rather than a console -- CowTerm started
+    // with its output redirected, or under ctest -- and the shell then writes
+    // there instead of into the pseudoconsole, leaving the pane blank.
+    startup.StartupInfo.dwFlags = STARTF_USESTDHANDLES;
     startup.lpAttributeList = attributes;
 
     auto info = PROCESS_INFORMATION {};
