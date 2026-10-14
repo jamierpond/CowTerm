@@ -1,11 +1,10 @@
 #include "AppShell.h"
-#include "CowTermVersion.h"
-#if defined(__APPLE__)
 #include "Cli.h"
-#endif
+#include "CowTermVersion.h"
 #include "DaemonClient.h"
 
 #include <eacp/Core/App/App.h>
+#include <eacp/Core/Platform/Platform.h>
 #include <eacp/Graphics/Menu/Menu.h>
 
 #include <cstdio>
@@ -68,16 +67,16 @@ struct TerminalApp
 
         window.setContentView(shell);
 
-#if COWTERM_PERMISSIONS
-        installMenuBar();
-#endif
+        // A Windows window would grow a menu bar of its own, and Linux has no
+        // grants to put in one; the tray carries the rest everywhere.
+        if constexpr (Platform::isMac())
+            installMenuBar();
 
         // Sessions restore once the daemon dial resolves, so panes with
         // still-running shells re-adopt them instead of spawning fresh.
         term::DaemonClient::initialize([this] { shell.start(); });
     }
 
-#if COWTERM_PERMISSIONS
     // The standard application menu with the permissions items after About.
     void installMenuBar()
     {
@@ -111,7 +110,6 @@ struct TerminalApp
         bar.add(std::move(app));
         Graphics::setApplicationMenuBar(bar, window);
     }
-#endif
 
     term::AppShell shell;
     Graphics::Window window {windowOptions()};
@@ -119,13 +117,8 @@ struct TerminalApp
 
 int main(int argc, char** argv)
 {
-#if defined(__APPLE__)
     if (term::isCliInvocation(argc, argv))
         return term::runCli(argc, argv);
-#else
-    (void) argc;
-    (void) argv;
-#endif
 
     std::fprintf(stderr,
                  "CowTerm %s (%s)\n",

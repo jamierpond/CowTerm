@@ -24,11 +24,14 @@ add_executable(${COWTERM_EXECUTABLE_TARGET}
         Main.cpp
         AppShell.cpp
         ClaudeHud.cpp
+        Cli.cpp
         Command.cpp
         Config.cpp
         GitWorktree.cpp
         MruStore.cpp
         Palette.cpp
+        Permissions.cpp
+        PermissionsPanel.cpp
         PrDashboard.cpp
         Popup.cpp
         Projects.cpp
@@ -38,20 +41,16 @@ add_executable(${COWTERM_EXECUTABLE_TARGET}
         TrayController.cpp
         DaemonClient.cpp)
 
-# Per-platform shell commands, notifications and trash.
+# Per-platform halves of ct, shell commands, notifications, privacy grants
+# and trash. Windows and Linux have no privacy grants (no TCC), so they share
+# Permissions-Default.cpp, which reports every grant in force.
 if (APPLE)
     target_sources(${COWTERM_EXECUTABLE_TARGET} PRIVATE
+            Cli-macOS.mm
             Command-Posix.cpp
             Notifier-macOS.mm
-            Trash-macOS.mm
-            Cli.mm
-            Permissions.cpp
             Permissions-macOS.mm
-            PermissionsPanel.cpp)
-
-    # The privacy-grants panel (CowTerm > Permissions…); Windows and Linux
-    # have no TCC, so it isn't built there.
-    target_compile_definitions(${COWTERM_EXECUTABLE_TARGET} PRIVATE COWTERM_PERMISSIONS=1)
+            Trash-macOS.mm)
 
     target_link_libraries(${COWTERM_EXECUTABLE_TARGET} PRIVATE
             "-framework UserNotifications"
@@ -61,8 +60,10 @@ if (APPLE)
             "-framework AppKit")
 elseif (WIN32)
     target_sources(${COWTERM_EXECUTABLE_TARGET} PRIVATE
+            Cli-Windows.cpp
             Command-Windows.cpp
             Notifier-Windows.cpp
+            Permissions-Default.cpp
             Trash-Windows.cpp)
 
     # The dashboard and switcher sources hold Unicode literals (powerline
@@ -71,6 +72,7 @@ elseif (WIN32)
 
     target_link_libraries(${COWTERM_EXECUTABLE_TARGET} PRIVATE
             d2d1
+            gdi32
             dwrite
             windowscodecs
             user32
@@ -80,8 +82,10 @@ elseif (LINUX)
     # notify-send for desktop notifications, the freedesktop.org trash spec for
     # deletes: both are plain filesystem/process work, so nothing to link.
     target_sources(${COWTERM_EXECUTABLE_TARGET} PRIVATE
+            Cli-Linux.cpp
             Command-Posix.cpp
             Notifier-Linux.cpp
+            Permissions-Default.cpp
             Trash-Linux.cpp)
 endif ()
 

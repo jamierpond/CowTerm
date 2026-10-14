@@ -3,6 +3,7 @@
 #include "ClaudeHud.h"
 #include "Config.h"
 #include "Palette.h"
+#include "PermissionsPanel.h"
 #include "Popup.h"
 #include "PrDashboard.h"
 #include "Session.h"
@@ -11,10 +12,6 @@
 
 #if COWTERM_RUDDER
 #include "RudderPublisher.h"
-#endif
-
-#if COWTERM_PERMISSIONS
-#include "PermissionsPanel.h"
 #endif
 
 #include <eacp/UI/UI.h>
@@ -41,11 +38,10 @@ public:
         [](const std::string&) {};
     eacp::Callback onBringToFront = [] {};
 
-#if COWTERM_PERMISSIONS
     // CowTerm > Permissions… (and Reset all permissions…, which opens it on
-    // the confirmation).
+    // the confirmation). Only macOS has grants to show, so only its menus
+    // offer it.
     void showPermissions(bool confirmReset = false);
-#endif
 
     void resized() override;
 
@@ -90,9 +86,7 @@ private:
     PrDashboard prDashboard {config, manager};
     ClaudeHud claudeHud {config, manager};
     Popup popup {config};
-#if COWTERM_PERMISSIONS
     PermissionsPanel permissions {config};
-#endif
     eacp::UI::ComponentHost overlayHost;
     TrayController tray {manager};
     TermSession* attached = nullptr;

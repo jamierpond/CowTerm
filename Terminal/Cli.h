@@ -1,7 +1,7 @@
 #pragma once
 
-// The CowTerm executable doubles as the `ct` command-line tool (macOS only):
-// `ct` is a symlink or alias to it. See Cli.mm.
+// The CowTerm executable doubles as the `ct` command-line tool: `ct` is a
+// symlink or alias to it (ct.cmd on Windows). See Cli.cpp.
 namespace term
 {
 // True when invoked as `ct`, or with a CLI verb as the first argument. A

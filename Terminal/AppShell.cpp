@@ -7,6 +7,7 @@
 #include "Notifier.h"
 
 #include <eacp/Core/App/App.h>
+#include <eacp/Core/Platform/Platform.h>
 #include <eacp/Core/Threads/EventLoop.h>
 
 #include <algorithm>
@@ -82,15 +83,17 @@ AppShell::AppShell()
 
     claudeHud.onClosed = [this] { hideClaudeHud(); };
 
-#if COWTERM_PERMISSIONS
     permissions.onClosed = [this] { hidePermissions(); };
-    tray.onShowPermissions = [this]
+
+    if constexpr (Platform::isMac())
     {
-        onBringToFront();
-        showPermissions();
-    };
-    tray.refresh();
-#endif
+        tray.onShowPermissions = [this]
+        {
+            onBringToFront();
+            showPermissions();
+        };
+        tray.refresh();
+    }
 
     // Branch a highlighted repo into a fresh worktree and drop a session in
     // it. Returns git's error on failure so the palette can show it in place.
@@ -149,9 +152,9 @@ void AppShell::start()
 
     manager.restoreOrCreateInitial();
 
-#if COWTERM_PERMISSIONS
     // Unlock first: a required grant missing opens the panel over the
-    // restored sessions, and it goes again by itself once granted.
+    // restored sessions, and it goes again by itself once granted. Never on
+    // Windows or Linux, where every grant is always in force.
     if (PermissionsPanel::requiredMissingNow())
         Threads::callAsync(
             [this]
@@ -162,7 +165,6 @@ void AppShell::start()
                     permissions.show(true);
                 }
             });
-#endif
 }
 
 void AppShell::rudderChanged()
@@ -195,12 +197,8 @@ void AppShell::attachActive(TermSession& session)
 
 bool AppShell::anyOverlayShown() const
 {
-    auto shown = palette.isShown() || switcher.isShown() || prDashboard.isShown()
-                 || claudeHud.isShown() || popup.isShown();
-#if COWTERM_PERMISSIONS
-    shown = shown || permissions.isShown();
-#endif
-    return shown;
+    return palette.isShown() || switcher.isShown() || prDashboard.isShown()
+           || claudeHud.isShown() || popup.isShown() || permissions.isShown();
 }
 
 void AppShell::resized()
@@ -294,10 +292,8 @@ void AppShell::raiseOverlay()
         showOverlay(prDashboard);
     else if (claudeHud.isShown())
         showOverlay(claudeHud);
-#if COWTERM_PERMISSIONS
     else if (permissions.isShown())
         showOverlay(permissions);
-#endif
 }
 
 void AppShell::showPalette()
@@ -376,7 +372,6 @@ void AppShell::hideClaudeHud()
         attached->view.focusActive();
 }
 
-#if COWTERM_PERMISSIONS
 // Like the other overlays, it waits for whichever one is open to close.
 void AppShell::showPermissions(bool confirmReset)
 {
@@ -386,7 +381,6 @@ void AppShell::showPermissions(bool confirmReset)
     showOverlay(permissions);
     permissions.show(false, confirmReset);
 }
-#endif
 
 void AppShell::hidePermissions()
 {
