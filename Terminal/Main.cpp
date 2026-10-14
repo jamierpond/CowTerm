@@ -6,8 +6,10 @@
 #include "DaemonClient.h"
 
 #include <eacp/Core/App/App.h>
+#include <eacp/Graphics/Menu/Menu.h>
 
 #include <cstdio>
+#include <utility>
 
 using namespace eacp;
 
@@ -66,10 +68,50 @@ struct TerminalApp
 
         window.setContentView(shell);
 
+#if COWTERM_PERMISSIONS
+        installMenuBar();
+#endif
+
         // Sessions restore once the daemon dial resolves, so panes with
         // still-running shells re-adopt them instead of spawning fresh.
         term::DaemonClient::initialize([this] { shell.start(); });
     }
+
+#if COWTERM_PERMISSIONS
+    // The standard application menu with the permissions items after About.
+    void installMenuBar()
+    {
+        using Graphics::MenuItem;
+
+        auto showPermissions = [this](bool confirmReset)
+        {
+            window.setVisible(true);
+            window.toFront();
+            shell.showPermissions(confirmReset);
+        };
+
+        auto app = Graphics::Menu {"CowTerm"};
+        auto first = true;
+
+        for (auto& item: Graphics::standardApplicationMenu("CowTerm").items)
+        {
+            app.add(item);
+
+            if (std::exchange(first, false))
+            {
+                app.addSeparator();
+                app.add(MenuItem::withAction("Permissions…",
+                                             [showPermissions] { showPermissions(false); }));
+                app.add(MenuItem::withAction("Reset all permissions…",
+                                             [showPermissions] { showPermissions(true); }));
+            }
+        }
+
+        auto bar = Graphics::MenuBar {};
+        bar.add(std::move(app));
+        Graphics::setApplicationMenuBar(bar, window);
+    }
+#endif
 
     term::AppShell shell;
     Graphics::Window window {windowOptions()};

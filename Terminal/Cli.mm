@@ -8,6 +8,7 @@
 
 #include "Cli.h"
 #include "CowTermVersion.h"
+#include "Permissions.h"
 
 #include <ApplicationServices/ApplicationServices.h>
 #include <CoreGraphics/CoreGraphics.h>
@@ -55,6 +56,7 @@ constexpr auto usage = R"(usage: ct <command>
 
   screen-cap status               granted / not granted, and CowTerm's signature
   screen-cap request              ask macOS for Screen Recording
+  screen-cap check                exit 0 if granted, 1 if not; prints nothing
   screen-cap shot [options]       screenshot; prints the PNG's path
       -o <file>  --display <n>  --window <id>  --rect x,y,w,h  --interactive
   screen-cap record start [options]
@@ -66,6 +68,8 @@ constexpr auto usage = R"(usage: ct <command>
   start-whole-screen-recording    = screen-cap record start
   stop-screen-recording           = screen-cap record stop
   version
+  --reset-permissions [service]   tccutil reset <service> (default All) for
+                                  CowTerm's bundle id; runs from any shell
 
 Captures default to $COWTERM_CAPTURE_DIR, else ~/Pictures/CowTerm.
 Exit codes: 0 ok, 1 error, 2 Screen Recording not granted,
@@ -683,6 +687,8 @@ int screenCap(const std::vector<std::string>& args)
         return status();
     if (args[0] == "request")
         return request();
+    if (args[0] == "check")
+        return granted() ? exitOk : exitFail;
     if (args[0] == "shot")
         return shot(rest);
     if (args[0] == "record")
@@ -745,6 +751,21 @@ int dispatch(const std::vector<std::string>& args)
         return exitOk;
     }
 
+    // Wipes CowTerm's own grants, which is the same from any terminal.
+    if (args[0] == "--reset-permissions")
+    {
+        const auto service = args.size() > 1 ? args[1] : std::string {"All"};
+        auto error = std::string {};
+
+        if (!permissions::platform::reset(service, error))
+            return fail("reset failed: " + error);
+
+        std::printf("reset %s for %s\n",
+                    service.c_str(),
+                    permissions::platform::bundleIdentifier().c_str());
+        return exitOk;
+    }
+
     auto parent = std::string {};
     if (!insideCowTerm(parent))
     {
@@ -796,7 +817,8 @@ bool isCliInvocation(int argc, char** argv)
                              "--help",
                              "-h",
                              "version",
-                             "--version"})
+                             "--version",
+                             "--reset-permissions"})
         if (verb == known)
             return true;
 

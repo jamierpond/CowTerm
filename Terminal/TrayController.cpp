@@ -79,6 +79,12 @@ void TrayController::refresh()
 
     menu.addSeparator();
 
+    if (onShowPermissions)
+    {
+        menu.add(MenuItem::withAction("Permissions…", [this] { onShowPermissions(); }));
+        menu.addSeparator();
+    }
+
     const auto haveDaemon =
         DaemonClient::get() != nullptr && DaemonClient::get()->isConnected();
 

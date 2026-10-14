@@ -68,6 +68,24 @@ CowTerm's plist let macOS explain camera, microphone, system-audio, automation
 and other requests made by commands you run; they never grant anything without
 your consent.
 
+### The permissions panel
+
+CowTerm > Permissions… (also in the tray menu) lists every macOS privacy grant
+CowTerm asks for, with live status: Screen & System Audio Recording (required:
+`ct` captures and agents' `screencapture`), then the optional Accessibility,
+Full Disk Access, Automation, Desktop/Documents/Downloads and Notifications.
+Commands in a CowTerm shell are charged to CowTerm, so these are what they get.
+Grant shows macOS's prompt where there is one, else opens the exact System
+Settings pane; for lists that take an app, drag CowTerm's icon from the panel
+into them. It opens by itself on launch while a required grant is missing and
+checks once a second only while open. Screen Recording applies after a
+relaunch; the panel's Relaunch button quits normally (the daemon keeps every
+shell) and reopens CowTerm.
+
+Reset all permissions… (or `CowTerm --reset-permissions [service]` from any
+shell) runs `tccutil reset All` for CowTerm's bundle id. Notifications aren't
+TCC, so a reset leaves them alone.
+
 ### Screen capture for agents
 
 `ct` is the CowTerm executable's CLI mode: same signed binary, same grant.

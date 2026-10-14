@@ -31,10 +31,6 @@ allow_adhoc_signing := "OFF"
 # to nothing on macOS and Windows, which need none of it.
 deps := if os() == "linux" { "Scripts/with-linux-deps" } else { "" }
 
-# The app's bundle id (Terminal/CMakeLists.txt BUNDLE_ID); dev runs reset its
-# privacy grants.
-bundle_id := "com.eacp.cowterm"
-
 # Rudder's client library (and so its tests) is pulled in on macOS only.
 rudder_tests := if os() == "macos" { "CowTermRudderTests" } else { "" }
 
@@ -69,7 +65,7 @@ build: configure
 
 # Build and run the unit tests (regression coverage, incl. the quit-hang fix).
 test: configure
-    {{deps}} cmake --build {{build_dir}} --target CowTermTests CowTermScreenTests CowTermRenderTests CowTermSessionViewTests {{rudder_tests}}
+    {{deps}} cmake --build {{build_dir}} --target CowTermTests CowTermScreenTests CowTermRenderTests CowTermSessionViewTests CowTermPermissionsTests {{rudder_tests}}
     {{deps}} ctest --test-dir {{build_dir}} --output-on-failure
 
 # Remove the build tree.
@@ -88,11 +84,13 @@ rebuild: clean build
 #
 # Every dev build is ad-hoc signed with a fresh cdhash, so macOS keeps the
 # old privacy grant switched on in System Settings while refusing it to the
-# new binary. Resetting before launch makes the app ask again for real.
+# new binary. Resetting before launch makes the app ask again for real. The
+# app does the reset itself (`CowTerm --reset-permissions [service]`, the same
+# code as CowTerm > Reset all permissions…), reading its own bundle id.
 [macos]
 run: build
-    @echo "[run] resetting Accessibility for {{bundle_id}}"
-    -@tccutil reset Accessibility {{bundle_id}}
+    @echo "[run] resetting Accessibility for CowTerm"
+    -@"{{build_dir}}/Terminal/CowTerm.app/Contents/MacOS/CowTerm" --reset-permissions Accessibility
     open "{{build_dir}}/Terminal/CowTerm.app"
 
 [windows]

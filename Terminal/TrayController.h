@@ -21,6 +21,10 @@ public:
     eacp::Callback onShowWindow = [] {};
     std::function<void(TermSession&)> onPickSession = [](TermSession&) {};
 
+    // Set only where there is a permissions panel (macOS); the item shows
+    // only then.
+    eacp::Callback onShowPermissions;
+
 private:
     static eacp::Graphics::Image makeIcon();
 

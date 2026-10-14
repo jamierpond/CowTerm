@@ -13,6 +13,10 @@
 #include "RudderPublisher.h"
 #endif
 
+#if COWTERM_PERMISSIONS
+#include "PermissionsPanel.h"
+#endif
+
 #include <eacp/UI/UI.h>
 
 namespace term
@@ -37,6 +41,12 @@ public:
         [](const std::string&) {};
     eacp::Callback onBringToFront = [] {};
 
+#if COWTERM_PERMISSIONS
+    // CowTerm > Permissions… (and Reset all permissions…, which opens it on
+    // the confirmation).
+    void showPermissions(bool confirmReset = false);
+#endif
+
     void resized() override;
 
 private:
@@ -60,6 +70,7 @@ private:
     void hidePrDashboard();
     void showClaudeHud();
     void hideClaudeHud();
+    void hidePermissions();
     bool anyOverlayShown() const;
     void attachActive(TermSession& session);
     void setGlobalFontSize(float size);
@@ -79,6 +90,9 @@ private:
     PrDashboard prDashboard {config, manager};
     ClaudeHud claudeHud {config, manager};
     Popup popup {config};
+#if COWTERM_PERMISSIONS
+    PermissionsPanel permissions {config};
+#endif
     eacp::UI::ComponentHost overlayHost;
     TrayController tray {manager};
     TermSession* attached = nullptr;

@@ -43,13 +43,21 @@ if (APPLE)
     target_sources(${COWTERM_EXECUTABLE_TARGET} PRIVATE
             Notifier-macOS.mm
             Trash-macOS.mm
-            Cli.mm)
+            Cli.mm
+            Permissions.cpp
+            Permissions-macOS.mm
+            PermissionsPanel.cpp)
+
+    # The privacy-grants panel (CowTerm > Permissions…); Windows and Linux
+    # have no TCC, so it isn't built there.
+    target_compile_definitions(${COWTERM_EXECUTABLE_TARGET} PRIVATE COWTERM_PERMISSIONS=1)
 
     target_link_libraries(${COWTERM_EXECUTABLE_TARGET} PRIVATE
             "-framework UserNotifications"
             "-framework Foundation"
             "-framework CoreGraphics"
-            "-framework ApplicationServices")
+            "-framework ApplicationServices"
+            "-framework AppKit")
 elseif (WIN32)
     target_sources(${COWTERM_EXECUTABLE_TARGET} PRIVATE
             Notifier-Windows.cpp
