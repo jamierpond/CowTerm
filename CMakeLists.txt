@@ -58,6 +58,20 @@ CPMAddPackage(
 # find_package(ResEmbed) (via eacp_set_gui_subsystem) and need the Find modules.
 list(APPEND CMAKE_MODULE_PATH "${eacp_SOURCE_DIR}/CMake")
 
+# Publishes CowTerm's panes and ctrl+a f places to Rudder (the app switcher)
+# as contexts. Only Rudder's client library is built; CowTerm behaves exactly
+# as before when Rudder isn't running. Work against a local Rudder checkout
+# with:
+#   cmake -B build -DCPM_Rudder_SOURCE=$HOME/projects/Rudder
+if (APPLE)
+    CPMAddPackage(
+            NAME Rudder
+            GITHUB_REPOSITORY jamierpond/Rudder
+            GIT_TAG main
+            OPTIONS "RUDDER_CLIENT_ONLY ON"
+    )
+endif ()
+
 # This cache entry exists on every platform so cross-platform `just` recipes
 # can pass it without producing an "unused variable" warning. It only affects
 # the macOS packaging target.
