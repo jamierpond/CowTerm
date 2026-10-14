@@ -67,12 +67,15 @@ void RudderPublisher::push()
     for (const auto& session: manager.all())
     {
         auto tab = RudderTab {session->name, session->key(), {}};
+        const auto* focused =
+            session.get() == manager.active() ? session->view.activePane() : nullptr;
 
         for (auto* pane: session->view.panes())
             tab.panes.push_back({pane->shellId(),
                                  pane->currentTitle(),
                                  pane->foregroundProcess(),
-                                 pane->workingDirectory()});
+                                 pane->workingDirectory(),
+                                 pane == focused});
 
         tabs.push_back(std::move(tab));
     }

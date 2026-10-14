@@ -70,11 +70,11 @@ std::string withoutStatusGlyph(const std::string& title)
     return rest == std::string::npos ? std::string {} : title.substr(rest);
 }
 
-// "<command> · <title> — <cwd>", leaving out whatever is empty or already
-// said, so a search for a command or a directory finds the pane.
+// "<command> · <title>", leaving out whatever is empty or already said, so a
+// search for a command finds the pane; the cwd when there's nothing else. The
+// directory itself goes to Rudder as the context's path, which it matches on.
 std::string paneTitle(const RudderPane& pane, const std::string& home)
 {
-    const auto cwd = compactPath(pane.cwd, home);
     auto title = withoutStatusGlyph(pane.title);
 
     if (!pane.command.empty() && !isShell(pane.command)
@@ -82,14 +82,27 @@ std::string paneTitle(const RudderPane& pane, const std::string& home)
         title = title.empty() ? baseName(pane.command)
                               : baseName(pane.command) + " · " + title;
 
-    if (title.empty())
-        return cwd;
+    return title.empty() ? compactPath(pane.cwd, home) : title;
+}
 
-    if (!cwd.empty() && title.find(cwd) == std::string::npos
-        && title.find(pane.cwd) == std::string::npos)
-        title += " — " + cwd;
+// "<cwd> · Tab <n> · pane <m> · <tab name>": where the pane is, the cwd first
+// unless the title already shows it.
+std::string paneSubtitle(const RudderPane& pane,
+                         const std::string& title,
+                         std::size_t tab,
+                         std::size_t index,
+                         const std::string& tabName,
+                         const std::string& home)
+{
+    auto where = "Tab " + std::to_string(tab + 1) + " · pane " + std::to_string(index + 1)
+                 + " · " + tabName;
+    const auto cwd = compactPath(pane.cwd, home);
 
-    return title;
+    if (cwd.empty() || title.find(cwd) != std::string::npos
+        || title.find(pane.cwd) != std::string::npos)
+        return where;
+
+    return cwd + " · " + where;
 }
 } // namespace
 
@@ -114,8 +127,10 @@ std::vector<rudder::protocol::Context>
             auto context = rudder::protocol::Context {};
             context.id = std::string {panePrefix} + pane.shellId;
             context.title = paneTitle(pane, home);
-            context.subtitle = "Tab " + std::to_string(tab + 1) + " · pane "
-                               + std::to_string(index + 1) + " · " + session.name;
+            context.subtitle =
+                paneSubtitle(pane, context.title, tab, index, session.name, home);
+            context.path = pane.cwd;
+            context.focused = pane.focused;
             contexts.push_back(std::move(context));
         }
     }
@@ -129,6 +144,7 @@ std::vector<rudder::protocol::Context>
         context.id = std::string {placePrefix} + path;
         context.title = baseName(path);
         context.subtitle = compactPath(path, home);
+        context.path = path;
         context.open = false;
         contexts.push_back(std::move(context));
     }

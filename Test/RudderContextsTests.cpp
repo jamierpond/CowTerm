@@ -34,16 +34,48 @@ auto tOneContextPerPane = test("RudderContexts/oneContextPerPane") = []
     check(contexts[1].id == "pane:a1");
     check(contexts[2].id == "pane:a2");
     check(contexts[1].subtitle == "Tab 2 · pane 1 · CowTerm");
-    check(contexts[2].subtitle == "Tab 2 · pane 2 · CowTerm");
+    check(contexts[2].subtitle == "~/projects/CowTerm/Lib · Tab 2 · pane 2 · CowTerm");
     check(contexts[0].open && contexts[1].open, "panes preview freely");
 };
 
-auto tTitleCarriesCommandAndCwd = test("RudderContexts/titleCarriesCommandAndCwd") = []
+auto tTitleCarriesCommand = test("RudderContexts/titleCarriesCommand") = []
 {
     const auto contexts = rudderContexts({twoPaneTab()}, {}, home);
 
     check(contexts[0].title == "~/projects/CowTerm", "a shell at its prompt is its cwd");
-    check(contexts[1].title == "nvim — ~/projects/CowTerm/Lib");
+    check(contexts[1].title == "nvim", "the cwd is the path, and shown in the subtitle");
+};
+
+auto tPathIsTheCwd = test("RudderContexts/pathIsTheCwd") = []
+{
+    // Claude Code titles the pane after the conversation; Rudder still finds
+    // it by the project, through the path.
+    auto tab = RudderTab {"main",
+                          "/Users/me/projects/Grazer",
+                          {{"c1", "2.1.299 · Password autofill and apple keychain", "2.1.299",
+                            "/Users/me/projects/Grazer"}}};
+
+    const auto contexts =
+        rudderContexts({twoPaneTab(), tab}, {"/Users/me/projects/tamber-web"}, home);
+
+    check(contexts[0].path == "/Users/me/projects/CowTerm");
+    check(contexts[1].path == "/Users/me/projects/CowTerm/Lib");
+    check(contexts[2].title == "2.1.299 · Password autofill and apple keychain");
+    check(contexts[2].subtitle == "~/projects/Grazer · Tab 2 · pane 1 · main");
+    check(contexts[2].path == "/Users/me/projects/Grazer");
+    check(contexts[3].path == "/Users/me/projects/tamber-web", "places carry theirs too");
+};
+
+auto tFocusedPaneMarked = test("RudderContexts/focusedPaneMarked") = []
+{
+    auto tab = twoPaneTab();
+    tab.panes[1].focused = true;
+
+    const auto contexts = rudderContexts({tab}, {"/Users/me/projects/x"}, home);
+
+    check(!contexts[0].focused);
+    check(contexts[1].focused, "Esc in Rudder switches back to it");
+    check(!contexts[2].focused);
 };
 
 auto tTitleSequenceWins = test("RudderContexts/titleSequenceWins") = []
@@ -55,8 +87,7 @@ auto tTitleSequenceWins = test("RudderContexts/titleSequenceWins") = []
     const auto contexts = rudderContexts({tab}, {}, home);
 
     check(contexts[0].title == "~/projects/CowTerm", "no repeated cwd");
-    check(contexts[1].title == "nvim Main.cpp — ~/projects/CowTerm/Lib",
-          "no repeated command");
+    check(contexts[1].title == "nvim Main.cpp", "no repeated command");
 };
 
 auto tCommandJoinsAnUnrelatedTitle = test("RudderContexts/commandJoinsTitle") = []
@@ -65,7 +96,7 @@ auto tCommandJoinsAnUnrelatedTitle = test("RudderContexts/commandJoinsTitle") = 
     tab.panes[1].command = "htop";
     tab.panes[1].title = "load";
 
-    check(rudderContexts({tab}, {}, home)[1].title == "htop · load — ~/projects/CowTerm/Lib");
+    check(rudderContexts({tab}, {}, home)[1].title == "htop · load");
 };
 
 auto tStatusGlyphIsDropped = test("RudderContexts/statusGlyphIsDropped") = []
@@ -77,7 +108,7 @@ auto tStatusGlyphIsDropped = test("RudderContexts/statusGlyphIsDropped") = []
     auto spinning = rudderContexts({tab}, {}, home);
     tab.panes[1].title = "◑ Fix the build";
 
-    check(spinning[1].title == "claude · Fix the build — ~/projects/CowTerm/Lib");
+    check(spinning[1].title == "claude · Fix the build");
     check(spinning == rudderContexts({tab}, {}, home), "a spinner frame isn't a change");
 
     tab.panes[1].title = "~/x y";

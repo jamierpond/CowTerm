@@ -17,6 +17,9 @@ struct RudderPane
     std::string title;
     std::string command;
     std::string cwd;
+
+    // The pane CowTerm is showing: the active tab's focused pane.
+    bool focused = false;
 };
 
 struct RudderTab
@@ -31,7 +34,8 @@ struct RudderTab
 
 // One context per pane, then one per place (a ctrl+a f directory) that no tab
 // or pane is in yet. Places are pushed with open=false, since activating one
-// creates a session. `home` is abbreviated to ~ in titles.
+// creates a session. Each carries its directory as `path` (what Rudder
+// matches a project name on); `home` is abbreviated to ~ where it's shown.
 std::vector<rudder::protocol::Context>
     rudderContexts(const std::vector<RudderTab>& tabs,
                    const std::vector<std::string>& placePaths,
