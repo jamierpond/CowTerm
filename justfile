@@ -9,8 +9,9 @@
 #   just update-deps      refetch Rudder@main (build/install do this too)
 
 # On Windows, run recipe bodies through PowerShell (the OS-specific recipes
-# below use PowerShell syntax); macOS/Linux use the default sh.
-set windows-shell := ["powershell.exe", "-NoLogo", "-NoProfile", "-Command"]
+# below use PowerShell syntax); macOS/Linux use the default sh. Bypass, because
+# a stock Windows install runs no scripts at all, Scripts/with-msvc.ps1 included.
+set windows-shell := ["powershell.exe", "-NoLogo", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command"]
 
 # --- Config (override on the command line, e.g. `just build_type=Debug build`) ---
 build_dir  := "build"
@@ -27,9 +28,12 @@ allow_adhoc_signing := "OFF"
 # A Linux build needs the Wayland, text and libcurl development packages that
 # eacp looks for with pkg-config, plus a compiler and ninja. Scripts/with-linux-deps
 # uses the system's own if they are installed and otherwise borrows them from the
-# pinned dev shell in flake.nix, so the recipes below work either way. It expands
-# to nothing on macOS and Windows, which need none of it.
-deps := if os() == "linux" { "Scripts/with-linux-deps" } else { "" }
+# pinned dev shell in flake.nix, so the recipes below work either way.
+#
+# A Windows build needs the MSVC environment (cl, link, the SDK paths) that a
+# Developer PowerShell sets up, because Ninja runs the compiler directly;
+# Scripts/with-msvc.ps1 brings it in from a plain shell. macOS needs neither.
+deps := if os() == "linux" { "Scripts/with-linux-deps" } else if os() == "windows" { "Scripts/with-msvc.ps1" } else { "" }
 
 # Rudder's client library (and so its tests) is pulled in on macOS only.
 rudder_tests := if os() == "macos" { "CowTermRudderTests" } else { "" }
