@@ -179,6 +179,7 @@ void DaemonClient::handleMessage(const std::string& body)
 
     if (message.verb == "info")
     {
+        auto previous = std::move(info);
         info.clear();
         auto start = std::size_t {0};
 
@@ -200,6 +201,9 @@ void DaemonClient::handleMessage(const std::string& body)
                 line.substr(firstTab + 1, secondTab - firstTab - 1);
             entry.workingDirectory = line.substr(secondTab + 1);
         }
+
+        if (info != previous)
+            onInfoChanged();
     }
 }
 

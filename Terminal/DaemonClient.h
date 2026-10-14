@@ -42,6 +42,8 @@ public:
     {
         std::string foregroundProcess;
         std::string workingDirectory;
+
+        bool operator==(const ShellInfo&) const = default;
     };
 
     // Dials the daemon, launching the bundled TerminalDaemon binary when
@@ -64,6 +66,10 @@ public:
     void release(const std::string& id);
 
     ShellInfo infoFor(const std::string& id) const;
+
+    // A shell's foreground process or directory changed, as seen by the
+    // info refresh that already runs. Not fired when nothing moved.
+    eacp::Callback onInfoChanged = [] {};
 
     // Tears the whole server down — every surviving shell dies. The tray's
     // "kill everything" path.

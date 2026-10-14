@@ -110,7 +110,11 @@ void SessionManager::wireSession(TermSession& session)
             onNotify(*raw, text);
         };
 
-        pane.onCwdChanged = [this](const std::string&) { persist(); };
+        pane.onCwdChanged = [this](const std::string&)
+        {
+            persist();
+            onPanesChanged();
+        };
 
         onPaneWired(*raw, pane);
     };
@@ -126,6 +130,7 @@ void SessionManager::wireSession(TermSession& session)
             onActiveChanged(*raw);
 
         persist();
+        onPanesChanged();
     };
 }
 

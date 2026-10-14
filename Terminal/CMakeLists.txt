@@ -81,6 +81,17 @@ endif ()
 target_link_libraries(${COWTERM_EXECUTABLE_TARGET} PRIVATE
         CowTerm::Terminal eacp-sprites eacp-text eacp-ui eacp-network emberstore)
 
+# Rudder: the context list is pure (RudderContexts), the publisher is the
+# live wiring. Only where the client library exists (macOS).
+if (TARGET RudderClient)
+    target_sources(${COWTERM_EXECUTABLE_TARGET} PRIVATE
+            RudderContexts.cpp
+            RudderPublisher.cpp
+            DirWatcher-macOS.mm)
+    target_link_libraries(${COWTERM_EXECUTABLE_TARGET} PRIVATE RudderClient)
+    target_compile_definitions(${COWTERM_EXECUTABLE_TARGET} PRIVATE COWTERM_RUDDER=1)
+endif ()
+
 # Stamp the git SHA into a generated header on every build so the running app
 # can report exactly which commit it came from (window title + startup log).
 set(_version_in  ${CMAKE_CURRENT_SOURCE_DIR}/Version.h.in)

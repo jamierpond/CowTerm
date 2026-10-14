@@ -105,6 +105,9 @@ public:
     std::function<void(TermSession&, const std::string&)> onNotify =
         [](TermSession&, const std::string&) {};
     eacp::Callback onSessionsChanged = [] {};
+
+    // Any session's panes changed: one closed, focus moved, a cwd changed.
+    eacp::Callback onPanesChanged = [] {};
     eacp::Callback onAllClosed = [] {};
 
     // Fired for every pane the session creates, so the app shell installs

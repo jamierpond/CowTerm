@@ -2,6 +2,7 @@
 
 #include "CowTermCore/Debug.h"
 #include "CowTermVersion.h"
+#include "DaemonClient.h"
 #include "GitWorktree.h"
 #include "Notifier.h"
 
@@ -23,9 +24,16 @@ AppShell::AppShell()
         attachActive(session);
         updateTitle();
         tray.refresh();
+        rudderChanged();
     };
 
-    manager.onSessionsChanged = [this] { tray.refresh(); };
+    manager.onSessionsChanged = [this]
+    {
+        tray.refresh();
+        rudderChanged();
+    };
+
+    manager.onPanesChanged = [this] { rudderChanged(); };
 
     manager.onPaneWired = [this](TermSession& session, TerminalView& pane)
     {
@@ -38,7 +46,11 @@ AppShell::AppShell()
         {
             if (manager.active() == raw)
                 updateTitle();
+
+            rudderChanged();
         };
+
+        rudderChanged();
     };
 
     tray.onShowWindow = [this] { onBringToFront(); };
@@ -116,7 +128,22 @@ AppShell::AppShell()
 
 void AppShell::start()
 {
+#if COWTERM_RUDDER
+    rudder.onBringToFront = [this] { onBringToFront(); };
+
+    // A pane's running command shows up only in the daemon's info refresh.
+    if (auto* daemon = DaemonClient::get())
+        daemon->onInfoChanged = [this] { rudderChanged(); };
+#endif
+
     manager.restoreOrCreateInitial();
+}
+
+void AppShell::rudderChanged()
+{
+#if COWTERM_RUDDER
+    rudder.schedulePush();
+#endif
 }
 
 void AppShell::attachActive(TermSession& session)
