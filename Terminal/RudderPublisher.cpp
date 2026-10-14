@@ -20,7 +20,12 @@ RudderPublisher::RudderPublisher(const AppConfig& configToUse,
     , manager(managerToUse)
     , client(rudder::protocol::Hello {"CowTerm", "com.eacp.cowterm", 0})
 {
-    client.onActivate = [this](const std::string& contextId) { activate(contextId); };
+    client.onActivate = [this](const std::string& contextId) { activate(contextId, true); };
+
+    // A preview only switches to the pane: Rudder raises CowTerm itself while
+    // the row is selected, and a raise from here would land late, over
+    // wherever the user went next.
+    client.onPreview = [this](const std::string& contextId) { activate(contextId, false); };
 
     placesWatcher.onChange = [this] { schedulePlacesRescan(); };
 
@@ -82,7 +87,7 @@ void RudderPublisher::push()
     client.pushContexts(std::move(contexts));
 }
 
-void RudderPublisher::activate(const std::string& contextId)
+void RudderPublisher::activate(const std::string& contextId, bool raise)
 {
     const auto target = parseRudderContextId(contextId);
 
@@ -91,6 +96,11 @@ void RudderPublisher::activate(const std::string& contextId)
 
     if (target->kind == RudderTarget::Kind::Place)
     {
+        // Rudder never previews a place (it isn't open yet); opening one is
+        // Enter's alone.
+        if (!raise)
+            return;
+
         // Exactly what choosing it in ctrl+a f does: the session already on
         // that directory, or a new one.
         manager.openProject(target->value);
@@ -104,7 +114,10 @@ void RudderPublisher::activate(const std::string& contextId)
             {
                 manager.switchTo(*session);
                 session->view.focusPane(pane);
-                onBringToFront();
+
+                if (raise)
+                    onBringToFront();
+
                 return;
             }
 }

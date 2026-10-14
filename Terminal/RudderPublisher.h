@@ -28,12 +28,13 @@ public:
     // turn.
     void schedulePush();
 
-    // Rudder picked a context; the window should come forward.
+    // Rudder picked a context (Enter, not a preview); the window should come
+    // forward.
     eacp::Callback onBringToFront = [] {};
 
 private:
     void push();
-    void activate(const std::string& contextId);
+    void activate(const std::string& contextId, bool raise);
     void rescanPlaces();
     void schedulePlacesRescan();
 
