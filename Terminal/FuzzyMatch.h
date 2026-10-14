@@ -6,7 +6,7 @@
 
 namespace term
 {
-// fzf-style case-insensitive subsequence match (same scorer as Wim's
+// fzf-style case-insensitive subsequence match (same scorer as Grazer's
 // palette). Consecutive matches and word-boundary hits score higher; skipped
 // text costs a little. Spaces in the query are ignored so "eacp term" can
 // match "eacp — Terminal".

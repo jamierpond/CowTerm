@@ -6,6 +6,7 @@
 #   just install          build, then install it to the usual place for this OS
 #   just build_type=Debug build      override the build type
 #   just clean            delete the build tree
+#   just update-deps      refetch Rudder@main (build/install do this too)
 
 # On Windows, run recipe bodies through PowerShell (the OS-specific recipes
 # below use PowerShell syntax); macOS/Linux use the default sh.
@@ -44,6 +45,12 @@ default:
 # Configure the CMake build tree (idempotent; first run fetches deps via CPM).
 configure:
     {{deps}} cmake -S . -B {{build_dir}} -G "{{generator}}" -DCMAKE_BUILD_TYPE={{build_type}} -DCOWTERM_MACOS_SIGNING_IDENTITY="{{signing_identity}}" -DCOWTERM_MACOS_ALLOW_ADHOC_SIGNING={{allow_adhoc_signing}}
+
+# Every configure runs FetchContent's update step, which checks out a
+# branch-pinned package's new head, so `just build` / `just install` already
+# pick up new Rudder commits; this is that step on its own.
+# Refetch branch-pinned deps (Rudder@main) without building.
+update-deps: configure
 
 # Build the app; CowTermDaemon builds as a dependency and is bundled alongside
 # it. CowTermApp (the always-run packaging + signing target) exists only on

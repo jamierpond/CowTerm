@@ -125,7 +125,7 @@ kernel — no shell integration required.
 
 ## The palette
 
-One overlay, everything fuzzy-searchable (Wim-style scoring + MRU):
+One overlay, everything fuzzy-searchable (Grazer-style scoring + MRU):
 
 - **Open sessions** first, most-recently-used first. Sessions running a
   Claude Code conversation show `✳`, its title, and a `claude` badge — and

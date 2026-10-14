@@ -32,7 +32,7 @@ struct PaletteItem
 // The switcher: one overlay that fuzzy-searches everything — open sessions
 // (Claude sessions surfaced with their conversation title and last notify),
 // then known project dirs that aren't open yet. Empty query lists by
-// recency, Wim-style; Enter switches or spawns. CPU-painted chrome over the
+// recency, Grazer-style; Enter switches or spawns. CPU-painted chrome over the
 // GPU terminal.
 class Palette final : public eacp::UI::Component
 {
