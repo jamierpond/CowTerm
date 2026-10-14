@@ -60,17 +60,16 @@ list(APPEND CMAKE_MODULE_PATH "${eacp_SOURCE_DIR}/CMake")
 
 # Publishes CowTerm's panes and ctrl+a f places to Rudder (the app switcher)
 # as contexts. Only Rudder's client library is built; CowTerm behaves exactly
-# as before when Rudder isn't running. Work against a local Rudder checkout
-# with:
+# as before when Rudder isn't running, and on a platform Rudder has no
+# transport for yet its client is a silent stub. Work against a local Rudder
+# checkout with:
 #   cmake -B build -DCPM_Rudder_SOURCE=$HOME/projects/Rudder
-if (APPLE)
-    CPMAddPackage(
-            NAME Rudder
-            GITHUB_REPOSITORY jamierpond/Rudder
-            GIT_TAG main
-            OPTIONS "RUDDER_CLIENT_ONLY ON"
-    )
-endif ()
+CPMAddPackage(
+        NAME Rudder
+        GITHUB_REPOSITORY jamierpond/Rudder
+        GIT_TAG main
+        OPTIONS "RUDDER_CLIENT_ONLY ON"
+)
 
 # This cache entry exists on every platform so cross-platform `just` recipes
 # can pass it without producing an "unused variable" warning. It only affects

@@ -35,19 +35,22 @@ add_executable(${COWTERM_EXECUTABLE_TARGET}
         PrDashboard.cpp
         Popup.cpp
         Projects.cpp
+        RudderContexts.cpp
+        RudderPublisher.cpp
         Session.cpp
         SessionView.cpp
         Switcher.cpp
         TrayController.cpp
         DaemonClient.cpp)
 
-# Per-platform halves of ct, shell commands, notifications, privacy grants
-# and trash. Windows and Linux have no privacy grants (no TCC), so they share
+# Per-platform halves of ct, shell commands, the places watcher,
+# notifications, privacy grants and trash. Windows and Linux have no privacy grants (no TCC), so they share
 # Permissions-Default.cpp, which reports every grant in force.
 if (APPLE)
     target_sources(${COWTERM_EXECUTABLE_TARGET} PRIVATE
             Cli-macOS.mm
             Command-Posix.cpp
+            DirWatcher-macOS.mm
             Notifier-macOS.mm
             Permissions-macOS.mm
             Trash-macOS.mm)
@@ -62,6 +65,7 @@ elseif (WIN32)
     target_sources(${COWTERM_EXECUTABLE_TARGET} PRIVATE
             Cli-Windows.cpp
             Command-Windows.cpp
+            DirWatcher-Windows.cpp
             Notifier-Windows.cpp
             Permissions-Default.cpp
             Trash-Windows.cpp)
@@ -84,6 +88,7 @@ elseif (LINUX)
     target_sources(${COWTERM_EXECUTABLE_TARGET} PRIVATE
             Cli-Linux.cpp
             Command-Posix.cpp
+            DirWatcher-Linux.cpp
             Notifier-Linux.cpp
             Permissions-Default.cpp
             Trash-Linux.cpp)
@@ -94,18 +99,8 @@ endif ()
 # per-platform branches. The overlays use it rather than Graphics::Context,
 # which is the native 2D tier and exists only on macOS and Windows.
 target_link_libraries(${COWTERM_EXECUTABLE_TARGET} PRIVATE
-        CowTerm::Terminal eacp-sprites eacp-text eacp-ui eacp-network emberstore)
-
-# Rudder: the context list is pure (RudderContexts), the publisher is the
-# live wiring. Only where the client library exists (macOS).
-if (TARGET RudderClient)
-    target_sources(${COWTERM_EXECUTABLE_TARGET} PRIVATE
-            RudderContexts.cpp
-            RudderPublisher.cpp
-            DirWatcher-macOS.mm)
-    target_link_libraries(${COWTERM_EXECUTABLE_TARGET} PRIVATE RudderClient)
-    target_compile_definitions(${COWTERM_EXECUTABLE_TARGET} PRIVATE COWTERM_RUDDER=1)
-endif ()
+        CowTerm::Terminal eacp-sprites eacp-text eacp-ui eacp-network emberstore
+        RudderClient)
 
 # Stamp the git SHA into a generated header on every build so the running app
 # can report exactly which commit it came from (window title + startup log).

@@ -35,9 +35,6 @@ allow_adhoc_signing := "OFF"
 # Scripts/with-msvc.ps1 brings it in from a plain shell. macOS needs neither.
 deps := if os() == "linux" { "Scripts/with-linux-deps" } else if os() == "windows" { "Scripts/with-msvc.ps1" } else { "" }
 
-# Rudder's client library (and so its tests) is pulled in on macOS only.
-rudder_tests := if os() == "macos" { "CowTermRudderTests" } else { "" }
-
 # Default: show the recipe list.
 default:
     @just --list
@@ -69,7 +66,7 @@ build: configure
 
 # Build and run the unit tests (regression coverage, incl. the quit-hang fix).
 test: configure
-    {{deps}} cmake --build {{build_dir}} --target CowTermTests CowTermScreenTests CowTermRenderTests CowTermSessionViewTests CowTermPermissionsTests {{rudder_tests}}
+    {{deps}} cmake --build {{build_dir}} --target CowTermTests CowTermScreenTests CowTermRenderTests CowTermSessionViewTests CowTermPermissionsTests CowTermRudderTests
     {{deps}} ctest --test-dir {{build_dir}} --output-on-failure
 
 # Remove the build tree.

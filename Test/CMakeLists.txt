@@ -54,15 +54,13 @@ target_include_directories(CowTermPermissionsTests PRIVATE ../Terminal)
 
 # The context list CowTerm publishes to Rudder; pure, so only the protocol
 # types come along.
-if (TARGET RudderProtocol)
-    nano_add_executable(CowTermRudderTests
-            SOURCES
-                RudderContextsTests.cpp
-                ../Terminal/RudderContexts.cpp
-            TARGETS RudderProtocol)
+nano_add_executable(CowTermRudderTests
+        SOURCES
+            RudderContextsTests.cpp
+            ../Terminal/RudderContexts.cpp
+        TARGETS RudderProtocol)
 
-    target_include_directories(CowTermRudderTests PRIVATE ../Terminal)
-endif ()
+target_include_directories(CowTermRudderTests PRIVATE ../Terminal)
 
 # forkpty/openpty live in libutil on Linux; on Apple they are in libSystem.
 if (NOT APPLE)

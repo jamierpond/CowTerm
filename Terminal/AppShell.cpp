@@ -142,13 +142,11 @@ AppShell::AppShell()
 
 void AppShell::start()
 {
-#if COWTERM_RUDDER
     rudder.onBringToFront = [this] { onBringToFront(); };
 
     // A pane's running command shows up only in the daemon's info refresh.
     if (auto* daemon = DaemonClient::get())
         daemon->onInfoChanged = [this] { rudderChanged(); };
-#endif
 
     manager.restoreOrCreateInitial();
 
@@ -169,9 +167,7 @@ void AppShell::start()
 
 void AppShell::rudderChanged()
 {
-#if COWTERM_RUDDER
     rudder.schedulePush();
-#endif
 }
 
 void AppShell::attachActive(TermSession& session)

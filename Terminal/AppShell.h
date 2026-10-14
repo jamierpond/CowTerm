@@ -6,13 +6,10 @@
 #include "PermissionsPanel.h"
 #include "Popup.h"
 #include "PrDashboard.h"
+#include "RudderPublisher.h"
 #include "Session.h"
 #include "Switcher.h"
 #include "TrayController.h"
-
-#if COWTERM_RUDDER
-#include "RudderPublisher.h"
-#endif
 
 #include <eacp/UI/UI.h>
 
@@ -75,11 +72,9 @@ private:
     void rudderChanged();
 
     AppConfig config = loadConfig();
-#if COWTERM_RUDDER
     // Ahead of the manager, so it outlives the session teardown that still
     // reports pane changes. It only holds the reference until then.
     RudderPublisher rudder {config, manager};
-#endif
     SessionManager manager {config};
     Palette palette {config, manager};
     Switcher switcher {config, manager};
