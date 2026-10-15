@@ -125,7 +125,9 @@ debug-popup: build
 
 # Build, then install the app to the usual place for this OS. On Windows a
 # running CowTerm locks its exe against overwrite but not rename, so the copy
-# falls back to renaming the live exe aside (*.exe.old, cleaned up next run).
+# falls back to renaming the live exe aside (*.old, cleaned up next run); a
+# running CowTerm and its daemon keep going, shells intact, until you switch
+# with Kill everything & quit (Scripts/install-windows.ps1 says so).
 # On macOS it refuses an ad-hoc bundle: installing one would throw away the
 # stable identity the Screen Recording grant is keyed on. Also links `ct` (the
 # CowTerm executable's CLI mode) into ~/.local/bin. On Windows `ct` is a ct.cmd
@@ -158,8 +160,7 @@ signing:
 
 [windows]
 install: build
-    New-Item -ItemType Directory -Force -Path "$env:LOCALAPPDATA\Programs\CowTerm" | Out-Null
-    $dir = "$env:LOCALAPPDATA\Programs\CowTerm"; foreach ($exe in 'CowTerm.exe','CowTermDaemon.exe') { $t = Join-Path $dir $exe; if (Test-Path "$t.old") { try { Remove-Item -Force "$t.old" -ErrorAction Stop } catch {} }; try { Copy-Item -Force "{{build_dir}}\Terminal\$exe" $dir -ErrorAction Stop } catch { Rename-Item -Force $t "$exe.old"; Copy-Item -Force "{{build_dir}}\Terminal\$exe" $dir } }
+    Scripts/install-windows.ps1 "{{build_dir}}" "$env:LOCALAPPDATA\Programs\CowTerm"
     $exe = "$env:LOCALAPPDATA\Programs\CowTerm\CowTerm.exe"; $ws = New-Object -ComObject WScript.Shell; @([Environment]::GetFolderPath('Desktop'), [Environment]::GetFolderPath('Programs')) | ForEach-Object { $s = $ws.CreateShortcut((Join-Path $_ 'CowTerm.lnk')); $s.TargetPath = $exe; $s.WorkingDirectory = (Split-Path $exe); $s.IconLocation = $exe; $s.Description = 'CowTerm'; $s.Save() }; Write-Host "Added Desktop and Start Menu shortcuts"
     ie4uinit.exe -show
     $exe = "$env:LOCALAPPDATA\Programs\CowTerm\CowTerm.exe"; $bin = "$HOME\.local\bin"; New-Item -ItemType Directory -Force -Path $bin | Out-Null; Set-Content -Encoding ascii "$bin\ct.cmd" "@if `"%~1`"==`"`" (`"$exe`" help) else (`"$exe`" %*)"; Write-Host "Added ct ($bin\ct.cmd)"
