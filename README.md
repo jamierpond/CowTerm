@@ -14,7 +14,7 @@ ordering and ring-back notifications replace the tmux-sessionizer workflow.
 
 ## Build
 
-CowTerm is a standalone [eacp](https://github.com/jamierpond/eacp) app. It
+CowTerm is a standalone [eacp](https://github.com/eyalamirmusic/eacp) app. It
 pulls eacp, [emberstore](https://github.com/tamber-inc/emberstore) and the rest
 of its dependencies with [CPM](https://github.com/cpm-cmake/CPM.cmake)
 (vendored in `cmake/CPM.cmake`) — no monorepo checkout required:
