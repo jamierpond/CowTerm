@@ -36,19 +36,22 @@ include(CPM)
 # helpers (res_embed_add, eacp_set_gui_subsystem, eacp_set_app_icon, ...) that
 # the app's CMakeLists call. Examples/tests are top-level-only in eacp, so they
 # stay off here. Point CPM at a local checkout with -DCPM_eacp_SOURCE=/path.
-# Pinned to upstream eacp develop at 80b93a9 plus the fork's stale-mouse-target
-# fix (e4573f9, eyalamirmusic/eacp PR #38, still open), carried on
-# jamierpond/eacp branch cowterm/stale-mouse-targets-2. Without it,
-# View::removeSubview clears hoveredView/mouseDownTarget for direct children
-# only, so removing a nested subtree while hovered leaves the root pointing at
-# a destroyed view and the next mouseExited is a use-after-free. Point back at
-# eyalamirmusic/eacp `develop` (not `main`, which lags it) once #38 lands.
+# Pinned to jamierpond/eacp main at 9a124ea: upstream eacp develop (52313a8)
+# plus three fixes CowTerm depends on, all in eyalamirmusic/eacp PR #141. Two
+# are the Windows keyboard: keys reach the focused view rather than only the
+# window's content view, and KeyEvent::charactersIgnoringModifiers is filled
+# in, which the Ctrl+A leader matches on. The third is the stale-mouse-target
+# fix (once PR #38): without it View::removeSubview clears hoveredView/
+# mouseDownTarget for direct children only, so removing a nested subtree while
+# hovered leaves the root pointing at a destroyed view and the next
+# mouseExited is a use-after-free. Point back at eyalamirmusic/eacp `develop`
+# (not `main`, which lags it) once #141 lands.
 # Provides eacp-text (GlyphAtlas.h) and the IPC::Messenger layer the session
 # daemon and DaemonClient ride on.
 CPMAddPackage(
         NAME eacp
         GITHUB_REPOSITORY jamierpond/eacp
-        GIT_TAG 9b7924329f1d940bcfde1d78b9d63d5ff6912f7c
+        GIT_TAG 9a124ea146fa48e406eeb2120dd4cd8888d961a4
         OPTIONS
             "EACP_ENABLE_EXAMPLES OFF"
             "EACP_ENABLE_TESTS OFF")
