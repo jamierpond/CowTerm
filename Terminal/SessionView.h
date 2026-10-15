@@ -65,6 +65,10 @@ public:
     void splitActive(bool horizontal);
     void closeActivePane();
 
+    // Kills one pane's shell and removes it, the way closeActivePane does
+    // the active one. Nothing if it isn't one of this tree's leaves.
+    void closePane(TerminalView* pane);
+
     // Kills every pane's shell — closing a whole session on purpose, as
     // opposed to detaching at app teardown.
     void terminateAll();

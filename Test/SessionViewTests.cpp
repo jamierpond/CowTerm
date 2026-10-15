@@ -77,3 +77,33 @@ auto tClosingTheOtherPaneKeepsTheActiveOne =
 
     view.focusActive();
 };
+
+auto tClosingAPaneByName = test("SessionView/closePaneRemovesThatPaneOnly") = []
+{
+    // What Rudder's close does: one named pane goes, now, and the active
+    // one is left alone.
+    auto config = AppConfig {};
+    auto view = SessionView {config, "/tmp"};
+    auto panes = std::vector<TerminalView*> {};
+
+    view.onPaneCreated = [&](TerminalView& pane) { panes.push_back(&pane); };
+    view.restore(twoPaneSplit());
+    view.setBounds({0.f, 0.f, 600.f, 300.f});
+
+    check(panes.size() == 2);
+
+    auto* survivor = panes[0];
+    view.closePane(panes[1]);
+
+    check(view.paneCount() == 1);
+    check(view.activePane() == survivor);
+    check(view.panes() == std::vector<TerminalView*> {survivor});
+
+    // A pane that's already gone is nothing to close.
+    view.closePane(panes[1]);
+    check(view.paneCount() == 1);
+
+    // The shell exit the close caused lands later and finds nothing to do.
+    Threads::runEventLoopFor(Time::MS {200});
+    check(view.paneCount() == 1);
+};

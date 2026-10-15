@@ -367,6 +367,17 @@ void SessionView::closeActivePane()
     removeLeaf(active);
 }
 
+void SessionView::closePane(TerminalView* pane)
+{
+    auto* leaf = leafFor(pane);
+
+    if (leaf == nullptr)
+        return;
+
+    leaf->view->terminateShell();
+    removeLeaf(leaf);
+}
+
 void SessionView::terminateAll()
 {
     auto leaves = std::vector<Node*> {};

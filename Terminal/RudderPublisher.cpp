@@ -18,7 +18,7 @@ RudderPublisher::RudderPublisher(const AppConfig& configToUse,
                                  SessionManager& managerToUse)
     : config(configToUse)
     , manager(managerToUse)
-    , client(rudder::protocol::Hello {"CowTerm", "com.eacp.cowterm", 0})
+    , client(rudder::protocol::Hello {"CowTerm", "com.eacp.cowterm", 0, true})
 {
     client.onActivate = [this](const std::string& contextId) { activate(contextId, true); };
 
@@ -26,6 +26,8 @@ RudderPublisher::RudderPublisher(const AppConfig& configToUse,
     // the row is selected, and a raise from here would land late, over
     // wherever the user went next.
     client.onPreview = [this](const std::string& contextId) { activate(contextId, false); };
+
+    client.onClose = [this](const std::string& contextId) { close(contextId); };
 
     placesWatcher.onChange = [this] { schedulePlacesRescan(); };
 
@@ -121,6 +123,25 @@ void RudderPublisher::activate(const std::string& contextId, bool raise)
                 if (raise)
                     onBringToFront();
 
+                return;
+            }
+}
+
+// Rudder's close on a pane: what ctrl+a x does to the active one. The
+// session goes with its last pane, and the push that follows leaves the
+// pane out. A place isn't open, so there is nothing to close.
+void RudderPublisher::close(const std::string& contextId)
+{
+    const auto target = parseRudderContextId(contextId);
+
+    if (!target || target->kind != RudderTarget::Kind::Pane)
+        return;
+
+    for (const auto& session: manager.all())
+        for (auto* pane: session->view.panes())
+            if (pane->shellId() == target->value)
+            {
+                session->view.closePane(pane);
                 return;
             }
 }
