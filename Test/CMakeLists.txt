@@ -68,12 +68,13 @@ nano_add_executable(CowTermPermissionsTests
 
 target_include_directories(CowTermPermissionsTests PRIVATE ../Terminal)
 
-# The context list CowTerm publishes to Rudder; pure, so only the protocol
-# types come along.
+# The context list CowTerm publishes to Rudder and the branch it reads from
+# each pane's repo; pure, so only the protocol types come along.
 nano_add_executable(CowTermRudderTests
         SOURCES
             RudderContextsTests.cpp
             ../Terminal/RudderContexts.cpp
+            ../Terminal/GitBranch.cpp
         TARGETS RudderProtocol)
 
 target_include_directories(CowTermRudderTests PRIVATE ../Terminal)

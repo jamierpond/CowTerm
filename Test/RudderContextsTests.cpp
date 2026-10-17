@@ -1,6 +1,11 @@
+#include "GitBranch.h"
 #include "RudderContexts.h"
 
 #include <NanoTest/NanoTest.h>
+
+#include <filesystem>
+#include <fstream>
+#include <random>
 
 // The context list CowTerm publishes to Rudder: one row per pane, then the
 // ctrl+a f places nothing is open in yet.
@@ -19,6 +24,27 @@ RudderTab twoPaneTab()
             {{"a1", "", "zsh", "/Users/me/projects/CowTerm"},
              {"a2", "", "nvim", "/Users/me/projects/CowTerm/Lib"}}};
 }
+
+void write(const std::filesystem::path& file, const std::string& text)
+{
+    std::filesystem::create_directories(file.parent_path());
+    std::ofstream {file} << text;
+}
+
+// A scratch directory, gone when the test is.
+struct TempDir
+{
+    TempDir()
+        : path(std::filesystem::temp_directory_path()
+               / ("cowterm-gitbranch-" + std::to_string(std::random_device {}())))
+    {
+        std::filesystem::create_directories(path);
+    }
+
+    ~TempDir() { std::filesystem::remove_all(path); }
+
+    std::filesystem::path path;
+};
 } // namespace
 
 auto tOneContextPerPane = test("RudderContexts/oneContextPerPane") = []
@@ -166,4 +192,56 @@ auto tWindowsShellIsItsCwd = test("RudderContexts/windowsShellIsItsCwd") = []
                        "C:/Users/me");
 
     check(contexts[0].title == "~/src", "pwsh at its prompt is its cwd, compacted");
+};
+
+auto tGitBranchReadsHead = test("GitBranch/readsHead") = []
+{
+    const auto dir = TempDir {};
+    const auto repo = dir.path / "repo";
+    write(repo / ".git" / "HEAD", "ref: refs/heads/feature/thing\n");
+    std::filesystem::create_directories(repo / "src" / "deep");
+
+    check(gitBranch(repo.string()) == "feature/thing");
+    check(gitBranch((repo / "src" / "deep").string()) == "feature/thing", "from a subdir");
+    check(gitBranch(dir.path.string()).empty(), "outside the repo");
+    check(gitBranch("").empty());
+};
+
+auto tGitBranchWorktree = test("GitBranch/worktree") = []
+{
+    const auto dir = TempDir {};
+    write(dir.path / "repo" / ".git" / "worktrees" / "repo-x" / "HEAD",
+          "ref: refs/heads/x\n");
+    write(dir.path / "repo-x" / ".git", "gitdir: ../repo/.git/worktrees/repo-x\n");
+    write(dir.path / "abs" / ".git",
+          "gitdir: " + (dir.path / "repo" / ".git" / "worktrees" / "repo-x").string() + "\n");
+
+    check(gitBranch((dir.path / "repo-x").string()) == "x", "relative gitdir");
+    check(gitBranch((dir.path / "abs").string()) == "x", "absolute gitdir");
+};
+
+auto tGitBranchDetached = test("GitBranch/detached") = []
+{
+    const auto dir = TempDir {};
+    write(dir.path / ".git" / "HEAD", "3e45fcc0a1b2c3d4e5f60718293a4b5c6d7e8f90\n");
+
+    check(gitBranch(dir.path.string()).empty());
+};
+
+auto tGitBranchesFollowCheckout = test("GitBranch/cacheFollowsCheckout") = []
+{
+    const auto dir = TempDir {};
+    auto branches = GitBranches {};
+    std::filesystem::create_directories(dir.path / "repo");
+
+    check(branches.of((dir.path / "repo").string()).empty(), "not a repo yet");
+
+    write(dir.path / "repo" / ".git" / "HEAD", "ref: refs/heads/main\n");
+    check(branches.of((dir.path / "repo").string()) == "main", "git init is noticed");
+
+    write(dir.path / "repo" / ".git" / "HEAD", "ref: refs/heads/other\n");
+    check(branches.of((dir.path / "repo").string()) == "other", "a checkout is noticed");
+
+    std::filesystem::remove_all(dir.path / "repo" / ".git");
+    check(branches.of((dir.path / "repo").string()).empty(), "nor is a removed repo");
 };

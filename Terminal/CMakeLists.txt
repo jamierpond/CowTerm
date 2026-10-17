@@ -27,6 +27,7 @@ add_executable(${COWTERM_EXECUTABLE_TARGET}
         Cli.cpp
         Command.cpp
         Config.cpp
+        GitBranch.cpp
         GitWorktree.cpp
         MruStore.cpp
         Palette.cpp
