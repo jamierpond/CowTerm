@@ -86,7 +86,7 @@ auto tPathIsTheCwd = test("RudderContexts/pathIsTheCwd") = []
 
     check(contexts[0].path == "/Users/me/projects/CowTerm");
     check(contexts[1].path == "/Users/me/projects/CowTerm/Lib");
-    check(contexts[2].title == "2.1.299 · Password autofill and apple keychain");
+    check(contexts[2].title == "Password autofill and apple keychain");
     check(contexts[2].subtitle == "~/projects/Grazer · Tab 2 · pane 1 · main");
     check(contexts[2].path == "/Users/me/projects/Grazer");
     check(contexts[3].path == "/Users/me/projects/tamber-web", "places carry theirs too");
@@ -139,6 +139,29 @@ auto tStatusGlyphIsDropped = test("RudderContexts/statusGlyphIsDropped") = []
 
     tab.panes[1].title = "~/x y";
     check(rudderContexts({tab}, {}, home)[1].title.starts_with("claude · ~/x y"));
+};
+
+auto tVersionIsDropped = test("RudderContexts/versionIsDropped") = []
+{
+    auto tab = twoPaneTab();
+    tab.panes[1].command = "/Users/me/.local/share/claude/versions/2.1.300";
+    tab.panes[1].title = "✳ Meta Business Suite checkout tracking";
+
+    check(rudderContexts({tab}, {}, home)[1].title == "Meta Business Suite checkout tracking");
+
+    tab.panes[1].command = "claude";
+    tab.panes[1].title = "✳ 2.1.300 · Fix the build";
+    check(rudderContexts({tab}, {}, home)[1].title == "claude · Fix the build");
+
+    tab.panes[1].title = "2026 plans";
+    check(rudderContexts({tab}, {}, home)[1].title == "claude · 2026 plans");
+
+    tab.panes[1].title = "1.2 GB free";
+    check(rudderContexts({tab}, {}, home)[1].title == "claude · 1.2 GB free");
+
+    tab.panes[1].command = "1.2";
+    tab.panes[1].title = "Fix the build";
+    check(rudderContexts({tab}, {}, home)[1].title == "1.2 · Fix the build");
 };
 
 auto tHomePrefixIsWholeComponent = test("RudderContexts/homePrefixIsWholeComponent") = []

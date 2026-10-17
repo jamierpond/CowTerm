@@ -72,6 +72,51 @@ std::string withoutStatusGlyph(const std::string& title)
     return rest == std::string::npos ? std::string {} : title.substr(rest);
 }
 
+// "2.1.300": digits.digits.digits and nothing else.
+bool isVersion(std::string_view text)
+{
+    auto parts = 0;
+    auto digits = 0;
+
+    for (auto c: text)
+    {
+        if (std::isdigit((unsigned char) c))
+            ++digits;
+        else if (c == '.' && digits > 0 && parts < 2)
+            ++parts, digits = 0;
+        else
+            return false;
+    }
+
+    return parts == 2 && digits > 0;
+}
+
+// Claude Code's native install runs as ~/.local/share/claude/versions/2.1.300,
+// so its process name is its version: that says nothing, and would take the
+// front of the title. Same for a title that leads with a bare version and a
+// separator ("2.1.300 · Task").
+std::string commandName(const std::string& command)
+{
+    auto name = baseName(command);
+    return isVersion(name) ? std::string {} : name;
+}
+
+std::string withoutLeadingVersion(const std::string& title)
+{
+    const auto space = title.find(' ');
+
+    if (space == std::string::npos || !isVersion(std::string_view {title}.substr(0, space)))
+        return title;
+
+    constexpr auto separator = std::string_view {"·"};
+    auto rest = title.find_first_not_of(' ', space);
+
+    if (rest != std::string::npos && title.compare(rest, separator.size(), separator) == 0)
+        rest = title.find_first_not_of(' ', rest + separator.size());
+
+    return rest == std::string::npos ? title : title.substr(rest);
+}
+
 // "<branch> · <command> · <title>", leaving out whatever is empty or already
 // said, so a search for a command finds the pane. In a repo the branch leads:
 // it names the work, where the directory (a worktree's, often) doesn't. A
@@ -81,16 +126,15 @@ std::string withoutStatusGlyph(const std::string& title)
 std::string paneTitle(const RudderPane& pane, const std::string& home)
 {
     const auto cwd = compactPath(pane.cwd, home);
-    auto title = withoutStatusGlyph(pane.title);
+    auto title = withoutLeadingVersion(withoutStatusGlyph(pane.title));
+    const auto command = commandName(pane.command);
 
     if (!pane.branch.empty() && isShell(pane.command)
         && (title == cwd || title == pane.cwd))
         title.clear();
 
-    if (!pane.command.empty() && !isShell(pane.command)
-        && title.find(baseName(pane.command)) == std::string::npos)
-        title = title.empty() ? baseName(pane.command)
-                              : baseName(pane.command) + " · " + title;
+    if (!command.empty() && !isShell(command) && title.find(command) == std::string::npos)
+        title = title.empty() ? command : command + " · " + title;
 
     if (!pane.branch.empty() && title != pane.branch
         && !title.starts_with(pane.branch + " · "))
