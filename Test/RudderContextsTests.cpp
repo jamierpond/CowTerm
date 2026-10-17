@@ -82,7 +82,7 @@ auto tPathIsTheCwd = test("RudderContexts/pathIsTheCwd") = []
                             "/Users/me/projects/Grazer"}}};
 
     const auto contexts =
-        rudderContexts({twoPaneTab(), tab}, {"/Users/me/projects/tamber-web"}, home);
+        rudderContexts({twoPaneTab(), tab}, {{"/Users/me/projects/tamber-web"}}, home);
 
     check(contexts[0].path == "/Users/me/projects/CowTerm");
     check(contexts[1].path == "/Users/me/projects/CowTerm/Lib");
@@ -97,7 +97,7 @@ auto tFocusedPaneMarked = test("RudderContexts/focusedPaneMarked") = []
     auto tab = twoPaneTab();
     tab.panes[1].focused = true;
 
-    const auto contexts = rudderContexts({tab}, {"/Users/me/projects/x"}, home);
+    const auto contexts = rudderContexts({tab}, {{"/Users/me/projects/x"}}, home);
 
     check(!contexts[0].focused);
     check(contexts[1].focused, "Esc in Rudder switches back to it");
@@ -153,7 +153,7 @@ auto tPlacesAfterPanes = test("RudderContexts/placesAfterPanes") = []
 {
     const auto contexts = rudderContexts(
         {twoPaneTab()},
-        {"/Users/me/projects", "/Users/me/projects/tamber-web", "/Users/me/projects/CowTerm"},
+        {{"/Users/me/projects"}, {"/Users/me/projects/tamber-web"}, {"/Users/me/projects/CowTerm"}},
         home);
 
     check(contexts.size() == 4, "the open tab's dir is covered by its panes");
@@ -167,7 +167,7 @@ auto tPlacesAfterPanes = test("RudderContexts/placesAfterPanes") = []
 auto tPaneCwdCoversPlace = test("RudderContexts/paneCwdCoversPlace") = []
 {
     const auto contexts =
-        rudderContexts({twoPaneTab()}, {"/Users/me/projects/CowTerm/Lib"}, home);
+        rudderContexts({twoPaneTab()}, {{"/Users/me/projects/CowTerm/Lib"}}, home);
 
     check(contexts.size() == 2);
 };
@@ -192,6 +192,61 @@ auto tWindowsShellIsItsCwd = test("RudderContexts/windowsShellIsItsCwd") = []
                        "C:/Users/me");
 
     check(contexts[0].title == "~/src", "pwsh at its prompt is its cwd, compacted");
+};
+
+auto tBranchLeadsTheTitle = test("RudderContexts/branchLeadsTheTitle") = []
+{
+    auto tab = RudderTab {"CowTerm-rudder-branch",
+                          "/Users/me/projects/CowTerm-rudder-branch",
+                          {{"w1", "", "zsh", "/Users/me/projects/CowTerm-rudder-branch"},
+                           {"w2", "◐ Fix the build", "claude",
+                            "/Users/me/projects/CowTerm-rudder-branch/Lib"}}};
+    tab.panes[0].branch = "rudder-branch";
+    tab.panes[1].branch = "rudder-branch";
+
+    const auto contexts = rudderContexts({tab}, {}, home);
+
+    check(contexts[0].title == "rudder-branch", "the branch, not the worktree dir");
+    check(contexts[0].subtitle
+          == "~/projects/CowTerm-rudder-branch · Tab 1 · pane 1 · CowTerm-rudder-branch");
+    check(contexts[0].branch == "rudder-branch");
+    check(contexts[1].title == "rudder-branch · claude · Fix the build");
+    check(contexts[1].branch == "rudder-branch");
+};
+
+auto tBranchNotRepeated = test("RudderContexts/branchNotRepeated") = []
+{
+    auto tab = twoPaneTab();
+    tab.panes[0].branch = "main";
+    tab.panes[0].title = "~/projects/CowTerm";
+    tab.panes[1].branch = "main";
+    tab.panes[1].title = "main · nvim";
+
+    const auto contexts = rudderContexts({tab}, {}, home);
+
+    check(contexts[0].title == "main", "a shell titled with its cwd is just the branch");
+    check(contexts[0].subtitle == "~/projects/CowTerm · Tab 1 · pane 1 · CowTerm",
+          "the cwd moves to the subtitle");
+    check(contexts[1].title == "main · nvim", "already leads with it");
+};
+
+auto tNoBranchNoChange = test("RudderContexts/noBranchNoChange") = []
+{
+    const auto contexts = rudderContexts({twoPaneTab()}, {}, home);
+
+    check(contexts[0].branch.empty() && contexts[1].branch.empty());
+    check(contexts[0].title == "~/projects/CowTerm");
+    check(contexts[1].title == "nvim");
+};
+
+auto tPlacesCarryBranch = test("RudderContexts/placesCarryBranch") = []
+{
+    const auto contexts = rudderContexts(
+        {}, {{"/Users/me/projects/tamber-web", "develop"}, {"/Users/me/notes"}}, home);
+
+    check(contexts[0].branch == "develop");
+    check(contexts[0].title == "tamber-web", "a place is still named for its folder");
+    check(contexts[1].branch.empty());
 };
 
 auto tGitBranchReadsHead = test("GitBranch/readsHead") = []

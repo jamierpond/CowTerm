@@ -71,17 +71,27 @@ void RudderPublisher::push()
             session.get() == manager.active() ? session->view.activePane() : nullptr;
 
         for (auto* pane: session->view.panes())
+        {
+            auto cwd = pane->workingDirectory();
+            auto branch = branches.of(cwd);
             tab.panes.push_back({pane->shellId(),
                                  pane->currentTitle(),
                                  pane->foregroundProcess(),
-                                 pane->workingDirectory(),
+                                 std::move(cwd),
+                                 std::move(branch),
                                  pane == focused});
+        }
 
         tabs.push_back(std::move(tab));
     }
 
-    auto contexts =
-        rudderContexts(tabs, places, eacp::FilePath::homeDirectory().str());
+    auto placesWithBranches = std::vector<RudderPlace> {};
+
+    for (const auto& path: places)
+        placesWithBranches.emplace_back(path, branches.of(path));
+
+    auto contexts = rudderContexts(
+        tabs, placesWithBranches, eacp::FilePath::homeDirectory().str());
 
     if (contexts == pushed)
         return;

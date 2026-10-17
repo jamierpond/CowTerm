@@ -72,19 +72,31 @@ std::string withoutStatusGlyph(const std::string& title)
     return rest == std::string::npos ? std::string {} : title.substr(rest);
 }
 
-// "<command> · <title>", leaving out whatever is empty or already said, so a
-// search for a command finds the pane; the cwd when there's nothing else. The
-// directory itself goes to Rudder as the context's path, which it matches on.
+// "<branch> · <command> · <title>", leaving out whatever is empty or already
+// said, so a search for a command finds the pane. In a repo the branch leads:
+// it names the work, where the directory (a worktree's, often) doesn't. A
+// shell titled with its cwd says nothing the subtitle doesn't, so the branch
+// stands alone there; outside a repo, the cwd. The directory itself goes to
+// Rudder as the context's path, which it matches on.
 std::string paneTitle(const RudderPane& pane, const std::string& home)
 {
+    const auto cwd = compactPath(pane.cwd, home);
     auto title = withoutStatusGlyph(pane.title);
+
+    if (!pane.branch.empty() && isShell(pane.command)
+        && (title == cwd || title == pane.cwd))
+        title.clear();
 
     if (!pane.command.empty() && !isShell(pane.command)
         && title.find(baseName(pane.command)) == std::string::npos)
         title = title.empty() ? baseName(pane.command)
                               : baseName(pane.command) + " · " + title;
 
-    return title.empty() ? compactPath(pane.cwd, home) : title;
+    if (!pane.branch.empty() && title != pane.branch
+        && !title.starts_with(pane.branch + " · "))
+        title = title.empty() ? pane.branch : pane.branch + " · " + title;
+
+    return title.empty() ? cwd : title;
 }
 
 // "<cwd> · Tab <n> · pane <m> · <tab name>": where the pane is, the cwd first
@@ -110,7 +122,7 @@ std::string paneSubtitle(const RudderPane& pane,
 
 std::vector<rudder::protocol::Context>
     rudderContexts(const std::vector<RudderTab>& tabs,
-                   const std::vector<std::string>& placePaths,
+                   const std::vector<RudderPlace>& places,
                    const std::string& home)
 {
     auto contexts = std::vector<rudder::protocol::Context> {};
@@ -132,12 +144,13 @@ std::vector<rudder::protocol::Context>
             context.subtitle =
                 paneSubtitle(pane, context.title, tab, index, session.name, home);
             context.path = pane.cwd;
+            context.branch = pane.branch;
             context.focused = pane.focused;
             contexts.push_back(std::move(context));
         }
     }
 
-    for (const auto& path: placePaths)
+    for (const auto& [path, branch]: places)
     {
         if (covered.contains(path))
             continue;
@@ -147,6 +160,7 @@ std::vector<rudder::protocol::Context>
         context.title = baseName(path);
         context.subtitle = compactPath(path, home);
         context.path = path;
+        context.branch = branch;
         context.open = false;
         contexts.push_back(std::move(context));
     }

@@ -2,6 +2,7 @@
 
 #include "Config.h"
 #include "DirWatcher.h"
+#include "GitBranch.h"
 #include "RudderContexts.h"
 #include "Session.h"
 
@@ -44,6 +45,7 @@ private:
 
     // The ctrl+a f list (scanProjects), cached between directory changes.
     std::vector<std::string> places;
+    GitBranches branches;
     DirWatcher placesWatcher;
 
     std::vector<rudder::protocol::Context> pushed;
