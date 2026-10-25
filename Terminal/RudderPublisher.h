@@ -36,6 +36,7 @@ public:
 private:
     void push();
     void activate(const std::string& contextId, bool raise);
+    void close(const std::string& contextId);
     void rescanPlaces();
     void schedulePlacesRescan();
 
