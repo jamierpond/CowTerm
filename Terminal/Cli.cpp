@@ -1,5 +1,5 @@
 // ct: CowTerm's command-line mode. `ct` is a symlink (or alias) to the CowTerm
-// executable itself, so the CLI is the same signed binary as the app.
+// executable itself, so the CLI is the same binary as the app.
 //
 // Its job today is screen capture for agents. On macOS a process in a CowTerm
 // shell has CowTerm as its responsible app, so macOS asks — and remembers —

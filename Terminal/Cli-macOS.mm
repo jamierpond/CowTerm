@@ -187,11 +187,9 @@ void printGrantDetails()
         std::printf("signature: adhoc\n");
         std::fflush(stdout);
         std::fprintf(stderr,
-                     "ct: WARNING: %s is ad-hoc signed. macOS keys the Screen Recording "
+                     "ct: note: %s is ad-hoc signed. macOS keys the Screen Recording "
                      "grant on the signature, and an ad-hoc one changes with every "
-                     "build, so the grant will not stick. Rebuild with a signing "
-                     "identity (`just signing` shows why it went ad-hoc) and "
-                     "`just install`.\n",
+                     "build, so the grant has to be given again after a rebuild.\n",
                      app->c_str());
     }
     else

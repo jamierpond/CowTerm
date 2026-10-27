@@ -17,13 +17,6 @@ set windows-shell := ["powershell.exe", "-NoLogo", "-NoProfile", "-ExecutionPoli
 build_dir  := "build"
 generator  := "Ninja"
 build_type := "Release"
-signing_identity := ""
-# Certificate-signed by default, so macOS privacy grants (Screen Recording)
-# survive rebuilds. The build fails if no identity is usable (usually: the
-# keychain holding it is locked -- see `just signing`). `just
-# allow_adhoc_signing=ON build` makes a disposable ad-hoc build instead; its
-# designated requirement is a cdhash, so every rebuild re-prompts.
-allow_adhoc_signing := "OFF"
 
 # A Linux build needs the Wayland, text and libcurl development packages that
 # eacp looks for with pkg-config, plus a compiler and ninja. Scripts/with-linux-deps
@@ -41,7 +34,7 @@ default:
 
 # Configure the CMake build tree (idempotent; first run fetches deps via CPM).
 configure:
-    {{deps}} cmake -S . -B {{build_dir}} -G "{{generator}}" -DCMAKE_BUILD_TYPE={{build_type}} -DCOWTERM_MACOS_SIGNING_IDENTITY="{{signing_identity}}" -DCOWTERM_MACOS_ALLOW_ADHOC_SIGNING={{allow_adhoc_signing}}
+    {{deps}} cmake -S . -B {{build_dir}} -G "{{generator}}" -DCMAKE_BUILD_TYPE={{build_type}}
 
 # Every configure runs FetchContent's update step, which checks out a
 # branch-pinned package's new head, so `just build` / `just install` already
@@ -50,7 +43,7 @@ configure:
 update-deps: configure
 
 # Build the app; CowTermDaemon builds as a dependency and is bundled alongside
-# it. CowTermApp (the always-run packaging + signing target) exists only on
+# it. CowTermApp (the always-run target that refreshes the bundled daemon) exists only on
 # macOS; elsewhere the executable target copies the daemon via POST_BUILD.
 [macos]
 build: configure
@@ -83,7 +76,7 @@ rebuild: clean build
 
 # Build, then launch the app.
 #
-# Every dev build is ad-hoc signed with a fresh cdhash, so macOS keeps the
+# Every rebuild is a new ad-hoc identity to macOS, so it keeps the
 # old privacy grant switched on in System Settings while refusing it to the
 # new binary. Resetting before launch makes the app ask again for real. The
 # app does the reset itself (`CowTerm --reset-permissions [service]`, the same
@@ -128,35 +121,17 @@ debug-popup: build
 # falls back to renaming the live exe aside (*.old, cleaned up next run); a
 # running CowTerm and its daemon keep going, shells intact, until you switch
 # with Kill everything & quit (Scripts/install-windows.ps1 says so).
-# On macOS it refuses an ad-hoc bundle: installing one would throw away the
-# stable identity the Screen Recording grant is keyed on. Also links `ct` (the
+# On macOS the bundle goes to ~/.local/libexec/cowterm. Also links `ct` (the
 # CowTerm executable's CLI mode) into ~/.local/bin. On Windows `ct` is a ct.cmd
 # there instead: CowTerm.exe is a GUI executable, which a shell would not wait
 # for, and a batch file makes it.
 [macos]
 install: build
-    @if codesign --display --requirements - "{{build_dir}}/Terminal/CowTerm.app" 2>&1 | grep -q cdhash; then \
-        echo "error: {{build_dir}}/Terminal/CowTerm.app is ad-hoc signed; refusing to install it." >&2; \
-        echo "       Unlock the signing keychain (see \`just signing\`) and rebuild." >&2; \
-        exit 1; \
-    fi
-    rm -rf "/Applications/CowTerm.app"
-    cp -R "{{build_dir}}/Terminal/CowTerm.app" "/Applications/CowTerm.app"
-    codesign --verify --deep --strict --verbose=2 "/Applications/CowTerm.app"
-    mkdir -p "$HOME/.local/bin"
-    ln -sf "/Applications/CowTerm.app/Contents/MacOS/CowTerm" "$HOME/.local/bin/ct"
-    @echo "Installed CowTerm.app to /Applications (ct -> ~/.local/bin/ct)"
-
-# List code-signing identities per keychain and whether each is unlocked --
-# the one-look answer to "why did the build go ad-hoc?".
-[macos]
-signing:
-    #!/bin/sh
-    security list-keychains -d user | tr -d '"' | while read -r kc; do
-        if security show-keychain-info "$kc" >/dev/null 2>&1; then state=unlocked; else state=LOCKED; fi
-        echo "$kc ($state)"
-        security find-identity -v -p codesigning "$kc" | sed -n 's/^ *[0-9]*) /    /p'
-    done
+    mkdir -p "$HOME/.local/bin" "$HOME/.local/libexec/cowterm"
+    rm -rf "$HOME/.local/libexec/cowterm/CowTerm.app"
+    cp -R "{{build_dir}}/Terminal/CowTerm.app" "$HOME/.local/libexec/cowterm/CowTerm.app"
+    ln -sf "$HOME/.local/libexec/cowterm/CowTerm.app/Contents/MacOS/CowTerm" "$HOME/.local/bin/ct"
+    @echo "Installed CowTerm.app to ~/.local/libexec/cowterm (ct -> ~/.local/bin/ct)"
 
 [windows]
 install: build

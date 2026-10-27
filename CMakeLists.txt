@@ -74,12 +74,6 @@ CPMAddPackage(
         OPTIONS "RUDDER_CLIENT_ONLY ON"
 )
 
-# This cache entry exists on every platform so cross-platform `just` recipes
-# can pass it without producing an "unused variable" warning. It only affects
-# the macOS packaging target.
-set(COWTERM_MACOS_SIGNING_IDENTITY "" CACHE STRING
-        "Certificate name or SHA-1 used to sign CowTerm; empty auto-detects")
-
 # eacp runs eacp_default_setup() only when it is the root project. We are the
 # root now, so reproduce the deployment target and point its target helper at
 # CowTerm's own plist. A terminal is the responsible application for many
@@ -89,9 +83,6 @@ if (APPLE)
     set(CMAKE_OSX_DEPLOYMENT_TARGET "11.0" CACHE STRING "")
     set(EACP_MACOS_PLIST "${CMAKE_CURRENT_SOURCE_DIR}/Terminal/Info.plist.in"
             CACHE INTERNAL "CowTerm macOS bundle Info.plist template" FORCE)
-
-    option(COWTERM_MACOS_ALLOW_ADHOC_SIGNING
-            "Allow disposable macOS builds whose privacy grants reset" OFF)
 endif ()
 
 # eacp's C++20 modules are precompiled; skip module scanning as eacp does.

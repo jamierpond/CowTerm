@@ -29,41 +29,16 @@ The `CowTermDaemon` binary is built and copied into the app bundle
 automatically. To build against a local eacp checkout instead of fetching it,
 pass `-DCPM_eacp_SOURCE=/path/to/eacp`.
 
-### macOS code signing and privacy permissions
+### macOS privacy permissions
 
-macOS remembers Screen Recording (and other privacy grants) against the
-responsible app's designated requirement. For a terminal that's CowTerm, for
-every command it runs. An ad-hoc signature's requirement is its cdhash, so each
-rebuild is a new app and the prompt comes back. A certificate-backed signature
-keeps the grant across rebuilds.
+CowTerm is not certificate-signed. macOS remembers Screen Recording,
+Accessibility and other privacy grants against the responsible app's signature
+(for a terminal that's CowTerm, for every command it runs), and each rebuild is
+a new ad-hoc identity, so those grants re-prompt after a rebuild. `just run`
+resets Accessibility before launching for that reason, so the prompt is real
+rather than a stale switch in System Settings.
 
-The build auto-detects a code-signing identity (Apple Development, then
-Developer ID, then any) and fails if none is usable. `Developer ID Application:
-Tamber, Incorporated` works; it lives in a dedicated build keychain that the
-tamber-web/eacp release scripts create (and know the password to). The usual
-failure is that keychain being locked: the build names it, and `just signing`
-lists identities per keychain with lock state. Unlock it with:
-
-```bash
-security unlock-keychain ~/Library/Keychains/tamber-codesign.keychain-db
-```
-
-To pick an identity explicitly: `just signing_identity="<name or SHA-1>" build`.
-A disposable ad-hoc build: `just allow_adhoc_signing=ON build`. `just install`
-refuses to install an ad-hoc bundle.
-
-Moving an install from ad-hoc to stable signing, once:
-
-```bash
-just install                                  # needs the unlocked keychain
-# CowTerm: Kill everything & quit (so the old daemon exits)
-tccutil reset ScreenCapture com.eacp.cowterm
-# launch CowTerm, then in it:
-ct screen-cap request                         # grant in System Settings
-# restart CowTerm
-```
-
-Later builds signed by the same identity keep the grant. Purpose strings in
+Purpose strings in
 CowTerm's plist let macOS explain camera, microphone, system-audio, automation
 and other requests made by commands you run; they never grant anything without
 your consent.
@@ -88,11 +63,11 @@ TCC, so a reset leaves them alone.
 
 ### Screen capture for agents
 
-`ct` is the CowTerm executable's CLI mode: same signed binary, same grant.
+`ct` is the CowTerm executable's CLI mode: same binary, same grant.
 `just install` symlinks it to `~/.local/bin/ct`; an alias works too:
 
 ```bash
-alias ct=/Applications/CowTerm.app/Contents/MacOS/CowTerm
+alias ct=~/.local/libexec/cowterm/CowTerm.app/Contents/MacOS/CowTerm
 ```
 
 Everything but `help`/`version` only runs from a CowTerm shell (exit 3

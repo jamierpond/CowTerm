@@ -145,34 +145,16 @@ eacp_set_app_icon(${COWTERM_EXECUTABLE_TARGET}
         IMAGE "${CMAKE_CURRENT_SOURCE_DIR}/Icon.png")
 
 # The daemon rides beside the GUI executable. CowTermApp is deliberately always
-# out of date: this keeps a daemon-only rebuild from leaving a stale bundled
-# copy, and ensures resource-only changes are sealed by a fresh outer signature.
+# out of date so a daemon-only rebuild never leaves a stale bundled copy.
 if (APPLE)
     add_dependencies(${COWTERM_EXECUTABLE_TARGET} CowTermDaemon)
 
-    set(COWTERM_PACKAGE_COMMAND
-            ${CMAKE_COMMAND}
-            -DAPP_PATH=$<TARGET_BUNDLE_DIR:${COWTERM_EXECUTABLE_TARGET}>
-            -DDAEMON_SOURCE_PATH=$<TARGET_FILE:CowTermDaemon>
-            -DDAEMON_PATH=$<TARGET_FILE_DIR:${COWTERM_EXECUTABLE_TARGET}>/CowTermDaemon
-            -DAPP_IDENTIFIER=${BUNDLE_ID}
-            -DDAEMON_IDENTIFIER=${DAEMON_BUNDLE_ID}
-            -DSIGNING_IDENTITY=${COWTERM_MACOS_SIGNING_IDENTITY}
-            -DALLOW_ADHOC=${COWTERM_MACOS_ALLOW_ADHOC_SIGNING}
-            -P ${CMAKE_SOURCE_DIR}/cmake/SignMacOSApp.cmake)
-
-    # A direct executable-target build still receives a valid signature.
-    add_custom_command(TARGET ${COWTERM_EXECUTABLE_TARGET} POST_BUILD
-            COMMAND ${COWTERM_PACKAGE_COMMAND}
-            COMMENT "Refreshing and signing CowTerm.app after linking"
-            VERBATIM)
-
-    # Normal builds use this always-run target, which also covers changes that
-    # do not relink the GUI executable.
     add_custom_target(CowTermApp ALL
-            COMMAND ${COWTERM_PACKAGE_COMMAND}
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    $<TARGET_FILE:CowTermDaemon>
+                    $<TARGET_FILE_DIR:${COWTERM_EXECUTABLE_TARGET}>/CowTermDaemon
             DEPENDS ${COWTERM_EXECUTABLE_TARGET} CowTermDaemon
-            COMMENT "Refreshing and signing CowTerm.app"
+            COMMENT "Refreshing the daemon inside CowTerm.app"
             VERBATIM)
 else ()
     # Preserve the existing target and post-build layout off macOS.
