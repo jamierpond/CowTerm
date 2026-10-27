@@ -9,6 +9,7 @@
 #include <RudderClient.h>
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -32,6 +33,11 @@ public:
     // Rudder picked a context (Enter, not a preview); the window should come
     // forward.
     eacp::Callback onBringToFront = [] {};
+
+    // The pane's row as last published (title, subtitle, cwd), for anything
+    // else that names a pane the way Rudder shows it.
+    std::optional<rudder::protocol::Context>
+        findPaneContext(const std::string& shellId) const;
 
 private:
     void push();

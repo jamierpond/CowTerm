@@ -78,6 +78,10 @@ public:
     const std::vector<std::unique_ptr<TermSession>>& all() const { return sessions; }
 
     TermSession* find(const std::string& key);
+
+    // Switches to the session holding the pane with this shell id and focuses
+    // that pane. False when no open pane has the id.
+    bool showPane(const std::string& shellId);
     TermSession& openProject(const std::string& dir);
 
     // Always creates a fresh session (openProject dedupes by directory).

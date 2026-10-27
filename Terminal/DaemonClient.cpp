@@ -341,6 +341,11 @@ TerminalConfig terminalConfig(const AppConfig& config)
     result.fontSize = config.fontSize;
     result.theme = themeByName(config.theme);
     result.makeShell = [](const std::string& shellId) { return makeShell(shellId); };
+    result.environmentForShell = [](const std::string& shellId)
+    {
+        return std::vector<EnvironmentVariable> {
+            {proto::paneEnvironmentVariable, shellId}};
+    };
 
     return result;
 }

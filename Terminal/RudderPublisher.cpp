@@ -123,18 +123,20 @@ void RudderPublisher::activate(const std::string& contextId, bool raise)
         return;
     }
 
-    for (const auto& session: manager.all())
-        for (auto* pane: session->view.panes())
-            if (pane->shellId() == target->value)
-            {
-                manager.switchTo(*session);
-                session->view.focusPane(pane);
+    if (manager.showPane(target->value) && raise)
+        onBringToFront();
+}
 
-                if (raise)
-                    onBringToFront();
+std::optional<rudder::protocol::Context>
+    RudderPublisher::findPaneContext(const std::string& shellId) const
+{
+    const auto id = paneContextId(shellId);
 
-                return;
-            }
+    for (const auto& context: pushed)
+        if (context.id == id)
+            return context;
+
+    return std::nullopt;
 }
 
 // Rudder's close on a pane: what ctrl+a x does to the active one. The

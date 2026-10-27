@@ -110,7 +110,7 @@ struct Daemon
         pane.startDir = cwd;
 
         const auto started = pane.pty.start(
-            {{cols, rows}, cwd, {}},
+            {{cols, rows}, cwd, {}, {{term::proto::paneEnvironmentVariable, id}}},
             [this, id](std::string data)
             {
                 Threads::callAsync([this, id, data = std::move(data)]

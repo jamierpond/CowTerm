@@ -129,15 +129,63 @@ AppShell::AppShell()
 
     popup.interceptKey = [this](const KeyEvent& event) { return popupKey(event); };
 
+    // Ring-backs name a session by its key; `ct notify-user` names a pane by
+    // its Rudder context id.
     Notifier::initialize(
         [this](const std::string& sessionKey)
         {
+            const auto target = parseRudderContextId(sessionKey);
+
+            if (target && target->kind == RudderTarget::Kind::Pane)
+            {
+                showPaneAndBringToFront(target->value);
+                return;
+            }
+
             if (auto* session = manager.find(sessionKey))
             {
                 manager.switchTo(*session);
                 onBringToFront();
             }
         });
+
+    notifyUserServer.describePane = [this](const std::string& shellId)
+    { return describePaneForNotifyUser(shellId); };
+
+    notifyUserServer.onShowPane = [this](const std::string& shellId)
+    { showPaneAndBringToFront(shellId); };
+
+    notifyUserServer.onPromptOpened =
+        [this](const NotifyUserRequest& request, const std::string& title)
+    { ringBackForNotifyUser(request, title); };
+}
+
+void AppShell::showPaneAndBringToFront(const std::string& shellId)
+{
+    if (manager.showPane(shellId))
+        onBringToFront();
+}
+
+std::optional<NotifyUserPaneLabel>
+    AppShell::describePaneForNotifyUser(const std::string& shellId) const
+{
+    const auto context = rudder.findPaneContext(shellId);
+
+    if (!context)
+        return std::nullopt;
+
+    return NotifyUserPaneLabel {context->title, context->subtitle};
+}
+
+// The prompt window floats over everything, but while CowTerm is not the app
+// in front a desktop notification is what reaches the user.
+void AppShell::ringBackForNotifyUser(const NotifyUserRequest& request,
+                                     const std::string& title)
+{
+    if (windowFocused)
+        return;
+
+    Notifier::notify(paneContextId(request.paneId), title, request.content);
 }
 
 void AppShell::start()

@@ -76,6 +76,24 @@ TermSession* SessionManager::find(const std::string& key)
     return nullptr;
 }
 
+bool SessionManager::showPane(const std::string& shellId)
+{
+    for (const auto& session: sessions)
+    {
+        for (auto* pane: session->view.panes())
+        {
+            if (pane->shellId() == shellId)
+            {
+                switchTo(*session);
+                session->view.focusPane(pane);
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
 std::string SessionManager::uniqueName(const std::string& base) const
 {
     auto name = base;

@@ -23,6 +23,17 @@ inline std::string serverName()
     return suffix.empty() ? std::string {"cowtermd"} : "cowtermd-" + suffix;
 }
 
+// The IPC name the running app serves and `ct notify-user` dials.
+inline std::string appServerName()
+{
+    const auto suffix = instanceSuffix();
+    return suffix.empty() ? std::string {"cowterm"} : "cowterm-" + suffix;
+}
+
+// Set in every pane's shell environment to the pane's stable shell id, so
+// `ct notify-user` run there knows which pane asked.
+inline constexpr auto paneEnvironmentVariable = "COWTERM_PANE";
+
 // One Messenger message: a verb line ("verb arg1 arg2..."), then an
 // optional raw payload after the first newline. The payload is untouched
 // bytes — Messenger frames are length-prefixed, so PTY output needs no

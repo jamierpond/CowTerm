@@ -79,6 +79,14 @@ nano_add_executable(CowTermRudderTests
 
 target_include_directories(CowTermRudderTests PRIVATE ../Terminal)
 
+# The `ct notify-user` request and reply encoding; pure, over Protocol.h.
+nano_add_executable(CowTermNotifyUserTests
+        SOURCES
+            NotifyUserProtocolTests.cpp
+            ../Terminal/NotifyUserProtocol.cpp)
+
+target_include_directories(CowTermNotifyUserTests PRIVATE ../Terminal)
+
 # forkpty/openpty live in libutil on Linux; on Apple they are in libSystem.
 if (LINUX)
     target_link_libraries(CowTermTests PRIVATE util)

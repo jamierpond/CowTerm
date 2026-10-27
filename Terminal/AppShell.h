@@ -2,6 +2,7 @@
 
 #include "ClaudeHud.h"
 #include "Config.h"
+#include "NotifyUserServer.h"
 #include "Palette.h"
 #include "PermissionsPanel.h"
 #include "Popup.h"
@@ -70,6 +71,9 @@ private:
     void updateTitle();
     void handleSessionNotify(TermSession& session, const std::string& text);
     void rudderChanged();
+    void showPaneAndBringToFront(const std::string& shellId);
+    std::optional<NotifyUserPaneLabel> describePaneForNotifyUser(const std::string& shellId) const;
+    void ringBackForNotifyUser(const NotifyUserRequest& request, const std::string& title);
 
     AppConfig config = loadConfig();
     // Ahead of the manager, so it outlives the session teardown that still
@@ -84,6 +88,7 @@ private:
     PermissionsPanel permissions {config};
     eacp::UI::ComponentHost overlayHost;
     TrayController tray {manager};
+    NotifyUserServer notifyUserServer {config};
     TermSession* attached = nullptr;
     bool prefixArmed = false;
     bool popupPrefixArmed = false;

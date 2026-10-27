@@ -4,6 +4,7 @@
 #include <memory>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace term
 {
@@ -11,6 +12,12 @@ struct PtySize
 {
     int cols = 80;
     int rows = 24;
+};
+
+struct EnvironmentVariable
+{
+    std::string name;
+    std::string value;
 };
 
 struct PtyOptions
@@ -24,6 +31,9 @@ struct PtyOptions
     // PATH apply) instead of an interactive shell; the PTY ends when it
     // exits. Empty runs the user's shell.
     std::string command;
+
+    // Set in the shell's environment on top of the one it inherits.
+    std::vector<EnvironmentVariable> environment;
 };
 
 // A pseudo-terminal running the user's login shell. Output is delivered on a

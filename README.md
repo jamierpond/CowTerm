@@ -190,6 +190,38 @@ Wire it to Claude Code with a `Stop` hook that prints the sequence, and the
 "Claude finished → notification → click → you're back in that pane" loop is
 closed.
 
+## Asking the user (`ct notify-user`)
+
+An agent in a pane can stop and ask. The running app opens a small window that
+floats over everything, naming the pane (click the header or **Show pane** to
+jump to it), and `ct` blocks until the user answers. When CowTerm is not the
+app in front it also posts a notification; clicking that jumps to the pane too.
+
+```
+ct notify-user --content "xyz done, requires your input"
+ct notify-user --content "foo bar" --options "this one" "that one"
+ct notify-user --content "foo bar" --options "ship it" "hold" --allow-type-response
+ct notify-user --pane <pane-id> --content "..."
+ct notify-user --title "tamber-web · fix-auth" --content "..."
+```
+
+With no `--options` and no `--allow-type-response` the window has a single OK.
+Several asks at once get a window each, cascaded.
+
+- stdout: the chosen option, or the typed answer, on one line.
+- exit 0 answered; 1 dismissed (Esc, Dismiss or the close button), nothing printed;
+  2 usage error; 4 CowTerm not running or gone before an answer.
+- Killing `ct` (Ctrl-C) closes its window.
+- The pane: every pane's shell has `COWTERM_PANE` set to its id, so no flag is
+  needed inside CowTerm; `--pane` overrides it.
+
+From Claude Code:
+
+```sh
+answer=$(ct notify-user --content "Tests pass. Merge?" --options "merge" "wait")
+[ "$answer" = "merge" ] && gh pr merge
+```
+
 ## Config — `~/.config/cowterm.json`
 
 ```json

@@ -9,6 +9,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cwchar>
 #include <mutex>
 #include <thread>
 #include <vector>
@@ -43,6 +44,57 @@ std::wstring findShell()
         return comspec;
 
     return L"cmd.exe";
+}
+
+bool isVariableNamed(const std::wstring& entry, const std::wstring& name)
+{
+    return entry.size() > name.size() && entry[name.size()] == L'='
+           && _wcsnicmp(entry.c_str(), name.c_str(), name.size()) == 0;
+}
+
+// A CreateProcessW environment block: this process's variables with `extras`
+// set over them, each NUL-terminated, the block ending in one more NUL.
+std::wstring environmentBlockWith(const std::vector<EnvironmentVariable>& extras)
+{
+    auto names = std::vector<std::wstring> {};
+
+    for (const auto& variable: extras)
+        names.push_back(widen(variable.name));
+
+    const auto isOverridden = [&](const std::wstring& entry)
+    {
+        return std::any_of(names.begin(),
+                           names.end(),
+                           [&](const std::wstring& name)
+                           { return isVariableNamed(entry, name); });
+    };
+
+    auto block = std::wstring {};
+
+    if (auto* inherited = GetEnvironmentStringsW())
+    {
+        for (auto* entry = inherited; *entry != L'\0'; entry += wcslen(entry) + 1)
+        {
+            const auto line = std::wstring {entry};
+
+            if (isOverridden(line))
+                continue;
+
+            block += line;
+            block += L'\0';
+        }
+
+        FreeEnvironmentStringsW(inherited);
+    }
+
+    for (const auto& variable: extras)
+    {
+        block += widen(variable.name) + L"=" + widen(variable.value);
+        block += L'\0';
+    }
+
+    block += L'\0';
+    return block;
 }
 
 bool isDirectory(const std::wstring& path)
@@ -278,6 +330,7 @@ bool Pty::start(const PtyOptions& options,
         commandLine += L" -NoLogo -NoExit -EncodedCommand " + devShellCommand();
     }
     const auto directory = startDirectory(options.workingDirectory);
+    auto environment = environmentBlockWith(options.environment);
 
     const auto launched =
         InitializeProcThreadAttributeList(attributes, 1, 0, &listSize)
@@ -293,8 +346,8 @@ bool Pty::start(const PtyOptions& options,
                           nullptr,
                           nullptr,
                           FALSE,
-                          EXTENDED_STARTUPINFO_PRESENT,
-                          nullptr,
+                          EXTENDED_STARTUPINFO_PRESENT | CREATE_UNICODE_ENVIRONMENT,
+                          environment.data(),
                           directory.empty() ? nullptr : directory.c_str(),
                           &startup.StartupInfo,
                           &info);

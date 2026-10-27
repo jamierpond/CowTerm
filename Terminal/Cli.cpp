@@ -10,7 +10,9 @@
 #include "Cli.h"
 #include "CliPlatform.h"
 #include "CowTermVersion.h"
+#include "NotifyUserClient.h"
 #include "Permissions.h"
+#include "Protocol.h"
 
 #include <eacp/Core/Platform/ScopedAutoReleasePool.h>
 #include <eacp/Core/Utils/FilePath.h>
@@ -40,6 +42,11 @@ constexpr int exitFail = 1;
 constexpr int exitNoPermission = 2;
 constexpr int exitNotInCowTerm = 3;
 
+// `ct notify-user` has its own: 0 answered, 1 dismissed, 2 usage, 4 no app.
+constexpr int exitNotifyUserDismissed = 1;
+constexpr int exitNotifyUserUsage = 2;
+constexpr int exitNotifyUserAppUnreachable = 4;
+
 constexpr auto usage = R"(usage: ct <command>
 
   screen-cap status               granted / not granted, and CowTerm's signature
@@ -52,6 +59,11 @@ constexpr auto usage = R"(usage: ct <command>
   screen-cap record stop          finish the recording; prints its path
   screen-cap record status
 
+  notify-user --content <text> [--options <a> <b> ...]
+              [--allow-type-response] [--title <text>] [--pane <id>]
+                                  ask the user in a window over everything;
+                                  prints the chosen option or typed answer
+
   screenshot                      = screen-cap shot
   start-whole-screen-recording    = screen-cap record start
   stop-screen-recording           = screen-cap record stop
@@ -62,6 +74,8 @@ constexpr auto usage = R"(usage: ct <command>
 Captures default to $COWTERM_CAPTURE_DIR, else ~/Pictures/CowTerm.
 Exit codes: 0 ok, 1 error, 2 Screen Recording not granted,
 3 not running inside CowTerm (the grant belongs to the hosting terminal).
+notify-user: 0 answered, 1 dismissed, 2 usage error, 4 CowTerm not running.
+Its pane defaults to $COWTERM_PANE, which every CowTerm pane sets.
 Windows grants nothing to ask for, and records nothing yet.
 )";
 
@@ -439,6 +453,97 @@ int screenCap(const std::vector<std::string>& args)
     return fail("unknown screen-cap command: " + args[0]);
 }
 
+int failNotifyUserUsage(const std::string& message)
+{
+    std::fprintf(stderr, "ct notify-user: %s (see ct help)\n", message.c_str());
+    return exitNotifyUserUsage;
+}
+
+bool isNotifyUserFlag(const std::string& arg)
+{
+    return arg.starts_with("--");
+}
+
+int exitCodeForNotifyUserOutcome(const NotifyUserOutcome& outcome)
+{
+    if (!outcome.wasAnswered)
+    {
+        std::fprintf(stderr,
+                     "ct notify-user: CowTerm is not running or went away before "
+                     "the user answered\n");
+        return exitNotifyUserAppUnreachable;
+    }
+
+    if (!outcome.reply.answer)
+        return exitNotifyUserDismissed;
+
+    std::printf("%s\n", outcome.reply.answer->c_str());
+    std::fflush(stdout);
+    return exitOk;
+}
+
+int notifyUser(const std::vector<std::string>& args)
+{
+    auto request = NotifyUserRequest {};
+    auto hasContent = false;
+
+    if (const auto* pane = std::getenv(proto::paneEnvironmentVariable))
+        request.paneId = pane;
+
+    for (auto i = std::size_t {0}; i < args.size(); ++i)
+    {
+        const auto& arg = args[i];
+
+        if (arg == "--allow-type-response")
+        {
+            request.allowsTypedResponse = true;
+            continue;
+        }
+
+        if (arg == "--options")
+        {
+            while (i + 1 < args.size() && !isNotifyUserFlag(args[i + 1]))
+                request.options.push_back(args[++i]);
+
+            if (request.options.empty())
+                return failNotifyUserUsage("--options needs at least one option");
+
+            continue;
+        }
+
+        if (arg != "--content" && arg != "--title" && arg != "--pane")
+            return failNotifyUserUsage("unknown option: " + arg);
+
+        if (i + 1 >= args.size())
+            return failNotifyUserUsage(arg + " needs a value");
+
+        const auto& value = args[++i];
+
+        if (arg == "--content")
+        {
+            request.content = value;
+            hasContent = true;
+        }
+        else if (arg == "--title")
+        {
+            request.title = value;
+        }
+        else
+        {
+            request.paneId = value;
+        }
+    }
+
+    if (!hasContent)
+        return failNotifyUserUsage("--content is required");
+
+    if (request.paneId.empty())
+        return failNotifyUserUsage(
+            "no pane: run it inside a CowTerm pane or pass --pane <id>");
+
+    return askRunningAppAndWait(request, exitCodeForNotifyUserOutcome);
+}
+
 int dispatch(const std::vector<std::string>& args)
 {
     if (args.empty() || args[0] == "help" || args[0] == "--help" || args[0] == "-h")
@@ -467,6 +572,11 @@ int dispatch(const std::vector<std::string>& args)
                     permissions::platform::bundleIdentifier().c_str());
         return exitOk;
     }
+
+    // Talks to the running app, not the OS; no grant involved, so it runs
+    // from any terminal.
+    if (args[0] == "notify-user")
+        return notifyUser(std::vector<std::string>(args.begin() + 1, args.end()));
 
     // macOS attributes the Screen Recording request to the terminal hosting
     // the shell. Run from iTerm or over ssh, ct would prompt for (and get or be
@@ -518,6 +628,7 @@ bool isCliInvocation(int argc, char** argv)
 
     const auto verb = std::string {argv[1]};
     for (const auto* known: {"screen-cap",
+                             "notify-user",
                              "screenshot",
                              "start-whole-screen-recording",
                              "stop-screen-recording",

@@ -74,4 +74,5 @@ struct RudderTarget
 };
 
 std::optional<RudderTarget> parseRudderContextId(const std::string& id);
+std::string paneContextId(const std::string& shellId);
 } // namespace term
