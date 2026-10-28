@@ -23,6 +23,9 @@ struct RudderPane
     // detached HEAD. The pane's name in Rudder when it has one.
     std::string branch;
 
+    // The repository root holding cwd; empty outside a repo.
+    std::string repo;
+
     // The pane CowTerm is showing: the active tab's focused pane.
     bool focused = false;
 };
@@ -37,17 +40,22 @@ struct RudderTab
     std::vector<RudderPane> panes;
 };
 
-// A ctrl+a f directory, and the branch checked out there if it's a repo.
+// A ctrl+a f directory, and the branch and repository root there if it's a
+// repo.
 struct RudderPlace
 {
-    RudderPlace(std::string pathToUse, std::string branchToUse = {})
+    RudderPlace(std::string pathToUse,
+                std::string branchToUse = {},
+                std::string repoToUse = {})
         : path(std::move(pathToUse))
         , branch(std::move(branchToUse))
+        , repo(std::move(repoToUse))
     {
     }
 
     std::string path;
     std::string branch;
+    std::string repo;
 };
 
 // One context per pane, then one per place (a ctrl+a f directory) that no tab

@@ -11,6 +11,10 @@ namespace term
 // HEAD.
 std::string gitBranch(const std::string& dir);
 
+// The directory holding the nearest ".git" up from `dir`: a worktree's own
+// root, not the shared git dir. Empty outside a repo.
+std::string gitRepositoryRoot(const std::string& dir);
+
 // gitBranch, remembering where each directory's HEAD file is so a lookup is
 // one small read rather than a walk up the tree. HEAD itself is re-read every
 // time, so a checkout shows on the next lookup.
@@ -18,8 +22,10 @@ class GitBranches
 {
 public:
     std::string of(const std::string& dir);
+    std::string repositoryRootOf(const std::string& dir);
 
 private:
     std::unordered_map<std::string, std::string> heads;
+    std::unordered_map<std::string, std::string> roots;
 };
 } // namespace term

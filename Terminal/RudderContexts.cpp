@@ -189,12 +189,13 @@ std::vector<rudder::protocol::Context>
                 paneSubtitle(pane, context.title, tab, index, session.name, home);
             context.path = pane.cwd;
             context.branch = pane.branch;
+            context.repo = pane.repo;
             context.focused = pane.focused;
             contexts.push_back(std::move(context));
         }
     }
 
-    for (const auto& [path, branch]: places)
+    for (const auto& [path, branch, repo]: places)
     {
         if (covered.contains(path))
             continue;
@@ -205,6 +206,7 @@ std::vector<rudder::protocol::Context>
         context.subtitle = compactPath(path, home);
         context.path = path;
         context.branch = branch;
+        context.repo = repo;
         context.open = false;
         contexts.push_back(std::move(context));
     }

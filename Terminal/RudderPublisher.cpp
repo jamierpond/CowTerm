@@ -76,11 +76,13 @@ void RudderPublisher::push()
         {
             auto cwd = pane->workingDirectory();
             auto branch = branches.of(cwd);
+            auto repo = branches.repositoryRootOf(cwd);
             tab.panes.push_back({pane->shellId(),
                                  pane->currentTitle(),
                                  pane->foregroundProcess(),
                                  std::move(cwd),
                                  std::move(branch),
+                                 std::move(repo),
                                  pane == focused});
         }
 
@@ -90,7 +92,8 @@ void RudderPublisher::push()
     auto placesWithBranches = std::vector<RudderPlace> {};
 
     for (const auto& path: places)
-        placesWithBranches.emplace_back(path, branches.of(path));
+        placesWithBranches.emplace_back(
+            path, branches.of(path), branches.repositoryRootOf(path));
 
     auto contexts = rudderContexts(
         tabs, placesWithBranches, eacp::FilePath::homeDirectory().str());

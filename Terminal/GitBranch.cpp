@@ -22,9 +22,15 @@ std::string firstLine(const fs::path& file)
     return line;
 }
 
-// The HEAD file of the repo holding `dir`: the nearest ".git" up the tree,
-// either the git dir itself or (worktrees, submodules) a file pointing at it.
-std::optional<fs::path> headFile(const std::string& dir)
+struct GitCheckout
+{
+    fs::path root;
+    fs::path head;
+};
+
+// The nearest ".git" up the tree from `dir`, either the git dir itself or
+// (worktrees, submodules) a file pointing at it.
+std::optional<GitCheckout> findGitCheckout(const std::string& dir)
 {
     if (dir.empty())
         return std::nullopt;
@@ -36,7 +42,7 @@ std::optional<fs::path> headFile(const std::string& dir)
         const auto dotGit = at / ".git";
 
         if (fs::is_directory(dotGit, error))
-            return dotGit / "HEAD";
+            return GitCheckout {at, dotGit / "HEAD"};
 
         if (fs::is_regular_file(dotGit, error))
         {
@@ -47,12 +53,20 @@ std::optional<fs::path> headFile(const std::string& dir)
                 return std::nullopt;
 
             auto gitDir = fs::path {line.substr(prefix.size())};
-            return (gitDir.is_relative() ? at / gitDir : gitDir) / "HEAD";
+            return GitCheckout {at, (gitDir.is_relative() ? at / gitDir : gitDir) / "HEAD"};
         }
 
         if (at == at.parent_path())
             break;
     }
+
+    return std::nullopt;
+}
+
+std::optional<fs::path> headFile(const std::string& dir)
+{
+    if (auto checkout = findGitCheckout(dir))
+        return checkout->head;
 
     return std::nullopt;
 }
@@ -77,6 +91,12 @@ std::string gitBranch(const std::string& dir)
     return head ? branchIn(*head).value_or("") : std::string {};
 }
 
+std::string gitRepositoryRoot(const std::string& dir)
+{
+    const auto checkout = findGitCheckout(dir);
+    return checkout ? checkout->root.string() : std::string {};
+}
+
 std::string GitBranches::of(const std::string& dir)
 {
     if (const auto known = heads.find(dir); known != heads.end())
@@ -96,5 +116,25 @@ std::string GitBranches::of(const std::string& dir)
 
     heads[dir] = head->string();
     return branchIn(*head).value_or("");
+}
+
+std::string GitBranches::repositoryRootOf(const std::string& dir)
+{
+    if (const auto known = roots.find(dir); known != roots.end())
+    {
+        auto error = std::error_code {};
+
+        if (fs::exists(fs::path {known->second} / ".git", error))
+            return known->second;
+
+        roots.erase(known);
+    }
+
+    auto root = gitRepositoryRoot(dir);
+
+    if (!root.empty())
+        roots[dir] = root;
+
+    return root;
 }
 } // namespace term

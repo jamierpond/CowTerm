@@ -272,6 +272,37 @@ auto tPlacesCarryBranch = test("RudderContexts/placesCarryBranch") = []
     check(contexts[1].branch.empty());
 };
 
+auto tPanesAndPlacesCarryRepo = test("RudderContexts/panesAndPlacesCarryRepo") = []
+{
+    auto tab = twoPaneTab();
+    tab.panes[0].repo = "/Users/me/projects/CowTerm";
+    const auto contexts = rudderContexts(
+        {tab}, {{"/Users/me/projects/tamber-web", "develop", "/Users/me/projects/tamber-web"}}, home);
+
+    check(contexts[0].repo == "/Users/me/projects/CowTerm");
+    check(contexts[1].repo.empty());
+    check(contexts[2].repo == "/Users/me/projects/tamber-web");
+};
+
+auto tGitRepositoryRoot = test("GitBranch/repositoryRoot") = []
+{
+    const auto dir = TempDir {};
+    const auto repo = dir.path / "repo";
+    write(repo / ".git" / "HEAD", "ref: refs/heads/main\n");
+    write(repo / ".git" / "worktrees" / "repo-x" / "HEAD", "ref: refs/heads/x\n");
+    write(dir.path / "repo-x" / ".git", "gitdir: ../repo/.git/worktrees/repo-x\n");
+    std::filesystem::create_directories(repo / "src" / "deep");
+    auto branches = GitBranches {};
+
+    check(gitRepositoryRoot(repo.string()) == repo.string());
+    check(gitRepositoryRoot((repo / "src" / "deep").string()) == repo.string(), "from a subdir");
+    check(gitRepositoryRoot((dir.path / "repo-x").string()) == (dir.path / "repo-x").string(),
+          "a worktree is its own root");
+    check(gitRepositoryRoot(dir.path.string()).empty(), "outside the repo");
+    check(branches.repositoryRootOf((repo / "src").string()) == repo.string());
+    check(branches.repositoryRootOf(dir.path.string()).empty());
+};
+
 auto tGitBranchReadsHead = test("GitBranch/readsHead") = []
 {
     const auto dir = TempDir {};
