@@ -1,5 +1,7 @@
 #include "PrDashboard.h"
 
+#include "GitBranch.h"
+
 
 #include "Command.h"
 #include "FuzzyMatch.h"
@@ -69,38 +71,6 @@ std::string lowered(std::string text)
                    text.begin(),
                    [](unsigned char c) { return (char) std::tolower(c); });
     return text;
-}
-
-// "owner/repo" from any git remote URL form (https, ssh://, scp-like),
-// lowercased, ".git" stripped. Empty when it doesn't look like a remote.
-std::string slugFromRemote(std::string url)
-{
-    while (!url.empty() && (url.back() == '\n' || url.back() == '\r' || url.back() == ' '))
-        url.pop_back();
-
-    if (const auto scheme = url.find("://"); scheme != std::string::npos)
-    {
-        url = url.substr(scheme + 3);
-
-        if (const auto slash = url.find('/'); slash != std::string::npos)
-            url = url.substr(slash + 1);
-        else
-            return {};
-    }
-    else if (const auto colon = url.find(':');
-             colon != std::string::npos && url.find('/') > colon)
-    {
-        // scp-like: git@github.com:owner/repo.git
-        url = url.substr(colon + 1);
-    }
-
-    while (!url.empty() && url.front() == '/')
-        url.erase(url.begin());
-
-    if (url.ends_with(".git"))
-        url = url.substr(0, url.size() - 4);
-
-    return url.find('/') != std::string::npos ? lowered(url) : std::string {};
 }
 
 // Seconds since the epoch for gh's "2026-07-19T12:34:56Z" timestamps.

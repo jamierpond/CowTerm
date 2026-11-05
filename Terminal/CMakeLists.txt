@@ -22,7 +22,14 @@ endif ()
 # switcher, daemon client, tray.
 add_executable(${COWTERM_EXECUTABLE_TARGET}
         Main.cpp
+        AgentBoard.cpp
         AppShell.cpp
+        BoardDocument.cpp
+        BoardEnvironment.cpp
+        BoardProjects.cpp
+        BoardSnapshots.cpp
+        BoardStore.cpp
+        CardText.cpp
         ClaudeHud.cpp
         Cli.cpp
         Command.cpp
@@ -40,11 +47,15 @@ add_executable(${COWTERM_EXECUTABLE_TARGET}
         PrDashboard.cpp
         Popup.cpp
         Projects.cpp
+        PullRequests.cpp
         RudderContexts.cpp
         RudderPublisher.cpp
         Session.cpp
         SessionView.cpp
         Switcher.cpp
+        TaskBoard.cpp
+        TextWrapping.cpp
+        Zones.cpp
         TrayController.cpp
         DaemonClient.cpp)
 
@@ -59,6 +70,7 @@ if (APPLE)
             DirWatcher-macOS.mm
             Notifier-macOS.mm
             Permissions-macOS.mm
+            ProcessEnvironment-macOS.cpp
             Trash-macOS.mm)
 
     target_link_libraries(${COWTERM_EXECUTABLE_TARGET} PRIVATE
@@ -74,6 +86,7 @@ elseif (WIN32)
             DirWatcher-Windows.cpp
             Notifier-Windows.cpp
             Permissions-Default.cpp
+            ProcessEnvironment-Windows.cpp
             Trash-Windows.cpp)
 
     # The dashboard and switcher sources hold Unicode literals (powerline
@@ -97,6 +110,7 @@ elseif (LINUX)
             DirWatcher-Linux.cpp
             Notifier-Linux.cpp
             Permissions-Default.cpp
+            ProcessEnvironment-Linux.cpp
             Trash-Linux.cpp)
 endif ()
 
@@ -106,7 +120,7 @@ endif ()
 # which is the native 2D tier and exists only on macOS and Windows.
 target_link_libraries(${COWTERM_EXECUTABLE_TARGET} PRIVATE
         CowTerm::Terminal eacp-sprites eacp-text eacp-ui eacp-network emberstore
-        RudderClient)
+        RudderClient ClaudeCLI ExecutableLookup JsonFields)
 
 # Stamp the git SHA into a generated header on every build so the running app
 # can report exactly which commit it came from (window title + startup log).

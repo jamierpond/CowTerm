@@ -8,6 +8,12 @@
 // CliPlatform.h (Cli-macOS.mm, Cli-Windows.cpp, Cli-Linux.cpp).
 
 #include "Cli.h"
+#include "BoardEnvironment.h"
+#include "BoardSnapshots.h"
+#include "BoardStore.h"
+#include "GitBranch.h"
+#include "PullRequests.h"
+#include "CowTermTerminal/GlyphAtlas.h"
 #include "CliPlatform.h"
 #include "CowTermVersion.h"
 #include "NotifyUserClient.h"
@@ -63,6 +69,15 @@ constexpr auto usage = R"(usage: ct <command>
               [--allow-type-response] [--title <text>] [--pane <id>]
                                   ask the user in a window over everything;
                                   prints the chosen option or typed answer
+
+  board list                      every card: zone, key, title, status
+  board move <review|done> [--card <key>]
+                                  move this pane's card (an agent's own move)
+  board prs [--since today|3d|week]
+                                  your open pull requests, each with the claude
+                                  session it came from and how it was linked
+  board snapshots <dir> [--live]  render the task board at five window shapes
+                                  (--live adds a scene from your running claude)
 
   screenshot                      = screen-cap shot
   start-whole-screen-recording    = screen-cap record start
@@ -544,6 +559,181 @@ int notifyUser(const std::vector<std::string>& args)
     return askRunningAppAndWait(request, exitCodeForNotifyUserOutcome);
 }
 
+constexpr auto boardUsage =
+    "usage: ct board list | ct board move <review|done> [--card <key>] | ct board prs [--since today|3d|week] | "
+    "ct board snapshots <dir> [--live]";
+
+std::optional<std::string> findOptionValue(const std::vector<std::string>& args,
+                                           const std::string& option)
+{
+    auto found = std::ranges::find(args, option);
+
+    if (found == args.end() || std::next(found) == args.end())
+        return std::nullopt;
+
+    return *std::next(found);
+}
+
+BoardSnapshot collectStoredLiveBoardSnapshot(const BoardQuery& query)
+{
+    auto snapshot = collectLiveBoardSnapshot(query);
+    auto database = openBoardDatabase(getDefaultBoardStoreDirectory());
+    applyBoardDocument(snapshot, openBoardDocument(database).get());
+    return snapshot;
+}
+
+int listBoard(const BoardQuery& query)
+{
+    auto snapshot = collectStoredLiveBoardSnapshot(query);
+
+    if (!snapshot.problem.empty())
+        return fail(snapshot.problem);
+
+    for (const auto zone: getColumnZonesInDisplayOrder())
+    {
+        for (const auto& card: getCardsInZone(snapshot, zone))
+        {
+            std::printf("%s\t%s\t%s\t%s\n",
+                        std::string {getZoneName(zone)}.c_str(),
+                        card.key.c_str(),
+                        card.description.c_str(),
+                        card.badgeText.c_str());
+        }
+    }
+
+    return exitOk;
+}
+
+// The card of the pane this runs in (COWTERM_PANE); else this directory and branch.
+std::string findOwnCardKey(const BoardQuery& query)
+{
+    const auto* pane = std::getenv(proto::paneEnvironmentVariable);
+
+    if (pane != nullptr)
+    {
+        auto snapshot = collectLiveBoardSnapshot(query);
+        auto found = std::ranges::find(snapshot.cards, std::string {pane}, &TaskCard::paneShellId);
+
+        if (found != snapshot.cards.end())
+            return found->key;
+    }
+
+    const auto directory = fs::current_path().string();
+    return makeCardKey(directory, gitBranch(directory));
+}
+
+int moveOwnCard(const BoardQuery& query, const std::vector<std::string>& args)
+{
+    if (args.size() < 2)
+        return fail(boardUsage);
+
+    auto zone = findZoneByName(args[1]);
+
+    if (!zone)
+        return fail("no zone named " + args[1] + " (review or done)");
+
+    auto key = findOptionValue(args, "--card").value_or(findOwnCardKey(query));
+    auto database = openBoardDatabase(getDefaultBoardStoreDirectory());
+    auto document = openBoardDocument(database);
+    auto stored = document.get();
+
+    switch (moveCard(stored, key, *zone, MoveRequester::agent))
+    {
+        case MoveOutcome::refusedForAgent:
+            return fail("an agent can move its card to review or done only");
+        case MoveOutcome::unchanged:
+            std::printf("%s already in %s\n", key.c_str(), args[1].c_str());
+            return exitOk;
+        case MoveOutcome::moved:
+            document.set(stored);
+            std::printf("moved %s to %s\n", key.c_str(), args[1].c_str());
+            return exitOk;
+    }
+
+    return exitFail;
+}
+
+int listPullRequests(const BoardQuery& query, const std::vector<std::string>& args)
+{
+    auto window = parsePullRequestWindow(findOptionValue(args, "--since").value_or("today"));
+
+    if (!window)
+        return fail("--since takes today, 3d or week");
+
+    const auto now = std::time(nullptr);
+    const auto tools = makeStartAgentSettingsFromEnvironment();
+    auto fetch = fetchPullRequests(tools.ghExecutable, *window, now);
+
+    if (!fetch.problem.empty())
+        return fail(fetch.problem);
+
+    auto sessions = collectRecentSessions(
+        query.configDirectory, tools.gitExecutable, getPullRequestWindowStart(*window, now));
+    auto board = collectStoredLiveBoardSnapshot(query);
+
+    for (const auto& linked: linkPullRequests(fetch.pullRequests, sessions))
+    {
+        const auto& pullRequest = linked.pullRequest;
+        auto link = std::string {"no session"};
+
+        if (linked.session && linked.rule)
+        {
+            auto card = findCardOfSession(board, linked.session->sessionId);
+            auto status = card ? std::string {getZoneName(card->zone)} : std::string {"ended"};
+            link = std::string {getPullRequestLinkRuleName(*linked.rule)} + " -> "
+                   + linked.session->workingDirectory + " (" + status + ")";
+        }
+
+        std::printf("%s#%d\t%s\tchecks %s\treview %s\t%s\n",
+                    pullRequest.repository.c_str(),
+                    pullRequest.number,
+                    pullRequest.title.c_str(),
+                    pullRequest.checksState.empty() ? "none" : pullRequest.checksState.c_str(),
+                    pullRequest.reviewDecision.empty() ? "none" : pullRequest.reviewDecision.c_str(),
+                    link.c_str());
+    }
+
+    return exitOk;
+}
+
+int board(const std::vector<std::string>& args)
+{
+    if (args.empty())
+        return fail(boardUsage);
+
+    if (args[0] == "list" || args[0] == "move" || args[0] == "prs")
+    {
+        auto query = makeClaudeQueryFromEnvironment();
+
+        if (!query)
+            return fail("claude not found on PATH or in ~/.local/bin");
+
+        if (args[0] == "list")
+            return listBoard(*query);
+
+        if (args[0] == "prs")
+            return listPullRequests(*query, args);
+
+        return moveOwnCard(*query, args);
+    }
+
+    if (args.size() < 2 || args[0] != "snapshots")
+        return fail(boardUsage);
+
+    auto liveQuery = std::optional<BoardQuery> {};
+
+    if (std::ranges::find(args, "--live") != args.end())
+    {
+        liveQuery = makeClaudeQueryFromEnvironment();
+
+        if (!liveQuery)
+            return fail("claude not found on PATH or in ~/.local/bin");
+    }
+
+    registerEmbeddedFonts();
+    return renderBoardSnapshots(args[1], liveQuery);
+}
+
 int dispatch(const std::vector<std::string>& args)
 {
     if (args.empty() || args[0] == "help" || args[0] == "--help" || args[0] == "-h")
@@ -577,6 +767,9 @@ int dispatch(const std::vector<std::string>& args)
     // from any terminal.
     if (args[0] == "notify-user")
         return notifyUser(std::vector<std::string>(args.begin() + 1, args.end()));
+
+    if (args[0] == "board")
+        return board(std::vector<std::string>(args.begin() + 1, args.end()));
 
     // macOS attributes the Screen Recording request to the terminal hosting
     // the shell. Run from iTerm or over ssh, ct would prompt for (and get or be
@@ -629,6 +822,7 @@ bool isCliInvocation(int argc, char** argv)
     const auto verb = std::string {argv[1]};
     for (const auto* known: {"screen-cap",
                              "notify-user",
+                             "board",
                              "screenshot",
                              "start-whole-screen-recording",
                              "stop-screen-recording",

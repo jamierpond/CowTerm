@@ -36,6 +36,17 @@ include(CPM)
 # helpers (res_embed_add, eacp_set_gui_subsystem, eacp_set_app_icon, ...) that
 # the app's CMakeLists call. Examples/tests are top-level-only in eacp, so they
 # stay off here. Point CPM at a local checkout with -DCPM_eacp_SOURCE=/path.
+# ClaudeCodeCpp pins this Miro; declaring it first keeps eacp, ClaudeCodeCpp
+# and CowTerm on one copy.
+CPMAddPackage(
+        NAME Miro
+        GITHUB_REPOSITORY eyalamirmusic/Miro
+        GIT_TAG 996af8bcfe68d8c707960663c1447197ff5dd5b9
+        SYSTEM YES)
+
+# The justfile builds against ~/projects/eacp-process-child-environment for
+# now (CPM_eacp_SOURCE): ClaudeCodeCpp needs Process options
+# (removedEnvironment, inheritErrorOutput) that exist only in that worktree.
 # Pinned to 9a124ea: upstream eacp develop (52313a8) plus PR #141
 # (eyalamirmusic/eacp branch jp/windows-key-focus). The PR carries three fixes
 # CowTerm depends on. Two are the Windows keyboard: keys reach the focused view
@@ -52,6 +63,7 @@ CPMAddPackage(
         NAME eacp
         GITHUB_REPOSITORY eyalamirmusic/eacp
         GIT_TAG 9a124ea146fa48e406eeb2120dd4cd8888d961a4
+        SYSTEM YES
         OPTIONS
             "EACP_ENABLE_EXAMPLES OFF"
             "EACP_ENABLE_TESTS OFF")
@@ -73,6 +85,16 @@ CPMAddPackage(
         GIT_TAG main
         OPTIONS "RUDDER_CLIENT_ONLY ON"
 )
+
+# The task board's claude data: `claude agents --json` and transcripts.
+# ClaudeCodeCpp has no remote yet, so it comes from the local checkout.
+set(COWTERM_CLAUDECODECPP_SOURCE "$ENV{HOME}/projects/ClaudeCodeCpp"
+        CACHE PATH "ClaudeCodeCpp checkout providing the ClaudeCLI library")
+CPMAddPackage(
+        NAME ClaudeCodeCpp
+        SOURCE_DIR ${COWTERM_CLAUDECODECPP_SOURCE}
+        EXCLUDE_FROM_ALL YES
+        SYSTEM YES)
 
 # eacp runs eacp_default_setup() only when it is the root project. We are the
 # root now, so reproduce the deployment target and point its target helper at

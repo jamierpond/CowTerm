@@ -94,6 +94,7 @@ exit 2 with a hint when Screen Recording isn't granted.
 | `Ctrl+A f` / `w` / `p` (or `Cmd+K` / `Cmd+T`) | Open the palette |
 | `Ctrl+W` (in the palette) | New worktree + branch off the highlighted repo |
 | `Ctrl+A i` | Lazygit popup in the active pane's directory |
+| `Ctrl+A b` | Task board: claude in every pane by task (j/k h/l, Enter go to pane, m+w/r/d move, n new agent, p pull requests) |
 | `Ctrl+A "` | Split pane below (in the pane's directory) |
 | `Ctrl+A %` (or `Cmd+D`) | Split pane right (in the pane's directory) |
 | `Ctrl+A h/j/k/l` | Focus pane in direction |

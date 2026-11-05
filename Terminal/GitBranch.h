@@ -15,6 +15,10 @@ std::string gitBranch(const std::string& dir);
 // root, not the shared git dir. Empty outside a repo.
 std::string gitRepositoryRoot(const std::string& dir);
 
+// "owner/repo" from any git remote URL form (https, ssh://, scp-like),
+// lowercased, ".git" stripped. Empty when it doesn't look like a remote.
+std::string slugFromRemote(std::string url);
+
 // gitBranch, remembering where each directory's HEAD file is so a lookup is
 // one small read rather than a walk up the tree. HEAD itself is re-read every
 // time, so a checkout shows on the next lookup.

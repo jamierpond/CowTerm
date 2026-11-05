@@ -1,4 +1,5 @@
 #include "AppShell.h"
+#include "BoardEnvironment.h"
 #include "Cli.h"
 #include "CowTermVersion.h"
 #include "DaemonClient.h"
@@ -64,6 +65,11 @@ struct TerminalApp
 
         window.events.onActivationChanged = [this](bool isKey)
         { shell.setWindowFocused(isKey); };
+
+        if (auto claudeQuery = term::makeClaudeQueryFromEnvironment())
+            shell.setClaudeQuery(*claudeQuery);
+
+        shell.setStartAgentSettings(term::makeStartAgentSettingsFromEnvironment());
 
         window.setContentView(shell);
 

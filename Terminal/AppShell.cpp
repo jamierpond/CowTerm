@@ -1,5 +1,7 @@
 #include "AppShell.h"
 
+#include "Command.h"
+
 #include "CowTermCore/Debug.h"
 #include "CowTermVersion.h"
 #include "DaemonClient.h"
@@ -18,6 +20,31 @@ namespace term
 using namespace eacp;
 using Graphics::KeyEvent;
 namespace KeyCode = Graphics::KeyCode;
+
+namespace
+{
+std::vector<BoardPane> collectBoardPanes(const SessionManager& manager)
+{
+    auto panes = std::vector<BoardPane> {};
+
+    for (const auto& session: manager.all())
+    {
+        const auto claudePanes = session->view.claudePanes();
+
+        for (auto* pane: session->view.panes())
+        {
+            auto boardPane = BoardPane {};
+            boardPane.shellId = pane->shellId();
+            boardPane.workingDirectory = pane->workingDirectory();
+            boardPane.isRunningClaude =
+                std::ranges::find(claudePanes, pane) != claudePanes.end();
+            panes.push_back(std::move(boardPane));
+        }
+    }
+
+    return panes;
+}
+} // namespace
 
 AppShell::AppShell()
 {
@@ -82,6 +109,25 @@ AppShell::AppShell()
     prDashboard.onClosed = [this] { hidePrDashboard(); };
 
     claudeHud.onClosed = [this] { hideClaudeHud(); };
+
+    taskBoard.onClosed = [this] { hideTaskBoard(); };
+
+    taskBoard.getPanes = [this] { return collectBoardPanes(manager); };
+
+    taskBoard.setStoreDirectory(getDefaultBoardStoreDirectory());
+
+    taskBoard.onTellPane = [this](const std::string& shellId, const std::string& text)
+    { tellPane(shellId, text); };
+
+    taskBoard.onStartAgent = [this](const std::string& worktreePath)
+    { startClaudeInNewSession(worktreePath); };
+
+    taskBoard.onResumeSession = [this](const std::string& directory, const std::string& sessionId)
+    { resumeClaudeInNewSession(directory, sessionId); };
+
+    taskBoard.onOpenUrl = [](const std::string& url) { openInBrowser(url); };
+
+    taskBoard.onShowPane = [this](const std::string& shellId) { manager.showPane(shellId); };
 
     permissions.onClosed = [this] { hidePermissions(); };
 
@@ -242,7 +288,8 @@ void AppShell::attachActive(TermSession& session)
 bool AppShell::anyOverlayShown() const
 {
     return palette.isShown() || switcher.isShown() || prDashboard.isShown()
-           || claudeHud.isShown() || popup.isShown() || permissions.isShown();
+           || claudeHud.isShown() || taskBoard.isShown() || popup.isShown()
+           || permissions.isShown();
 }
 
 void AppShell::resized()
@@ -336,6 +383,8 @@ void AppShell::raiseOverlay()
         showOverlay(prDashboard);
     else if (claudeHud.isShown())
         showOverlay(claudeHud);
+    else if (taskBoard.isShown())
+        showOverlay(taskBoard);
     else if (permissions.isShown())
         showOverlay(permissions);
 }
@@ -409,6 +458,65 @@ void AppShell::showClaudeHud()
 }
 
 void AppShell::hideClaudeHud()
+{
+    hideOverlay();
+
+    if (attached != nullptr)
+        attached->view.focusActive();
+}
+
+// Nothing when the pane has closed since.
+void AppShell::typeIntoPane(const std::string& shellId, const std::string& text)
+{
+    for (const auto& session: manager.all())
+    {
+        for (auto* pane: session->view.panes())
+        {
+            if (pane->shellId() == shellId)
+            {
+                pane->sendText(text);
+                return;
+            }
+        }
+    }
+}
+
+// The Enter goes separately: claude reads a burst of text ending in a newline
+// as a paste and keeps the newline in its input instead of sending.
+void AppShell::tellPane(const std::string& shellId, const std::string& text)
+{
+    constexpr auto enterDelay = Time::MS {150};
+
+    typeIntoPane(shellId, text);
+    Threads::callAfter(enterDelay, [this, shellId] { typeIntoPane(shellId, "\n"); });
+}
+
+void AppShell::startClaudeInNewSession(const std::string& worktreePath)
+{
+    auto& session = manager.newSession(worktreePath);
+
+    if (auto* pane = session.view.activePane())
+        pane->sendText("claude\n");
+}
+
+void AppShell::resumeClaudeInNewSession(const std::string& directory, const std::string& sessionId)
+{
+    auto& session = manager.newSession(directory);
+
+    if (auto* pane = session.view.activePane())
+        pane->sendText("claude --resume " + shellQuote(sessionId) + "\n");
+}
+
+void AppShell::showTaskBoard()
+{
+    if (anyOverlayShown())
+        return;
+
+    showOverlay(taskBoard);
+    taskBoard.show();
+}
+
+void AppShell::hideTaskBoard()
 {
     hideOverlay();
 
@@ -623,6 +731,13 @@ bool AppShell::handlePrefixed(const KeyEvent& event)
     if (chars == "a")
     {
         showClaudeHud();
+        return true;
+    }
+
+    // The task board: claude in every pane, by task, in four columns.
+    if (chars == "b")
+    {
+        showTaskBoard();
         return true;
     }
 

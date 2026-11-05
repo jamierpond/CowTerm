@@ -10,6 +10,7 @@
 #include "RudderPublisher.h"
 #include "Session.h"
 #include "Switcher.h"
+#include "TaskBoard.h"
 #include "TrayController.h"
 
 #include <eacp/UI/UI.h>
@@ -41,6 +42,14 @@ public:
     // offer it.
     void showPermissions(bool confirmReset = false);
 
+    // Where the task board finds claude; Main.cpp reads it from the environment.
+    void setClaudeQuery(const BoardQuery& query) { taskBoard.setClaudeQuery(query); }
+
+    void setStartAgentSettings(const StartAgentSettings& settings)
+    {
+        taskBoard.setStartAgentSettings(settings);
+    }
+
     void resized() override;
 
 private:
@@ -64,6 +73,12 @@ private:
     void hidePrDashboard();
     void showClaudeHud();
     void hideClaudeHud();
+    void showTaskBoard();
+    void hideTaskBoard();
+    void typeIntoPane(const std::string& shellId, const std::string& text);
+    void startClaudeInNewSession(const std::string& worktreePath);
+    void resumeClaudeInNewSession(const std::string& directory, const std::string& sessionId);
+    void tellPane(const std::string& shellId, const std::string& text);
     void hidePermissions();
     bool anyOverlayShown() const;
     void attachActive(TermSession& session);
@@ -84,6 +99,7 @@ private:
     Switcher switcher {config, manager};
     PrDashboard prDashboard {config, manager};
     ClaudeHud claudeHud {config, manager};
+    TaskBoard taskBoard {config};
     Popup popup {config};
     PermissionsPanel permissions {config};
     eacp::UI::ComponentHost overlayHost;

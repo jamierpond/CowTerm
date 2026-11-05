@@ -91,3 +91,47 @@ target_include_directories(CowTermNotifyUserTests PRIVATE ../Terminal)
 if (LINUX)
     target_link_libraries(CowTermTests PRIVATE util)
 endif ()
+
+# The task board's grouping, pane matching, zones and moves; pure, over
+# fixture agent listings and transcripts in a scratch directory.
+nano_add_executable(CowTermBoardTests
+        SOURCES
+            TaskBoardTests.cpp
+            ../Terminal/AgentBoard.cpp
+            ../Terminal/BoardDocument.cpp
+            ../Terminal/BoardProjects.cpp
+            ../Terminal/CardText.cpp
+            ../Terminal/GitBranch.cpp
+            ../Terminal/PullRequests.cpp
+            ../Terminal/Zones.cpp
+        TARGETS ClaudeCLI JsonFields)
+
+target_include_directories(CowTermBoardTests PRIVATE ../Terminal)
+
+# The board's mouse handling on an offscreen render (self-skips without a GPU).
+nano_add_executable(CowTermBoardViewTests
+        SOURCES
+            TaskBoardViewTests.cpp
+            ../Terminal/AgentBoard.cpp
+            ../Terminal/BoardDocument.cpp
+            ../Terminal/BoardEnvironment.cpp
+            ../Terminal/BoardProjects.cpp
+            ../Terminal/BoardStore.cpp
+            ../Terminal/CardText.cpp
+            ../Terminal/Config.cpp
+            ../Terminal/GitBranch.cpp
+            ../Terminal/PullRequests.cpp
+            ../Terminal/TaskBoard.cpp
+            ../Terminal/TextWrapping.cpp
+            ../Terminal/Zones.cpp
+        TARGETS CowTerm::Core ClaudeCLI JsonFields ExecutableLookup emberstore eacp-ui)
+
+target_include_directories(CowTermBoardViewTests PRIVATE ../Terminal)
+
+if (APPLE)
+    target_sources(CowTermBoardViewTests PRIVATE ../Terminal/ProcessEnvironment-macOS.cpp)
+elseif (WIN32)
+    target_sources(CowTermBoardViewTests PRIVATE ../Terminal/ProcessEnvironment-Windows.cpp)
+else ()
+    target_sources(CowTermBoardViewTests PRIVATE ../Terminal/ProcessEnvironment-Linux.cpp)
+endif ()

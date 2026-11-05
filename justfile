@@ -18,6 +18,11 @@ build_dir  := "build"
 generator  := "Ninja"
 build_type := "Release"
 
+# eacp from a local worktree until its Process options (ClaudeCodeCpp needs
+# them) are merged; `just eacp_source="" build` uses the pin in CMakeLists.txt.
+eacp_source := env_var("HOME") + "/projects/eacp-process-child-environment"
+eacp_flag := if eacp_source == "" { "" } else { "-DCPM_eacp_SOURCE=" + eacp_source }
+
 # A Linux build needs the Wayland, text and libcurl development packages that
 # eacp looks for with pkg-config, plus a compiler and ninja. Scripts/with-linux-deps
 # uses the system's own if they are installed and otherwise borrows them from the
@@ -34,7 +39,7 @@ default:
 
 # Configure the CMake build tree (idempotent; first run fetches deps via CPM).
 configure:
-    {{deps}} cmake -S . -B {{build_dir}} -G "{{generator}}" -DCMAKE_BUILD_TYPE={{build_type}}
+    {{deps}} cmake -S . -B {{build_dir}} -G "{{generator}}" -DCMAKE_BUILD_TYPE={{build_type}} {{eacp_flag}}
 
 # Every configure runs FetchContent's update step, which checks out a
 # branch-pinned package's new head, so `just build` / `just install` already
@@ -59,7 +64,7 @@ build: configure
 
 # Build and run the unit tests (regression coverage, incl. the quit-hang fix).
 test: configure
-    {{deps}} cmake --build {{build_dir}} --target CowTermTests CowTermScreenTests CowTermRenderTests CowTermSessionViewTests CowTermPermissionsTests CowTermRudderTests CowTermNotifyUserTests
+    {{deps}} cmake --build {{build_dir}} --target CowTermTests CowTermScreenTests CowTermRenderTests CowTermSessionViewTests CowTermPermissionsTests CowTermRudderTests CowTermNotifyUserTests CowTermBoardTests CowTermBoardViewTests
     {{deps}} ctest --test-dir {{build_dir}} --output-on-failure
 
 # Remove the build tree.
@@ -175,3 +180,9 @@ install: build
     -update-desktop-database "$HOME/.local/share/applications" 2>/dev/null
     -gtk-update-icon-cache -f -t "$HOME/.local/share/icons/hicolor" 2>/dev/null
     @echo "Installed to ~/.local/bin, with a desktop entry and icon"
+
+# Render the task board at five window shapes into docs/screenshots/board:
+# fixture scenes plus one from the claude running in your CowTerm panes.
+[macos]
+board-snapshots: build
+    "{{build_dir}}/Terminal/CowTerm.app/Contents/MacOS/CowTerm" board snapshots docs/screenshots/board --live
