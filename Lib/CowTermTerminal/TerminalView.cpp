@@ -105,6 +105,16 @@ std::unique_ptr<Shell> shellFor(const TerminalConfig& config,
 
     return std::make_unique<LocalShell>();
 }
+
+std::vector<EnvironmentVariable> environmentFor(const TerminalConfig& config,
+                                                const std::string& shellId,
+                                                const std::string& command)
+{
+    if (!command.empty())
+        return {};
+
+    return config.environmentForShell(shellId);
+}
 } // namespace
 
 TerminalView::TerminalView(const TerminalConfig& config,
@@ -152,7 +162,10 @@ TerminalView::TerminalView(const TerminalConfig& config,
     auto guard = std::weak_ptr<bool> {alive};
 
     shell->start(
-        {{screen.columns(), screen.rows()}, workingDirectory, commandToRun},
+        {{screen.columns(), screen.rows()},
+         workingDirectory,
+         commandToRun,
+         environmentFor(config, paneShellId, commandToRun)},
         [this, guard](const std::string& data)
         {
             {

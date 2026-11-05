@@ -35,6 +35,12 @@ struct TerminalConfig
     // Command panes (a non-empty commandToRun) always run in-process.
     std::function<std::unique_ptr<Shell>(const std::string& shellId)> makeShell =
         [](const std::string&) { return std::make_unique<LocalShell>(); };
+
+    // Extra environment for an interactive pane's shell, keyed by its stable
+    // id. Command panes get none.
+    std::function<std::vector<EnvironmentVariable>(const std::string& shellId)>
+        environmentForShell = [](const std::string&)
+    { return std::vector<EnvironmentVariable> {}; };
 };
 
 // The terminal: a GPU-rendered cell grid over a live PTY. Output is parsed

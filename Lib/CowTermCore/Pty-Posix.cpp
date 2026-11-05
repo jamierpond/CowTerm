@@ -31,7 +31,8 @@ constexpr int shutdownKillGraceMs = 250;
 // allocates -- can deadlock if another thread held that lock at fork time.
 [[noreturn]] void execShell(const std::string& shell,
                             const std::string& workingDirectory,
-                            const std::string& command)
+                            const std::string& command,
+                            const std::vector<EnvironmentVariable>& environment)
 {
     // SIGHUP is deliberately included: the daemon sets it to SIG_IGN so the
     // GUI dying can't take it down, and an ignored disposition survives execve.
@@ -43,6 +44,9 @@ constexpr int shutdownKillGraceMs = 250;
     setenv("TERM", "xterm-256color", 1);
     setenv("COLORTERM", "truecolor", 1);
     unsetenv("TERM_PROGRAM");
+
+    for (const auto& variable: environment)
+        setenv(variable.name.c_str(), variable.value.c_str(), 1);
 
     if (getenv("LANG") == nullptr)
         setenv("LANG", "en_US.UTF-8", 1);
@@ -143,7 +147,8 @@ bool Pty::start(const PtyOptions& options,
         return false;
 
     if (child == 0)
-        execShell(shell, options.workingDirectory, options.command);
+        execShell(
+            shell, options.workingDirectory, options.command, options.environment);
 
     native->fd = masterFd;
     native->pid = child;

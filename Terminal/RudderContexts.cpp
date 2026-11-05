@@ -127,7 +127,7 @@ std::vector<rudder::protocol::Context>
             covered.insert(pane.cwd);
 
             auto context = rudder::protocol::Context {};
-            context.id = std::string {panePrefix} + pane.shellId;
+            context.id = paneContextId(pane.shellId);
             context.title = paneTitle(pane, home);
             context.subtitle =
                 paneSubtitle(pane, context.title, tab, index, session.name, home);
@@ -164,5 +164,9 @@ std::optional<RudderTarget> parseRudderContextId(const std::string& id)
                              id.substr(placePrefix.size())};
 
     return std::nullopt;
+}
+std::string paneContextId(const std::string& shellId)
+{
+    return std::string {panePrefix} + shellId;
 }
 } // namespace term

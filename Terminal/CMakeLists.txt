@@ -29,6 +29,10 @@ add_executable(${COWTERM_EXECUTABLE_TARGET}
         Config.cpp
         GitWorktree.cpp
         MruStore.cpp
+        NotifyUserClient.cpp
+        NotifyUserPrompt.cpp
+        NotifyUserProtocol.cpp
+        NotifyUserServer.cpp
         Palette.cpp
         Permissions.cpp
         PermissionsPanel.cpp
