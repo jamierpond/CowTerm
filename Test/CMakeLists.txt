@@ -167,3 +167,10 @@ target_link_libraries(CowTermCatThroughputBench PRIVATE CowTerm::Terminal)
 # Not a test: one pane's memory with 10,000 lines of scrollback.
 add_executable(CowTermScreenMemoryBench ../Bench/ScreenMemoryBench.cpp)
 target_link_libraries(CowTermScreenMemoryBench PRIVATE CowTerm::Core)
+
+# Not a test: times a new pane's PowerShell to its first prompt, for
+# Scripts/measure-shell-start.ps1.
+if (WIN32)
+    add_executable(CowTermShellStartTimer ShellStartTimer-Windows.cpp)
+    target_link_libraries(CowTermShellStartTimer PRIVATE CowTerm::Core)
+endif ()
