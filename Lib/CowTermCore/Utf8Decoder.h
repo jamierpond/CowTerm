@@ -10,7 +10,7 @@ namespace term
 class Utf8Decoder
 {
 public:
-    static constexpr char32_t replacementCharacter = U'�';
+    static constexpr auto replacementCharacter = char32_t {0xFFFD};
 
     template <typename EmitCodepoint>
     void decode(std::uint8_t byte, EmitCodepoint&& emitCodepoint)
