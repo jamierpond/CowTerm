@@ -1,11 +1,9 @@
 #pragma once
 
-#include "Config.h"
-
-#include <eacp/UI/UI.h>
-#include "Session.h"
+#include "OverlayPanel.h"
 
 #include <functional>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -34,7 +32,7 @@ struct PaletteItem
 // then known project dirs that aren't open yet. Empty query lists by
 // recency, Grazer-style; Enter switches or spawns. CPU-painted chrome over the
 // GPU terminal.
-class Palette final : public eacp::UI::Component
+class Palette final : public OverlayPanel
 {
 public:
     Palette(const AppConfig& configToUse, SessionManager& sessionsToUse);
@@ -65,15 +63,37 @@ public:
     void mouseMove(const eacp::UI::MouseEvent& event) override;
 
 private:
+    struct SelectedRepository
+    {
+        std::string path;
+        std::string label;
+    };
+
+    // The frame shared by the worktree and trash prompts.
+    struct SubPrompt
+    {
+        std::string title;
+        std::string targetName;
+        std::string error;
+        std::string hint;
+        eacp::UI::Color titleColour;
+        eacp::UI::Color borderColour;
+    };
+
     void rebuild();
+    PaletteItem makeSessionItem(TermSession& session) const;
+    PaletteItem makeProjectItem(const std::string& name, const std::string& path) const;
     void applyQuery();
-    void choose();
-    void cancel();
+    void chooseSelected() override;
+    void dismiss() override;
     void peekSelected();
     void moveSelection(int delta);
-    void popQueryChar();
-    int rowAt(eacp::UI::Point pos) const;
-    eacp::UI::Rect panelBounds() const;
+    void editQuery(const eacp::UI::KeyEvent& event);
+    bool handleNavigationKey(const eacp::UI::KeyEvent& event);
+    bool handleCommandKey(const eacp::UI::KeyEvent& event);
+    std::optional<SelectedRepository> findSelectedRepository() const;
+    int findRowAt(eacp::UI::Point pos) const override;
+    eacp::UI::Rect calculatePanelBounds() const override;
 
     // The worktree branch-name sub-prompt.
     void beginWorktree();
@@ -81,6 +101,8 @@ private:
     void createWorktreeFromInput();
     void exitWorktree();
     void paintWorktree(eacp::UI::Graphics& context);
+    eacp::UI::Rect paintSubPrompt(eacp::UI::Graphics& g, const SubPrompt& prompt);
+    void paintRow(eacp::UI::Graphics& g, const PaletteItem& item, eacp::UI::Rect rowArea);
 
     // The "trash this worktree?" y/n confirmation.
     void beginRemoveWorktree();
@@ -89,14 +111,9 @@ private:
     void exitConfirmDelete();
     void paintConfirmDelete(eacp::UI::Graphics& context);
 
-    const AppConfig& config;
-    SessionManager& sessions;
-    Theme theme;
-
     std::vector<PaletteItem> allItems;
     std::vector<PaletteItem> visible;
     std::string query;
-    int selected = 0;
     bool shown = false;
 
     // Worktree sub-prompt: when active the list is replaced by a single
@@ -113,9 +130,5 @@ private:
     std::string deleteTargetPath;
     std::string deleteTargetName;
     std::string deleteError;
-
-    eacp::UI::Font queryFont;
-    eacp::UI::Font rowFont;
-    eacp::UI::Font detailFont;
 };
 } // namespace term

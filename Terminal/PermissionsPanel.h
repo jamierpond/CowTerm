@@ -64,12 +64,33 @@ private:
     const permissions::Info& selectedInfo() const;
 
     void refresh();
+    permissions::Status checkGrant(const permissions::Info& grant) const;
+    void probeScreenRecordingWhileInDoubt();
     void act(int row);
     void resetAll();
     void close();
+    void cancelOrClose();
+    void confirmOrAct();
+    void handleConfirmingResetClick(const Layout& at, eacp::UI::Point pos);
+    bool handleRowClick(const Layout& at, eacp::UI::Point pos);
+    bool handleButtonClick(const Layout& at, eacp::UI::Point pos);
+    bool isScreenProbeDue() const;
+    void loadAppIconOnce();
+    bool isDragTileActive() const;
+    std::string describeBanner() const;
 
     void paintRow(eacp::UI::Graphics& g, const Layout& at, int row);
+    void paintRequiredTag(eacp::UI::Graphics& g,
+                          const permissions::Info& grant,
+                          const eacp::UI::Rect& row,
+                          float nameWidth);
+    eacp::UI::Color getStatusColour(const permissions::Info& grant,
+                                    permissions::Status status) const;
     void paintDetail(eacp::UI::Graphics& g, const Layout& at);
+    void paintDragTile(eacp::UI::Graphics& g, const eacp::UI::Rect& tile, bool done);
+    void paintTitle(eacp::UI::Graphics& g, const eacp::UI::Rect& card);
+    void paintBanner(eacp::UI::Graphics& g, const Layout& at);
+    void paintFooter(eacp::UI::Graphics& g, const Layout& at);
     void paintButton(eacp::UI::Graphics& g,
                      const eacp::UI::Rect& area,
                      const std::string& label,

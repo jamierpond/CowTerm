@@ -96,9 +96,23 @@ target_include_directories(CowTermRudderTests PRIVATE ../Terminal)
 nano_add_executable(CowTermNotifyUserTests
         SOURCES
             NotifyUserProtocolTests.cpp
-            ../Terminal/NotifyUserProtocol.cpp)
+            ../Terminal/NotifyUserProtocol.cpp
+            ../Terminal/TextLayout.cpp)
 
 target_include_directories(CowTermNotifyUserTests PRIVATE ../Terminal)
+
+# The overlay panels' shared list layout and key mapping, and the text
+# splitting, wrapping and editing they and `ct notify-user` use.
+nano_add_executable(CowTermPanelTests
+        SOURCES
+            OverlayPanelTests.cpp
+            TextLayoutTests.cpp
+            ../Terminal/OverlayPanel.cpp
+            ../Terminal/TextLayout.cpp
+            ../Terminal/Config.cpp
+        TARGETS CowTerm::Terminal eacp-ui emberstore)
+
+target_include_directories(CowTermPanelTests PRIVATE ../Terminal)
 
 # forkpty/openpty live in libutil on Linux; on Apple they are in libSystem.
 if (LINUX)

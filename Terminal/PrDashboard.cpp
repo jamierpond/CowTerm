@@ -1,5 +1,5 @@
 #include "PrDashboard.h"
-
+#include "TextLayout.h"
 
 #include "Command.h"
 #include "FuzzyMatch.h"
@@ -10,7 +10,9 @@
 #include <eacp/Core/Utils/Files.h>
 
 #include <algorithm>
+#include <array>
 #include <cstdio>
+#include <optional>
 #include <ctime>
 #include <filesystem>
 #include <thread>
@@ -27,40 +29,48 @@ namespace KeyCode = UI::KeyCode;
 
 namespace
 {
-// The painter measures and draws in the face currently in force, so these keep
-// the old call shape -- text, position, font -- rather than making every call
-// site set the font first.
-void drawText(UI::Graphics& g,
-              const std::string& text,
-              UI::Point position,
-              const UI::Font& font)
-{
-    g.setFont(font);
-    g.drawText(text, position);
-}
-
-float measureWidth(UI::Graphics& g, const std::string& text, const UI::Font& font)
-{
-    g.setFont(font);
-    return g.measureText(text);
-}
-constexpr float panelWidth = 960.0f;
-constexpr float rowHeight = 32.0f;
-constexpr float headerHeight = 46.0f;
-constexpr float hintHeight = 24.0f;
-constexpr int maxRows = 14;
+constexpr auto listMetrics = ListPanelMetrics {.maximumWidth = 960.0f,
+                                               .rowHeight = 32.0f,
+                                               .headerHeight = 46.0f,
+                                               .hintHeight = 24.0f,
+                                               .maximumRows = 14,
+                                               .topFraction = 0.12f};
+constexpr auto fontSizes = OverlayFontSizes {.header = 16.0f, .row = 14.0f, .detail = 12.0f};
 
 // Right-hand columns: the owning session, and review state before it.
 constexpr float sessionColumn = 130.0f;
 constexpr float reviewColumn = 150.0f;
 
-std::string truncated(const std::string& text, std::size_t max)
-{
-    if (text.size() <= max)
-        return text;
+constexpr auto prFieldCount = std::size_t {10};
+constexpr auto statusLength = 60;
 
-    return text.substr(0, max - 1) + "…";
-}
+constexpr auto textLeft = 18.0f;
+constexpr auto headerBaseline = 30.0f;
+constexpr auto queryLeft = 66.0f;
+constexpr auto statusRightPadding = 16.0f;
+constexpr auto rowSideInset = 8.0f;
+constexpr auto rowGap = 2.0f;
+constexpr auto baselineFraction = 0.62f;
+constexpr auto ciDotLeft = 12.0f;
+constexpr auto ageLeft = 34.0f;
+constexpr auto repoLeft = 76.0f;
+constexpr auto repoNameLength = 18;
+constexpr auto titleLeft = 226.0f;
+constexpr auto titleRightPadding = 24.0f;
+constexpr auto minimumTitleLength = 8.0f;
+constexpr auto averageTitleCharacterWidth = 7.2f;
+constexpr auto draftTitleAlpha = 0.6f;
+constexpr auto readyTitleAlpha = 1.0f;
+constexpr auto reviewLength = 20;
+constexpr auto columnRightPadding = 12.0f;
+constexpr auto sessionNameLength = 16;
+constexpr auto hintBottomOffset = 10.0f;
+
+constexpr auto secondsPerMinute = 60;
+constexpr auto secondsPerHour = 3600;
+constexpr auto secondsPerDay = 86400;
+constexpr auto daysPerWeek = 7;
+constexpr auto daysShownBeforeWeeks = 14;
 
 std::string lowered(std::string text)
 {
@@ -71,36 +81,88 @@ std::string lowered(std::string text)
     return text;
 }
 
+bool isTrailingWhitespace(char c)
+{
+    return c == '\n' || c == '\r' || c == ' ';
+}
+
+// scp-like: git@github.com:owner/repo.git
+bool isScpLikeRemote(const std::string& url)
+{
+    const auto colon = url.find(':');
+    return colon != std::string::npos && url.find('/') > colon;
+}
+
+// The path part of a remote URL, or nothing for a "scheme://host" with no path.
+std::optional<std::string> stripRemoteHost(const std::string& url)
+{
+    if (const auto scheme = url.find("://"); scheme != std::string::npos)
+    {
+        const auto afterScheme = url.substr(scheme + 3);
+        const auto slash = afterScheme.find('/');
+
+        if (slash == std::string::npos)
+            return std::nullopt;
+
+        return afterScheme.substr(slash + 1);
+    }
+
+    if (isScpLikeRemote(url))
+        return url.substr(url.find(':') + 1);
+
+    return url;
+}
+
 // "owner/repo" from any git remote URL form (https, ssh://, scp-like),
 // lowercased, ".git" stripped. Empty when it doesn't look like a remote.
 std::string slugFromRemote(std::string url)
 {
-    while (!url.empty() && (url.back() == '\n' || url.back() == '\r' || url.back() == ' '))
+    while (!url.empty() && isTrailingWhitespace(url.back()))
         url.pop_back();
 
-    if (const auto scheme = url.find("://"); scheme != std::string::npos)
+    auto path = stripRemoteHost(url);
+
+    if (!path)
+        return {};
+
+    while (!path->empty() && path->front() == '/')
+        path->erase(path->begin());
+
+    if (path->ends_with(".git"))
+        *path = path->substr(0, path->size() - 4);
+
+    if (path->find('/') == std::string::npos)
+        return {};
+
+    return lowered(*path);
+}
+
+CommandOutput readOriginRemote(const std::string& dir)
+{
+    return runViaLoginShell("git -C " + shellQuote(dir) + " remote get-url origin 2>/dev/null");
+}
+
+// repo slug -> {session key, session name} for each {key, name, project dir};
+// the first session on a repo wins.
+std::map<std::string, std::pair<std::string, std::string>>
+    resolveSessionsByRepo(const std::vector<std::array<std::string, 3>>& snapshot)
+{
+    auto map = std::map<std::string, std::pair<std::string, std::string>> {};
+
+    for (const auto& [key, name, dir]: snapshot)
     {
-        url = url.substr(scheme + 3);
+        const auto remote = readOriginRemote(dir);
 
-        if (const auto slash = url.find('/'); slash != std::string::npos)
-            url = url.substr(slash + 1);
-        else
-            return {};
-    }
-    else if (const auto colon = url.find(':');
-             colon != std::string::npos && url.find('/') > colon)
-    {
-        // scp-like: git@github.com:owner/repo.git
-        url = url.substr(colon + 1);
+        if (remote.status != 0)
+            continue;
+
+        const auto slug = slugFromRemote(remote.text);
+
+        if (!slug.empty() && !map.contains(slug))
+            map[slug] = {key, name};
     }
 
-    while (!url.empty() && url.front() == '/')
-        url.erase(url.begin());
-
-    if (url.ends_with(".git"))
-        url = url.substr(0, url.size() - 4);
-
-    return url.find('/') != std::string::npos ? lowered(url) : std::string {};
+    return map;
 }
 
 // Seconds since the epoch for gh's "2026-07-19T12:34:56Z" timestamps.
@@ -127,16 +189,16 @@ std::string formatAge(std::int64_t seconds)
     if (seconds < 0)
         seconds = 0;
 
-    if (seconds >= 14 * 86400)
-        return std::to_string(seconds / (7 * 86400)) + "w";
+    if (seconds >= daysShownBeforeWeeks * secondsPerDay)
+        return std::to_string(seconds / (daysPerWeek * secondsPerDay)) + "w";
 
-    if (seconds >= 86400)
-        return std::to_string(seconds / 86400) + "d";
+    if (seconds >= secondsPerDay)
+        return std::to_string(seconds / secondsPerDay) + "d";
 
-    if (seconds >= 3600)
-        return std::to_string(seconds / 3600) + "h";
+    if (seconds >= secondsPerHour)
+        return std::to_string(seconds / secondsPerHour) + "h";
 
-    return std::to_string(seconds / 60) + "m";
+    return std::to_string(seconds / secondsPerMinute) + "m";
 }
 
 // gojq's @tsv escapes \ t n r; fold them back.
@@ -164,26 +226,6 @@ std::string tsvUnescape(const std::string& text)
     }
 
     return out;
-}
-
-std::vector<std::string> splitTabs(const std::string& line)
-{
-    auto fields = std::vector<std::string> {};
-    auto start = std::size_t {0};
-
-    while (true)
-    {
-        const auto tab = line.find('\t', start);
-
-        if (tab == std::string::npos)
-        {
-            fields.push_back(line.substr(start));
-            return fields;
-        }
-
-        fields.push_back(line.substr(start, tab - start));
-        start = tab + 1;
-    }
 }
 
 // One gh call for the whole board. gh's embedded jq flattens the GraphQL
@@ -222,6 +264,22 @@ std::string fetchCommand()
            + shellQuote(jq) + " 2>&1";
 }
 
+PrItem makePrItem(const std::vector<std::string>& fields)
+{
+    auto item = PrItem {};
+    item.ci = fields[0];
+    item.pushedAt = fields[1];
+    item.repo = tsvUnescape(fields[2]);
+    item.number = fields[3];
+    item.draft = fields[4] == "1";
+    item.reviewDecision = fields[5];
+    item.reviewers = tsvUnescape(fields[6]);
+    item.branch = tsvUnescape(fields[7]);
+    item.url = tsvUnescape(fields[8]);
+    item.title = tsvUnescape(fields[9]);
+    return item;
+}
+
 std::vector<PrItem> parseRows(const std::string& text)
 {
     auto items = std::vector<PrItem> {};
@@ -242,23 +300,8 @@ std::vector<PrItem> parseRows(const std::string& text)
             continue;
         }
 
-        const auto fields = splitTabs(line);
-
-        if (fields.size() >= 10)
-        {
-            auto item = PrItem {};
-            item.ci = fields[0];
-            item.pushedAt = fields[1];
-            item.repo = tsvUnescape(fields[2]);
-            item.number = fields[3];
-            item.draft = fields[4] == "1";
-            item.reviewDecision = fields[5];
-            item.reviewers = tsvUnescape(fields[6]);
-            item.branch = tsvUnescape(fields[7]);
-            item.url = tsvUnescape(fields[8]);
-            item.title = tsvUnescape(fields[9]);
-            items.push_back(std::move(item));
-        }
+        if (const auto fields = splitAtSeparator(line, '\t'); fields.size() >= prFieldCount)
+            items.push_back(makePrItem(fields));
 
         if (end == std::string::npos)
             break;
@@ -308,6 +351,11 @@ std::string lastNonEmptyLine(const std::string& text)
     return last;
 }
 
+bool isUnfitForPath(char c)
+{
+    return c == '/' || c == '\\' || c == ' ' || c == ':';
+}
+
 // Filesystem-friendly leaf for a branch, matching GitWorktree's sibling
 // naming: feature/foo checks out into <repo>-feature-foo.
 std::string branchLeaf(const std::string& branch)
@@ -315,23 +363,34 @@ std::string branchLeaf(const std::string& branch)
     auto out = std::string {};
 
     for (const auto c: branch)
-        out += (c == '/' || c == '\\' || c == ' ' || c == ':') ? '-' : c;
+        out += isUnfitForPath(c) ? '-' : c;
 
     return out;
 }
+
+struct JumpRequest
+{
+    std::string repo;
+    std::string number;
+    std::string repoName;
+    std::string branch;
+    std::string cloneBase;
+    std::vector<std::string> candidates;
+};
 
 // The Enter jump, given a resolved main checkout ("" -> clone first): reuse
 // the worktree that already has the branch, else add a dedicated sibling
 // worktree for it (fetching the PR head when the branch only exists on the
 // remote), mirroring env/direnv files in like the wt script. Prints the
 // directory to open as its last line.
-std::string gotoScript(const std::string& main,
-                       const std::string& cloneTarget,
-                       const std::string& repo,
-                       const std::string& branch,
-                       const std::string& leaf,
-                       const std::string& number)
+std::string gotoScript(const std::string& main, const JumpRequest& request)
 {
+    const auto cloneTarget = request.cloneBase + "/" + request.repoName;
+    const auto& repo = request.repo;
+    const auto& branch = request.branch;
+    const auto leaf = branchLeaf(branch);
+    const auto& number = request.number;
+
     // The login shell may be zsh, whose unmatched globs abort the whole
     // script (nomatch); the env-mirror loop below globs speculatively.
     return "if [ -n \"$ZSH_VERSION\" ]; then setopt null_glob; fi\n"
@@ -368,18 +427,136 @@ std::string gotoScript(const std::string& main,
            "if [ -d \"$wtpath\" ]; then printf '%s\\n' \"$wtpath\";"
            " else printf '%s\\n' \"$main\"; fi\n";
 }
+
+std::string getRepoName(const std::string& repo)
+{
+    return repo.substr(repo.rfind('/') + 1);
+}
+
+// The checkout whose origin is the PR's repo: the first one named like the
+// repo wins outright, else the first match of any name.
+std::string findMainCheckout(const std::vector<std::string>& candidates,
+                             const std::string& wantedSlug,
+                             const std::string& repoName)
+{
+    auto fallback = std::string {};
+
+    for (const auto& dir: candidates)
+    {
+        if (!std::filesystem::exists(dir + "/.git"))
+            continue;
+
+        const auto remote = readOriginRemote(dir);
+
+        if (remote.status != 0 || slugFromRemote(remote.text) != wantedSlug)
+            continue;
+
+        if (getRepoName(dir) == repoName)
+            return dir;
+
+        if (fallback.empty())
+            fallback = dir;
+    }
+
+    return fallback;
+}
+
+std::string describeJumpFailure(const CommandOutput& output, const std::string& branch)
+{
+    if (output.text.empty())
+        return "could not open " + branch;
+
+    return firstLine(output.text);
+}
+
+PrJumpResult runJump(const JumpRequest& request)
+{
+    const auto main =
+        findMainCheckout(request.candidates, lowered(request.repo), request.repoName);
+    const auto output = runViaLoginShell(gotoScript(main, request));
+    const auto path = lastNonEmptyLine(output.text);
+
+    if (output.status != 0 || !std::filesystem::is_directory(path))
+        return {.path = {}, .error = describeJumpFailure(output, request.branch)};
+
+    return {.path = path, .error = {}};
+}
+
+bool hasCiPassed(const PrItem& item)
+{
+    return item.ci == "SUCCESS";
+}
+
+bool hasCiFailed(const PrItem& item)
+{
+    return item.ci == "FAILURE" || item.ci == "ERROR";
+}
+
+bool isCiRunning(const PrItem& item)
+{
+    return item.ci == "PENDING" || item.ci == "EXPECTED";
+}
+
+Rgb getCiColour(const PrItem& item, const Theme& theme)
+{
+    if (hasCiPassed(item))
+        return theme.ansi[2];
+
+    if (hasCiFailed(item))
+        return theme.ansi[1];
+
+    if (isCiRunning(item))
+        return theme.ansi[3];
+
+    return theme.ansi[8];
+}
+
+bool hasCiState(const PrItem& item)
+{
+    return hasCiPassed(item) || hasCiFailed(item) || isCiRunning(item);
+}
+
+std::string getCiDot(const PrItem& item)
+{
+    return hasCiState(item) ? "●" : "○";
+}
+
+bool isApproved(const PrItem& item)
+{
+    return item.reviewDecision == "APPROVED";
+}
+
+bool hasChangesRequested(const PrItem& item)
+{
+    return item.reviewDecision == "CHANGES_REQUESTED";
+}
+
+std::string describeReviewState(const PrItem& item)
+{
+    if (isApproved(item))
+        return "✓ " + item.reviewers;
+
+    if (hasChangesRequested(item))
+        return "✗ " + item.reviewers;
+
+    return item.reviewers;
+}
+
+Rgb getReviewColour(const PrItem& item, const Theme& theme)
+{
+    if (isApproved(item))
+        return theme.ansi[2];
+
+    if (hasChangesRequested(item))
+        return theme.ansi[1];
+
+    return theme.ansi[8];
+}
 } // namespace
 
 PrDashboard::PrDashboard(const AppConfig& configToUse, SessionManager& sessionsToUse)
-    : config(configToUse)
-    , sessions(sessionsToUse)
-    , theme(themeByName(configToUse.theme))
-    , queryFont({config.font, 16.0f})
-    , rowFont({config.font, 14.0f})
-    , detailFont({config.font, 12.0f})
+    : OverlayPanel(configToUse, sessionsToUse, fontSizes)
 {
-    setInterceptsMouseClicks(true);
-    setWantsKeyboardFocus(true);
 }
 
 PrDashboard::~PrDashboard()
@@ -431,7 +608,7 @@ void PrDashboard::refresh()
 
             if (output.status != 0)
             {
-                status = truncated(firstLine(output.text), 60);
+                status = truncateWithEllipsis(firstLine(output.text), statusLength);
 
                 if (status.empty())
                     status = "gh failed — is it installed and authed?";
@@ -476,21 +653,7 @@ void PrDashboard::buildSessionMap()
     std::thread(
         [snapshot = std::move(snapshot), guard = std::weak_ptr<bool> {alive}, this]
         {
-            auto map = std::map<std::string, std::pair<std::string, std::string>> {};
-
-            for (const auto& [key, name, dir]: snapshot)
-            {
-                const auto remote = runViaLoginShell(
-                    "git -C " + shellQuote(dir) + " remote get-url origin 2>/dev/null");
-
-                if (remote.status != 0)
-                    continue;
-
-                const auto slug = slugFromRemote(remote.text);
-
-                if (!slug.empty() && map.find(slug) == map.end())
-                    map[slug] = {key, name};
-            }
+            auto map = resolveSessionsByRepo(snapshot);
 
             Threads::callAsync(
                 [map = std::move(map), guard, this]
@@ -567,31 +730,24 @@ const PrItem* PrDashboard::selectedItem() const
     return &visible[(std::size_t) selected];
 }
 
-void PrDashboard::choose()
+void PrDashboard::chooseSelected()
 {
     if (const auto* item = selectedItem(); item != nullptr && busy.empty())
         openWorktree(*item);
 }
 
-void PrDashboard::cancel()
+void PrDashboard::dismiss()
 {
     shown = false;
     onClosed();
 }
 
-void PrDashboard::openWorktree(const PrItem& itemRef)
+// Candidate checkouts, scanned on the worker: sessions we already mapped to
+// this repo first, then every project dir (basename matches before the rest,
+// so the common case runs one git call, not fifty).
+std::vector<std::string> PrDashboard::collectCandidateCheckouts(
+    const PrItem& item, const std::string& repoName) const
 {
-    const auto item = itemRef;  // survives list refreshes while the job runs
-    const auto repoName = item.repo.substr(item.repo.rfind('/') + 1);
-    const auto branch =
-        item.branch.empty() ? "pr-" + item.number : item.branch;
-
-    busy = "opening " + branch + "…";
-    repaint();
-
-    // Candidate checkouts, scanned on the worker: sessions we already mapped
-    // to this repo first, then every project dir (basename matches before the
-    // rest, so the common case runs one git call, not fifty).
     auto candidates = std::vector<std::string> {};
 
     if (const auto found = sessionsByRepo.find(lowered(item.repo));
@@ -606,79 +762,67 @@ void PrDashboard::openWorktree(const PrItem& itemRef)
 
     candidates.insert(candidates.end(), likely.begin(), likely.end());
     candidates.insert(candidates.end(), rest.begin(), rest.end());
+    return candidates;
+}
 
+void PrDashboard::openWorktree(const PrItem& itemRef)
+{
+    const auto item = itemRef;  // survives list refreshes while the job runs
+    const auto repoName = getRepoName(item.repo);
+    const auto branch = item.branch.empty() ? "pr-" + item.number : item.branch;
+
+    busy = "opening " + branch + "…";
+    repaint();
+
+    auto candidates = collectCandidateCheckouts(item, repoName);
     const auto cloneBase =
         expandHome(config.searchDirs.empty() ? "~" : config.searchDirs.front());
 
+    auto request = JumpRequest {.repo = item.repo,
+                                .number = item.number,
+                                .repoName = repoName,
+                                .branch = branch,
+                                .cloneBase = cloneBase,
+                                .candidates = std::move(candidates)};
+
     std::thread(
-        [item, repoName, branch, candidates = std::move(candidates), cloneBase,
-         generation = jumpGeneration, guard = std::weak_ptr<bool> {alive}, this]
+        [request = std::move(request),
+         generation = jumpGeneration,
+         guard = std::weak_ptr<bool> {alive},
+         this]
         {
-            const auto want = lowered(item.repo);
-            auto main = std::string {};
-            auto fallback = std::string {};
-
-            for (const auto& dir: candidates)
-            {
-                if (!std::filesystem::exists(dir + "/.git"))
-                    continue;
-
-                const auto remote = runViaLoginShell(
-                    "git -C " + shellQuote(dir) + " remote get-url origin 2>/dev/null");
-
-                if (remote.status != 0 || slugFromRemote(remote.text) != want)
-                    continue;
-
-                if (dir.substr(dir.rfind('/') + 1) == repoName)
-                {
-                    main = dir;
-                    break;
-                }
-
-                if (fallback.empty())
-                    fallback = dir;
-            }
-
-            if (main.empty())
-                main = fallback;
-
-            const auto output = runViaLoginShell(gotoScript(main,
-                                                            cloneBase + "/" + repoName,
-                                                            item.repo,
-                                                            branch,
-                                                            branchLeaf(branch),
-                                                            item.number));
-            auto path = lastNonEmptyLine(output.text);
-
-            if (output.status != 0 || !std::filesystem::is_directory(path))
-                path.clear();
-
-            const auto error = path.empty()
-                                   ? (output.text.empty() ? "could not open " + branch
-                                                          : firstLine(output.text))
-                                   : std::string {};
+            const auto result = runJump(request);
 
             Threads::callAsync(
-                [path, error, generation, guard, this]
+                [result, generation, guard, this]
                 {
-                    if (guard.expired() || !shown || generation != jumpGeneration)
-                        return;
-
-                    busy.clear();
-
-                    if (!error.empty())
-                    {
-                        status = truncated(error, 60);
-                        repaint();
-                        return;
-                    }
-
-                    shown = false;
-                    onClosed();
-                    sessions.openProject(path);
+                    if (!guard.expired())
+                        finishJumpIfStillWanted(result, generation);
                 });
         })
         .detach();
+}
+
+void PrDashboard::finishJumpIfStillWanted(const PrJumpResult& result, int generation)
+{
+    if (shown && generation == jumpGeneration)
+        finishJump(result);
+}
+
+void PrDashboard::finishJump(const PrJumpResult& result)
+{
+    busy.clear();
+
+    if (!result.error.empty())
+    {
+        status = truncateWithEllipsis(result.error, statusLength);
+        repaint();
+        return;
+    }
+
+    shown = false;
+    onClosed();
+    sessions.openProject(result.path);
 }
 
 void PrDashboard::switchToSession(const PrItem& item)
@@ -701,7 +845,7 @@ void PrDashboard::openInBrowser(const PrItem& item)
 
     term::openInBrowser(item.url);
 
-    cancel();
+    dismiss();
 }
 
 void PrDashboard::copyUrl(const PrItem& item)
@@ -714,283 +858,242 @@ void PrDashboard::moveSelection(int delta)
 {
     if (!visible.empty())
     {
-        selected = (selected + delta + (int) visible.size()) % (int) visible.size();
+        selected = wrapSelection(selected, delta, (int) visible.size());
         repaint();
-    }
-}
-
-void PrDashboard::popQueryChar()
-{
-    while (!query.empty())
-    {
-        const auto last = (unsigned char) query.back();
-        query.pop_back();
-
-        if ((last & 0xc0) != 0x80)
-            break;
     }
 }
 
 bool PrDashboard::keyDown(const KeyEvent& event)
 {
-    if (event.keyCode == KeyCode::Escape)
-    {
-        cancel();
+    if (handleNavigationKey(event))
         return true;
-    }
-
-    if (event.keyCode == KeyCode::Return)
-    {
-        choose();
-        return true;
-    }
-
-    if (event.keyCode == KeyCode::UpArrow
-        || (event.modifiers.control && event.charactersIgnoringModifiers == "p"))
-    {
-        moveSelection(-1);
-        return true;
-    }
-
-    if (event.keyCode == KeyCode::DownArrow
-        || (event.modifiers.control && event.charactersIgnoringModifiers == "n"))
-    {
-        moveSelection(1);
-        return true;
-    }
 
     if (event.modifiers.control)
-    {
-        const auto& chars = event.charactersIgnoringModifiers;
-        const auto* item = selectedItem();
-
-        if (chars == "r")
-            refresh();
-        else if (chars == "o" && item != nullptr)
-            openInBrowser(*item);
-        else if (chars == "s" && item != nullptr)
-            switchToSession(*item);
-        else if (chars == "y" && item != nullptr)
-            copyUrl(*item);
-
-        return true;
-    }
-
-    if (event.keyCode == KeyCode::Delete)
-    {
-        popQueryChar();
-        applyQuery();
-        repaint();
-        return true;
-    }
-
-    if (event.modifiers.command)
-        return true;
-
-    const auto& text = event.characters;
-
-    if (!text.empty() && (unsigned char) text[0] >= 0x20 && text[0] != 0x7f)
-    {
-        query += text;
-        selected = 0;
-        applyQuery();
-        repaint();
-    }
+        handleControlShortcut(event);
+    else if (event.keyCode == KeyCode::Delete || !event.modifiers.command)
+        editQuery(event);
 
     return true;
 }
 
-Rect PrDashboard::panelBounds() const
+bool PrDashboard::handleNavigationKey(const KeyEvent& event)
 {
-    const auto bounds = getLocalBounds();
-    const auto width = std::min(panelWidth, bounds.w - 60.0f);
-    const auto rows = std::min((int) visible.size(), maxRows);
-    const auto height = headerHeight + (float) std::max(rows, 1) * rowHeight
-                        + hintHeight + 12.0f;
+    if (event.keyCode == KeyCode::Escape)
+        dismiss();
+    else if (event.keyCode == KeyCode::Return)
+        chooseSelected();
+    else if (isSelectPreviousKey(event))
+        moveSelection(-1);
+    else if (isSelectNextKey(event))
+        moveSelection(1);
+    else
+        return false;
 
-    return {
-        (bounds.w - width) / 2.0f, std::max(bounds.h * 0.12f, 20.0f), width, height};
+    return true;
 }
 
-int PrDashboard::rowAt(Point pos) const
+void PrDashboard::handleControlShortcut(const KeyEvent& event)
 {
-    const auto panel = panelBounds();
-    const auto y = pos.y - (panel.y + headerHeight + 4.0f);
+    const auto& chars = event.charactersIgnoringModifiers;
 
-    if (pos.x < panel.x || pos.x > panel.right() || y < 0)
-        return -1;
+    if (chars == "r")
+    {
+        refresh();
+        return;
+    }
 
-    const auto row = (int) (y / rowHeight);
-    return row < std::min((int) visible.size(), maxRows) ? row : -1;
+    const auto* item = selectedItem();
+
+    if (item == nullptr)
+        return;
+
+    if (chars == "o")
+        openInBrowser(*item);
+    else if (chars == "s")
+        switchToSession(*item);
+    else if (chars == "y")
+        copyUrl(*item);
+}
+
+void PrDashboard::editQuery(const KeyEvent& event)
+{
+    if (!editQueryText(query, event))
+        return;
+
+    applyQuery();
+    repaint();
+}
+
+Rect PrDashboard::calculatePanelBounds() const
+{
+    return calculateListPanelBounds(getLocalBounds(), listMetrics, (int) visible.size());
+}
+
+int PrDashboard::findRowAt(Point pos) const
+{
+    return findListRowAt(calculatePanelBounds(), listMetrics, (int) visible.size(), pos);
 }
 
 void PrDashboard::mouseMove(const MouseEvent& event)
 {
-    if (const auto row = rowAt(event.position); row >= 0 && row != selected)
+    if (const auto row = findRowAt(event.position); row >= 0 && row != selected)
     {
         selected = row;
         repaint();
     }
 }
 
-void PrDashboard::mouseDown(const MouseEvent& event)
+// Title, filter query, and the fetch state on the right.
+void PrDashboard::paintHeader(UI::Graphics& g, Rect panel)
 {
-    const auto row = rowAt(event.position);
+    const auto baseline = panel.y + headerBaseline;
 
-    if (row >= 0)
-    {
-        selected = row;
-        choose();
-        return;
-    }
-
-    if (!panelBounds().contains(event.position))
-        cancel();
-}
-
-void PrDashboard::paint(UI::Graphics& g)
-{
-    const auto panel = panelBounds();
-    const auto now = (std::int64_t) std::time(nullptr);
-
-    g.setColour(Color::black(0.38f));
-    g.fillRect(getLocalBounds());
-
-    g.setColour(toColor(theme.background).brighter(0.04f));
-    g.fillRoundedRect(panel, 12.0f);
-
-    g.setColour(toColor(theme.selection, 0.8f));
-    g.drawRect(panel, 1.0f);
-
-    // Header: title, filter query, and the fetch state on the right.
     g.setColour(toColor(theme.ansi[5]));
-    drawText(g, "prs", {panel.x + 18.0f, panel.y + 30.0f}, queryFont);
+    drawTextInFont(g, "prs", {panel.x + textLeft, baseline}, headerFont);
 
-    const auto queryText = "› " + query + "▏";
     g.setColour(toColor(theme.foreground));
-    drawText(g, queryText, {panel.x + 66.0f, panel.y + 30.0f}, queryFont);
+    drawTextInFont(g, "› " + query + "▏", {panel.x + queryLeft, baseline}, headerFont);
 
     if (!status.empty())
     {
-        const auto width = measureWidth(g, status, detailFont);
+        const auto width = measureTextInFont(g, status, detailFont);
         g.setColour(toColor(theme.ansi[8]));
-        drawText(g, 
-            status, {panel.right() - width - 16.0f, panel.y + 30.0f}, detailFont);
+        drawTextInFont(g,
+                       status,
+                       {panel.right() - width - statusRightPadding, baseline},
+                       detailFont);
     }
 
-    g.setColour(toColor(theme.selection));
-    g.drawLine({panel.x + 12.0f, panel.y + headerHeight - 2.0f},
-                     {panel.right() - 12.0f, panel.y + headerHeight - 2.0f});
+    paintHeaderDivider(g, panel, listMetrics.headerHeight);
+}
 
-    const auto rows = std::min((int) visible.size(), maxRows);
+void PrDashboard::paintRow(UI::Graphics& g, const PrItem& item, Rect rowArea, std::int64_t now)
+{
+    const auto baseline = rowArea.y + listMetrics.rowHeight * baselineFraction;
 
-    for (auto i = 0; i < rows; ++i)
-    {
-        const auto& item = visible[(std::size_t) i];
-        const auto y = panel.y + headerHeight + 4.0f + (float) i * rowHeight;
-        const auto rowRect =
-            Rect {panel.x + 8.0f, y, panel.w - 16.0f, rowHeight - 2.0f};
+    g.setColour(toColor(getCiColour(item, theme)));
+    drawTextInFont(g, getCiDot(item), {rowArea.x + ciDotLeft, baseline}, rowFont);
 
-        if (i == selected)
-        {
-            g.setColour(toColor(theme.selection, 0.85f));
-            g.fillRoundedRect(rowRect, 6.0f);
-        }
+    // Age of the last push.
+    g.setColour(toColor(theme.ansi[8]));
+    drawTextInFont(g,
+                   formatAge(now - epochFromIso(item.pushedAt)),
+                   {rowArea.x + ageLeft, baseline},
+                   detailFont);
 
-        const auto baseline = y + rowHeight * 0.62f;
+    // Repo (name only; the slug is in the filter haystack).
+    g.setColour(toColor(theme.ansi[4]));
+    drawTextInFont(g,
+                   truncateWithEllipsis(getRepoName(item.repo), repoNameLength),
+                   {rowArea.x + repoLeft, baseline},
+                   rowFont);
 
-        // CI state dot.
-        const auto success = item.ci == "SUCCESS";
-        const auto failed = item.ci == "FAILURE" || item.ci == "ERROR";
-        const auto running = item.ci == "PENDING" || item.ci == "EXPECTED";
-        const auto dotColor = success   ? toColor(theme.ansi[2])
-                              : failed  ? toColor(theme.ansi[1])
-                              : running ? toColor(theme.ansi[3])
-                                        : toColor(theme.ansi[8]);
-        g.setColour(dotColor);
-        drawText(g, success || failed || running ? "●" : "○",
-                         {rowRect.x + 12.0f, baseline},
-                         rowFont);
+    // Title, flexible width between the repo column and the review block.
+    const auto titleX = rowArea.x + titleLeft;
+    const auto titleRight =
+        rowArea.right() - sessionColumn - reviewColumn - titleRightPadding;
+    const auto titleChars = (std::size_t) std::max(
+        minimumTitleLength, (titleRight - titleX) / averageTitleCharacterWidth);
+    const auto title = (item.draft ? "◌ " : "") + item.title;
+    const auto titleAlpha = item.draft ? draftTitleAlpha : readyTitleAlpha;
+    g.setColour(toColor(theme.foreground, titleAlpha));
+    drawTextInFont(g, truncateWithEllipsis(title, titleChars), {titleX, baseline}, rowFont);
 
-        // Age of the last push.
-        g.setColour(toColor(theme.ansi[8]));
-        drawText(g, formatAge(now - epochFromIso(item.pushedAt)),
-                         {rowRect.x + 34.0f, baseline},
-                         detailFont);
+    paintReviewState(g, item, rowArea, baseline);
+    paintOwningSession(g, item, rowArea, baseline);
+}
 
-        // Repo (name only; the slug is in the filter haystack).
-        const auto repoName = item.repo.substr(item.repo.rfind('/') + 1);
-        g.setColour(toColor(theme.ansi[4]));
-        drawText(g, 
-            truncated(repoName, 18), {rowRect.x + 76.0f, baseline}, rowFont);
+// Decision mark plus requested reviewers.
+void PrDashboard::paintReviewState(UI::Graphics& g,
+                                   const PrItem& item,
+                                   Rect rowArea,
+                                   float baseline)
+{
+    const auto review = describeReviewState(item);
 
-        // Title, flexible width between the repo column and the review block.
-        const auto titleX = rowRect.x + 226.0f;
-        const auto titleRight =
-            rowRect.right() - sessionColumn - reviewColumn - 24.0f;
-        const auto titleChars =
-            (std::size_t) std::max(8.0f, (titleRight - titleX) / 7.2f);
-        const auto title = (item.draft ? "◌ " : "") + item.title;
-        g.setColour(toColor(theme.foreground, item.draft ? 0.6f : 1.0f));
-        drawText(g, truncated(title, titleChars), {titleX, baseline}, rowFont);
+    if (review.empty())
+        return;
 
-        // Review state: decision mark plus requested reviewers.
-        const auto approved = item.reviewDecision == "APPROVED";
-        const auto changes = item.reviewDecision == "CHANGES_REQUESTED";
-        const auto review = std::string {approved  ? "✓ "
-                                         : changes ? "✗ "
-                                                   : ""}
-                            + item.reviewers;
+    const auto text = truncateWithEllipsis(review, reviewLength);
+    const auto width = measureTextInFont(g, text, detailFont);
+    g.setColour(toColor(getReviewColour(item, theme)));
+    drawTextInFont(
+        g,
+        text,
+        {rowArea.right() - sessionColumn - columnRightPadding - width, baseline},
+        detailFont);
+}
 
-        if (!review.empty())
-        {
-            const auto text = truncated(review, 20);
-            const auto width = measureWidth(g, text, detailFont);
-            g.setColour(approved  ? toColor(theme.ansi[2])
-                             : changes ? toColor(theme.ansi[1])
-                                       : toColor(theme.ansi[8]));
-            drawText(g, 
-                text,
-                {rowRect.right() - sessionColumn - 12.0f - width, baseline},
-                detailFont);
-        }
+// The session that has this repo checked out, if any.
+void PrDashboard::paintOwningSession(UI::Graphics& g,
+                                     const PrItem& item,
+                                     Rect rowArea,
+                                     float baseline)
+{
+    const auto hasSession = !item.sessionName.empty();
+    const auto sessionText =
+        hasSession ? truncateWithEllipsis(item.sessionName, sessionNameLength) : "—";
+    const auto sessionWidth = measureTextInFont(g, sessionText, detailFont);
+    const auto sessionColour = hasSession ? theme.ansi[6] : theme.ansi[8];
+    g.setColour(toColor(sessionColour));
+    drawTextInFont(g,
+                   sessionText,
+                   {rowArea.right() - sessionWidth - columnRightPadding, baseline},
+                   detailFont);
+}
 
-        // The session that has this repo checked out, if any.
-        const auto sessionText =
-            item.sessionName.empty() ? "—" : truncated(item.sessionName, 16);
-        const auto sessionWidth =
-            measureWidth(g, sessionText, detailFont);
-        g.setColour(item.sessionName.empty() ? toColor(theme.ansi[8])
-                                                  : toColor(theme.ansi[6]));
-        drawText(g, sessionText,
-                         {rowRect.right() - sessionWidth - 12.0f, baseline},
-                         detailFont);
-    }
-
-    if (visible.empty())
-    {
-        g.setColour(toColor(theme.ansi[8]));
-        drawText(g, 
-            allItems.empty() && refreshing ? "loading PRs…" : "no matches",
-            {panel.x + 18.0f, panel.y + headerHeight + rowHeight * 0.62f},
-            rowFont);
-    }
-
-    // Hint line — or the in-flight jump, which owns the footer while it runs.
-    const auto hintY = panel.bottom() - 10.0f;
+// The hint line -- or the in-flight jump, which owns the footer while it runs.
+void PrDashboard::paintFooter(UI::Graphics& g, Rect panel)
+{
+    const auto hintPosition = Point {panel.x + textLeft, panel.bottom() - hintBottomOffset};
 
     if (!busy.empty())
     {
         g.setColour(toColor(theme.ansi[3]));
-        drawText(g, busy, {panel.x + 18.0f, hintY}, detailFont);
+        drawTextInFont(g, busy, hintPosition, detailFont);
+        return;
     }
-    else
+
+    g.setColour(toColor(theme.ansi[8]));
+    drawTextInFont(g,
+                   "enter worktree · ^o browser · ^s session · ^y copy · ^r refresh",
+                   hintPosition,
+                   detailFont);
+}
+
+void PrDashboard::paint(UI::Graphics& g)
+{
+    const auto panel = calculatePanelBounds();
+    const auto now = (std::int64_t) std::time(nullptr);
+
+    paintListBackdropAndCard(g, panel);
+    paintHeader(g, panel);
+
+    const auto rows = countVisibleListRows(listMetrics, (int) visible.size());
+
+    for (auto i = 0; i < rows; ++i)
     {
-        g.setColour(toColor(theme.ansi[8]));
-        drawText(g, 
-            "enter worktree · ^o browser · ^s session · ^y copy · ^r refresh",
-            {panel.x + 18.0f, hintY},
-            detailFont);
+        const auto rowArea = Rect {panel.x + rowSideInset,
+                                   calculateListRowTop(panel, listMetrics, i),
+                                   panel.w - 2.0f * rowSideInset,
+                                   listMetrics.rowHeight - rowGap};
+
+        if (i == selected)
+            paintSelectedRowHighlight(g, rowArea);
+
+        paintRow(g, visible[(std::size_t) i], rowArea, now);
     }
+
+    if (visible.empty())
+    {
+        const auto isLoading = allItems.empty() && refreshing;
+        const auto message = isLoading ? "loading PRs…" : "no matches";
+        const auto emptyBaseline =
+            panel.y + listMetrics.headerHeight + listMetrics.rowHeight * baselineFraction;
+        g.setColour(toColor(theme.ansi[8]));
+        drawTextInFont(g, message, {panel.x + textLeft, emptyBaseline}, rowFont);
+    }
+
+    paintFooter(g, panel);
 }
 } // namespace term

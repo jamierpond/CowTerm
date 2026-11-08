@@ -37,6 +37,7 @@ add_executable(${COWTERM_EXECUTABLE_TARGET}
         NotifyUserPrompt.cpp
         NotifyUserProtocol.cpp
         NotifyUserServer.cpp
+        OverlayPanel.cpp
         Palette.cpp
         Permissions.cpp
         PermissionsPanel.cpp
@@ -48,6 +49,7 @@ add_executable(${COWTERM_EXECUTABLE_TARGET}
         Session.cpp
         SessionView.cpp
         Switcher.cpp
+        TextLayout.cpp
         TrayController.cpp
         DaemonClient.cpp)
 

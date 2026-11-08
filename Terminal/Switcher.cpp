@@ -1,5 +1,7 @@
 #include "Switcher.h"
 
+#include "TextLayout.h"
+
 #include <eacp/Core/Threads/EventLoop.h>
 #include <eacp/Graphics/Graphics/Keyboard.h>
 
@@ -23,49 +25,36 @@ constexpr float minCard = 104.0f;
 constexpr float maxCard = 190.0f;
 constexpr float cardHeight = 66.0f;
 constexpr float panelHeight = pad * 2.0f + cardHeight + 30.0f;
+constexpr auto fontSizes = OverlayFontSizes {.header = 15.0f, .row = 13.0f, .detail = 12.0f};
+constexpr auto cardStyle =
+    OverlayCardStyle {.backgroundBrightening = 0.05f, .cornerRadius = 14.0f};
+constexpr auto cardBorderAlpha = 0.8f;
+constexpr auto modifierPollIntervalMs = 60;
+constexpr auto windowSideMargin = 120.0f;
+constexpr auto minimumAvailableWidth = 240.0f;
+constexpr auto cardCornerRadius = 8.0f;
+constexpr auto highlightedCardAlpha = 0.9f;
+constexpr auto plainCardAlpha = 0.06f;
+constexpr auto iconBaseline = 26.0f;
+constexpr auto nameBaseline = 50.0f;
+constexpr auto minimumNameLength = 4;
+constexpr auto averageNameCharacterWidth = 8.5f;
+constexpr auto highlightedNameAlpha = 1.0f;
+constexpr auto plainNameAlpha = 0.82f;
+constexpr auto detailLength = 72;
+constexpr auto detailBottomOffset = 14.0f;
 
-std::string compactPath(std::string path)
+// Centre text horizontally on anchor.x, drawn at baseline anchor.y.
+void drawCentered(UI::Graphics& g, const std::string& text, Point anchor, const UI::Font& font)
 {
-    const auto home = FilePath::homeDirectory().str();
-
-    if (!home.empty() && path.starts_with(home))
-        path = "~" + path.substr(home.size());
-
-    return path;
-}
-
-std::string truncated(const std::string& text, std::size_t max)
-{
-    if (text.size() <= max)
-        return text;
-
-    return text.substr(0, max - 1) + "…";
-}
-
-// Centre text horizontally on cx, drawn at baseline y. Measurement follows the
-// font in force, so the face is set before measuring rather than passed to both.
-void drawCentered(UI::Graphics& g,
-                  const std::string& text,
-                  float cx,
-                  float y,
-                  const UI::Font& font)
-{
-    g.setFont(font);
-    const auto w = g.measureText(text);
-    g.drawText(text, {cx - w / 2.0f, y});
+    const auto w = measureTextInFont(g, text, font);
+    g.drawText(text, {anchor.x - w / 2.0f, anchor.y});
 }
 } // namespace
 
 Switcher::Switcher(const AppConfig& configToUse, SessionManager& sessionsToUse)
-    : config(configToUse)
-    , sessions(sessionsToUse)
-    , theme(themeByName(configToUse.theme))
-    , titleFont({config.font, 15.0f})
-    , labelFont({config.font, 13.0f})
-    , detailFont({config.font, 12.0f})
+    : OverlayPanel(configToUse, sessionsToUse, fontSizes)
 {
-    setInterceptsMouseClicks(true);
-    setWantsKeyboardFocus(true);
 }
 
 bool Switcher::begin(bool reverse)
@@ -97,9 +86,9 @@ bool Switcher::begin(bool reverse)
         [this]
         {
             if (shown && !Graphics::Keyboard::isControlPressed())
-                commit();
+                chooseSelected();
         },
-        60);
+        modifierPollIntervalMs);
 
     sessions.beginPeek();
     peekSelected();
@@ -113,7 +102,8 @@ void Switcher::step(bool reverse)
     if (n == 0)
         return;
 
-    selected = (selected + (reverse ? -1 : 1) + n) % n;
+    const auto delta = reverse ? -1 : 1;
+    selected = wrapSelection(selected, delta, n);
     peekSelected();
     repaint();
 }
@@ -124,7 +114,7 @@ void Switcher::peekSelected()
         sessions.peekTo(*order[(std::size_t) selected]);
 }
 
-void Switcher::commit()
+void Switcher::chooseSelected()
 {
     if (!shown)
         return;
@@ -138,7 +128,7 @@ void Switcher::commit()
     onClosed();
 }
 
-void Switcher::cancel()
+void Switcher::dismiss()
 {
     if (!shown)
         return;
@@ -151,7 +141,7 @@ void Switcher::cancel()
 
 void Switcher::stopPolling()
 {
-    // commit()/cancel() can run from inside the poll timer's own callback, so
+    // chooseSelected()/dismiss() can run from inside the poll timer's own callback, so
     // tearing the Timer down here would free the closure mid-call. Defer the
     // reset to the next loop turn — and skip it if the switcher has reopened in
     // the meantime, which owns a fresh timer we must not drop.
@@ -167,13 +157,13 @@ bool Switcher::keyDown(const KeyEvent& event)
 {
     if (event.keyCode == KeyCode::Escape)
     {
-        cancel();
+        dismiss();
         return true;
     }
 
     if (event.keyCode == KeyCode::Return)
     {
-        commit();
+        chooseSelected();
         return true;
     }
 
@@ -201,22 +191,9 @@ bool Switcher::keyDown(const KeyEvent& event)
     return true;
 }
 
-void Switcher::mouseDown(const MouseEvent& event)
-{
-    if (const auto card = cardAt(event.position); card >= 0)
-    {
-        selected = card;
-        commit();
-        return;
-    }
-
-    if (!panelBounds().contains(event.position))
-        cancel();
-}
-
 void Switcher::mouseMove(const MouseEvent& event)
 {
-    if (const auto card = cardAt(event.position); card >= 0 && card != selected)
+    if (const auto card = findRowAt(event.position); card >= 0 && card != selected)
     {
         selected = card;
         peekSelected();
@@ -228,12 +205,12 @@ float Switcher::cardWidth() const
 {
     const auto bounds = getLocalBounds();
     const auto n = std::max((int) order.size(), 1);
-    const auto avail = std::max(bounds.w - 120.0f, 240.0f) - pad * 2.0f;
+    const auto avail = std::max(bounds.w - windowSideMargin, minimumAvailableWidth) - pad * 2.0f;
 
     return std::clamp((avail - gap * (float) (n - 1)) / (float) n, minCard, maxCard);
 }
 
-Rect Switcher::panelBounds() const
+Rect Switcher::calculatePanelBounds() const
 {
     const auto bounds = getLocalBounds();
     const auto n = std::max((int) order.size(), 1);
@@ -246,9 +223,9 @@ Rect Switcher::panelBounds() const
             panelHeight};
 }
 
-int Switcher::cardAt(Point pos) const
+int Switcher::findRowAt(Point pos) const
 {
-    const auto panel = panelBounds();
+    const auto panel = calculatePanelBounds();
     const auto cardW = cardWidth();
     const auto top = panel.y + pad;
 
@@ -268,68 +245,80 @@ int Switcher::cardAt(Point pos) const
     return -1;
 }
 
+std::string Switcher::describeSession(const TermSession& session) const
+{
+    const auto title = session.activeTitle();
+    auto detail = title;
+
+    if (!session.isClaude() || title.empty())
+        detail = compactHomePath(session.activeWorkingDirectory());
+
+    if (const auto panes = session.view.paneCount(); panes > 1)
+        detail += "  ·  " + std::to_string(panes) + " panes";
+
+    return detail;
+}
+
+void Switcher::paintCard(UI::Graphics& g, int index, Rect card)
+{
+    const auto& session = *order[(std::size_t) index];
+    const auto cx = card.x + card.w / 2.0f;
+    const auto highlighted = index == selected;
+    const auto claude = session.isClaude();
+
+    if (highlighted)
+        g.setColour(toColor(theme.selection, highlightedCardAlpha));
+    else
+        g.setColour(toColor(theme.foreground, plainCardAlpha));
+
+    g.fillRoundedRect(card, cardCornerRadius);
+
+    const auto icon = claude ? "✳" : "●";
+    const auto iconColour = claude ? theme.ansi[5] : theme.ansi[2];
+    g.setColour(toColor(iconColour));
+    drawCentered(g, icon, {cx, card.y + iconBaseline}, headerFont);
+
+    const auto maxChars = (std::size_t) std::max(
+        minimumNameLength, (int) (card.w / averageNameCharacterWidth));
+    const auto nameAlpha = highlighted ? highlightedNameAlpha : plainNameAlpha;
+    g.setColour(toColor(theme.foreground, nameAlpha));
+    drawCentered(
+        g, truncateWithEllipsis(session.name, maxChars), {cx, card.y + nameBaseline}, rowFont);
+}
+
+// The highlight's conversation title (Claude) or cwd.
+void Switcher::paintSelectedDetail(UI::Graphics& g, Rect panel)
+{
+    if (selected < 0 || selected >= (int) order.size())
+        return;
+
+    const auto detail = describeSession(*order[(std::size_t) selected]);
+
+    g.setColour(toColor(theme.ansi[8]));
+    drawCentered(g,
+                 truncateWithEllipsis(detail, detailLength),
+                 {panel.x + panel.w / 2.0f, panel.y + panelHeight - detailBottomOffset},
+                 detailFont);
+}
+
 void Switcher::paint(UI::Graphics& g)
 {
     if (order.empty())
         return;
 
-    const auto panel = panelBounds();
+    const auto panel = calculatePanelBounds();
     const auto cardW = cardWidth();
 
-    g.setColour(Color::black(0.38f));
-    g.fillRect(getLocalBounds());
-
-    g.setColour(toColor(theme.background).brighter(0.05f));
-    g.fillRoundedRect(panel, 14.0f);
-
-    g.setColour(toColor(theme.selection, 0.8f));
-    g.drawRect(panel, 1.0f);
+    paintBackdropAndCard(g, panel, toColor(theme.selection, cardBorderAlpha), cardStyle);
 
     auto x = panel.x + pad;
-    const auto cardTop = panel.y + pad;
 
     for (auto i = 0; i < (int) order.size(); ++i)
     {
-        auto* session = order[(std::size_t) i];
-        const auto cardRect = Rect {x, cardTop, cardW, cardHeight};
-        const auto cx = x + cardW / 2.0f;
-        const auto highlighted = i == selected;
-        const auto claude = session->isClaude();
-
-        g.setColour(highlighted ? toColor(theme.selection, 0.9f)
-                                : toColor(theme.foreground, 0.06f));
-        g.fillRoundedRect(cardRect, 8.0f);
-
-        const auto icon = claude ? "✳" : "●";
-        g.setColour(claude ? toColor(theme.ansi[5]) : toColor(theme.ansi[2]));
-        drawCentered(g, icon, cx, cardTop + 26.0f, titleFont);
-
-        const auto maxChars = (std::size_t) std::max(4, (int) (cardW / 8.5f));
-        g.setColour(toColor(theme.foreground, highlighted ? 1.0f : 0.82f));
-        drawCentered(
-            g, truncated(session->name, maxChars), cx, cardTop + 50.0f, labelFont);
-
+        paintCard(g, i, {x, panel.y + pad, cardW, cardHeight});
         x += cardW + gap;
     }
 
-    // Detail line for the highlight: its conversation title (Claude) or cwd.
-    if (selected >= 0 && selected < (int) order.size())
-    {
-        auto* session = order[(std::size_t) selected];
-        const auto title = session->activeTitle();
-        auto detail = session->isClaude() && !title.empty()
-                          ? title
-                          : compactPath(session->activeWorkingDirectory());
-
-        if (const auto panes = session->view.paneCount(); panes > 1)
-            detail += "  ·  " + std::to_string(panes) + " panes";
-
-        g.setColour(toColor(theme.ansi[8]));
-        drawCentered(g,
-                     truncated(detail, 72),
-                     panel.x + panel.w / 2.0f,
-                     panel.y + panelHeight - 14.0f,
-                     detailFont);
-    }
+    paintSelectedDetail(g, panel);
 }
 } // namespace term

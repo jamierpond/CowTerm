@@ -1,5 +1,7 @@
 #include "PermissionsPanel.h"
 
+#include "OverlayPanel.h"
+
 #include <eacp/Graphics/Graphics.h>
 
 #include <algorithm>
@@ -26,17 +28,8 @@ constexpr float detailHeight = 132.0f;
 constexpr float bannerHeight = 40.0f;
 constexpr float footerHeight = 52.0f;
 
-void drawText(UI::Graphics& g, const std::string& text, Point at, const UI::Font& font)
-{
-    g.setFont(font);
-    g.drawText(text, at);
-}
-
-float measureWidth(UI::Graphics& g, const std::string& text, const UI::Font& font)
-{
-    g.setFont(font);
-    return g.measureText(text);
-}
+constexpr auto refreshIntervalMs = 1000;
+constexpr auto ticksPerScreenProbe = 2;
 
 bool isDone(Status status)
 {
@@ -132,7 +125,7 @@ void PermissionsPanel::show(bool automaticToUse, bool confirmReset)
             ++ticks;
             refresh();
         },
-        Time::MS {1000});
+        Time::MS {refreshIntervalMs});
 
     repaint();
 }
@@ -165,6 +158,52 @@ bool PermissionsPanel::bannerShown() const
            || selectedInfo().kind == Kind::screenRecording;
 }
 
+permissions::Status PermissionsPanel::checkGrant(const permissions::Info& grant) const
+{
+    const auto status = platform::check(grant.kind);
+
+    // This process caches its Screen Recording answer, so a grant made while
+    // it runs (or a reset) shows only in a fresh process.
+    const auto isCachedAnswerStale =
+        grant.kind == Kind::screenRecording && (status != Status::granted || resetDone);
+
+    if (!isCachedAnswerStale)
+        return status;
+
+    return screenProbe.value_or(false) ? Status::needsRelaunch : Status::notGranted;
+}
+
+bool PermissionsPanel::isScreenProbeDue() const
+{
+    const auto screenDoubt = statusOf(Kind::screenRecording) != Status::granted;
+    const auto isProbeTick = ticks % ticksPerScreenProbe == 0;
+    return screenDoubt && !probing && isProbeTick;
+}
+
+// The probe spawns a process, so every other tick, and only while the
+// in-process answer can't be trusted.
+void PermissionsPanel::probeScreenRecordingWhileInDoubt()
+{
+    if (!isScreenProbeDue())
+        return;
+
+    probing = true;
+    platform::probeScreenRecording(
+        [this, alive = alive](bool granted)
+        {
+            if (!*alive)
+                return;
+
+            probing = false;
+
+            if (screenProbe != granted)
+            {
+                screenProbe = granted;
+                refresh();
+            }
+        });
+}
+
 void PermissionsPanel::refresh()
 {
     if (!shown)
@@ -173,41 +212,9 @@ void PermissionsPanel::refresh()
     entries.clear();
 
     for (const auto& grant: permissions::all())
-    {
-        auto status = platform::check(grant.kind);
+        entries.push_back({grant.kind, checkGrant(grant)});
 
-        // This process caches its Screen Recording answer, so a grant made
-        // while it runs (or a reset) shows only in a fresh process.
-        if (grant.kind == Kind::screenRecording
-            && (status != Status::granted || resetDone))
-            status = screenProbe.value_or(false) ? Status::needsRelaunch
-                                                 : Status::notGranted;
-
-        entries.push_back({grant.kind, status});
-    }
-
-    // The probe spawns a process, so every other tick, and only while the
-    // in-process answer can't be trusted.
-    const auto screenDoubt = statusOf(Kind::screenRecording) != Status::granted;
-
-    if (screenDoubt && !probing && ticks % 2 == 0)
-    {
-        probing = true;
-        platform::probeScreenRecording(
-            [this, alive = alive](bool granted)
-            {
-                if (!*alive)
-                    return;
-
-                probing = false;
-
-                if (screenProbe != granted)
-                {
-                    screenProbe = granted;
-                    refresh();
-                }
-            });
-    }
+    probeScreenRecordingWhileInDoubt();
 
     // Launch's showing goes away once nothing required is missing, as
     // Rudder's unlock card does.
@@ -310,48 +317,48 @@ PermissionsPanel::Layout PermissionsPanel::layout() const
     return at;
 }
 
+void PermissionsPanel::cancelOrClose()
+{
+    if (!confirmingReset)
+    {
+        close();
+        return;
+    }
+
+    confirmingReset = false;
+    repaint();
+}
+
+void PermissionsPanel::confirmOrAct()
+{
+    if (confirmingReset)
+        resetAll();
+    else
+        act(selected);
+}
+
 bool PermissionsPanel::keyDown(const KeyEvent& event)
 {
-    if (event.keyCode == KeyCode::Escape)
-    {
-        if (confirmingReset)
-        {
-            confirmingReset = false;
-            repaint();
-        }
-        else
-            close();
-
-        return true;
-    }
-
-    if (event.keyCode == KeyCode::Return)
-    {
-        if (confirmingReset)
-            resetAll();
-        else
-            act(selected);
-
-        return true;
-    }
-
     const auto& chars = event.charactersIgnoringModifiers;
     const auto count = (int) permissions::all().size();
 
-    if (event.keyCode == KeyCode::UpArrow || chars == "k"
-        || (event.modifiers.control && chars == "p"))
+    if (event.keyCode == KeyCode::Escape)
     {
-        selected = (selected - 1 + count) % count;
-        repaint();
-        return true;
+        cancelOrClose();
     }
-
-    if (event.keyCode == KeyCode::DownArrow || chars == "j"
-        || (event.modifiers.control && chars == "n"))
+    else if (event.keyCode == KeyCode::Return)
     {
-        selected = (selected + 1) % count;
+        confirmOrAct();
+    }
+    else if (isSelectPreviousKey(event) || chars == "k")
+    {
+        selected = wrapSelection(selected, -1, count);
         repaint();
-        return true;
+    }
+    else if (isSelectNextKey(event) || chars == "j")
+    {
+        selected = wrapSelection(selected, 1, count);
+        repaint();
     }
 
     // Everything else is swallowed while the panel owns the keyboard.
@@ -362,6 +369,61 @@ void PermissionsPanel::mouseMove(const MouseEvent& event)
 {
     mouse = event.position;
     repaint();
+}
+
+void PermissionsPanel::handleConfirmingResetClick(const Layout& at, Point pos)
+{
+    if (at.confirm.contains(pos))
+    {
+        resetAll();
+    }
+    else if (at.cancel.contains(pos))
+    {
+        confirmingReset = false;
+        repaint();
+    }
+}
+
+bool PermissionsPanel::handleButtonClick(const Layout& at, Point pos)
+{
+    if (at.reset.contains(pos))
+    {
+        confirmingReset = true;
+        repaint();
+        return true;
+    }
+
+    if (bannerShown() && at.relaunch.contains(pos))
+    {
+        platform::relaunch();
+        return true;
+    }
+
+    return false;
+}
+
+bool PermissionsPanel::handleRowClick(const Layout& at, Point pos)
+{
+    for (std::size_t i = 0; i < at.rows.size(); ++i)
+    {
+        if (!at.rows[i].contains(pos))
+            continue;
+
+        selected = (int) i;
+
+        if (at.actions[i].contains(pos))
+            act((int) i);
+
+        repaint();
+        return true;
+    }
+
+    return false;
+}
+
+bool PermissionsPanel::isDragTileActive() const
+{
+    return selectedInfo().dragToList && !isDone(statusOf(selectedInfo().kind));
 }
 
 void PermissionsPanel::mouseDown(const MouseEvent& event)
@@ -377,47 +439,15 @@ void PermissionsPanel::mouseDown(const MouseEvent& event)
 
     if (confirmingReset)
     {
-        if (at.confirm.contains(pos))
-            resetAll();
-        else if (at.cancel.contains(pos))
-        {
-            confirmingReset = false;
-            repaint();
-        }
-
+        handleConfirmingResetClick(at, pos);
         return;
     }
 
-    if (at.reset.contains(pos))
-    {
-        confirmingReset = true;
-        repaint();
+    if (handleButtonClick(at, pos) || handleRowClick(at, pos))
         return;
-    }
-
-    if (bannerShown() && at.relaunch.contains(pos))
-    {
-        platform::relaunch();
-        return;
-    }
-
-    for (std::size_t i = 0; i < at.rows.size(); ++i)
-    {
-        if (!at.rows[i].contains(pos))
-            continue;
-
-        selected = (int) i;
-
-        if (at.actions[i].contains(pos))
-            act((int) i);
-
-        repaint();
-        return;
-    }
 
     // Starting the drag opens the pane, so the list is there to drop on.
-    if (selectedInfo().dragToList && !isDone(statusOf(selectedInfo().kind))
-        && at.tile.contains(pos))
+    if (isDragTileActive() && at.tile.contains(pos))
     {
         if (auto* host = getHost())
             platform::startAppDrag(*host);
@@ -441,6 +471,42 @@ void PermissionsPanel::paintButton(UI::Graphics& g,
     g.drawText(label, area, UI::Justification::Centred);
 }
 
+Color PermissionsPanel::getStatusColour(const permissions::Info& grant, Status status) const
+{
+    switch (status)
+    {
+        case Status::granted:
+            return toColor(theme.ansi[2]);
+        case Status::needsRelaunch:
+            return toColor(theme.ansi[3]);
+        case Status::denied:
+            return toColor(theme.ansi[1]);
+        case Status::unknown:
+            return toColor(theme.ansi[7]);
+        case Status::notGranted:
+            break;
+    }
+
+    return grant.required ? toColor(theme.ansi[1]) : toColor(theme.ansi[3]);
+}
+
+// Required vs optional, beside the name.
+void PermissionsPanel::paintRequiredTag(UI::Graphics& g,
+                                        const permissions::Info& grant,
+                                        const Rect& row,
+                                        float nameWidth)
+{
+    const auto tag = grant.required ? std::string {"required"} : std::string {"optional"};
+    const auto tagWidth = measureTextInFont(g, tag, detailFont) + 12.0f;
+    const auto tagRect = Rect {row.x + 26.0f + nameWidth + 10.0f, row.y + 5.0f, tagWidth, 16.0f};
+    const auto tagColour = grant.required ? toColor(theme.ansi[5]) : toColor(theme.ansi[8]);
+    g.setColour(tagColour.withAlpha(0.25f));
+    g.fillRoundedRect(tagRect, 8.0f);
+    g.setColour(grant.required ? toColor(theme.ansi[5]) : toColor(theme.ansi[7]));
+    g.setFont(detailFont);
+    g.drawText(tag, tagRect, UI::Justification::Centred);
+}
+
 void PermissionsPanel::paintRow(UI::Graphics& g, const Layout& at, int i)
 {
     const auto& grant = permissions::all()[(std::size_t) i];
@@ -453,42 +519,16 @@ void PermissionsPanel::paintRow(UI::Graphics& g, const Layout& at, int i)
         g.fillRoundedRect(row, 6.0f);
     }
 
-    const auto colour = [&]
-    {
-        switch (status)
-        {
-            case Status::granted:
-                return toColor(theme.ansi[2]);
-            case Status::needsRelaunch:
-                return toColor(theme.ansi[3]);
-            case Status::denied:
-                return toColor(theme.ansi[1]);
-            case Status::unknown:
-                return toColor(theme.ansi[7]);
-            case Status::notGranted:
-                break;
-        }
-
-        return grant.required ? toColor(theme.ansi[1]) : toColor(theme.ansi[3]);
-    }();
+    const auto colour = getStatusColour(grant, status);
 
     g.setColour(colour);
     g.fillRoundedRect({row.x + 10.0f, row.y + 11.0f, 8.0f, 8.0f}, 4.0f);
 
     g.setColour(toColor(theme.foreground));
-    const auto nameWidth = measureWidth(g, grant.name, rowFont);
-    drawText(g, grant.name, {row.x + 26.0f, row.y + 18.0f}, rowFont);
+    const auto nameWidth = measureTextInFont(g, grant.name, rowFont);
+    drawTextInFont(g, grant.name, {row.x + 26.0f, row.y + 18.0f}, rowFont);
 
-    // Required vs optional, beside the name.
-    const auto tag = grant.required ? std::string {"required"} : std::string {"optional"};
-    const auto tagWidth = measureWidth(g, tag, detailFont) + 12.0f;
-    const auto tagRect = Rect {row.x + 26.0f + nameWidth + 10.0f, row.y + 5.0f, tagWidth, 16.0f};
-    const auto tagColour = grant.required ? toColor(theme.ansi[5]) : toColor(theme.ansi[8]);
-    g.setColour(tagColour.withAlpha(0.25f));
-    g.fillRoundedRect(tagRect, 8.0f);
-    g.setColour(grant.required ? toColor(theme.ansi[5]) : toColor(theme.ansi[7]));
-    g.setFont(detailFont);
-    g.drawText(tag, tagRect, UI::Justification::Centred);
+    paintRequiredTag(g, grant, row, nameWidth);
 
     const auto& action = at.actions[(std::size_t) i];
 
@@ -496,13 +536,13 @@ void PermissionsPanel::paintRow(UI::Graphics& g, const Layout& at, int i)
     g.saveState();
     g.reduceClipRegion({row.x, row.y, action.x - 8.0f - row.x, row.h});
     g.setColour(toColor(theme.ansi[7]));
-    drawText(g, grant.why, {row.x + 26.0f, row.y + 34.0f}, detailFont);
+    drawTextInFont(g, grant.why, {row.x + 26.0f, row.y + 34.0f}, detailFont);
     g.restoreState();
 
     const auto label = permissions::statusLabel(status);
-    const auto labelWidth = measureWidth(g, label, detailFont);
+    const auto labelWidth = measureTextInFont(g, label, detailFont);
     g.setColour(colour);
-    drawText(g, label, {action.x - 12.0f - labelWidth, row.y + 18.0f}, detailFont);
+    drawTextInFont(g, label, {action.x - 12.0f - labelWidth, row.y + 18.0f}, detailFont);
 
     const auto button =
         permissions::actionLabel(grant, status, prompted.contains(grant.kind));
@@ -511,68 +551,68 @@ void PermissionsPanel::paintRow(UI::Graphics& g, const Layout& at, int i)
         paintButton(g, action, button, toColor(theme.ansi[4]));
 }
 
+void PermissionsPanel::loadAppIconOnce()
+{
+    auto* host = getHost();
+
+    if (icon != nullptr || host == nullptr)
+        return;
+
+    if (auto image = platform::appIcon())
+        icon = host->getImageCache().get(image);
+}
+
+// Rudder's tile: the app's icon in a green-edged card, dragged from.
+void PermissionsPanel::paintDragTile(UI::Graphics& g, const Rect& tile, bool done)
+{
+    const auto isHoverable = tile.contains(mouse) && !done;
+    g.setColour(Color(1.f, 1.f, 1.f, isHoverable ? 0.08f : 0.04f));
+    g.fillRoundedRect(tile, 14.0f);
+    g.setColour(toColor(theme.ansi[2], done ? 0.35f : 0.8f));
+    g.drawRoundedRect(tile, 14.0f, 1.0f);
+
+    loadAppIconOnce();
+
+    if (icon != nullptr)
+        g.drawImage(icon,
+                    {tile.x + (tile.w - 64.0f) / 2.0f, tile.y + 14.0f, 64.0f, 64.0f},
+                    done ? 0.4f : 1.0f);
+
+    g.setColour(toColor(theme.foreground));
+    g.setFont(detailFont);
+    g.drawText(done ? "CowTerm is in the list" : "Drag CowTerm into the list",
+               {tile.x, tile.y + 84.0f, tile.w, 20.0f},
+               UI::Justification::Centred);
+}
+
 void PermissionsPanel::paintDetail(UI::Graphics& g, const Layout& at)
 {
     const auto& grant = selectedInfo();
-    const auto done = isDone(statusOf(grant.kind));
     auto x = at.detail.x + 24.0f;
 
     if (grant.dragToList)
     {
-        // Rudder's tile: the app's icon in a green-edged card, dragged from.
-        const auto& tile = at.tile;
-        g.setColour(Color(1.f, 1.f, 1.f, tile.contains(mouse) && !done ? 0.08f : 0.04f));
-        g.fillRoundedRect(tile, 14.0f);
-        g.setColour(toColor(theme.ansi[2], done ? 0.35f : 0.8f));
-        g.drawRoundedRect(tile, 14.0f, 1.0f);
-
-        if (icon == nullptr)
-            if (auto* host = getHost())
-                if (auto image = platform::appIcon())
-                    icon = host->getImageCache().get(image);
-
-        if (icon != nullptr)
-            g.drawImage(icon,
-                        {tile.x + (tile.w - 64.0f) / 2.0f, tile.y + 14.0f, 64.0f, 64.0f},
-                        done ? 0.4f : 1.0f);
-
-        g.setColour(toColor(theme.foreground));
-        g.setFont(detailFont);
-        g.drawText(done ? "CowTerm is in the list" : "Drag CowTerm into the list",
-                   {tile.x, tile.y + 84.0f, tile.w, 20.0f},
-                   UI::Justification::Centred);
-
-        x = tile.right() + 24.0f;
+        paintDragTile(g, at.tile, isDone(statusOf(grant.kind)));
+        x = at.tile.right() + 24.0f;
     }
 
     auto y = at.detail.y + 26.0f;
 
     g.setColour(toColor(theme.foreground));
-    drawText(g, grant.name, {x, y}, rowFont);
+    drawTextInFont(g, grant.name, {x, y}, rowFont);
     y += 22.0f;
 
     g.setColour(toColor(theme.ansi[7]));
 
     for (const auto& step: stepsFor(grant))
     {
-        drawText(g, step, {x, y}, detailFont);
+        drawTextInFont(g, step, {x, y}, detailFont);
         y += 17.0f;
     }
 }
 
-void PermissionsPanel::paint(UI::Graphics& g)
+void PermissionsPanel::paintTitle(UI::Graphics& g, const Rect& card)
 {
-    const auto at = layout();
-    const auto& card = at.card;
-
-    g.setColour(Color::black(0.5f));
-    g.fillRect(getLocalBounds());
-
-    g.setColour(toColor(theme.background).brighter(0.05f));
-    g.fillRoundedRect(card, 22.0f);
-    g.setColour(toColor(theme.selection, 0.8f));
-    g.drawRoundedRect(card, 22.0f, 1.0f);
-
     const auto missing = permissions::requiredMissing(entries);
 
     g.setColour(toColor(theme.foreground));
@@ -590,6 +630,76 @@ void PermissionsPanel::paint(UI::Graphics& g)
     g.drawText("and scripts can only screenshot, drive apps or read ~/Library if CowTerm can.",
                {card.x, card.y + 66.0f, card.w, 16.0f},
                UI::Justification::Centred);
+}
+
+std::string PermissionsPanel::describeBanner() const
+{
+    if (resetDone)
+        return "Grants reset. Relaunch so CowTerm drops the ones it cached.";
+
+    if (statusOf(Kind::screenRecording) == Status::needsRelaunch)
+        return "Screen Recording is on; CowTerm sees it after a relaunch.";
+
+    return "Screen Recording only takes effect after CowTerm relaunches.";
+}
+
+void PermissionsPanel::paintBanner(UI::Graphics& g, const Layout& at)
+{
+    const auto& banner = at.banner;
+    g.setColour(toColor(theme.ansi[3], 0.12f));
+    g.fillRoundedRect(banner, 8.0f);
+
+    g.setColour(toColor(theme.ansi[3]));
+    drawTextInFont(g, describeBanner(), {banner.x + 14.0f, banner.y + 17.0f}, detailFont);
+    g.setColour(toColor(theme.ansi[7]));
+    drawTextInFont(g,
+                   "Relaunching keeps every shell running (the daemon holds them).",
+                   {banner.x + 14.0f, banner.y + 32.0f},
+                   detailFont);
+
+    paintButton(g, at.relaunch, "Relaunch CowTerm", toColor(theme.ansi[3]));
+}
+
+void PermissionsPanel::paintFooter(UI::Graphics& g, const Layout& at)
+{
+    const auto& card = at.card;
+    const auto footerText = card.bottom() - footerHeight + 30.0f;
+
+    if (confirmingReset)
+    {
+        g.setColour(toColor(theme.ansi[1]));
+        drawTextInFont(g,
+                       "Reset every privacy grant CowTerm has? macOS will ask again.",
+                       {card.x + 24.0f, footerText},
+                       detailFont);
+        paintButton(g, at.confirm, "Reset", toColor(theme.ansi[1]));
+        paintButton(g, at.cancel, "Cancel", toColor(theme.ansi[8]));
+        return;
+    }
+
+    paintButton(g, at.reset, "Reset all permissions…", toColor(theme.ansi[1]));
+
+    const auto hint = error.empty() ? std::string {"↑↓ select · enter grant · esc close"}
+                                    : "tccutil: " + error;
+    const auto width = measureTextInFont(g, hint, detailFont);
+    g.setColour(error.empty() ? toColor(theme.ansi[8]) : toColor(theme.ansi[1]));
+    drawTextInFont(g, hint, {card.right() - 24.0f - width, footerText}, detailFont);
+}
+
+void PermissionsPanel::paint(UI::Graphics& g)
+{
+    const auto at = layout();
+    const auto& card = at.card;
+
+    g.setColour(Color::black(0.5f));
+    g.fillRect(getLocalBounds());
+
+    g.setColour(toColor(theme.background).brighter(0.05f));
+    g.fillRoundedRect(card, 22.0f);
+    g.setColour(toColor(theme.selection, 0.8f));
+    g.drawRoundedRect(card, 22.0f, 1.0f);
+
+    paintTitle(g, card);
 
     for (auto i = 0; i < (int) at.rows.size(); ++i)
         paintRow(g, at, i);
@@ -601,48 +711,8 @@ void PermissionsPanel::paint(UI::Graphics& g)
     paintDetail(g, at);
 
     if (bannerShown())
-    {
-        const auto& banner = at.banner;
-        g.setColour(toColor(theme.ansi[3], 0.12f));
-        g.fillRoundedRect(banner, 8.0f);
+        paintBanner(g, at);
 
-        const auto line = resetDone
-                              ? "Grants reset. Relaunch so CowTerm drops the ones it cached."
-                          : statusOf(Kind::screenRecording) == Status::needsRelaunch
-                              ? "Screen Recording is on; CowTerm sees it after a relaunch."
-                              : "Screen Recording only takes effect after CowTerm relaunches.";
-
-        g.setColour(toColor(theme.ansi[3]));
-        drawText(g, line, {banner.x + 14.0f, banner.y + 17.0f}, detailFont);
-        g.setColour(toColor(theme.ansi[7]));
-        drawText(g,
-                 "Relaunching keeps every shell running (the daemon holds them).",
-                 {banner.x + 14.0f, banner.y + 32.0f},
-                 detailFont);
-
-        paintButton(g, at.relaunch, "Relaunch CowTerm", toColor(theme.ansi[3]));
-    }
-
-    const auto footerText = card.bottom() - footerHeight + 30.0f;
-
-    if (confirmingReset)
-    {
-        g.setColour(toColor(theme.ansi[1]));
-        drawText(g,
-                 "Reset every privacy grant CowTerm has? macOS will ask again.",
-                 {card.x + 24.0f, footerText},
-                 detailFont);
-        paintButton(g, at.confirm, "Reset", toColor(theme.ansi[1]));
-        paintButton(g, at.cancel, "Cancel", toColor(theme.ansi[8]));
-        return;
-    }
-
-    paintButton(g, at.reset, "Reset all permissions…", toColor(theme.ansi[1]));
-
-    const auto hint = error.empty() ? std::string {"↑↓ select · enter grant · esc close"}
-                                    : "tccutil: " + error;
-    const auto width = measureWidth(g, hint, detailFont);
-    g.setColour(error.empty() ? toColor(theme.ansi[8]) : toColor(theme.ansi[1]));
-    drawText(g, hint, {card.right() - 24.0f - width, footerText}, detailFont);
+    paintFooter(g, at);
 }
 } // namespace term

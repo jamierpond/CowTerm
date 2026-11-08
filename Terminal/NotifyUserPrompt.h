@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Config.h"
+#include "TextLayout.h"
 
 #include <eacp/UI/UI.h>
 
@@ -72,8 +73,20 @@ private:
         float height = 0.0f;
     };
 
+    struct AnswerButtonFlow
+    {
+        std::vector<Button> buttons;
+        float rowCount = 0.0f;
+    };
+
     Layout calculateLayout(float width) const;
-    std::vector<std::string> wrapTextToWidth(const std::string& text, float width) const;
+    AnswerButtonFlow layoutAnswerButtons(float left, float innerWidth) const;
+    void fitContentLines(Layout& result, float innerWidth, float maximumLineCount) const;
+    float layoutTypedResponseRow(Layout& result, float left, float innerWidth, float y) const;
+    float layoutFooterButtons(Layout& result, float left, float innerWidth, float y) const;
+    float calculateLineHeight(const eacp::UI::Font& font) const;
+    float calculateButtonWidth(const std::string& caption) const;
+    TextWidthMeasurer createMeasurer(const eacp::UI::Font& font) const;
     std::string truncateTextToWidth(const std::string& text,
                                     float width,
                                     const eacp::UI::Font& font) const;
@@ -83,6 +96,8 @@ private:
     void answerWithOptionNumber(std::size_t number);
     void pasteIntoTypedResponse();
     void deleteLastTypedCharacter();
+    void answerWithOptionShortcut(const std::string& typed);
+    void editTypedResponse(const eacp::UI::KeyEvent& event);
 
     void paintHeader(eacp::UI::Graphics& g) const;
     void paintContent(eacp::UI::Graphics& g) const;

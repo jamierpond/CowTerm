@@ -8,6 +8,7 @@
 #include <Miro/Reflect.h>
 
 #include <memory>
+#include <optional>
 #include <vector>
 
 namespace term
@@ -136,6 +137,17 @@ private:
     Node* leafFor(const TerminalView* view) const;
     void setActive(Node* leaf);
     void removeLeaf(Node* leaf);
+    void collapseIntoSurvivingSibling(Node& parent, const Node& closing);
+    Node* findFirstLeafUnder(Node* node) const;
+    Node* findNearestLeafInDirection(char direction) const;
+
+    struct EnclosingSplit
+    {
+        Node& split;
+        Node& child;
+    };
+
+    std::optional<EnclosingSplit> findEnclosingSplit(bool horizontal) const;
 
     const AppConfig& config;
     std::string fallbackDir;
