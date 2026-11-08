@@ -15,3 +15,5 @@ build-asan
 # nix / direnv
 /.direnv/
 /result
+/build-*/
+/build-*.log

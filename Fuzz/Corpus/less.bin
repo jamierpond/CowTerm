@@ -1,0 +1,95 @@
+PP[?1049h[20;1H[?1h=[33mcommit bb0acbd659fbd89d74e2d896e915eb47e1cecc84[m[m
+Author: Jamie Pond <jamiepond259@gmail.com>[m
+Date:   Tue Oct 27 20:05:01 2026 -0700[m
+[m
+    Rudder: tell it each pane's and place's repository root[m
+    [m
+    Rudder now remembers a context by repository and branch rather than branch[m
+    alone (every develop pane across repos was one thing to it). The root is the[m
+    directory holding the nearest .git, a worktree's own folder for a worktree.[m
+[m
+[1mdiff --git a/Terminal/GitBranch.cpp b/Terminal/GitBranch.cpp[m[m
+[1mindex ef7f163..5151dc0 100644[m[m
+[1m--- a/Terminal/GitBranch.cpp[m[m
+[1m+++ b/Terminal/GitBranch.cpp[m[m
+[36m@@ -22,9 +22,15 @@[m [mstd::string firstLine(const fs::path& file)[m[m
+     return line;[m[m
+ }[m[m
+ [m[m
+[31m-// The HEAD file of the repo holding `dir`: the nearest ".git" up the tree,[m[m
+:[K[K[31m-// either the git dir itself or (worktrees, submodules) a file pointing at it.[m[m
+[31m-std::optional<fs::path> headFile(const std::string& dir)[m[m
+[32m+[m[32mstruct GitCheckout[m[m
+[32m+[m[32m{[m[m
+[32m+[m[32m    fs::path root;[m[m
+[32m+[m[32m    fs::path head;[m[m
+[32m+[m[32m};[m[m
+[32m+[m[m
+[32m+[m[32m// The nearest ".git" up the tree from `dir`, either the git dir itself or[m[m
+[32m+[m[32m// (worktrees, submodules) a file pointing at it.[m[m
+[32m+[m[32mstd::optional<GitCheckout> findGitCheckout(const std::string& dir)[m[m
+ {[m[m
+     if (dir.empty())[m[m
+         return std::nullopt;[m[m
+[36m@@ -36,7 +42,7 @@[m [mstd::optional<fs::path> headFile(const std::string& dir)[m[m
+         const auto dotGit = at / ".git";[m[m
+ [m[m
+         if (fs::is_directory(dotGit, error))[m[m
+[31m-            return dotGit / "HEAD";[m[m
+:[K[K/[Kff[Kuu[Kzz[Kzz[K[1;1H[K[31m-// either the git dir itself or (worktrees, submodules) a file pointing at it.[m[m
+[2;1H[K[31m-std::optional<fs::path> headFile(const std::string& dir)[m[m
+[3;1H[K[32m+[m[32mstruct GitCheckout[m[m
+[4;1H[K[32m+[m[32m{[m[m
+[5;1H[K[32m+[m[32m    fs::path root;[m[m
+[6;1H[K[32m+[m[32m    fs::path head;[m[m
+[7;1H[K[32m+[m[32m};[m[m
+[8;1H[K[32m+[m[m
+[9;1H[K[32m+[m[32m// The nearest ".git" up the tree from `dir`, either the git dir itself or[m[m
+[10;1H[K[32m+[m[32m// (worktrees, submodules) a file pointing at it.[m[m
+[11;1H[K[32m+[m[32mstd::optional<GitCheckout> findGitCheckout(const std::string& dir)[m[m
+[12;1H[K {[m[m
+[13;1H[K     if (dir.empty())[m[m
+[14;1H[K         return std::nullopt;[m[m
+[15;1H[K[36m@@ -36,7 +42,7 @@[m [mstd::optional<fs::path> headFile(const std::string& dir)[m[m
+[16;1H[K         const auto dotGit = at / ".git";[m[m
+[17;1H[K [m[m
+[18;1H[K         if (fs::is_directory(dotGit, error))[m[m
+[19;1H[K[31m-            return dotGit / "HEAD";[m[m
+[20;1H[1;1H[K[31m-// either the git dir itself or (worktrees, submodules) a file pointing at it.[m[m
+[2;1H[K[31m-std::optional<fs::path> headFile(const std::string& dir)[m[m
+[3;1H[K[32m+[m[32mstruct GitCheckout[m[m
+[4;1H[K[32m+[m[32m{[m[m
+[5;1H[K[32m+[m[32m    fs::path root;[m[m
+[6;1H[K[32m+[m[32m    fs::path head;[m[m
+[7;1H[K[32m+[m[32m};[m[m
+[8;1H[K[32m+[m[m
+[9;1H[K[32m+[m[32m// The nearest ".git" up the tree from `dir`, either the git dir itself or[m[m
+[10;1H[K[32m+[m[32m// (worktrees, submodules) a file pointing at it.[m[m
+[11;1H[K[32m+[m[32mstd::optional<GitCheckout> findGitCheckout(const std::string& dir)[m[m
+[12;1H[K {[m[m
+[13;1H[K     if (dir.empty())[m[m
+[14;1H[K         return std::nullopt;[m[m
+[15;1H[K[36m@@ -36,7 +42,7 @@[m [mstd::optional<fs::path> headFile(const std::string& dir)[m[m
+[16;1H[K         const auto dotGit = at / ".git";[m[m
+[17;1H[K [m[m
+[18;1H[K         if (fs::is_directory(dotGit, error))[m[m
+[19;1H[K[31m-            return dotGit / "HEAD";[m[m
+[20;1H[K[7mPattern not found  (press RETURN)[27m[20;1H[K[K...skipping...
+[32m+[m[32m    tab.panes[1].title = "✳ 2.1.300 · Fix the build";[m[m
+[32m+[m[32m    check(rudderContexts({tab}, {}, home)[1].title == "claude · Fix the build")[m [32m[m[32m;[m[m
+[32m+[m[m
+[32m+[m[32m    tab.panes[1].title = "2026 plans";[m[m
+[32m+[m[32m    check(rudderContexts({tab}, {}, home)[1].title == "claude · 2026 plans");[m[m
+[32m+[m[m
+[32m+[m[32m    tab.panes[1].title = "1.2 GB free";[m[m
+[32m+[m[32m    check(rudderContexts({tab}, {}, home)[1].title == "claude · 1.2 GB free");[m[m
+[32m+[m[m
+[32m+[m[32m    tab.panes[1].command = "1.2";[m[m
+[32m+[m[32m    tab.panes[1].title = "Fix the build";[m[m
+[32m+[m[32m    check(rudderContexts({tab}, {}, home)[1].title == "1.2 · Fix the build");[m[m
+[32m+[m[32m};[m[m
+[32m+[m[m
+ auto tHomePrefixIsWholeComponent = test("RudderContexts/homePrefixIsWholeCompon[m ent") = [][m[m
+ {[m[m
+     const auto contexts =[m[m
+[7m(END)[27m[K[K[?1l>[?1049l

@@ -31,7 +31,20 @@ target_include_directories(CowTermTests PRIVATE ../Lib/CowTermCore)
 nano_add_executable(CowTermScreenTests
         SOURCES
             ScreenColorTests.cpp
+            ParserFuzzRegressionTests.cpp
         TARGETS CowTerm::Core)
+
+# Replays every recording in Fuzz/Corpus (the fuzzer's seeds and every input
+# it once crashed on) and checks each screen against Fuzz/Snapshots.txt.
+nano_add_executable(CowTermFuzzCorpusTests
+        SOURCES
+            FuzzCorpusReplayTests.cpp
+        TARGETS CowTerm::Core)
+
+target_include_directories(CowTermFuzzCorpusTests PRIVATE ../Fuzz)
+target_compile_definitions(CowTermFuzzCorpusTests PRIVATE
+        COWTERM_FUZZ_CORPUS_DIR="${PROJECT_SOURCE_DIR}/Fuzz/Corpus"
+        COWTERM_FUZZ_SNAPSHOTS_FILE="${PROJECT_SOURCE_DIR}/Fuzz/Snapshots.txt")
 
 # Renders a real pane off-screen and reads the pixels back, so it needs the GPU
 # terminal rather than the model alone. Every case self-skips without a device,

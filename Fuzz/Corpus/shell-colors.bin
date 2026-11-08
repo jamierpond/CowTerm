@@ -1,0 +1,50 @@
+ZZtotal 15
+drwxr-xr-x  23 root  wheel   736 Sep 24 00:10 [34m.[39;49m[0m
+drwxr-xr-x  23 root  wheel   736 Sep 24 00:10 [34m..[39;49m[0m
+----------   1 root  admin     0 Sep 24 00:10 .file
+drwxr-xr-x   2 root  wheel    64 Sep 24 00:10 [34m.nofollow[39;49m[0m
+drwxr-xr-x   2 root  wheel    64 Sep 24 00:10 [34m.resolve[39;49m[0m
+drwxr-xr-x   2 root  wheel    64 Sep 24 00:10 [34m.vol[39;49m[0m
+lrwxr-xr-x   1 root  admin    36 Sep 24 00:10 [35m.VolumeIcon.icns[39;49m[0m -> System/Volumes/Data/.VolumeIcon.icns
+drwxrwxr-x  53 root  admin  1696 Nov  8 14:21 [34mApplications[39;49m[0m
+drwxr-xr-x@ 39 root  wheel  1248 Sep 24 00:10 [34mbin[39;49m[0m
+drwxr-xr-x   2 root  wheel    64 May 21 00:57 [34mcores[39;49m[0m
+dr-xr-xr-x   4 root  wheel  7654 Oct 19 20:43 [34mdev[39;49m[0m
+lrwxr-xr-x@  1 root  wheel    11 Sep 24 00:10 [35metc[39;49m[0m -> private/etc
+lrwxr-xr-x   1 root  wheel    25 Oct 19 20:44 [35mhome[39;49m[0m -> /System/Volumes/Data/home
+drwxr-xr-x  68 root  wheel  2176 Oct 19 20:44 [34mLibrary[39;49m[0m
+drwxr-xr-x   9 root  wheel   288 Oct 19 20:44 [34mnix[39;49m[0m
+drwxr-xr-x   3 root  wheel    96 Jun 30 17:09 [34mopt[39;49m[0m
+drwxr-xr-x   6 root  wheel   192 Oct 19 20:44 [34mpkg[39;49m[0m
+drwxr-xr-x   6 root  wheel   192 Oct 19 20:44 [34mprivate[39;49m[0m
+lrwxr-xr-x   1 root  wheel    15 Oct 19 20:44 [35mrun[39;49m[0m -> private/var/run
+drwxr-xr-x@ 74 root  wheel  2368 Sep 24 00:10 [34msbin[39;49m[0m
+drwxr-xr-x@ 12 root  wheel   384 Sep 24 00:10 [34mSystem[39;49m[0m
+lrwxr-xr-x@  1 root  wheel    11 Sep 24 00:10 [35mtmp[39;49m[0m -> private/tmp
+drwxr-xr-x   5 root  admin   160 Oct 19 20:43 [34mUsers[39;49m[0m
+drwxr-xr-x@ 11 root  wheel   352 Sep 24 00:10 [34musr[39;49m[0m
+lrwxr-xr-x@  1 root  wheel    11 Sep 24 00:10 [35mvar[39;49m[0m -> private/var
+drwxr-xr-x   5 root  wheel   160 Nov  5 15:27 [34mVolumes[39;49m[0m
+[?1h=* [33mbb0acbd[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mjp/ghostty-lessons[m[33m, [m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m, [m[1;32mjp/other-stuff[m[33m)[m Rudder: t[m [33m[m[33m[m[1;36m[m[33m[m[1;32m[m[33m[m[1;31m[m[33m[m[1;31m[m[33m[m[1;32m[m[33m[mell it each pane's and place's repository root[m
+* [33m929a4a8[m Drop macOS code signing; install to ~/.local instead of /Applications[m
+* [33me3653af[m Add ct notify-user: an always-on-top prompt an agent can block on[m
+*   [33md5af92b[m Merge branch 'close-context' into integrate-all[m
+[32m|[m[33m\[m  [m
+[32m|[m * [33m54ee7f7[m Close a pane when Rudder asks[m
+* [33m|[m [33meaf22b0[m[33m ([m[1;31morigin/rudder-branch[m[33m)[m Rudder: drop Claude Code's version from pane titles[m
+* [33m|[m [33mc88c582[m Tell Rudder each pane's git branch and lead the pane title with it[m
+* [33m|[m [33m4f13b6e[m Read a directory's git branch from its HEAD file[m
+[33m|[m[33m/[m  [m
+* [33m27f3d1c[m Fetch eacp from eyalamirmusic/eacp, not the fork[m
+* [33m5849844[m Pin eacp to jamierpond/eacp main for the Windows keyboard fixes[m
+* [33mc63e24d[m Install over a running CowTerm on Windows without touching its shells[m
+* [33m0b014f3[m Rewrap the per-platform sources comment[m
+* [33me39dc58[m Install ct on Windows as ~/.local/bin/ct.cmd[m
+* [33m0004a36[m Report Windows pane directories with / and know Windows' shells[m
+* [33mbbf1697[m Run the test suite on Windows, PTY teardown included[m
+* [33mf24a604[m Give ConPTY shells null std handles, not CowTerm's[m
+* [33me12e4b7[m Publish to Rudder on Windows and Linux too[m
+* [33mebd561f[m Build ct and the permissions panel on every platform[m
+* [33mead9988[m Run git and gh on Windows through Git Bash, without a console flash[m
+* [33md20dbfe[m Keep Pty's platform state out of its header[m
+[K[?1l>]0;title]7;file://h/tmp]8;;https://x.y\link]8;;\n[38;2;1;2;3m[48;5;200mtc[0m[?2026h[?2026l[5 q

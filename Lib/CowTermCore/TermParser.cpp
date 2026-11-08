@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 #include <cstdio>
+#include <cstdlib>
 
 namespace term
 {
@@ -749,10 +750,17 @@ namespace
 // file://host/percent%20encoded/path -> /percent encoded/path
 std::string pathFromFileUrl(const std::string& url)
 {
-    if (!url.starts_with("file://"))
+    constexpr auto fileScheme = std::string_view {"file://"};
+
+    if (!url.starts_with(fileScheme))
         return {};
 
-    auto path = url.substr(url.find('/', 7));
+    const auto pathStart = url.find('/', fileScheme.size());
+
+    if (pathStart == std::string::npos)
+        return {};
+
+    auto path = url.substr(pathStart);
     auto decoded = std::string {};
     decoded.reserve(path.size());
 
