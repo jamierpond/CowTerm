@@ -20,53 +20,65 @@ constexpr auto timeout = std::chrono::seconds {30};
 // Typed straight away; the shell runs it once its prompt is up. The marker is
 // built from two halves so the echo of the typed line never matches it.
 constexpr auto printReadyMarker = "'{0}{1}' -f 'COWTERM','_READY'\r";
+
+struct ShellOutput
+{
+    std::mutex lock;
+    std::condition_variable changed;
+    std::string text;
+    bool hasExited = false;
+
+    bool isReady() const
+    {
+        return hasExited || text.find(readyMarker) != std::string::npos;
+    }
+};
+
+bool startShell(term::Pty& pty, ShellOutput& output)
+{
+    return pty.start(
+        {},
+        [&](std::string text)
+        {
+            auto guard = std::lock_guard {output.lock};
+            output.text += text;
+            output.changed.notify_all();
+        },
+        [&]
+        {
+            auto guard = std::lock_guard {output.lock};
+            output.hasExited = true;
+            output.changed.notify_all();
+        });
+}
+
+bool waitForReadyMarker(ShellOutput& output)
+{
+    auto guard = std::unique_lock {output.lock};
+    output.changed.wait_for(guard, timeout, [&] { return output.isReady(); });
+    return output.isReady() && !output.hasExited;
+}
 } // namespace
 
 int main()
 {
-    auto lock = std::mutex {};
-    auto changed = std::condition_variable {};
-    auto output = std::string {};
-    auto hasExited = false;
-
+    auto output = ShellOutput {};
     auto pty = term::Pty {};
     const auto startTime = Clock::now();
 
-    const auto started = pty.start(
-        {},
-        [&](std::string text)
-        {
-            auto guard = std::lock_guard {lock};
-            output += text;
-            changed.notify_all();
-        },
-        [&]
-        {
-            auto guard = std::lock_guard {lock};
-            hasExited = true;
-            changed.notify_all();
-        });
-
-    if (!started)
+    if (!startShell(pty, output))
     {
         std::fprintf(stderr, "Pty::start failed\n");
         return 1;
     }
 
     pty.write(printReadyMarker);
-
-    auto guard = std::unique_lock {lock};
-    const auto isReady = changed.wait_for(
-        guard,
-        timeout,
-        [&] { return hasExited || output.find(readyMarker) != std::string::npos; });
-
+    const auto isReady = waitForReadyMarker(output);
     const auto elapsed =
         std::chrono::duration_cast<std::chrono::milliseconds>(Clock::now() - startTime);
-    guard.unlock();
     pty.shutdown();
 
-    if (!isReady || hasExited)
+    if (!isReady)
     {
         std::fprintf(stderr, "shell never printed the marker\n");
         return 1;
