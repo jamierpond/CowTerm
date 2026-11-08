@@ -13,6 +13,9 @@ if (COWTERM_ENABLE_FUZZING)
 
     add_executable(CowTermParserFuzzer
             ParserFuzzer.cpp
+            ../Lib/CowTermCore/CharWidth.cpp
+            ../Lib/CowTermCore/CsiParameters.cpp
+            ../Lib/CowTermCore/SelectGraphicRendition.cpp
             ../Lib/CowTermCore/TermParser.cpp
             ../Lib/CowTermCore/TermScreen.cpp)
 

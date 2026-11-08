@@ -1,0 +1,33 @@
+#!/bin/sh
+# Checks a refactor of the parser or screen changed no behaviour: builds the
+# snapshot writer from BASE (default jp/parser-fuzzer) and from the working
+# tree, replays every input in CORPUS_DIR (default build-fuzz/corpus, the
+# fuzzer's generated corpus) through both, and diffs the screen hashes.
+#
+#   Scripts/compare-parser-snapshots [BASE] [CORPUS_DIR]
+set -eu
+cd "$(dirname "$0")/.."
+base="${1:-jp/parser-fuzzer}"
+corpus="${2:-build-fuzz/corpus}"
+work="build-compare"
+# Every include directory the library's own build of TermParser.cpp uses.
+include_flags="$(python3 -c 'import json,shlex,sys; e=[c for c in json.load(open("build/compile_commands.json")) if c["file"].endswith("CowTermCore/TermParser.cpp")][0]; print(" ".join(a for a in shlex.split(e["command"]) if a.startswith("-I")))')"
+rm -rf "$work"
+mkdir -p "$work/base/CowTermCore"
+
+for file in $(git ls-tree --name-only "$base" Lib/CowTermCore/); do
+    git show "$base:$file" > "$work/base/CowTermCore/$(basename "$file")"
+done
+
+build_writer() {
+    root="$1"
+    output="$2"
+    sources=$(ls "$root"/CowTermCore/*.cpp | grep -v Pty)
+    c++ -std=c++20 -O1 -I"$root" $include_flags -IFuzz Fuzz/WriteSnapshots.cpp $sources -o "$output"
+}
+
+build_writer "$work/base" "$work/base-writer"
+build_writer Lib "$work/current-writer"
+"$work/base-writer" "$corpus" "$work/base.txt"
+"$work/current-writer" "$corpus" "$work/current.txt"
+diff "$work/base.txt" "$work/current.txt" && echo "same screens for $(wc -l < "$work/base.txt") inputs"
