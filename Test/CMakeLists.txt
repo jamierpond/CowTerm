@@ -104,3 +104,13 @@ target_include_directories(CowTermNotifyUserTests PRIVATE ../Terminal)
 if (LINUX)
     target_link_libraries(CowTermTests PRIVATE util)
 endif ()
+
+# The terminal widget's input and drawing: through its public surface, the
+# bytes each key and mouse event writes to a recording shell and the cells copy
+# mode and selection paint (pixel cases self-skip without a GPU device); and the
+# pure encoders, copy-mode rules and painter decisions underneath.
+nano_add_executable(CowTermViewTests
+        SOURCES
+            TerminalViewBehaviourTests.cpp
+            TerminalViewLogicTests.cpp
+        TARGETS CowTerm::Terminal)

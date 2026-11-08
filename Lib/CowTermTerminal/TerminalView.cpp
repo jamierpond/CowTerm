@@ -1,89 +1,20 @@
 #include "TerminalView.h"
 
+#include "CellText.h"
+
 #include "CowTermCore/Debug.h"
 
 #include <eacp/Core/App/Clipboard.h>
 
 #include <algorithm>
-#include <cctype>
 #include <cstdio>
 #include <random>
 
 namespace term
 {
 using namespace eacp;
-namespace KeyCode = Graphics::KeyCode;
 using Graphics::KeyEvent;
 using Graphics::MouseEvent;
-
-namespace
-{
-namespace MacKey
-{
-constexpr std::uint16_t Home = 0x73;
-constexpr std::uint16_t End = 0x77;
-constexpr std::uint16_t PageUp = 0x74;
-constexpr std::uint16_t PageDown = 0x79;
-constexpr std::uint16_t ForwardDelete = 0x75;
-constexpr std::uint16_t KeypadEnter = 0x4c;
-} // namespace MacKey
-
-int modifierCode(const Graphics::ModifierKeys& mods)
-{
-    return 1 + (mods.shift ? 1 : 0) + (mods.alt ? 2 : 0) + (mods.control ? 4 : 0);
-}
-
-std::string csiWithModifiers(char final, const Graphics::ModifierKeys& mods)
-{
-    const auto code = modifierCode(mods);
-
-    if (code == 1)
-        return std::string {"\033["} + final;
-
-    char buffer[16];
-    std::snprintf(buffer, sizeof(buffer), "\033[1;%d%c", code, final);
-    return buffer;
-}
-
-std::string tildeKey(int number, const Graphics::ModifierKeys& mods)
-{
-    char buffer[16];
-    const auto code = modifierCode(mods);
-
-    if (code == 1)
-        std::snprintf(buffer, sizeof(buffer), "\033[%d~", number);
-    else
-        std::snprintf(buffer, sizeof(buffer), "\033[%d;%d~", number, code);
-
-    return buffer;
-}
-
-void appendUtf8(std::string& out, char32_t cp)
-{
-    if (cp < 0x80)
-    {
-        out.push_back((char) cp);
-    }
-    else if (cp < 0x800)
-    {
-        out.push_back((char) (0xc0 | (cp >> 6)));
-        out.push_back((char) (0x80 | (cp & 0x3f)));
-    }
-    else if (cp < 0x10000)
-    {
-        out.push_back((char) (0xe0 | (cp >> 12)));
-        out.push_back((char) (0x80 | ((cp >> 6) & 0x3f)));
-        out.push_back((char) (0x80 | (cp & 0x3f)));
-    }
-    else
-    {
-        out.push_back((char) (0xf0 | (cp >> 18)));
-        out.push_back((char) (0x80 | ((cp >> 12) & 0x3f)));
-        out.push_back((char) (0x80 | ((cp >> 6) & 0x3f)));
-        out.push_back((char) (0x80 | (cp & 0x3f)));
-    }
-}
-} // namespace
 
 namespace
 {
@@ -104,6 +35,11 @@ std::unique_ptr<Shell> shellFor(const TerminalConfig& config,
         return config.makeShell(shellId);
 
     return std::make_unique<LocalShell>();
+}
+
+bool isPositiveSize(float width, float height)
+{
+    return width > 0 && height > 0;
 }
 
 std::vector<EnvironmentVariable> environmentFor(const TerminalConfig& config,
@@ -253,21 +189,10 @@ void TerminalView::sendText(std::string_view text)
 std::string TerminalView::debugScreenText() const
 {
     auto out = std::string {};
-    const auto rows = screen.rows();
-    const auto cols = screen.columns();
 
-    for (int r = 0; r < rows; ++r)
+    for (int row = 0; row < screen.rows(); ++row)
     {
-        const auto& line = screen.lineAt(r, 0);
-        auto rowText = std::string {};
-
-        for (int c = 0; c < cols && c < (int) line.size(); ++c)
-            appendUtf8(rowText, line[(std::size_t) c].ch);
-
-        while (!rowText.empty() && rowText.back() == ' ')
-            rowText.pop_back();
-
-        out += rowText;
+        out += extractVisibleRowText(screen.lineAt(row, 0), screen.columns());
         out += '\n';
     }
 
@@ -280,7 +205,7 @@ void TerminalView::resized()
 
     const auto bounds = getLocalBounds();
 
-    if (bounds.w > 0 && bounds.h > 0)
+    if (isPositiveSize(bounds.w, bounds.h))
     {
         sprites.emplace(Graphics::Point {bounds.w, bounds.h}, sampleCount());
 
@@ -300,7 +225,7 @@ void TerminalView::applyGridSize()
     const auto cellW = atlas->cellWidth();
     const auto cellH = atlas->cellHeight();
 
-    if (cellW <= 0 || cellH <= 0 || bounds.w <= 0 || bounds.h <= 0)
+    if (!isPositiveSize(cellW, cellH) || !isPositiveSize(bounds.w, bounds.h))
         return;
 
     const auto cols = std::max(2, (int) ((bounds.w - 2 * marginX) / cellW));
@@ -342,137 +267,70 @@ void TerminalView::scrollBy(int lines)
 
 // ---- rendering -------------------------------------------------------------
 
-std::pair<Rgb, Rgb>
-    TerminalView::effectiveColors(const Cell& cell, long absoluteRow, int col) const
+long TerminalView::findTopVisibleAbsoluteRow() const
 {
-    auto fg = cell.fg;
-    auto bg = cell.bg;
-
-    if ((cell.attrs & Attr::Inverse) != 0)
-        std::swap(fg, bg);
-
-    if (isSelected(absoluteRow, col))
-        bg = theme.selection;
-
-    return {fg, bg};
+    return (long) screen.scrollbackSize() - scrollOffset;
 }
 
-void TerminalView::drawBackgrounds(int visualRow, const Line& line, float y)
+int TerminalView::calculateVisualRow(long absoluteRow) const
 {
-    const auto cellW = atlas->cellWidth();
-    const auto cellH = atlas->cellHeight();
-    const auto absoluteRow =
-        (long) screen.scrollbackSize() - scrollOffset + visualRow;
-
-    const auto cols = std::min((int) line.size(), screen.columns());
-    auto runStart = 0;
-    auto runBg = Rgb {};
-    auto runActive = false;
-
-    auto flush = [&](int endCol)
-    {
-        if (!runActive)
-            return;
-
-        sprites->fillRect({marginX + (float) runStart * cellW,
-                           y,
-                           (float) (endCol - runStart) * cellW,
-                           cellH},
-                          toColor(runBg));
-        runActive = false;
-    };
-
-    for (auto col = 0; col < cols; ++col)
-    {
-        const auto& cell = line[(std::size_t) col];
-        const auto [fg, bg] = effectiveColors(cell, absoluteRow, col);
-
-        const auto isDefault = bg == theme.background
-                               && (cell.attrs & Attr::Inverse) == 0
-                               && !isSelected(absoluteRow, col);
-
-        if (isDefault)
-        {
-            flush(col);
-            continue;
-        }
-
-        if (runActive && bg == runBg)
-            continue;
-
-        flush(col);
-        runStart = col;
-        runBg = bg;
-        runActive = true;
-    }
-
-    flush(cols);
+    return (int) (absoluteRow - findTopVisibleAbsoluteRow());
 }
 
-void TerminalView::drawGlyphs(int visualRow, const Line& line, float y)
+Graphics::Point TerminalView::calculateCellOrigin(int visualRow, int column) const
 {
-    const auto cellW = atlas->cellWidth();
-    const auto cellH = atlas->cellHeight();
-    const auto baseline = atlas->baseline();
-    const auto absoluteRow =
-        (long) screen.scrollbackSize() - scrollOffset + visualRow;
-
-    const auto cols = std::min((int) line.size(), screen.columns());
-
-    for (auto col = 0; col < cols; ++col)
-    {
-        const auto& cell = line[(std::size_t) col];
-
-        if ((cell.attrs & Attr::WideCont) != 0)
-            continue;
-
-        if ((cell.attrs & Attr::Hidden) != 0)
-            continue;
-
-        if ((cell.attrs & Attr::Blink) != 0 && !blinkOn)
-            continue;
-
-        const auto [fg, bg] = effectiveColors(cell, absoluteRow, col);
-        const auto x = marginX + (float) col * cellW;
-        const auto wide = (cell.attrs & Attr::Wide) != 0;
-        const auto width = wide ? cellW * 2 : cellW;
-
-        if (cell.ch != U' ')
-        {
-            const auto slot = atlas->glyph(cell.ch,
-                                           (cell.attrs & Attr::Bold) != 0,
-                                           (cell.attrs & Attr::Italic) != 0,
-                                           wide ? 2 : 1);
-
-            if (slot.valid && !slot.empty)
-            {
-                const auto alpha = (cell.attrs & Attr::Faint) != 0 ? 0.55f : 1.0f;
-                const auto tint = slot.colored ? Graphics::Color::white(alpha)
-                                               : toColor(fg, alpha);
-
-                // Placed by its own bearings from the cell origin and baseline,
-                // rather than stretched to fill the cell.
-                const auto scale = atlas->scale();
-
-                glyphs->add({x + slot.offset.x,
-                             y + baseline + slot.offset.y,
-                             slot.src.w / scale,
-                             slot.src.h / scale},
-                            slot.src,
-                            tint,
-                            slot.colored);
-            }
-        }
-
-        if ((cell.attrs & Attr::Underline) != 0)
-            sprites->fillRect({x, y + baseline + 1.5f, width, 1.0f}, toColor(fg));
-
-        if ((cell.attrs & Attr::Strike) != 0)
-            sprites->fillRect({x, y + cellH * 0.55f, width, 1.0f}, toColor(fg));
-    }
+    return {marginX + (float) column * atlas->cellWidth(),
+            marginY + (float) visualRow * atlas->cellHeight()};
 }
 
-void TerminalView::drawCursor()
+PaintedRow TerminalView::describeVisibleRow(int visualRow) const
+{
+    const auto& line = screen.lineAt(visualRow, scrollOffset);
+
+    return {line,
+            findTopVisibleAbsoluteRow() + visualRow,
+            marginY + (float) visualRow * atlas->cellHeight(),
+            std::min((int) line.size(), screen.columns())};
+}
+
+GridPainter TerminalView::makePainter()
+{
+    return {{*atlas, *sprites, *glyphs, theme, {marginX, marginY}}, selection, blinkOn};
+}
+
+std::string TerminalView::describeCopyModePosition() const
+{
+    if (!copyMode)
+        return {};
+
+    return "[" + std::to_string(scrollOffset) + "/"
+           + std::to_string(screen.scrollbackSize()) + "]";
+}
+
+void TerminalView::rasterizeFrameGlyphs(GridPainter& painter,
+                                        const std::string& copyIndicator)
+{
+    for (auto row = 0; row < screen.rows(); ++row)
+        painter.rasterizeRowGlyphs(describeVisibleRow(row));
+
+    painter.rasterizeTextGlyphs(copyIndicator);
+}
+
+void TerminalView::drawGrid(GridPainter& painter)
+{
+    for (auto row = 0; row < screen.rows(); ++row)
+        painter.drawRowBackgrounds(describeVisibleRow(row));
+
+    for (auto row = 0; row < screen.rows(); ++row)
+        painter.drawRowGlyphs(describeVisibleRow(row));
+}
+
+bool TerminalView::isCursorBlinkingNow() const
+{
+    return screen.modes.cursorBlink && isBlinkingCursorShape(parser.cursorShape());
+}
+
+void TerminalView::drawCursor(GridPainter& painter)
 {
     if (!screen.modes.showCursor)
         return;
@@ -482,140 +340,52 @@ void TerminalView::drawCursor()
     if (visualRow >= screen.rows())
         return;
 
-    const auto cellW = atlas->cellWidth();
-    const auto cellH = atlas->cellHeight();
-    const auto x = marginX + (float) screen.cursor.x * cellW;
-    const auto y = marginY + (float) visualRow * cellH;
-    const auto color = toColor(theme.cursor);
-
-    const auto shape = parser.cursorShape();
-    const auto blinking = screen.modes.cursorBlink && (shape == 0 || shape % 2 == 1);
+    const auto origin = calculateCellOrigin(visualRow, screen.cursor.x);
 
     if (!hasFocus())
     {
-        sprites->drawRect({x, y, cellW, cellH}, color, 1.0f);
+        painter.drawHollowCursor(origin);
         return;
     }
 
-    if (blinking && !blinkOn)
+    if (isCursorBlinkingNow() && !blinkOn)
         return;
 
-    if (shape == 3 || shape == 4)
-    {
-        sprites->fillRect({x, y + cellH - 2.0f, cellW, 2.0f}, color);
-        return;
-    }
-
-    if (shape == 5 || shape == 6)
-    {
-        sprites->fillRect({x, y, 2.0f, cellH}, color);
-        return;
-    }
-
-    sprites->fillRect({x, y, cellW, cellH}, color);
-
-    // Repaint the glyph under a block cursor in the background color so it
-    // stays legible.
-    const auto& line = screen.lineAt(visualRow, scrollOffset);
-
-    if (screen.cursor.x < (int) line.size())
-    {
-        const auto& cell = line[(std::size_t) screen.cursor.x];
-
-        if (cell.ch != U' ' && (cell.attrs & Attr::WideCont) == 0)
-        {
-            const auto wide = (cell.attrs & Attr::Wide) != 0;
-            const auto slot = atlas->glyph(cell.ch,
-                                           (cell.attrs & Attr::Bold) != 0,
-                                           (cell.attrs & Attr::Italic) != 0,
-                                           wide ? 2 : 1);
-
-            if (slot.valid && !slot.empty && !slot.colored)
-            {
-                const auto scale = atlas->scale();
-                const auto baseline = atlas->baseline();
-
-                glyphs->add({x + slot.offset.x,
-                             y + baseline + slot.offset.y,
-                             slot.src.w / scale,
-                             slot.src.h / scale},
-                            slot.src,
-                            toColor(theme.background),
-                            false);
-            }
-        }
-    }
+    painter.drawCursor(origin,
+                       findCursorStyle(parser.cursorShape()),
+                       screen.lineAt(visualRow, scrollOffset),
+                       screen.cursor.x);
 }
 
-void TerminalView::drawCopyMode(const std::string& indicator)
+void TerminalView::drawCopyMode(GridPainter& painter, const std::string& indicator)
 {
-    const auto cellW = atlas->cellWidth();
-    const auto cellH = atlas->cellHeight();
-    const auto baseline = atlas->baseline();
-    const auto scale = atlas->scale();
-
-    const auto visualRow =
-        (int) (copyCursor.row - ((long) screen.scrollbackSize() - scrollOffset));
+    const auto visualRow = calculateVisualRow(copyCursor.row);
 
     if (visualRow >= 0 && visualRow < screen.rows())
-    {
-        const auto x = marginX + (float) copyCursor.col * cellW;
-        const auto y = marginY + (float) visualRow * cellH;
+        painter.drawBlockCursor(calculateCellOrigin(visualRow, copyCursor.col),
+                                findLineAtAbsoluteRow(screen, copyCursor.row),
+                                copyCursor.col);
 
-        sprites->fillRect({x, y, cellW, cellH}, toColor(theme.cursor));
+    painter.drawCopyModeBadge(indicator, getLocalBounds().w);
+}
 
-        // Like the normal block cursor: repaint the covered glyph in the
-        // background color so it stays legible.
-        const auto& line = lineAtAbsolute(copyCursor.row);
+// The cursor draws a filled block through the sprite renderer and then the
+// glyph on top of it, so both pipelines have to be rebound: the grid's glyph
+// flush left its own pipeline in place.
+void TerminalView::drawCursorLayer(GPU::RenderPass& pass,
+                                   GridPainter& painter,
+                                   const std::string& copyIndicator)
+{
+    sprites->begin(pass);
+    glyphs->begin();
 
-        if (copyCursor.col < (int) line.size())
-        {
-            const auto& cell = line[(std::size_t) copyCursor.col];
+    if (copyMode)
+        drawCopyMode(painter, copyIndicator);
+    else
+        drawCursor(painter);
 
-            if (cell.ch != U' ' && (cell.attrs & Attr::WideCont) == 0)
-            {
-                const auto slot = atlas->glyph(cell.ch,
-                                               (cell.attrs & Attr::Bold) != 0,
-                                               (cell.attrs & Attr::Italic) != 0,
-                                               (cell.attrs & Attr::Wide) != 0 ? 2
-                                                                              : 1);
-
-                if (slot.valid && !slot.empty && !slot.colored)
-                    glyphs->add({x + slot.offset.x,
-                                 y + baseline + slot.offset.y,
-                                 slot.src.w / scale,
-                                 slot.src.h / scale},
-                                slot.src,
-                                toColor(theme.background),
-                                false);
-            }
-        }
-    }
-
-    // tmux's position badge, top right: lines scrolled up / history size.
-    const auto pad = 4.0f;
-    const auto width = (float) indicator.size() * cellW + pad * 2;
-    const auto x0 = getLocalBounds().w - width - marginX;
-
-    sprites->fillRect({x0, marginY, width, cellH}, toColor(theme.ansi[3]));
-
-    auto x = x0 + pad;
-
-    for (const auto c: indicator)
-    {
-        const auto slot = atlas->glyph((char32_t) c, false, false, 1);
-
-        if (slot.valid && !slot.empty)
-            glyphs->add({x + slot.offset.x,
-                         marginY + baseline + slot.offset.y,
-                         slot.src.w / scale,
-                         slot.src.h / scale},
-                        slot.src,
-                        toColor(theme.background),
-                        false);
-
-        x += cellW;
-    }
+    sprites->flush();
+    glyphs->flush(pass, atlas->atlas());
 }
 
 void TerminalView::render(GPU::Frame& frame)
@@ -628,55 +398,17 @@ void TerminalView::render(GPU::Frame& frame)
     sprites->begin(pass);
     glyphs->begin();
 
-    const auto rows = screen.rows();
-    const auto cellH = atlas->cellHeight();
+    auto painter = makePainter();
+    const auto copyIndicator = describeCopyModePosition();
 
-    // Rasterize every glyph this frame needs before the first draw call so
-    // the atlas texture uploads once, ahead of the draws that sample it.
-    for (auto row = 0; row < rows; ++row)
-    {
-        const auto& line = screen.lineAt(row, scrollOffset);
-        const auto cols = std::min((int) line.size(), screen.columns());
-
-        for (auto col = 0; col < cols; ++col)
-        {
-            const auto& cell = line[(std::size_t) col];
-
-            if (cell.ch != U' '
-                && (cell.attrs & (Attr::WideCont | Attr::Hidden)) == 0)
-                atlas->glyph(cell.ch,
-                             (cell.attrs & Attr::Bold) != 0,
-                             (cell.attrs & Attr::Italic) != 0,
-                             (cell.attrs & Attr::Wide) != 0 ? 2 : 1);
-        }
-    }
-
-    auto copyIndicator = std::string {};
-
-    if (copyMode)
-    {
-        copyIndicator = "[" + std::to_string(scrollOffset) + "/"
-                        + std::to_string(screen.scrollbackSize()) + "]";
-
-        for (const auto c: copyIndicator)
-            atlas->glyph((char32_t) c, false, false, 1);
-    }
-
+    rasterizeFrameGlyphs(painter, copyIndicator);
     atlas->commit();
-
-    for (auto row = 0; row < rows; ++row)
-        drawBackgrounds(
-            row, screen.lineAt(row, scrollOffset), marginY + (float) row * cellH);
-
-    for (auto row = 0; row < rows; ++row)
-        drawGlyphs(
-            row, screen.lineAt(row, scrollOffset), marginY + (float) row * cellH);
+    drawGrid(painter);
 
     // The backgrounds have to reach the pass before the glyphs do. A sprite
     // batch is drawn when the pass ends -- after every glyph -- so left queued
     // it would land on top of the text rather than behind it, and a second
-    // begin() before then discards it outright, which is what used to happen
-    // below and why no cell background was ever drawn.
+    // begin() before then discards it outright.
     sprites->flush();
 
     // Every cell's glyph is queued by now, so the whole screen submits as one
@@ -684,57 +416,51 @@ void TerminalView::render(GPU::Frame& frame)
     glyphs->flush(pass, atlas->atlas());
 
     if (copyMode || scrollOffset == 0)
-    {
-        // The cursor draws a filled block through the sprite renderer and then
-        // the glyph on top of it, so both pipelines have to be rebound: the
-        // glyph flush above left its own pipeline in place.
-        sprites->begin(pass);
-        glyphs->begin();
-
-        if (copyMode)
-            drawCopyMode(copyIndicator);
-        else
-            drawCursor();
-
-        // Same order again: the block first, then the glyph that sits on it.
-        sprites->flush();
-        glyphs->flush(pass, atlas->atlas());
-    }
+        drawCursorLayer(pass, painter, copyIndicator);
 
     renderedVersion = screen.version();
 }
 
 // ---- keyboard --------------------------------------------------------------
 
+void TerminalView::clearScreenAndScrollback()
+{
+    screen.eraseInDisplay(3);
+    screen.setCursor(0, 0);
+    scrollOffset = 0;
+    send("\014");
+    repaint();
+}
+
+void TerminalView::performEditingShortcut(EditingShortcut shortcut)
+{
+    switch (shortcut)
+    {
+        case EditingShortcut::Copy:
+            copySelection();
+            return;
+
+        case EditingShortcut::Paste:
+            paste();
+            return;
+
+        case EditingShortcut::ClearScreen:
+            clearScreenAndScrollback();
+            return;
+
+        case EditingShortcut::Swallow:
+            return;
+    }
+}
+
 bool TerminalView::handleCommandShortcut(const KeyEvent& event)
 {
-    if (!event.modifiers.command)
+    const auto shortcut = findCommandShortcut(event);
+
+    if (!shortcut)
         return false;
 
-    const auto& chars = event.charactersIgnoringModifiers;
-
-    if (chars == "c")
-    {
-        copySelection();
-        return true;
-    }
-
-    if (chars == "v")
-    {
-        paste();
-        return true;
-    }
-
-    if (chars == "k")
-    {
-        screen.eraseInDisplay(3);
-        screen.setCursor(0, 0);
-        scrollOffset = 0;
-        send("\014");
-        repaint();
-        return true;
-    }
-
+    performEditingShortcut(*shortcut);
     return true;
 }
 
@@ -744,145 +470,48 @@ bool TerminalView::handleClipboardShortcut(const KeyEvent& event)
     if constexpr (eacp::Platform::isMac())
         return false;
 
-    const auto& mods = event.modifiers;
+    const auto shortcut = findControlShiftClipboardShortcut(event);
 
-    if (!mods.control || !mods.shift || mods.command || mods.alt)
+    if (!shortcut)
         return false;
 
-    // Ctrl turns `characters` into a control code, so the unmodified spelling is
-    // the one to read; Shift leaves it upper case.
-    auto chars = event.charactersIgnoringModifiers;
+    performEditingShortcut(*shortcut);
+    return true;
+}
 
-    for (auto& character: chars)
-        character = (char) std::tolower((unsigned char) character);
-
-    if (chars == "c")
+int TerminalView::calculateScrollLinesForJump(ViewportJump jump) const
+{
+    switch (jump)
     {
-        copySelection();
-        return true;
+        case ViewportJump::ToOldest:
+            return screen.scrollbackSize();
+
+        case ViewportJump::ToNewest:
+            return -screen.scrollbackSize();
+
+        case ViewportJump::PageTowardOldest:
+            return screen.rows() - 1;
+
+        case ViewportJump::PageTowardNewest:
+            return -(screen.rows() - 1);
     }
 
-    if (chars == "v")
-    {
-        paste();
-        return true;
-    }
-
-    return false;
+    return 0;
 }
 
 bool TerminalView::handleSpecialKey(const KeyEvent& event)
 {
-    const auto& mods = event.modifiers;
-    const auto app = screen.modes.appCursorKeys && modifierCode(mods) == 1;
+    const auto response = encodeSpecialKey(event, screen.modes.appCursorKeys);
 
-    switch (event.keyCode)
-    {
-        case KeyCode::Return:
-        case MacKey::KeypadEnter:
-            sendAndScrollToBottom("\r");
-            return true;
+    if (!response)
+        return false;
 
-        case KeyCode::Tab:
-            sendAndScrollToBottom(mods.shift ? "\033[Z" : "\t");
-            return true;
+    if (const auto* jump = std::get_if<ViewportJump>(&*response))
+        scrollBy(calculateScrollLinesForJump(*jump));
+    else
+        sendAndScrollToBottom(std::get<std::string>(*response));
 
-        case KeyCode::Escape:
-            sendAndScrollToBottom("\033");
-            return true;
-
-        case KeyCode::Delete:
-            sendAndScrollToBottom(mods.alt ? "\033\x7f" : "\x7f");
-            return true;
-
-        case MacKey::ForwardDelete:
-            sendAndScrollToBottom(tildeKey(3, mods));
-            return true;
-
-        case KeyCode::UpArrow:
-            sendAndScrollToBottom(app ? "\033OA" : csiWithModifiers('A', mods));
-            return true;
-
-        case KeyCode::DownArrow:
-            sendAndScrollToBottom(app ? "\033OB" : csiWithModifiers('B', mods));
-            return true;
-
-        case KeyCode::RightArrow:
-            sendAndScrollToBottom(app ? "\033OC" : csiWithModifiers('C', mods));
-            return true;
-
-        case KeyCode::LeftArrow:
-            sendAndScrollToBottom(app ? "\033OD" : csiWithModifiers('D', mods));
-            return true;
-
-        case MacKey::Home:
-            if (mods.shift)
-                scrollBy(screen.scrollbackSize());
-            else
-                sendAndScrollToBottom(app ? "\033OH" : "\033[H");
-            return true;
-
-        case MacKey::End:
-            if (mods.shift)
-                scrollBy(-screen.scrollbackSize());
-            else
-                sendAndScrollToBottom(app ? "\033OF" : "\033[F");
-            return true;
-
-        case MacKey::PageUp:
-            if (mods.shift)
-                scrollBy(screen.rows() - 1);
-            else
-                sendAndScrollToBottom(tildeKey(5, mods));
-            return true;
-
-        case MacKey::PageDown:
-            if (mods.shift)
-                scrollBy(-(screen.rows() - 1));
-            else
-                sendAndScrollToBottom(tildeKey(6, mods));
-            return true;
-
-        case KeyCode::F1:
-            sendAndScrollToBottom("\033OP");
-            return true;
-        case KeyCode::F2:
-            sendAndScrollToBottom("\033OQ");
-            return true;
-        case KeyCode::F3:
-            sendAndScrollToBottom("\033OR");
-            return true;
-        case KeyCode::F4:
-            sendAndScrollToBottom("\033OS");
-            return true;
-        case KeyCode::F5:
-            sendAndScrollToBottom(tildeKey(15, mods));
-            return true;
-        case KeyCode::F6:
-            sendAndScrollToBottom(tildeKey(17, mods));
-            return true;
-        case KeyCode::F7:
-            sendAndScrollToBottom(tildeKey(18, mods));
-            return true;
-        case KeyCode::F8:
-            sendAndScrollToBottom(tildeKey(19, mods));
-            return true;
-        case KeyCode::F9:
-            sendAndScrollToBottom(tildeKey(20, mods));
-            return true;
-        case KeyCode::F10:
-            sendAndScrollToBottom(tildeKey(21, mods));
-            return true;
-        case KeyCode::F11:
-            sendAndScrollToBottom(tildeKey(23, mods));
-            return true;
-        case KeyCode::F12:
-            sendAndScrollToBottom(tildeKey(24, mods));
-            return true;
-
-        default:
-            return false;
-    }
+    return true;
 }
 
 void TerminalView::keyDown(const KeyEvent& event)
@@ -902,146 +531,74 @@ void TerminalView::keyDown(const KeyEvent& event)
     if (handleSpecialKey(event))
         return;
 
-    const auto& mods = event.modifiers;
-
-    if (mods.control && event.charactersIgnoringModifiers == " ")
-    {
-        sendAndScrollToBottom(std::string_view {"\0", 1});
-        return;
-    }
-
-    if (mods.alt && !event.charactersIgnoringModifiers.empty())
-    {
-        sendAndScrollToBottom("\033" + event.charactersIgnoringModifiers);
-        return;
-    }
-
-    if (!event.characters.empty())
-        sendAndScrollToBottom(event.characters);
+    if (const auto bytes = encodeTypedKey(event))
+        sendAndScrollToBottom(*bytes);
 }
 
 void TerminalView::paste()
 {
-    auto text = Clipboard::getText();
+    const auto text = Clipboard::getText();
 
     if (text.empty())
         return;
 
-    auto normalized = std::string {};
-    normalized.reserve(text.size());
-
-    for (std::size_t i = 0; i < text.size(); ++i)
-    {
-        if (text[i] == '\r' && i + 1 < text.size() && text[i + 1] == '\n')
-            continue;
-
-        normalized.push_back(text[i] == '\n' ? '\r' : text[i]);
-    }
-
-    if (screen.modes.bracketedPaste)
-        normalized = "\033[200~" + normalized + "\033[201~";
-
-    sendAndScrollToBottom(normalized);
+    sendAndScrollToBottom(preparePastedText(text, screen.modes.bracketedPaste));
 }
 
 // ---- selection & mouse -----------------------------------------------------
 
-TerminalView::CellRef TerminalView::cellRefAt(Graphics::Point pos) const
+VisibleCell TerminalView::findCellUnderPointer(Graphics::Point pos) const
 {
-    const auto cellW = atlas->cellWidth();
-    const auto cellH = atlas->cellHeight();
-
-    const auto col =
-        std::clamp((int) ((pos.x - marginX) / cellW), 0, screen.columns() - 1);
+    const auto column =
+        std::clamp((int) ((pos.x - marginX) / atlas->cellWidth()), 0, screen.columns() - 1);
     const auto visualRow =
-        std::clamp((int) ((pos.y - marginY) / cellH), 0, screen.rows() - 1);
+        std::clamp((int) ((pos.y - marginY) / atlas->cellHeight()), 0, screen.rows() - 1);
 
-    return {(long) screen.scrollbackSize() - scrollOffset + visualRow, col};
+    return {visualRow, column};
+}
+
+CellRef TerminalView::cellRefAt(Graphics::Point pos) const
+{
+    const auto cell = findCellUnderPointer(pos);
+    return {findTopVisibleAbsoluteRow() + cell.visualRow, cell.column};
 }
 
 bool TerminalView::hasSelection() const
 {
-    return selectionActive && !(selectionStart == selectionEnd && !selecting);
-}
-
-bool TerminalView::isSelected(long absoluteRow, int col) const
-{
-    if (!selectionActive)
-        return false;
-
-    const auto cell = CellRef {absoluteRow, col};
-    return !(cell < selectionStart) && !(selectionEnd < cell);
-}
-
-std::string TerminalView::selectedText() const
-{
-    if (!selectionActive)
-        return {};
-
-    auto result = std::string {};
-
-    for (auto row = selectionStart.row; row <= selectionEnd.row; ++row)
-    {
-        // Grid rows sit past the scrollback and resolve to negative offsets,
-        // down to -(rows - 1) for the bottom line.
-        const auto offset = (int) (screen.scrollbackSize() - row);
-
-        if (offset <= -screen.rows() || offset > screen.scrollbackSize())
-            continue;
-
-        const auto& line = screen.lineAt(0, offset);
-        const auto fromCol = row == selectionStart.row ? selectionStart.col : 0;
-        const auto toCol =
-            row == selectionEnd.row ? selectionEnd.col : (int) line.size() - 1;
-
-        auto text = std::string {};
-
-        for (auto col = fromCol; col <= std::min(toCol, (int) line.size() - 1);
-             ++col)
-        {
-            const auto& cell = line[(std::size_t) col];
-
-            if ((cell.attrs & Attr::WideCont) != 0)
-                continue;
-
-            appendUtf8(text, cell.ch);
-        }
-
-        while (!text.empty() && text.back() == ' ')
-            text.pop_back();
-
-        result += text;
-
-        if (row != selectionEnd.row)
-            result.push_back('\n');
-    }
-
-    return result;
+    return selection.active && !(selection.start == selection.end && !selecting);
 }
 
 void TerminalView::copySelection()
 {
     if (hasSelection())
-        Clipboard::copyText(selectedText());
+        Clipboard::copyText(extractTextBetween(screen, selection.start, selection.end));
+}
+
+void TerminalView::selectRow(CellRef cell)
+{
+    selection = {{cell.row, 0}, {cell.row, screen.columns() - 1}, true};
+    selecting = false;
+    repaint();
+}
+
+void TerminalView::selectWordAt(CellRef cell)
+{
+    const auto word = findWordAround(findLineAtAbsoluteRow(screen, cell.row), cell.col);
+
+    selection = {{cell.row, word.firstColumn}, {cell.row, word.lastColumn}, word.isOnWord};
+    selecting = false;
+    repaint();
+}
+
+void TerminalView::beginDragSelection(CellRef cell)
+{
+    selectionAnchor = cell;
+    selection = {cell, cell, false};
+    selecting = true;
+    repaint();
 }
 
 // ---- copy mode -------------------------------------------------------------
-
-const Line& TerminalView::lineAtAbsolute(long row) const
-{
-    return screen.lineAt(0, (int) ((long) screen.scrollbackSize() - row));
-}
-
-int TerminalView::lineLength(long row) const
-{
-    const auto& line = lineAtAbsolute(row);
-    auto length = (int) line.size();
-
-    while (length > 0 && line[(std::size_t) length - 1].ch == U' ')
-        --length;
-
-    return length;
-}
 
 void TerminalView::enterCopyMode()
 {
@@ -1055,10 +612,10 @@ void TerminalView::enterCopyMode()
     // Already scrolled up: keep the view and start at its top-left, like
     // tmux. Otherwise start at the terminal cursor.
     if (scrollOffset > 0)
-        setCopyCursor((long) screen.scrollbackSize() - scrollOffset, 0);
+        setCopyCursor({findTopVisibleAbsoluteRow(), 0});
     else
-        setCopyCursor((long) screen.scrollbackSize() + screen.cursor.y,
-                      screen.cursor.x);
+        setCopyCursor(
+            {(long) screen.scrollbackSize() + screen.cursor.y, screen.cursor.x});
 }
 
 void TerminalView::exitCopyMode()
@@ -1066,19 +623,17 @@ void TerminalView::exitCopyMode()
     copyMode = false;
     copySelecting = false;
     copyLineSelect = false;
-    selectionActive = false;
+    selection.active = false;
     scrollOffset = 0;
     repaint();
 }
 
-void TerminalView::setCopyCursor(long row, int col)
+void TerminalView::setCopyCursor(CellRef target)
 {
-    const auto lastRow = (long) screen.scrollbackSize() + screen.rows() - 1;
-    copyCursor.row = std::clamp(row, 0L, lastRow);
-    copyCursor.col = std::clamp(col, 0, screen.columns() - 1);
+    copyCursor.row = std::clamp(target.row, 0L, findLastAbsoluteRow(screen));
+    copyCursor.col = std::clamp(target.col, 0, screen.columns() - 1);
 
-    const auto visualRow =
-        (int) (copyCursor.row - ((long) screen.scrollbackSize() - scrollOffset));
+    const auto visualRow = calculateVisualRow(copyCursor.row);
 
     if (visualRow < 0)
         scrollOffset = (int) ((long) screen.scrollbackSize() - copyCursor.row);
@@ -1105,190 +660,95 @@ void TerminalView::updateCopySelection()
         end.col = screen.columns() - 1;
     }
 
-    selectionStart = start;
-    selectionEnd = end;
-    selectionActive = true;
+    selection = {start, end, true};
 }
 
-void TerminalView::moveCopyCursorByWord(bool forward)
+void TerminalView::cancelCopySelectionOrExit()
 {
-    const auto lastRow = (long) screen.scrollbackSize() + screen.rows() - 1;
-    auto row = copyCursor.row;
-    auto col = copyCursor.col;
-
-    const auto charAt = [&](long r, int c) -> char32_t
+    if (!copySelecting)
     {
-        const auto& line = lineAtAbsolute(r);
-        return c < (int) line.size() ? line[(std::size_t) c].ch : U' ';
-    };
-
-    if (forward)
-    {
-        const auto step = [&]
-        {
-            if (col < screen.columns() - 1)
-            {
-                ++col;
-                return true;
-            }
-
-            if (row >= lastRow)
-                return false;
-
-            ++row;
-            col = 0;
-            return true;
-        };
-
-        // Off the current word, then over the gap to the next one.
-        while (charAt(row, col) != U' ' && step()) {}
-        while (charAt(row, col) == U' ' && step()) {}
-    }
-    else
-    {
-        const auto step = [&]
-        {
-            if (col > 0)
-            {
-                --col;
-                return true;
-            }
-
-            if (row <= 0)
-                return false;
-
-            --row;
-            col = screen.columns() - 1;
-            return true;
-        };
-
-        // Over the gap backwards, then to the head of that word.
-        if (step())
-        {
-            while (charAt(row, col) == U' ' && step()) {}
-
-            while (col > 0 && charAt(row, col - 1) != U' ')
-                --col;
-        }
+        exitCopyMode();
+        return;
     }
 
-    setCopyCursor(row, col);
+    copySelecting = false;
+    copyLineSelect = false;
+    selection.active = false;
+    repaint();
+}
+
+void TerminalView::yankAndExitCopyMode()
+{
+    if (selection.active)
+        Clipboard::copyText(extractTextBetween(screen, selection.start, selection.end));
+
+    exitCopyMode();
+}
+
+void TerminalView::beginCopySelection(bool wholeLines)
+{
+    copySelecting = true;
+    copyLineSelect = wholeLines;
+    copyAnchor = copyCursor;
+    updateCopySelection();
+    repaint();
+}
+
+void TerminalView::applyCopyModeCommand(const CopyModeCommand& command)
+{
+    switch (command.action)
+    {
+        case CopyModeAction::Move:
+            setCopyCursor(findCopyModeMotionTarget(command.motion, copyCursor, screen));
+            return;
+
+        case CopyModeAction::CancelSelectionOrExit:
+            cancelCopySelectionOrExit();
+            return;
+
+        case CopyModeAction::Exit:
+            exitCopyMode();
+            return;
+
+        case CopyModeAction::YankAndExit:
+            yankAndExitCopyMode();
+            return;
+
+        case CopyModeAction::BeginCharacterSelection:
+            beginCopySelection(false);
+            return;
+
+        case CopyModeAction::BeginLineSelection:
+            beginCopySelection(true);
+            return;
+
+        case CopyModeAction::Nothing:
+            return;
+    }
 }
 
 bool TerminalView::handleCopyModeKey(const KeyEvent& event)
 {
-    // Cmd shortcuts (zoom, copy, paste) stay live; the mode consumes
-    // everything else so no keystroke leaks into the shell.
-    if (event.modifiers.command)
+    const auto command = findCopyModeCommand(event);
+
+    if (!command)
         return false;
 
-    const auto& chars = event.charactersIgnoringModifiers;
-    const auto rows = screen.rows();
-
-    const auto move = [&](long deltaRow, int deltaCol)
-    { setCopyCursor(copyCursor.row + deltaRow, copyCursor.col + deltaCol); };
-
-    const auto beginSelection = [&](bool lines)
-    {
-        copySelecting = true;
-        copyLineSelect = lines;
-        copyAnchor = copyCursor;
-        updateCopySelection();
-        repaint();
-    };
-
-    if (event.keyCode == KeyCode::Escape)
-    {
-        // First Escape drops the selection, the second leaves the mode.
-        if (copySelecting)
-        {
-            copySelecting = false;
-            copyLineSelect = false;
-            selectionActive = false;
-            repaint();
-        }
-        else
-        {
-            exitCopyMode();
-        }
-
-        return true;
-    }
-
-    if (chars == "q" || (event.modifiers.control && chars == "c"))
-    {
-        exitCopyMode();
-        return true;
-    }
-
-    if (chars == "y" || event.keyCode == KeyCode::Return
-        || event.keyCode == MacKey::KeypadEnter)
-    {
-        if (selectionActive)
-            Clipboard::copyText(selectedText());
-
-        exitCopyMode();
-        return true;
-    }
-
-    if (event.modifiers.control)
-    {
-        if (chars == "u")
-            move(-(long) (rows / 2), 0);
-        else if (chars == "d")
-            move(rows / 2, 0);
-        else if (chars == "b")
-            move(-(long) (rows - 1), 0);
-        else if (chars == "f")
-            move(rows - 1, 0);
-
-        return true;
-    }
-
-    if (event.keyCode == MacKey::PageUp)
-    {
-        move(-(long) (rows - 1), 0);
-        return true;
-    }
-
-    if (event.keyCode == MacKey::PageDown)
-    {
-        move(rows - 1, 0);
-        return true;
-    }
-
-    if (chars == "h" || event.keyCode == KeyCode::LeftArrow)
-        move(0, -1);
-    else if (chars == "j" || event.keyCode == KeyCode::DownArrow)
-        move(1, 0);
-    else if (chars == "k" || event.keyCode == KeyCode::UpArrow)
-        move(-1, 0);
-    else if (chars == "l" || event.keyCode == KeyCode::RightArrow)
-        move(0, 1);
-    else if (chars == "0" || event.keyCode == MacKey::Home)
-        setCopyCursor(copyCursor.row, 0);
-    else if (chars == "$" || event.keyCode == MacKey::End)
-        setCopyCursor(copyCursor.row, std::max(0, lineLength(copyCursor.row) - 1));
-    else if (chars == "g")
-        setCopyCursor(0, 0);
-    else if (chars == "G")
-        setCopyCursor((long) screen.scrollbackSize() + rows - 1, 0);
-    else if (chars == "w")
-        moveCopyCursorByWord(true);
-    else if (chars == "b")
-        moveCopyCursorByWord(false);
-    else if (chars == "v" || chars == " ")
-        beginSelection(false);
-    else if (chars == "V")
-        beginSelection(true);
-
+    applyCopyModeCommand(*command);
     return true;
 }
+
+// ---- mouse -----------------------------------------------------------------
 
 bool TerminalView::mouseReportingActive() const
 {
     const auto& modes = screen.modes;
     return modes.mouseButtons || modes.mouseDrag || modes.mouseMotion;
+}
+
+bool TerminalView::isReportingMouseFor(const MouseEvent& event) const
+{
+    return mouseReportingActive() && !event.modifiers.shift;
 }
 
 void TerminalView::sendMouseReport(const MouseEvent& event,
@@ -1299,29 +759,15 @@ void TerminalView::sendMouseReport(const MouseEvent& event,
     if (!screen.modes.mouseSgr)
         return;
 
-    const auto cellW = atlas->cellWidth();
-    const auto cellH = atlas->cellHeight();
-    const auto col =
-        std::clamp((int) ((event.pos.x - marginX) / cellW) + 1, 1, screen.columns());
-    const auto row =
-        std::clamp((int) ((event.pos.y - marginY) / cellH) + 1, 1, screen.rows());
-
-    char buffer[32];
-    std::snprintf(buffer,
-                  sizeof(buffer),
-                  "\033[<%d;%d;%d%c",
-                  button + (motion ? 32 : 0),
-                  col,
-                  row,
-                  pressed ? 'M' : 'm');
-    send(buffer);
+    const auto cell = findCellUnderPointer(event.pos);
+    send(encodeSgrMouseReport({button, pressed, motion, cell.column + 1, cell.visualRow + 1}));
 }
 
 void TerminalView::mouseDown(const MouseEvent& event)
 {
     onFocused();
 
-    if (mouseReportingActive() && !event.modifiers.shift)
+    if (isReportingMouseFor(event))
     {
         sendMouseReport(event, (int) event.button, true, false);
         return;
@@ -1333,57 +779,16 @@ void TerminalView::mouseDown(const MouseEvent& event)
     const auto cell = cellRefAt(event.pos);
 
     if (event.clickCount >= 3)
-    {
-        selectionStart = {cell.row, 0};
-        selectionEnd = {cell.row, screen.columns() - 1};
-        selectionActive = true;
-        selecting = false;
-        repaint();
-        return;
-    }
-
-    if (event.clickCount == 2)
-    {
-        const auto offset = (int) (screen.scrollbackSize() - cell.row);
-        const auto& line = screen.lineAt(0, offset);
-
-        auto isWordChar = [&](int col)
-        {
-            if (col < 0 || col >= (int) line.size())
-                return false;
-
-            const auto ch = line[(std::size_t) col].ch;
-            return ch != U' ';
-        };
-
-        auto from = cell.col;
-        auto to = cell.col;
-
-        while (isWordChar(from - 1))
-            --from;
-
-        while (isWordChar(to + 1))
-            ++to;
-
-        selectionStart = {cell.row, from};
-        selectionEnd = {cell.row, to};
-        selectionActive = isWordChar(cell.col);
-        selecting = false;
-        repaint();
-        return;
-    }
-
-    selectionAnchor = cell;
-    selectionStart = cell;
-    selectionEnd = cell;
-    selectionActive = false;
-    selecting = true;
-    repaint();
+        selectRow(cell);
+    else if (event.clickCount == 2)
+        selectWordAt(cell);
+    else
+        beginDragSelection(cell);
 }
 
 void TerminalView::mouseDragged(const MouseEvent& event)
 {
-    if (mouseReportingActive() && !event.modifiers.shift)
+    if (isReportingMouseFor(event))
     {
         if (screen.modes.mouseDrag || screen.modes.mouseMotion)
             sendMouseReport(event, (int) event.button, true, true);
@@ -1395,58 +800,60 @@ void TerminalView::mouseDragged(const MouseEvent& event)
         return;
 
     const auto cell = cellRefAt(event.pos);
-    selectionStart = std::min(selectionAnchor, cell);
-    selectionEnd = std::max(selectionAnchor, cell);
-    selectionActive = true;
+    selection = {std::min(selectionAnchor, cell), std::max(selectionAnchor, cell), true};
     repaint();
 }
 
 void TerminalView::mouseUp(const MouseEvent& event)
 {
-    if (mouseReportingActive() && !event.modifiers.shift)
+    if (isReportingMouseFor(event))
     {
         sendMouseReport(event, (int) event.button, false, false);
         return;
     }
 
-    if (selecting && selectionStart == selectionEnd)
-        selectionActive = false;
+    if (selecting && selection.start == selection.end)
+        selection.active = false;
 
     selecting = false;
     repaint();
 }
 
+int TerminalView::takeWholeWheelLines(float wheelDelta)
+{
+    wheelRemainder += wheelDelta;
+    const auto lines = (int) wheelRemainder;
+    wheelRemainder -= (float) lines;
+    return lines;
+}
+
+// Full-screen apps get wheel motion as arrow keys, the classic fallback when no
+// mouse mode is active.
+void TerminalView::sendWheelAsArrowKeys(int lines)
+{
+    const auto arrows = encodeWheelAsArrowKeys(lines, screen.modes.appCursorKeys);
+
+    for (auto i = 0; i < arrows.count; ++i)
+        send(arrows.key);
+}
+
 void TerminalView::mouseWheel(const MouseEvent& event)
 {
-    if (mouseReportingActive() && !event.modifiers.shift)
+    if (isReportingMouseFor(event))
     {
-        const auto up = event.delta.y > 0;
-        sendMouseReport(event, up ? 64 : 65, true, false);
+        const auto button = event.delta.y > 0 ? wheelUpMouseButton : wheelDownMouseButton;
+        sendMouseReport(event, button, true, false);
         return;
     }
 
-    wheelRemainder += event.delta.y;
-    const auto lines = (int) wheelRemainder;
+    const auto lines = takeWholeWheelLines(event.delta.y);
 
     if (lines == 0)
         return;
 
-    wheelRemainder -= (float) lines;
-
-    // Full-screen apps get wheel motion as arrow keys, the classic fallback
-    // when no mouse mode is active.
     if (screen.modes.altScreen)
-    {
-        const auto key = lines > 0
-                             ? (screen.modes.appCursorKeys ? "\033OA" : "\033[A")
-                             : (screen.modes.appCursorKeys ? "\033OB" : "\033[B");
-
-        for (auto i = 0; i < std::min(std::abs(lines), 40); ++i)
-            send(key);
-
-        return;
-    }
-
-    scrollBy(lines);
+        sendWheelAsArrowKeys(lines);
+    else
+        scrollBy(lines);
 }
 } // namespace term

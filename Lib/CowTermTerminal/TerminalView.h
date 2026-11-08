@@ -1,6 +1,10 @@
 #pragma once
 
+#include "CopyMode.h"
 #include "GlyphAtlas.h"
+#include "GridPainter.h"
+#include "GridSelection.h"
+#include "KeyEncoding.h"
 
 #include "CowTermCore/Shell.h"
 #include "CowTermCore/TermParser.h"
@@ -134,23 +138,6 @@ public:
     void mouseWheel(const eacp::Graphics::MouseEvent& event) override;
 
 private:
-    struct CellRef
-    {
-        // Absolute row: scrollback lines count from 0, grid rows follow.
-        long row = 0;
-        int col = 0;
-
-        bool operator<(const CellRef& other) const
-        {
-            return row != other.row ? row < other.row : col < other.col;
-        }
-
-        bool operator==(const CellRef& other) const
-        {
-            return row == other.row && col == other.col;
-        }
-    };
-
     void flushOutput();
     void send(std::string_view bytes);
     void sendAndScrollToBottom(std::string_view bytes);
@@ -161,41 +148,57 @@ private:
     // Super/Windows key, which the desktop reserves, so it is Ctrl+Shift+C/V --
     // shifted because plain Ctrl+C is SIGINT and belongs to the shell.
     bool handleClipboardShortcut(const eacp::Graphics::KeyEvent& event);
+    void performEditingShortcut(EditingShortcut shortcut);
+    void clearScreenAndScrollback();
     bool handleSpecialKey(const eacp::Graphics::KeyEvent& event);
+    int calculateScrollLinesForJump(ViewportJump jump) const;
     void copySelection();
     void applyGridSize();
     void scrollBy(int lines);
 
     bool handleCopyModeKey(const eacp::Graphics::KeyEvent& event);
+    void applyCopyModeCommand(const CopyModeCommand& command);
+    void cancelCopySelectionOrExit();
+    void yankAndExitCopyMode();
+    void beginCopySelection(bool wholeLines);
     void exitCopyMode();
 
     // Clamps to the buffer, scrolls the viewport to keep the cursor visible
     // and extends the live selection.
-    void setCopyCursor(long row, int col);
-    void moveCopyCursorByWord(bool forward);
+    void setCopyCursor(CellRef target);
     void updateCopySelection();
-    void drawCopyMode(const std::string& indicator);
-    const Line& lineAtAbsolute(long row) const;
-    int lineLength(long row) const;
+    std::string describeCopyModePosition() const;
 
     bool mouseReportingActive() const;
+    bool isReportingMouseFor(const eacp::Graphics::MouseEvent& event) const;
     void sendMouseReport(const eacp::Graphics::MouseEvent& event,
                          int button,
                          bool pressed,
                          bool motion);
+    int takeWholeWheelLines(float wheelDelta);
+    void sendWheelAsArrowKeys(int lines);
 
+    // The cell under a point, clamped to the grid.
+    VisibleCell findCellUnderPointer(eacp::Graphics::Point pos) const;
     CellRef cellRefAt(eacp::Graphics::Point pos) const;
-    bool isSelected(long absoluteRow, int col) const;
+    void selectRow(CellRef cell);
+    void selectWordAt(CellRef cell);
+    void beginDragSelection(CellRef cell);
     bool hasSelection() const;
-    std::string selectedText() const;
 
-    void drawBackgrounds(int visualRow, const Line& line, float y);
-    void drawGlyphs(int visualRow, const Line& line, float y);
-    void drawCursor();
-
-    // fg/bg after inverse video and selection are applied.
-    std::pair<Rgb, Rgb>
-        effectiveColors(const Cell& cell, long absoluteRow, int col) const;
+    long findTopVisibleAbsoluteRow() const;
+    int calculateVisualRow(long absoluteRow) const;
+    eacp::Graphics::Point calculateCellOrigin(int visualRow, int column) const;
+    PaintedRow describeVisibleRow(int visualRow) const;
+    GridPainter makePainter();
+    void rasterizeFrameGlyphs(GridPainter& painter, const std::string& copyIndicator);
+    void drawGrid(GridPainter& painter);
+    void drawCursorLayer(eacp::GPU::RenderPass& pass,
+                         GridPainter& painter,
+                         const std::string& copyIndicator);
+    void drawCursor(GridPainter& painter);
+    bool isCursorBlinkingNow() const;
+    void drawCopyMode(GridPainter& painter, const std::string& indicator);
 
     Theme theme;
     std::string fontName;
@@ -227,9 +230,7 @@ private:
 
     bool selecting = false;
     CellRef selectionAnchor;
-    CellRef selectionStart;
-    CellRef selectionEnd;
-    bool selectionActive = false;
+    SelectionRange selection;
 
     bool copyMode = false;
     bool copySelecting = false;
