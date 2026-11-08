@@ -11,7 +11,10 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 
-& "$PSScriptRoot/with-msvc.ps1" cmake --build $BuildDir --target CowTermShellStartTimer
+# In a child PowerShell, so the developer environment with-msvc.ps1 sets up
+# stays out of this one and out of the shells being timed.
+powershell -NoProfile -ExecutionPolicy Bypass -File "$PSScriptRoot/with-msvc.ps1" `
+    cmake --build $BuildDir --target CowTermShellStartTimer
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 $timer = Join-Path $BuildDir 'Test/CowTermShellStartTimer.exe'

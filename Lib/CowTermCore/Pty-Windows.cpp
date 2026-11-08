@@ -7,6 +7,7 @@
 #include <eacp/Core/Utils/Strings.h>
 
 #include <tlhelp32.h>
+#include <userenv.h>
 #include <winternl.h>
 
 #include <algorithm>
@@ -204,8 +205,39 @@ std::wstring encodePowerShell(const std::string& script)
     return base64(utf16le);
 }
 
+// The environment a fresh login gives this user (the machine and user
+// variables from the registry), without whatever this process inherited.
+std::wstring getLoginEnvironmentBlock()
+{
+    auto token = HANDLE {};
+
+    if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY | TOKEN_DUPLICATE, &token))
+        return {};
+
+    auto* environment = (void*) nullptr;
+    auto block = std::wstring {};
+
+    if (CreateEnvironmentBlock(&environment, token, FALSE))
+    {
+        const auto* entries = (const wchar_t*) environment;
+        auto* end = entries;
+
+        while (*end != L'\0')
+            end += wcslen(end) + 1;
+
+        block.assign(entries, end + 1);
+        DestroyEnvironmentBlock(environment);
+    }
+
+    CloseHandle(token);
+    return block;
+}
+
 // Runs a console program with no window and returns what it wrote to stdout.
-std::string readOutputOf(const std::wstring& executable, std::wstring commandLine)
+// An empty `environment` means this process's own.
+std::string readOutputOf(const std::wstring& executable,
+                         std::wstring commandLine,
+                         std::wstring environment = {})
 {
     auto inheritable = SECURITY_ATTRIBUTES {sizeof(SECURITY_ATTRIBUTES), nullptr, TRUE};
     auto readEnd = HANDLE {};
@@ -227,8 +259,8 @@ std::string readOutputOf(const std::wstring& executable, std::wstring commandLin
                                          nullptr,
                                          nullptr,
                                          TRUE,
-                                         CREATE_NO_WINDOW,
-                                         nullptr,
+                                         CREATE_NO_WINDOW | CREATE_UNICODE_ENVIRONMENT,
+                                         environment.empty() ? nullptr : environment.data(),
                                          nullptr,
                                          &startup,
                                          &info);
@@ -299,8 +331,10 @@ std::string quotedForPowerShell(const std::string& text)
     return quoted + "'";
 }
 
-// Runs Enter-VsDevShell in a throwaway PowerShell and returns the variables it
-// added or changed. Empty when the install has no DevShell module or it fails.
+// Runs Enter-VsDevShell in a throwaway PowerShell started with the login
+// environment, and returns the variables it added or changed. Starting clean
+// keeps the capture whole when CowTerm itself runs inside a developer shell.
+// Empty when the install has no DevShell module or it fails.
 std::vector<EnvironmentVariable> captureDevShellVariables(const std::wstring& shell,
                                                           const VisualStudioInstall& install)
 {
@@ -323,7 +357,8 @@ std::vector<EnvironmentVariable> captureDevShellVariables(const std::wstring& sh
     const auto output =
         readOutputOf(shell,
                      L"\"" + shell + L"\" -NoLogo -NoProfile -NonInteractive -EncodedCommand "
-                         + encodePowerShell(script));
+                         + encodePowerShell(script),
+                     getLoginEnvironmentBlock());
 
     return parseEnvironmentVariableLines(output);
 }
