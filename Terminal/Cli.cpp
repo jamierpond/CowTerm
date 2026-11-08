@@ -8,6 +8,7 @@
 // CliPlatform.h (Cli-macOS.mm, Cli-Windows.cpp, Cli-Linux.cpp).
 
 #include "Cli.h"
+#include "CliParsing.h"
 #include "CliPlatform.h"
 #include "CowTermVersion.h"
 #include "NotifyUserClient.h"
@@ -19,6 +20,9 @@
 #include <eacp/Core/Utils/StdPath.h>
 
 #include <algorithm>
+#include <array>
+#include <iterator>
+#include <string_view>
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
@@ -149,53 +153,23 @@ int request()
 std::optional<Options> parseOptions(const std::vector<std::string>& args,
                                     const std::vector<std::string>& allowed)
 {
-    auto options = Options {};
-    const auto isAllowed = [&](const std::string& name)
-    { return std::find(allowed.begin(), allowed.end(), name) != allowed.end(); };
+    auto parsed = parseCaptureOptions(args, allowed);
 
-    for (auto i = std::size_t {0}; i < args.size(); ++i)
-    {
-        const auto& arg = args[i];
+    if (!parsed.options)
+        fail(parsed.error);
 
-        if (!isAllowed(arg))
-        {
-            fail("unknown option: " + arg + " (see ct help)");
-            return std::nullopt;
-        }
+    return parsed.options;
+}
 
-        if (arg == "--interactive")
-        {
-            options.interactive = true;
-            continue;
-        }
+int failCapture(std::string message)
+{
+    while (!message.empty() && message.back() == '\n')
+        message.pop_back();
 
-        if (arg == "--audio")
-        {
-            options.audio = true;
-            continue;
-        }
+    if (message.empty())
+        return fail("screen capture produced no image");
 
-        if (i + 1 >= args.size())
-        {
-            fail(arg + " needs a value");
-            return std::nullopt;
-        }
-
-        const auto& value = args[++i];
-
-        if (arg == "-o")
-            options.output = value;
-        else if (arg == "--display")
-            options.display = value;
-        else if (arg == "--window")
-            options.window = value;
-        else if (arg == "--rect")
-            options.rect = value;
-        else if (arg == "--duration")
-            options.duration = value;
-    }
-
-    return options;
+    return fail("screen capture: " + message);
 }
 
 int shot(const std::vector<std::string>& args)
@@ -216,26 +190,13 @@ int shot(const std::vector<std::string>& args)
 
     // An interactive capture cancelled with Escape exits 0 and writes nothing.
     if (capture.status != 0 || !fs::exists(*path))
-    {
-        auto& message = capture.message;
-        while (!message.empty() && message.back() == '\n')
-            message.pop_back();
-        return fail(message.empty() ? "screen capture produced no image"
-                                    : "screen capture: " + message);
-    }
+        return failCapture(capture.message);
 
     std::printf("%s\n", path->string().c_str());
     return exitOk;
 }
 
 // --- recording ---------------------------------------------------------------
-
-struct Recording
-{
-    long long pid = 0;
-    std::string path;
-    long long started = 0;
-};
 
 fs::path stateFile()
 {
@@ -248,53 +209,13 @@ fs::path stateFile()
     return eacp::toStdPath(eacp::FilePath::appDataDirectory()) / "CowTerm" / name;
 }
 
-std::string jsonEscape(const std::string& text)
-{
-    auto out = std::string {};
-    for (auto c: text)
-    {
-        if (c == '"' || c == '\\')
-            out += '\\';
-        out += c;
-    }
-    return out;
-}
-
-// Reads back only what writeState() writes; not a general JSON parser.
 std::optional<Recording> readState()
 {
     auto file = std::ifstream {stateFile()};
     if (!file)
         return std::nullopt;
 
-    const auto text = std::string {std::istreambuf_iterator<char> {file}, {}};
-    const auto number = [&](const std::string& key) -> long long
-    {
-        const auto at = text.find("\"" + key + "\":");
-        return at == std::string::npos
-                   ? 0
-                   : std::atoll(text.c_str() + at + key.size() + 3);
-    };
-
-    auto recording = Recording {};
-    recording.pid = number("pid");
-    recording.started = number("started");
-
-    const auto at = text.find("\"path\":\"");
-    if (at != std::string::npos)
-    {
-        for (auto i = at + 8; i < text.size() && text[i] != '"'; ++i)
-        {
-            if (text[i] == '\\' && i + 1 < text.size())
-                ++i;
-            recording.path += text[i];
-        }
-    }
-
-    if (recording.pid <= 0 || recording.path.empty())
-        return std::nullopt;
-
-    return recording;
+    return parseRecordingState(std::string {std::istreambuf_iterator<char> {file}, {}});
 }
 
 bool writeState(const Recording& recording)
@@ -303,9 +224,7 @@ bool writeState(const Recording& recording)
     fs::create_directories(stateFile().parent_path(), error);
 
     auto file = std::ofstream {stateFile()};
-    file << "{\"pid\":" << recording.pid << ",\"path\":\""
-         << jsonEscape(recording.path) << "\",\"started\":" << recording.started
-         << "}\n";
+    file << formatRecordingState(recording);
     return (bool) file;
 }
 
@@ -459,11 +378,6 @@ int failNotifyUserUsage(const std::string& message)
     return exitNotifyUserUsage;
 }
 
-bool isNotifyUserFlag(const std::string& arg)
-{
-    return arg.starts_with("--");
-}
-
 int exitCodeForNotifyUserOutcome(const NotifyUserOutcome& outcome)
 {
     if (!outcome.wasAnswered)
@@ -484,104 +398,85 @@ int exitCodeForNotifyUserOutcome(const NotifyUserOutcome& outcome)
 
 int notifyUser(const std::vector<std::string>& args)
 {
-    auto request = NotifyUserRequest {};
-    auto hasContent = false;
+    const auto* pane = std::getenv(proto::paneEnvironmentVariable);
+    const auto defaultPaneId = pane != nullptr ? std::string {pane} : std::string {};
+    const auto parsed = parseNotifyUserArguments(args, defaultPaneId);
 
-    if (const auto* pane = std::getenv(proto::paneEnvironmentVariable))
-        request.paneId = pane;
+    if (!parsed.request)
+        return failNotifyUserUsage(parsed.usageError);
 
-    for (auto i = std::size_t {0}; i < args.size(); ++i)
-    {
-        const auto& arg = args[i];
-
-        if (arg == "--allow-type-response")
-        {
-            request.allowsTypedResponse = true;
-            continue;
-        }
-
-        if (arg == "--options")
-        {
-            while (i + 1 < args.size() && !isNotifyUserFlag(args[i + 1]))
-                request.options.push_back(args[++i]);
-
-            if (request.options.empty())
-                return failNotifyUserUsage("--options needs at least one option");
-
-            continue;
-        }
-
-        if (arg != "--content" && arg != "--title" && arg != "--pane")
-            return failNotifyUserUsage("unknown option: " + arg);
-
-        if (i + 1 >= args.size())
-            return failNotifyUserUsage(arg + " needs a value");
-
-        const auto& value = args[++i];
-
-        if (arg == "--content")
-        {
-            request.content = value;
-            hasContent = true;
-        }
-        else if (arg == "--title")
-        {
-            request.title = value;
-        }
-        else
-        {
-            request.paneId = value;
-        }
-    }
-
-    if (!hasContent)
-        return failNotifyUserUsage("--content is required");
-
-    if (request.paneId.empty())
-        return failNotifyUserUsage(
-            "no pane: run it inside a CowTerm pane or pass --pane <id>");
-
-    return askRunningAppAndWait(request, exitCodeForNotifyUserOutcome);
+    return askRunningAppAndWait(*parsed.request, exitCodeForNotifyUserOutcome);
 }
 
-int dispatch(const std::vector<std::string>& args)
+using Arguments = std::vector<std::string>;
+
+Arguments dropFirst(const Arguments& args)
 {
-    if (args.empty() || args[0] == "help" || args[0] == "--help" || args[0] == "-h")
-    {
-        std::fputs(usage, stdout);
-        return exitOk;
-    }
+    return Arguments(args.begin() + 1, args.end());
+}
 
-    if (args[0] == "version" || args[0] == "--version")
-    {
-        std::printf("ct %s (%s)\n", appVersion, versionTag().c_str());
-        return exitOk;
-    }
+int printUsage(const Arguments&)
+{
+    std::fputs(usage, stdout);
+    return exitOk;
+}
 
-    // Wipes CowTerm's own grants, which is the same from any terminal.
-    if (args[0] == "--reset-permissions")
-    {
-        const auto service = args.size() > 1 ? args[1] : std::string {"All"};
-        auto error = std::string {};
+int printVersion(const Arguments&)
+{
+    std::printf("ct %s (%s)\n", appVersion, versionTag().c_str());
+    return exitOk;
+}
 
-        if (!permissions::platform::reset(service, error))
-            return fail("reset failed: " + error);
+// Wipes CowTerm's own grants, which is the same from any terminal.
+int resetPermissions(const Arguments& args)
+{
+    const auto service = args.size() > 1 ? args[1] : std::string {"All"};
+    auto error = std::string {};
 
-        std::printf("reset %s for %s\n",
-                    service.c_str(),
-                    permissions::platform::bundleIdentifier().c_str());
-        return exitOk;
-    }
+    if (!permissions::platform::reset(service, error))
+        return fail("reset failed: " + error);
 
-    // Talks to the running app, not the OS; no grant involved, so it runs
-    // from any terminal.
-    if (args[0] == "notify-user")
-        return notifyUser(std::vector<std::string>(args.begin() + 1, args.end()));
+    std::printf("reset %s for %s\n",
+                service.c_str(),
+                permissions::platform::bundleIdentifier().c_str());
+    return exitOk;
+}
 
-    // macOS attributes the Screen Recording request to the terminal hosting
-    // the shell. Run from iTerm or over ssh, ct would prompt for (and get or be
-    // refused by) the wrong app, so the capture commands only run under
-    // CowTerm.
+// Talks to the running app, not the OS; no grant involved, so it runs
+// from any terminal.
+int notifyUserCommand(const Arguments& args)
+{
+    return notifyUser(dropFirst(args));
+}
+
+struct Command
+{
+    std::string_view verb;
+    int (*run)(const Arguments& args);
+};
+
+constexpr auto commandsRunAnywhere = std::array {
+    Command {"help", printUsage},
+    Command {"--help", printUsage},
+    Command {"-h", printUsage},
+    Command {"version", printVersion},
+    Command {"--version", printVersion},
+    Command {"--reset-permissions", resetPermissions},
+    Command {"notify-user", notifyUserCommand},
+};
+
+struct CaptureAlias
+{
+    std::string_view verb;
+    Arguments head;
+};
+
+// macOS attributes the Screen Recording request to the terminal hosting
+// the shell. Run from iTerm or over ssh, ct would prompt for (and get or be
+// refused by) the wrong app, so the capture commands only run under
+// CowTerm.
+int dispatchCaptureCommand(const Arguments& args)
+{
     auto parent = std::string {};
     if (!platform::insideCowTerm(parent))
     {
@@ -594,23 +489,34 @@ int dispatch(const std::vector<std::string>& args)
         return exitNotInCowTerm;
     }
 
-    const auto rest = std::vector<std::string>(args.begin() + 1, args.end());
-    const auto prepend = [&](std::vector<std::string> head)
-    {
-        head.insert(head.end(), rest.begin(), rest.end());
-        return head;
+    const auto aliases = std::array {
+        CaptureAlias {"screen-cap", {}},
+        CaptureAlias {"screenshot", {"shot"}},
+        CaptureAlias {"start-whole-screen-recording", {"record", "start"}},
+        CaptureAlias {"stop-screen-recording", {"record", "stop"}},
     };
 
-    if (args[0] == "screen-cap")
-        return screenCap(rest);
-    if (args[0] == "screenshot")
-        return screenCap(prepend({"shot"}));
-    if (args[0] == "start-whole-screen-recording")
-        return screenCap(prepend({"record", "start"}));
-    if (args[0] == "stop-screen-recording")
-        return screenCap(prepend({"record", "stop"}));
+    const auto found = std::ranges::find(aliases, args[0], &CaptureAlias::verb);
 
-    return fail("unknown command: " + args[0] + " (see ct help)");
+    if (found == aliases.end())
+        return fail("unknown command: " + args[0] + " (see ct help)");
+
+    auto expanded = found->head;
+    std::ranges::copy(dropFirst(args), std::back_inserter(expanded));
+    return screenCap(expanded);
+}
+
+int dispatch(const Arguments& args)
+{
+    if (args.empty())
+        return printUsage(args);
+
+    const auto found = std::ranges::find(commandsRunAnywhere, args[0], &Command::verb);
+
+    if (found != commandsRunAnywhere.end())
+        return found->run(args);
+
+    return dispatchCaptureCommand(args);
 }
 } // namespace
 } // namespace term::cli

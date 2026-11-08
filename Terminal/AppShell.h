@@ -14,6 +14,10 @@
 
 #include <eacp/UI/UI.h>
 
+#include <functional>
+#include <span>
+#include <string_view>
+
 namespace term
 {
 // Root content view: hosts the active session's terminal, the palette
@@ -44,27 +48,62 @@ public:
     void resized() override;
 
 private:
+    struct KeyAction
+    {
+        std::string_view key;
+        void (AppShell::*action)();
+    };
+
     bool interceptKey(const eacp::Graphics::KeyEvent& event);
     bool handlePrefixed(const eacp::Graphics::KeyEvent& event);
     bool handleCommand(const eacp::Graphics::KeyEvent& event);
     bool popupKey(const eacp::Graphics::KeyEvent& event);
+    static bool isLeaderPrefixKey(const eacp::Graphics::KeyEvent& event);
+    static bool isSwitcherKey(const eacp::Graphics::KeyEvent& event);
+    bool doesKeyTogglePopup(const std::string& characters) const;
+    bool runKeyAction(std::span<const KeyAction> actions, const std::string& characters);
+    bool runConfigBinding(const std::string& characters);
+    bool runArrowKey(const eacp::Graphics::KeyEvent& event);
+    static float calculateArrowResizeCells(bool altHeld);
+    bool runPaneDirectionKey(const std::string& characters);
+    bool runSessionDigitKey(const std::string& characters);
+    void withActivePaneTree(const std::function<void(SessionView&)>& action);
+    void withActivePane(const std::function<void(TerminalView&)>& action);
+    void showLazygitPopup();
+    void splitActivePaneBelow();
+    void splitActivePaneBeside();
+    void toggleActivePaneZoom();
+    void cycleActivePaneFocus();
+    void closeActivePane();
+    void enterCopyModeOnActivePane();
+    void pasteIntoActivePane();
+    void openSessionInActiveDirectory();
+    void switchToLastSession();
+    void quitFromLeader();
+    void increaseGlobalFontSize();
+    void decreaseGlobalFontSize();
+    void resetGlobalFontSize();
     // The overlays are UI components, not native views: one ComponentHost (a
     // GPUView) carries whichever is open, which is why they raise and lower as
     // a single subview rather than one apiece.
     void showOverlay(eacp::UI::Component& overlay);
     void hideOverlay();
+    void hideOverlayAndRefocus();
+    void focusAttachedPane();
+    bool isSwitcherBlocked() const;
+    bool isSessionInFrontOfUser(TermSession& session);
+    void wireSessionManager();
+    void wireTray();
+    void wireOverlays();
+    void wireWorktreeActions();
+    void wireNotifications();
     void raiseOverlay();
     void showPalette();
-    void hidePalette();
     void showSwitcher(bool reverse);
-    void hideSwitcher();
     void showPopup(const std::string& command);
     void hidePopup();
     void showPrDashboard();
-    void hidePrDashboard();
     void showClaudeHud();
-    void hideClaudeHud();
-    void hidePermissions();
     bool anyOverlayShown() const;
     void attachActive(TermSession& session);
     void setGlobalFontSize(float size);

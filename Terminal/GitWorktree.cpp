@@ -3,6 +3,8 @@
 #include "Command.h"
 #include "Trash.h"
 
+#include <string_view>
+
 namespace term
 {
 namespace
@@ -17,6 +19,12 @@ std::string trimmed(const std::string& text)
     return text.substr(begin, text.find_last_not_of(" \t\r\n") - begin + 1);
 }
 
+bool isPathUnfriendlyCharacter(char character)
+{
+    constexpr auto unfriendly = std::string_view {"/\\ :"};
+    return unfriendly.find(character) != std::string_view::npos;
+}
+
 // A filesystem-friendly leaf for the worktree directory. The git branch keeps
 // its real name (feature/foo); only the folder flattens ("feature-foo").
 std::string dirLeaf(const std::string& branch)
@@ -24,7 +32,7 @@ std::string dirLeaf(const std::string& branch)
     auto out = std::string {};
 
     for (const auto c: branch)
-        out += (c == '/' || c == '\\' || c == ' ' || c == ':') ? '-' : c;
+        out += isPathUnfriendlyCharacter(c) ? '-' : c;
 
     return out;
 }
@@ -52,6 +60,15 @@ struct WorktreeProbe
     std::string repoPath;  // owning repo's main working tree (set when linked)
 };
 
+// Equal dirs are the main working tree; an empty one means git's answer didn't parse.
+bool isLinkedWorktree(const std::string& gitDir, const std::string& commonDir)
+{
+    if (gitDir.empty() || commonDir.empty())
+        return false;
+
+    return gitDir != commonDir;
+}
+
 // Ask git what `path` is. A checkout's private git dir (--absolute-git-dir)
 // equals the shared common dir (--git-common-dir) for a repo's main working
 // tree and differs for a linked worktree; that difference is what marks a
@@ -75,14 +92,14 @@ WorktreeProbe probeWorktree(const std::string& path)
     const auto gitDir = trimmed(text.substr(0, newline));
     const auto commonDir = trimmed(text.substr(newline + 1));
 
-    if (gitDir.empty() || commonDir.empty() || gitDir == commonDir)
-        return {};  // main working tree, or unparseable — not a linked worktree
+    if (!isLinkedWorktree(gitDir, commonDir))
+        return {};
 
-    // Strip the trailing "/.git" (or bare ".git") to get the repo's top level.
-    const auto suffix = std::string {"/.git"};
+    // Strip the trailing "/.git" to get the repo's top level.
+    constexpr auto suffix = std::string_view {"/.git"};
     auto repo = commonDir;
 
-    if (repo.size() >= suffix.size() && repo.compare(repo.size() - suffix.size(), suffix.size(), suffix) == 0)
+    if (repo.ends_with(suffix))
         repo = repo.substr(0, repo.size() - suffix.size());
 
     return {true, repo};

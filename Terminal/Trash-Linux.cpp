@@ -6,6 +6,7 @@
 #include <fstream>
 #include <iomanip>
 #include <sstream>
+#include <string_view>
 #include <system_error>
 
 // The freedesktop.org trash specification: the file moves into
@@ -46,6 +47,22 @@ std::string deletionDate()
     return out.str();
 }
 
+bool isAsciiLetterOrDigit(unsigned char byte)
+{
+    return (byte >= 'A' && byte <= 'Z') || (byte >= 'a' && byte <= 'z')
+           || (byte >= '0' && byte <= '9');
+}
+
+bool isUnreservedByte(unsigned char byte)
+{
+    constexpr auto unreservedPunctuation = std::string_view {"-_.~/"};
+
+    if (isAsciiLetterOrDigit(byte))
+        return true;
+
+    return unreservedPunctuation.find(static_cast<char>(byte)) != std::string_view::npos;
+}
+
 // Percent-encode everything outside the unreserved set: the spec's Path field
 // is a URL-escaped fragment, so a name with a space or a '%' round-trips.
 std::string percentEncode(const std::string& value)
@@ -57,13 +74,7 @@ std::string percentEncode(const std::string& value)
     {
         const auto byte = (unsigned char) character;
 
-        const auto unreserved = (byte >= 'A' && byte <= 'Z')
-                                || (byte >= 'a' && byte <= 'z')
-                                || (byte >= '0' && byte <= '9')
-                                || byte == '-' || byte == '_' || byte == '.'
-                                || byte == '~' || byte == '/';
-
-        if (unreserved)
+        if (isUnreservedByte(byte))
         {
             out += character;
             continue;
@@ -98,6 +109,65 @@ fs::path uniqueName(const fs::path& files,
     }
 
     return {};
+}
+bool writeTrashInfo(const fs::path& record, const fs::path& source, std::string& error)
+{
+    auto stream = std::ofstream {record, std::ios::binary | std::ios::trunc};
+
+    if (!stream)
+    {
+        error = "could not write trash info: " + record.string();
+        return false;
+    }
+
+    stream << "[Trash Info]\n"
+           << "Path=" << percentEncode(source.string()) << "\n"
+           << "DeletionDate=" << deletionDate() << "\n";
+    stream.close();
+
+    if (!stream)
+    {
+        error = "could not write trash info: " + record.string();
+        auto code = std::error_code {};
+        fs::remove(record, code);
+        return false;
+    }
+
+    return true;
+}
+
+// A rename cannot cross a filesystem boundary, and the home trash often is
+// one. Fall back to a copy the spec allows, and only unlink once it lands.
+std::error_code copyIntoTrash(const fs::path& source, const fs::path& destination)
+{
+    auto copyCode = std::error_code {};
+    fs::copy(source,
+             destination,
+             fs::copy_options::recursive | fs::copy_options::copy_symlinks,
+             copyCode);
+
+    if (!copyCode)
+    {
+        fs::remove_all(source, copyCode);
+
+        if (!copyCode)
+            return {};
+    }
+
+    const auto failure = copyCode;
+    fs::remove_all(destination, copyCode);
+    return failure;
+}
+
+std::error_code moveIntoTrash(const fs::path& source, const fs::path& destination)
+{
+    auto code = std::error_code {};
+    fs::rename(source, destination, code);
+
+    if (code == std::errc::cross_device_link)
+        return copyIntoTrash(source, destination);
+
+    return code;
 }
 } // namespace
 
@@ -150,54 +220,14 @@ bool moveToTrash(const std::string& path, std::string& error)
     // pointing at nothing, which is recoverable, where the reverse leaves an
     // unrestorable file.
     const auto record = info / (name.string() + ".trashinfo");
-    auto stream = std::ofstream {record, std::ios::binary | std::ios::trunc};
 
-    if (!stream)
-    {
-        error = "could not write trash info: " + record.string();
+    if (!writeTrashInfo(record, source, error))
         return false;
-    }
 
-    stream << "[Trash Info]\n"
-           << "Path=" << percentEncode(source.string()) << "\n"
-           << "DeletionDate=" << deletionDate() << "\n";
-    stream.close();
-
-    if (!stream)
-    {
-        error = "could not write trash info: " + record.string();
-        fs::remove(record, code);
-        return false;
-    }
-
-    const auto destination = files / name;
-    fs::rename(source, destination, code);
+    code = moveIntoTrash(source, files / name);
 
     if (!code)
         return true;
-
-    // A rename cannot cross a filesystem boundary, and the home trash often is
-    // one. Fall back to a copy the spec allows, and only unlink once it lands.
-    if (code == std::errc::cross_device_link)
-    {
-        auto copyCode = std::error_code {};
-        fs::copy(source,
-                 destination,
-                 fs::copy_options::recursive
-                     | fs::copy_options::copy_symlinks,
-                 copyCode);
-
-        if (!copyCode)
-        {
-            fs::remove_all(source, copyCode);
-
-            if (!copyCode)
-                return true;
-        }
-
-        code = copyCode;
-        fs::remove_all(destination, copyCode);
-    }
 
     error = "could not move to trash: " + code.message();
     fs::remove(record, code);

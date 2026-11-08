@@ -16,8 +16,12 @@ std::string firstLine(const fs::path& file)
     auto line = std::string {};
     std::getline(in, line);
 
-    while (!line.empty() && (line.back() == '\r' || line.back() == ' '))
-        line.pop_back();
+    const auto end = line.find_last_not_of("\r ");
+
+    if (end == std::string::npos)
+        return {};
+
+    line.erase(end + 1);
 
     return line;
 }

@@ -79,6 +79,10 @@ private:
     explicit DaemonClient(std::unique_ptr<eacp::IPC::Messenger> messengerToUse);
 
     void handleMessage(const std::string& body);
+    void handleOutput(const std::string& id, std::string payload);
+    void handleExit(const std::string& id);
+    void handleInfo(const std::string& payload);
+    void readInfoLine(const std::string& line);
     void requestInfo();
 
     std::unique_ptr<eacp::IPC::Messenger> messenger;

@@ -45,21 +45,64 @@ RudderPublisher::~RudderPublisher()
     *alive = false;
 }
 
+// Clears pending and runs action, unless this publisher is gone by then.
+std::function<void()> RudderPublisher::createPendingRun(bool RudderPublisher::*pending,
+                                                        void (RudderPublisher::*action)())
+{
+    return [this, pending, action, guard = std::weak_ptr<bool> {alive}]
+    {
+        if (guard.expired())
+            return;
+
+        this->*pending = false;
+        (this->*action)();
+    };
+}
+
 void RudderPublisher::schedulePush()
 {
     if (pushPending)
         return;
 
     pushPending = true;
-    eacp::Threads::callAsync(
-        [this, guard = std::weak_ptr<bool> {alive}]
-        {
-            if (guard.expired())
-                return;
+    eacp::Threads::callAsync(createPendingRun(&RudderPublisher::pushPending, &RudderPublisher::push));
+}
 
-            pushPending = false;
-            push();
-        });
+RudderPane RudderPublisher::describePane(TerminalView& pane)
+{
+    auto cwd = pane.workingDirectory();
+    auto branch = branches.of(cwd);
+    auto repo = branches.repositoryRootOf(cwd);
+    return {pane.shellId(),
+            pane.currentTitle(),
+            pane.foregroundProcess(),
+            std::move(cwd),
+            std::move(branch),
+            std::move(repo),
+            false};
+}
+
+RudderTab RudderPublisher::describeSession(TermSession& session)
+{
+    auto tab = RudderTab {session.name, session.key(), {}};
+    const auto* focused = findFocusedPane(session);
+
+    for (auto* pane: session.view.panes())
+    {
+        auto description = describePane(*pane);
+        description.focused = pane == focused;
+        tab.panes.push_back(std::move(description));
+    }
+
+    return tab;
+}
+
+const TerminalView* RudderPublisher::findFocusedPane(TermSession& session)
+{
+    if (&session != manager.active())
+        return nullptr;
+
+    return session.view.activePane();
 }
 
 void RudderPublisher::push()
@@ -67,27 +110,7 @@ void RudderPublisher::push()
     auto tabs = std::vector<RudderTab> {};
 
     for (const auto& session: manager.all())
-    {
-        auto tab = RudderTab {session->name, session->key(), {}};
-        const auto* focused =
-            session.get() == manager.active() ? session->view.activePane() : nullptr;
-
-        for (auto* pane: session->view.panes())
-        {
-            auto cwd = pane->workingDirectory();
-            auto branch = branches.of(cwd);
-            auto repo = branches.repositoryRootOf(cwd);
-            tab.panes.push_back({pane->shellId(),
-                                 pane->currentTitle(),
-                                 pane->foregroundProcess(),
-                                 std::move(cwd),
-                                 std::move(branch),
-                                 std::move(repo),
-                                 pane == focused});
-        }
-
-        tabs.push_back(std::move(tab));
-    }
+        tabs.push_back(describeSession(*session));
 
     auto placesWithBranches = std::vector<RudderPlace> {};
 
@@ -168,15 +191,7 @@ void RudderPublisher::schedulePlacesRescan()
 
     rescanPending = true;
     eacp::Threads::delay(placesRescanDelay)
-        .then(
-            [this, guard = std::weak_ptr<bool> {alive}]
-            {
-                if (guard.expired())
-                    return;
-
-                rescanPending = false;
-                rescanPlaces();
-            });
+        .then(createPendingRun(&RudderPublisher::rescanPending, &RudderPublisher::rescanPlaces));
 }
 
 void RudderPublisher::rescanPlaces()
