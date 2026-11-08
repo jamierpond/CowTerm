@@ -116,6 +116,15 @@ nano_add_executable(CowTermPanelTests
 
 target_include_directories(CowTermPanelTests PRIVATE ../Terminal)
 
+# The cached Visual Studio developer environment; pure, so it builds everywhere
+# though only Windows panes use it.
+nano_add_executable(CowTermDevShellCacheTests
+        SOURCES
+            DevShellEnvironmentCacheTests.cpp
+        TARGETS CowTerm::Core)
+
+target_include_directories(CowTermDevShellCacheTests PRIVATE ../Lib/CowTermCore)
+
 # forkpty/openpty live in libutil on Linux; on Apple they are in libSystem.
 if (LINUX)
     target_link_libraries(CowTermTests PRIVATE util)

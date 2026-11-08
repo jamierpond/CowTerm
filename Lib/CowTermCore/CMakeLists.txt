@@ -11,7 +11,8 @@ add_library(CowTermCore STATIC
         Reflow.cpp
         SelectGraphicRendition.cpp
         TermScreen.cpp
-        TermParser.cpp)
+        TermParser.cpp
+        DevShellEnvironmentCache.cpp)
 
 if (WIN32)
     target_sources(CowTermCore PRIVATE Pty-Windows.cpp)
