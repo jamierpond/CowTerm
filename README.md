@@ -16,8 +16,9 @@ ordering and ring-back notifications replace the tmux-sessionizer workflow.
 
 CowTerm is a standalone [eacp](https://github.com/eyalamirmusic/eacp) app. It
 pulls eacp, [emberstore](https://github.com/tamber-inc/emberstore) and the rest
-of its dependencies with [CPM](https://github.com/cpm-cmake/CPM.cmake)
-(vendored in `cmake/CPM.cmake`) — no monorepo checkout required:
+of its dependencies with [lockstep](https://github.com/jamierpond/lockstep),
+which pins each one in `lockstep.lock` to a commit and a hash of its files, so
+every machine builds the same sources. No monorepo checkout required:
 
 ```bash
 cmake -S . -B build -G Ninja
@@ -27,7 +28,11 @@ open build/Terminal/CowTerm.app
 
 The `CowTermDaemon` binary is built and copied into the app bundle
 automatically. To build against a local eacp checkout instead of fetching it,
-pass `-DCPM_eacp_SOURCE=/path/to/eacp`.
+pass `-DLOCKSTEP_eacp_SOURCE=/path/to/eacp`.
+
+Branch-pinned dependencies (Rudder and emberstore at `main`) stay at their
+locked commit until `just update-deps`, which moves every package to where its
+branch or tag points now and rewrites `lockstep.lock`; commit the result.
 
 ### macOS privacy permissions
 

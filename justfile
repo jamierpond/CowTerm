@@ -6,7 +6,7 @@
 #   just install          build, then install it to the usual place for this OS
 #   just build_type=Debug build      override the build type
 #   just clean            delete the build tree
-#   just update-deps      refetch Rudder@main (build/install do this too)
+#   just update-deps      move every dependency to its branch/tag's current commit and rewrite lockstep.lock
 
 # On Windows, run recipe bodies through PowerShell (the OS-specific recipes
 # below use PowerShell syntax); macOS/Linux use the default sh. Bypass, because
@@ -32,15 +32,15 @@ deps := if os() == "linux" { "Scripts/with-linux-deps" } else if os() == "window
 default:
     @just --list
 
-# Configure the CMake build tree (idempotent; first run fetches deps via CPM).
+# Configure the CMake build tree (idempotent). lockstep fetches exactly the
+# commits in lockstep.lock and stops if a dependency's files don't match it.
 configure:
-    {{deps}} cmake -S . -B {{build_dir}} -G "{{generator}}" -DCMAKE_BUILD_TYPE={{build_type}}
+    {{deps}} cmake -S . -B {{build_dir}} -G "{{generator}}" -DCMAKE_BUILD_TYPE={{build_type}} -DLOCKSTEP_MODE=locked
 
-# Every configure runs FetchContent's update step, which checks out a
-# branch-pinned package's new head, so `just build` / `just install` already
-# pick up new Rudder commits; this is that step on its own.
-# Refetch branch-pinned deps (Rudder@main) without building.
-update-deps: configure
+# LOCKSTEP_MODE is cached, so configure sets it back to locked afterwards.
+update-deps:
+    {{deps}} cmake -S . -B {{build_dir}} -G "{{generator}}" -DCMAKE_BUILD_TYPE={{build_type}} -DLOCKSTEP_MODE=update
+    just build_dir={{build_dir}} build_type={{build_type}} configure
 
 # Build the app; CowTermDaemon builds as a dependency and is bundled alongside
 # it. CowTermApp (the always-run target that refreshes the bundled daemon) exists only on

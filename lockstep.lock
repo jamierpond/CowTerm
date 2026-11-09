@@ -1,0 +1,135 @@
+{
+  "bootstrap": "cmake/lockstep.cmake",
+  "packages": [
+    {
+      "commit": "9f26b4a120ef7e97a5f6d430c1bd9010d23e3709",
+      "hash": "efc3c23665509c858b1cf7da9aaa41ba1423fb3c89b6381a98da6a2cbff3d06c",
+      "kind": "git",
+      "name": "EADataStructures",
+      "patches": [],
+      "requestedRef": "main",
+      "submoduleSelection": {
+        "isRecursive": true,
+        "isRestricted": false,
+        "paths": []
+      },
+      "submodules": [],
+      "url": "https://github.com/eyalamirmusic/cpp_data_structures.git",
+      "usesGitLfs": false
+    },
+    {
+      "commit": "1712e729e6c292f7e73abf817bf511f35dcffe4c",
+      "hash": "99fe605149acc78215762e7f398a78f27057873450a473c51a9e9b13ea9455e3",
+      "kind": "git",
+      "name": "ESIMD",
+      "patches": [],
+      "requestedRef": "main",
+      "submoduleSelection": {
+        "isRecursive": true,
+        "isRestricted": false,
+        "paths": []
+      },
+      "submodules": [],
+      "url": "https://github.com/eyalamirmusic/ESIMD.git",
+      "usesGitLfs": false
+    },
+    {
+      "commit": "e6fc9b9acd899fbafc9431637a98198d484f6fd5",
+      "hash": "3128bcecc5b61f1e9af0b788a09221c7fd90333ce3dafd38438a5431f603ed5a",
+      "kind": "git",
+      "name": "Miro",
+      "patches": [],
+      "requestedRef": "main",
+      "submoduleSelection": {
+        "isRecursive": true,
+        "isRestricted": false,
+        "paths": []
+      },
+      "submodules": [],
+      "url": "https://github.com/eyalamirmusic/Miro.git",
+      "usesGitLfs": false
+    },
+    {
+      "commit": "1b193ebc095338c967af3d658e74b0d6f870bf9b",
+      "hash": "20700974bc778c949a252560f33f72275cfcc58a68904d98fabcb4e47d44bdf9",
+      "kind": "git",
+      "name": "NanoTest",
+      "patches": [],
+      "requestedRef": "main",
+      "submoduleSelection": {
+        "isRecursive": true,
+        "isRestricted": false,
+        "paths": []
+      },
+      "submodules": [],
+      "url": "https://github.com/eyalamirmusic/NanoTest.git",
+      "usesGitLfs": false
+    },
+    {
+      "commit": "8cfcbfa7bdf2214c8939502a349b7d4fb4ac73bb",
+      "hash": "1fb0ce608fe41c1ed15b0800fce2932c7ce63c4ad08e09d53e32a3c265fb231c",
+      "kind": "git",
+      "name": "ResEmbed",
+      "patches": [],
+      "requestedRef": "main",
+      "submoduleSelection": {
+        "isRecursive": true,
+        "isRestricted": false,
+        "paths": []
+      },
+      "submodules": [],
+      "url": "https://github.com/eyalamirmusic/ResEmbed.git",
+      "usesGitLfs": false
+    },
+    {
+      "commit": "0063204388dad33be6c8f912baa2b56260224d55",
+      "hash": "e693ce477012c5cccb69537dd2e6f751a1fa2b0be017cc731373001a875c4fb7",
+      "kind": "git",
+      "name": "Rudder",
+      "patches": [],
+      "requestedRef": "main",
+      "submoduleSelection": {
+        "isRecursive": true,
+        "isRestricted": false,
+        "paths": []
+      },
+      "submodules": [],
+      "url": "https://github.com/jamierpond/Rudder.git",
+      "usesGitLfs": false
+    },
+    {
+      "commit": "9a124ea146fa48e406eeb2120dd4cd8888d961a4",
+      "hash": "74ffff42245d21c6ff0c0ad5edec6b91ff62a4cf074c453d3833f26a4b2655b3",
+      "kind": "git",
+      "name": "eacp",
+      "patches": [],
+      "requestedRef": "9a124ea146fa48e406eeb2120dd4cd8888d961a4",
+      "submoduleSelection": {
+        "isRecursive": true,
+        "isRestricted": false,
+        "paths": []
+      },
+      "submodules": [],
+      "url": "https://github.com/eyalamirmusic/eacp.git",
+      "usesGitLfs": false
+    },
+    {
+      "commit": "2cda8a019ff2df7ee135f1b5a89847378bbcaf55",
+      "hash": "603e945e2ad64317817293de150a03919757889e0b4ba84a9b273e17bcf2c12f",
+      "kind": "git",
+      "name": "emberstore",
+      "patches": [],
+      "requestedRef": "main",
+      "submoduleSelection": {
+        "isRecursive": true,
+        "isRestricted": false,
+        "paths": []
+      },
+      "submodules": [],
+      "url": "https://github.com/tamber-inc/emberstore.git",
+      "usesGitLfs": false
+    }
+  ],
+  "root": "4cf7f2b8ad65bcadca053e0bfce8a90a3ebb9ad8fb524b164070841274bab42a",
+  "version": 1
+}

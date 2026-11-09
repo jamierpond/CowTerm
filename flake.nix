@@ -30,7 +30,7 @@
           name = "cowterm";
 
           # The toolchain. cmake fetches the rest of the dependency graph with
-          # CPM at configure time, so nothing else belongs here.
+          # lockstep at configure time, so nothing else belongs here.
           nativeBuildInputs = with pkgs; [ cmake ninja pkg-config gcc ];
 
           # Libraries, in buildInputs so the pkg-config wrapper puts their .pc
@@ -56,7 +56,7 @@
           ];
 
           # Vulkan is a *runtime* dependency, not a build one: eacp compiles
-          # against the CPM-fetched Vulkan-Headers and reaches the loader
+          # against the lockstep-fetched Vulkan-Headers and reaches the loader
           # through volk, which dlopens libvulkan.so.1 when the first GPUView
           # is created. Nothing links against it, so it deliberately stays out
           # of buildInputs -- adding it there would only put its .pc on

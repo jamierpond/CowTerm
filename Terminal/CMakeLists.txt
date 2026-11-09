@@ -1,7 +1,7 @@
 # Local persistence (MRU stamps, session restore). Fetched here rather than
 # at the top level because only the CowTerm app uses it; emberstore reuses
 # the eacp/Miro targets already in this build.
-CPMAddPackage(
+lockstep_add_package(
         NAME emberstore
         GITHUB_REPOSITORY tamber-inc/emberstore
         GIT_TAG main

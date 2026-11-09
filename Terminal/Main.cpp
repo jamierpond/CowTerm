@@ -28,7 +28,7 @@ Graphics::WindowOptions windowOptions()
     // its icon; without it every eacp app shows up as "eacp" with a
     // placeholder. WindowOptions::appId only exists in the Linux box's local
     // eacp (upstream Window-Linux.cpp still hardcodes app_id "eacp"); restore
-    // this line once that change is pushed and the CPM pin moved onto it.
+    // this line once that change is pushed and the lockstep pin moved onto it.
     options.backgroundColor =
         term::toColor(term::themeByName(term::loadConfig().theme).background);
 

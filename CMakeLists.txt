@@ -1,8 +1,9 @@
 cmake_minimum_required(VERSION 3.31)
+set(CMAKE_PROJECT_TOP_LEVEL_INCLUDES ${CMAKE_CURRENT_LIST_DIR}/cmake/lockstep.cmake)
 project(CowTerm VERSION 0.1.0 LANGUAGES C CXX)
 
 # CowTerm was extracted from the eacp monorepo (Apps/Terminal) into a
-# standalone product. It pulls eacp itself in as a CPM dependency rather than
+# standalone product. It pulls eacp itself in as a lockstep dependency rather than
 # living inside the eacp source tree; everything the app used from the monorepo
 # build (the eacp-* targets and the eacp_* CMake helpers) comes from that
 # package.
@@ -24,18 +25,17 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 # semantics unless told otherwise, raising C4530 — a hard error in the deps that
 # build warnings-as-error (emberstore's /WX). Enable standard C++ exception
 # handling for every target, matching the other platforms' Clang default. Set
-# before the CPM packages so their targets inherit it.
+# before the packages so their targets inherit it.
 if (MSVC)
     add_compile_options(/EHsc)
 endif ()
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
-include(CPM)
 
 # The framework: Core, Network, the GPU/Sprites stack, and the eacp_* CMake
 # helpers (res_embed_add, eacp_set_gui_subsystem, eacp_set_app_icon, ...) that
 # the app's CMakeLists call. Examples/tests are top-level-only in eacp, so they
-# stay off here. Point CPM at a local checkout with -DCPM_eacp_SOURCE=/path.
+# stay off here. Point lockstep at a local checkout with -DLOCKSTEP_eacp_SOURCE=/path.
 # Pinned to 9a124ea: upstream eacp develop (52313a8) plus PR #141
 # (eyalamirmusic/eacp branch jp/windows-key-focus). The PR carries three fixes
 # CowTerm depends on. Two are the Windows keyboard: keys reach the focused view
@@ -48,7 +48,7 @@ include(CPM)
 # `develop` (not `main`, which lags it) once #141 lands.
 # Provides eacp-text (GlyphAtlas.h) and the IPC::Messenger layer the session
 # daemon and DaemonClient ride on.
-CPMAddPackage(
+lockstep_add_package(
         NAME eacp
         GITHUB_REPOSITORY eyalamirmusic/eacp
         GIT_TAG 9a124ea146fa48e406eeb2120dd4cd8888d961a4
@@ -66,8 +66,8 @@ list(APPEND CMAKE_MODULE_PATH "${eacp_SOURCE_DIR}/CMake")
 # as before when Rudder isn't running, and on a platform Rudder has no
 # transport for yet its client is a silent stub. Work against a local Rudder
 # checkout with:
-#   cmake -B build -DCPM_Rudder_SOURCE=$HOME/projects/Rudder
-CPMAddPackage(
+#   cmake -B build -DLOCKSTEP_Rudder_SOURCE=$HOME/projects/Rudder
+lockstep_add_package(
         NAME Rudder
         GITHUB_REPOSITORY jamierpond/Rudder
         GIT_TAG main

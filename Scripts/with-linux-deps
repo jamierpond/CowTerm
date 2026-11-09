@@ -46,7 +46,7 @@ on. Install them with your package manager -- on Debian/Ubuntu:
       libfontconfig-dev libcurl4-openssl-dev pkg-config
 
 Vulkan is separate, and needed to *run* rather than to build: eacp compiles
-against headers CPM fetches and opens the loader by name at runtime, so no -dev
+against headers lockstep fetches and opens the loader by name at runtime, so no -dev
 package goes with it, but without a loader and a driver every view falls back to
 rendering off-screen and the window comes up empty.
 

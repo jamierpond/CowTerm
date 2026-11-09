@@ -1,4 +1,4 @@
-# CMake / CPM build trees
+# CMake build trees
 /build/
 /cmake-build-*/
 _deps/

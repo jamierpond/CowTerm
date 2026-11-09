@@ -1,6 +1,6 @@
 # Unit tests. NanoTest is a header-plus-tiny-lib framework that generates a
 # main() and registers each test case with CTest (see nano_add_executable).
-CPMAddPackage(
+lockstep_add_package(
         NAME NanoTest
         GITHUB_REPOSITORY eyalamirmusic/NanoTest
         GIT_TAG main
