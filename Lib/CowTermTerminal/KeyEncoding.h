@@ -24,6 +24,9 @@ enum class ViewportJump
 // Bytes for the shell, or a viewport move that sends nothing.
 using SpecialKeyResponse = std::variant<std::string, ViewportJump>;
 
+// Shift with Home, End, Page Up or Page Down; empty for any other key.
+std::optional<ViewportJump> findViewportJump(const eacp::Graphics::KeyEvent& event);
+
 // Return, Tab, Escape, Backspace, arrows, Home/End, paging, Delete and F1-F12.
 // Empty for any other key, which then goes through encodeTypedKey.
 std::optional<SpecialKeyResponse>

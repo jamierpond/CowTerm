@@ -70,6 +70,8 @@ private:
     void dispatchCsi(std::uint8_t finalByte);
     void runCsi(std::uint8_t finalByte);
     void runPrivateCsi(std::uint8_t finalByte);
+    void runKittyKeyboardCsi();
+    void changeKittyKeyboardFlags(KittyKeyboardStack& stack, std::uint8_t flags);
     void runCsiAction(std::uint8_t finalByte);
     void reportPrivateMode(int mode);
     void dispatchOsc();
