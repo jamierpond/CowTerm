@@ -86,6 +86,7 @@ struct TestPane
     void showOutput(const std::string& bytes)
     {
         recording->deliverOutput(bytes);
+        view->waitForParsedOutput();
 
         auto flushed = false;
         Threads::callAsync([&flushed] { flushed = true; });

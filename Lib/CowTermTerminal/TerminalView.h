@@ -6,6 +6,7 @@
 #include "GridSelection.h"
 #include "KeyEncoding.h"
 #include "KittyKeyEncoding.h"
+#include "OutputParserThread.h"
 
 #include "CowTermCore/FocusReports.h"
 #include "CowTermCore/Shell.h"
@@ -18,6 +19,7 @@
 
 #include <functional>
 #include <memory>
+#include <atomic>
 #include <mutex>
 #include <optional>
 
@@ -75,6 +77,10 @@ public:
 
     // Debug tracing: the visible grid as plain text, blanks trimmed.
     std::string debugScreenText() const;
+
+    // Blocks until every byte the shell has sent so far is on the screen; its
+    // repaint is then the next thing queued for the UI thread. For tests.
+    void waitForParsedOutput();
 
     // Ends the shell process on purpose (pane closed). The destructor only
     // detaches, so shells held by the daemon survive teardown.
@@ -148,7 +154,12 @@ public:
     void mouseWheel(const eacp::Graphics::MouseEvent& event) override;
 
 private:
-    void flushOutput();
+    void connectParserToUiThread();
+    void startOutputParserThread();
+    std::unique_lock<std::recursive_mutex> lockTerminal() const;
+    void runOnUiThread(std::function<void()> action);
+    void requestShowParsedOutput();
+    void showParsedOutput();
     void reportFocusIfChanged();
     bool openHyperlinkUnderPointer(const eacp::Graphics::MouseEvent& event);
     void repaintUnlessSynchronized();
@@ -236,8 +247,6 @@ private:
     bool commandTerminal = false;
     std::unique_ptr<Shell> shell;
 
-    std::mutex outputLock;
-    std::string pendingOutput;
     std::shared_ptr<bool> alive = std::make_shared<bool>(true);
 
     eacp::Threads::Timer blinkTimer;
@@ -265,6 +274,15 @@ private:
     // Keys whose press went to the program under the kitty protocol, so only
     // their releases are reported (not a release of a leader-key press).
     std::vector<std::uint16_t> keysPressedForProgram;
+
+    // Guards screen and parser, which the output thread writes. Recursive
+    // because an entry point (setWindowFocused) may call another (refreshCursor).
+    mutable std::recursive_mutex terminalLock;
+    std::atomic<bool> parsedOutputQueued {false};
+
+    // Last, so it stops (and joins its thread) before anything it parses into
+    // is destroyed.
+    std::unique_ptr<OutputParserThread> outputParser;
     FocusReports focusReports;
 };
 } // namespace term
