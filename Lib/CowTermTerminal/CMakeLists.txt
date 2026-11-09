@@ -9,7 +9,8 @@ add_library(CowTermTerminal STATIC
         CellText.cpp
         CopyMode.cpp
         GridPainter.cpp
-        KeyEncoding.cpp)
+        KeyEncoding.cpp
+        KittyKeyEncoding.cpp)
 
 if (MSVC)
     # Unicode literals (copy-mode indicators) — same reason as CowTermCore.

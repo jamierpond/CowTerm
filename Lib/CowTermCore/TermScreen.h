@@ -1,6 +1,7 @@
 #pragma once
 
 #include "HyperlinkTable.h"
+#include "KittyKeyboardFlags.h"
 #include "TermTypes.h"
 
 #include <cstdint>
@@ -98,6 +99,10 @@ public:
     void setHyperlink(std::string_view uri);
     std::string_view findHyperlinkUri(HyperlinkId id) const { return hyperlinks.findUri(id); }
 
+    // The active screen's kitty keyboard flags; each screen keeps its own.
+    KittyKeyboardStack& kittyKeyboard();
+    const KittyKeyboardStack& kittyKeyboard() const;
+
     // Bumped on every visible change; the view repaints when it moves.
     std::uint64_t version() const { return changeVersion; }
 
@@ -161,6 +166,8 @@ private:
     char32_t lastPrinted = 0;
     std::vector<bool> tabStops;
     HyperlinkTable hyperlinks;
+    KittyKeyboardStack primaryKittyKeyboard;
+    KittyKeyboardStack alternateKittyKeyboard;
     std::uint64_t changeVersion = 1;
 };
 } // namespace term

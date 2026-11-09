@@ -60,6 +60,16 @@ Cell TermScreen::penCell(char32_t codepoint) const
     return cell;
 }
 
+KittyKeyboardStack& TermScreen::kittyKeyboard()
+{
+    return modes.altScreen ? alternateKittyKeyboard : primaryKittyKeyboard;
+}
+
+const KittyKeyboardStack& TermScreen::kittyKeyboard() const
+{
+    return modes.altScreen ? alternateKittyKeyboard : primaryKittyKeyboard;
+}
+
 void TermScreen::setHyperlink(std::string_view uri)
 {
     if (uri.empty())
@@ -591,6 +601,8 @@ void TermScreen::fullReset()
     cursor = {0, 0};
     savedCursor = {0, 0};
     savedPen = pen;
+    primaryKittyKeyboard.clear();
+    alternateKittyKeyboard.clear();
     wrapPending = false;
     scrollTop = 0;
     scrollBottom = rowCount - 1;
