@@ -94,7 +94,18 @@ inline std::string runParserFuzzInput(std::string_view bytes)
     auto screen = TermScreen {input.columns, input.rows, theme};
     auto parser = TermParser {screen, theme};
     auto responses = std::string {};
-    parser.respond = [&](std::string_view reply) { responses += reply; };
+    const auto recordEvent = [&](std::string_view kind, std::string_view text)
+    {
+        responses += kind;
+        responses += text;
+        responses += '\n';
+    };
+
+    parser.respond = [&](std::string_view reply) { recordEvent("reply ", reply); };
+    parser.onTitleChanged = [&](const std::string& title) { recordEvent("title ", title); };
+    parser.onCwdChanged = [&](const std::string& cwd) { recordEvent("cwd ", cwd); };
+    parser.onNotify = [&](const std::string& text) { recordEvent("notify ", text); };
+    parser.onBell = [&] { recordEvent("bell", {}); };
 
     parser.feed(input.firstHalf);
     screen.resize(input.resizedColumns, input.resizedRows);

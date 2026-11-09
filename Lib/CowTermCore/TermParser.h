@@ -1,11 +1,14 @@
 #pragma once
 
+#include "CsiParameters.h"
 #include "TermScreen.h"
+#include "Utf8Decoder.h"
 
+#include <array>
+#include <cstdint>
 #include <functional>
 #include <string>
 #include <string_view>
-#include <vector>
 
 namespace term
 {
@@ -37,6 +40,8 @@ public:
     int cursorShape() const { return cursorStyle; }
 
 private:
+    friend struct TermParserActions;
+
     enum class State
     {
         Ground,
@@ -47,35 +52,30 @@ private:
         Charset
     };
 
-    using ParamGroup = std::vector<int>;
-
     void processByte(std::uint8_t byte);
+    void processGroundByte(std::uint8_t byte);
+    void processCsiByte(std::uint8_t byte);
+    void collectCsiByte(std::uint8_t byte);
+    void processOscByte(std::uint8_t byte);
+    void processStringSequenceByte(std::uint8_t byte);
+    void processCharsetByte(std::uint8_t byte);
+
     void executeControl(std::uint8_t byte);
     void startSequence(State next);
     void dispatchEscape(std::uint8_t byte);
-    void dispatchCsi(std::uint8_t final);
-    void dispatchSgr();
+    void dispatchCsi(std::uint8_t finalByte);
     void dispatchOsc();
     void setPrivateMode(int mode, bool on);
-    void setAnsiMode(int mode, bool on);
-    void putCodepoint(char32_t cp);
-
-    int param(std::size_t index, int fallback) const;
-    int paramOrOne(std::size_t index) const;
-
-    // Consumes an extended color spec (38/48) starting at group `index`,
-    // returning how many extra groups were used.
-    std::size_t parseExtendedColor(std::size_t index, Rgb& color, bool& valid);
+    void reportDeviceStatus();
+    void putCodepoint(char32_t codepoint);
 
     TermScreen& screen;
     const Theme& theme;
 
     State state = State::Ground;
+    Utf8Decoder utf8;
 
-    char32_t utf8Codepoint = 0;
-    int utf8Remaining = 0;
-
-    std::vector<ParamGroup> params;
+    CsiParameters params;
     char privateMarker = 0;
     char intermediate = 0;
 
@@ -83,7 +83,7 @@ private:
     bool stringEscPending = false;
 
     int charsetTarget = 0;
-    bool charsetSpecial[2] = {false, false};
+    std::array<bool, 2> charsetSpecial = {false, false};
     int activeCharset = 0;
 
     int cursorStyle = 0;

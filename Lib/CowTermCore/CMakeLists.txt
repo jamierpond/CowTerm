@@ -2,6 +2,9 @@
 # with the Shell seam over it. No GPU, no daemon, no config file — the daemon
 # and the PTY tests link this without dragging in a renderer.
 add_library(CowTermCore STATIC
+        CharWidth.cpp
+        CsiParameters.cpp
+        SelectGraphicRendition.cpp
         TermScreen.cpp
         TermParser.cpp)
 

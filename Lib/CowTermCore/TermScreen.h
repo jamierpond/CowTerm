@@ -105,8 +105,13 @@ private:
         return modes.altScreen ? altGrid : grid;
     }
 
+    std::uint16_t defaultColorAttributes() const;
     Cell blankCell() const;
+    Cell penCell(char32_t codepoint) const;
     Line blankLine() const;
+    bool isOnScreen(int x, int y) const;
+    bool isScrollingIntoHistory(int top) const;
+    bool isAlreadySize(int newCols, int newRows) const;
     void markDirty() { ++changeVersion; }
     void clampCursor();
     void writeCell(int x, int y, const Cell& cell);
@@ -114,6 +119,18 @@ private:
     // Overwriting either half of a wide pair blanks the partner cell so no
     // orphaned halves survive.
     void damageWidePair(int x, int y);
+    void wrapIfPending();
+    void makeRoomForWideCharacter();
+    void writeWideCell(Cell cell);
+    void advanceAfterPrinting(int width);
+    void clearCells(int y, int fromX, int toX, const Cell& blank);
+    void clearRows(int fromY, int toYExclusive, const Cell& blank);
+    int beginCharacterEditAtCursor(int count);
+    void shrinkPrimaryGrid(int newRows);
+    void growPrimaryGrid(int newRows);
+    void resizeAlternateGrid(int newRows);
+    void resizeLines(std::vector<Line>& lines);
+    void resizeTabStops(const std::vector<bool>& oldStops);
     void scrollUpRegion(int count, int top, int bottom);
     void scrollDownRegion(int count, int top, int bottom);
     void newlineWithScroll();

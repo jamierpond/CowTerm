@@ -7,35 +7,24 @@ namespace term
 namespace
 {
 constexpr int maxScrollback = 10000;
+constexpr int tabStopInterval = 8;
+constexpr int smallestColumnCount = 2;
+constexpr int wideCharacterWidth = 2;
 
-bool inRange(char32_t cp, char32_t lo, char32_t hi)
+constexpr int eraseBelowCursor = 0;
+constexpr int eraseAboveCursor = 1;
+constexpr int eraseWholeScreen = 2;
+constexpr int eraseScreenAndScrollback = 3;
+constexpr int eraseToLineEnd = 0;
+constexpr int eraseToLineStart = 1;
+constexpr int clearTabStopAtCursor = 0;
+constexpr int clearAllTabStops = 3;
+
+bool isDefaultTabStop(int column)
 {
-    return cp >= lo && cp <= hi;
+    return column > 0 && column % tabStopInterval == 0;
 }
 } // namespace
-
-int charWidth(char32_t cp)
-{
-    if (cp == 0x200b || cp == 0x200c || cp == 0x200d || cp == 0xfeff)
-        return 0;
-
-    if (inRange(cp, 0x0300, 0x036f) || inRange(cp, 0x1ab0, 0x1aff)
-        || inRange(cp, 0x1dc0, 0x1dff) || inRange(cp, 0x20d0, 0x20ff)
-        || inRange(cp, 0xfe00, 0xfe0f) || inRange(cp, 0xfe20, 0xfe2f))
-        return 0;
-
-    if (inRange(cp, 0x1100, 0x115f) || inRange(cp, 0x2e80, 0x303e)
-        || inRange(cp, 0x3041, 0x33ff) || inRange(cp, 0x3400, 0x4dbf)
-        || inRange(cp, 0x4e00, 0x9fff) || inRange(cp, 0xa000, 0xa4cf)
-        || inRange(cp, 0xac00, 0xd7a3) || inRange(cp, 0xf900, 0xfaff)
-        || inRange(cp, 0xfe30, 0xfe4f) || inRange(cp, 0xff00, 0xff60)
-        || inRange(cp, 0xffe0, 0xffe6) || inRange(cp, 0x1f300, 0x1f64f)
-        || inRange(cp, 0x1f680, 0x1f6ff) || inRange(cp, 0x1f900, 0x1f9ff)
-        || inRange(cp, 0x20000, 0x2fffd) || inRange(cp, 0x30000, 0x3fffd))
-        return 2;
-
-    return 1;
-}
 
 TermScreen::TermScreen(int colsToUse, int rowsToUse, const Theme& themeToUse)
     : theme(themeToUse)
@@ -45,13 +34,27 @@ TermScreen::TermScreen(int colsToUse, int rowsToUse, const Theme& themeToUse)
     resize(std::max(colsToUse, 1), std::max(rowsToUse, 1));
 }
 
+std::uint16_t TermScreen::defaultColorAttributes() const
+{
+    const auto foregroundBit = pen.defaultFg ? Attr::DefaultFg : 0;
+    const auto backgroundBit = pen.defaultBg ? Attr::DefaultBg : 0;
+    return (std::uint16_t) (foregroundBit | backgroundBit);
+}
+
 Cell TermScreen::blankCell() const
 {
     auto cell = Cell {};
     cell.fg = pen.defaultFg ? theme.foreground : pen.fg;
     cell.bg = pen.defaultBg ? theme.background : pen.bg;
-    cell.attrs = (std::uint16_t) ((pen.defaultFg ? Attr::DefaultFg : 0)
-                                  | (pen.defaultBg ? Attr::DefaultBg : 0));
+    cell.attrs = defaultColorAttributes();
+    return cell;
+}
+
+Cell TermScreen::penCell(char32_t codepoint) const
+{
+    auto cell = blankCell();
+    cell.ch = codepoint;
+    cell.attrs = (std::uint16_t) (pen.attrs | defaultColorAttributes());
     return cell;
 }
 
@@ -88,9 +91,14 @@ void TermScreen::damageWidePair(int x, int y)
     }
 }
 
+bool TermScreen::isOnScreen(int x, int y) const
+{
+    return x >= 0 && x < cols && y >= 0 && y < rowCount;
+}
+
 void TermScreen::writeCell(int x, int y, const Cell& cell)
 {
-    if (x < 0 || x >= cols || y < 0 || y >= rowCount)
+    if (!isOnScreen(x, y))
         return;
 
     damageWidePair(x, y);
@@ -103,51 +111,40 @@ void TermScreen::newlineWithScroll()
     linefeed();
 }
 
-void TermScreen::putChar(char32_t cp)
+void TermScreen::wrapIfPending()
 {
-    const auto width = charWidth(cp);
-
-    if (width == 0)
+    if (!wrapPending || !modes.autowrap)
         return;
 
-    if (wrapPending && modes.autowrap)
-    {
+    newlineWithScroll();
+    wrapPending = false;
+}
+
+// A wide char that no longer fits on the line wraps early.
+void TermScreen::makeRoomForWideCharacter()
+{
+    if (cursor.x < cols - 1)
+        return;
+
+    if (modes.autowrap)
         newlineWithScroll();
-        wrapPending = false;
-    }
-
-    // A wide char that no longer fits on the line wraps early.
-    if (width == 2 && cursor.x >= cols - 1)
-    {
-        if (modes.autowrap)
-            newlineWithScroll();
-        else
-            cursor.x = std::max(cols - 2, 0);
-    }
-
-    auto cell = blankCell();
-    cell.ch = cp;
-    cell.fg = pen.defaultFg ? theme.foreground : pen.fg;
-    cell.bg = pen.defaultBg ? theme.background : pen.bg;
-    cell.attrs = (std::uint16_t) (pen.attrs | (pen.defaultFg ? Attr::DefaultFg : 0)
-                                  | (pen.defaultBg ? Attr::DefaultBg : 0));
-
-    if (width == 2)
-    {
-        cell.attrs |= Attr::Wide;
-        writeCell(cursor.x, cursor.y, cell);
-
-        auto cont = cell;
-        cont.ch = U' ';
-        cont.attrs = (std::uint16_t) ((cell.attrs & ~Attr::Wide) | Attr::WideCont);
-        writeCell(cursor.x + 1, cursor.y, cont);
-    }
     else
-    {
-        writeCell(cursor.x, cursor.y, cell);
-    }
+        cursor.x = std::max(cols - wideCharacterWidth, 0);
+}
 
-    lastPrinted = cp;
+void TermScreen::writeWideCell(Cell cell)
+{
+    cell.attrs |= Attr::Wide;
+    writeCell(cursor.x, cursor.y, cell);
+
+    auto continuation = cell;
+    continuation.ch = U' ';
+    continuation.attrs = (std::uint16_t) ((cell.attrs & ~Attr::Wide) | Attr::WideCont);
+    writeCell(cursor.x + 1, cursor.y, continuation);
+}
+
+void TermScreen::advanceAfterPrinting(int width)
+{
     cursor.x += width;
 
     if (cursor.x >= cols)
@@ -155,7 +152,29 @@ void TermScreen::putChar(char32_t cp)
         cursor.x = cols - 1;
         wrapPending = modes.autowrap;
     }
+}
 
+void TermScreen::putChar(char32_t cp)
+{
+    const auto width = charWidth(cp);
+
+    if (width == 0)
+        return;
+
+    wrapIfPending();
+
+    if (width == wideCharacterWidth)
+    {
+        makeRoomForWideCharacter();
+        writeWideCell(penCell(cp));
+    }
+    else
+    {
+        writeCell(cursor.x, cursor.y, penCell(cp));
+    }
+
+    lastPrinted = cp;
+    advanceAfterPrinting(width);
     markDirty();
 }
 
@@ -250,9 +269,9 @@ void TermScreen::setTabStop()
 
 void TermScreen::clearTabStops(int mode)
 {
-    if (mode == 0)
+    if (mode == clearTabStopAtCursor)
         tabStops[(std::size_t) cursor.x] = false;
-    else if (mode == 3)
+    else if (mode == clearAllTabStops)
         std::fill(tabStops.begin(), tabStops.end(), false);
 }
 
@@ -309,45 +328,46 @@ void TermScreen::restoreCursor()
     markDirty();
 }
 
+void TermScreen::clearCells(int y, int fromX, int toX, const Cell& blank)
+{
+    auto& line = row(y);
+
+    for (auto x = std::max(fromX, 0); x <= std::min(toX, cols - 1); ++x)
+        line[(std::size_t) x] = blank;
+}
+
+void TermScreen::clearRows(int fromY, int toYExclusive, const Cell& blank)
+{
+    for (auto y = fromY; y < toYExclusive; ++y)
+        clearCells(y, 0, cols - 1, blank);
+}
+
 void TermScreen::eraseInDisplay(int mode)
 {
     wrapPending = false;
 
-    if (mode == 3)
+    if (mode == eraseScreenAndScrollback)
     {
         scrollback.clear();
-        eraseInDisplay(2);
+        eraseInDisplay(eraseWholeScreen);
         return;
     }
 
     const auto blank = blankCell();
 
-    auto clearLine = [&](int y, int fromX, int toX)
+    if (mode == eraseBelowCursor)
     {
-        auto& line = row(y);
-
-        for (auto x = std::max(fromX, 0); x <= std::min(toX, cols - 1); ++x)
-            line[(std::size_t) x] = blank;
-    };
-
-    if (mode == 0)
-    {
-        clearLine(cursor.y, cursor.x, cols - 1);
-
-        for (auto y = cursor.y + 1; y < rowCount; ++y)
-            clearLine(y, 0, cols - 1);
+        clearCells(cursor.y, cursor.x, cols - 1, blank);
+        clearRows(cursor.y + 1, rowCount, blank);
     }
-    else if (mode == 1)
+    else if (mode == eraseAboveCursor)
     {
-        for (auto y = 0; y < cursor.y; ++y)
-            clearLine(y, 0, cols - 1);
-
-        clearLine(cursor.y, 0, cursor.x);
+        clearRows(0, cursor.y, blank);
+        clearCells(cursor.y, 0, cursor.x, blank);
     }
-    else if (mode == 2)
+    else if (mode == eraseWholeScreen)
     {
-        for (auto y = 0; y < rowCount; ++y)
-            clearLine(y, 0, cols - 1);
+        clearRows(0, rowCount, blank);
     }
 
     markDirty();
@@ -356,15 +376,9 @@ void TermScreen::eraseInDisplay(int mode)
 void TermScreen::eraseInLine(int mode)
 {
     wrapPending = false;
-    const auto blank = blankCell();
-    auto& line = row(cursor.y);
-
-    auto from = mode == 0 ? cursor.x : 0;
-    auto to = mode == 1 ? cursor.x : cols - 1;
-
-    for (auto x = from; x <= to; ++x)
-        line[(std::size_t) x] = blank;
-
+    const auto from = mode == eraseToLineEnd ? cursor.x : 0;
+    const auto to = mode == eraseToLineStart ? cursor.x : cols - 1;
+    clearCells(cursor.y, from, to, blankCell());
     markDirty();
 }
 
@@ -388,13 +402,17 @@ void TermScreen::deleteLines(int count)
     markDirty();
 }
 
-void TermScreen::insertChars(int count)
+int TermScreen::beginCharacterEditAtCursor(int count)
 {
     wrapPending = false;
-    auto& line = row(cursor.y);
-    const auto n = std::clamp(count, 1, cols - cursor.x);
-
     damageWidePair(cursor.x, cursor.y);
+    return std::clamp(count, 1, cols - cursor.x);
+}
+
+void TermScreen::insertChars(int count)
+{
+    const auto n = beginCharacterEditAtCursor(count);
+    auto& line = row(cursor.y);
     line.insert(line.begin() + cursor.x, (std::size_t) n, blankCell());
     line.resize((std::size_t) cols);
     markDirty();
@@ -402,11 +420,8 @@ void TermScreen::insertChars(int count)
 
 void TermScreen::deleteChars(int count)
 {
-    wrapPending = false;
+    const auto n = beginCharacterEditAtCursor(count);
     auto& line = row(cursor.y);
-    const auto n = std::clamp(count, 1, cols - cursor.x);
-
-    damageWidePair(cursor.x, cursor.y);
     line.erase(line.begin() + cursor.x, line.begin() + cursor.x + n);
     line.resize((std::size_t) cols, blankCell());
     markDirty();
@@ -438,6 +453,11 @@ void TermScreen::scrollDown(int count)
     scrollDownRegion(count, scrollTop, scrollBottom);
 }
 
+bool TermScreen::isScrollingIntoHistory(int top) const
+{
+    return top == 0 && !modes.altScreen;
+}
+
 void TermScreen::scrollUpRegion(int count, int top, int bottom)
 {
     const auto n = std::clamp(count, 1, bottom - top + 1);
@@ -447,7 +467,7 @@ void TermScreen::scrollUpRegion(int count, int top, int bottom)
     {
         // Only lines leaving the top of a full-width primary screen become
         // history; region scrolls and the alt screen just discard.
-        if (top == 0 && !modes.altScreen)
+        if (isScrollingIntoHistory(top))
         {
             scrollback.push_back(std::move(lines[(std::size_t) top]));
 
@@ -543,72 +563,101 @@ void TermScreen::fullReset()
     for (auto& line: altGrid)
         std::fill(line.begin(), line.end(), blankCell());
 
+    resizeTabStops({});
+    markDirty();
+}
+
+bool TermScreen::isAlreadySize(int newCols, int newRows) const
+{
+    return newCols == cols && newRows == rowCount && !grid.empty();
+}
+
+// Overflow above the cursor becomes history so content is not lost.
+void TermScreen::shrinkPrimaryGrid(int newRows)
+{
+    while ((int) grid.size() > newRows)
+    {
+        if (cursor.y > 0)
+        {
+            scrollback.push_back(std::move(grid.front()));
+            grid.erase(grid.begin());
+            --cursor.y;
+        }
+        else
+        {
+            grid.pop_back();
+        }
+    }
+}
+
+// History comes back onto the screen before blank lines are added.
+void TermScreen::growPrimaryGrid(int newRows)
+{
+    while ((int) grid.size() < newRows)
+    {
+        if (!scrollback.empty())
+        {
+            grid.insert(grid.begin(), std::move(scrollback.back()));
+            scrollback.pop_back();
+            ++cursor.y;
+        }
+        else
+        {
+            grid.emplace_back();
+        }
+    }
+}
+
+void TermScreen::resizeAlternateGrid(int newRows)
+{
+    altGrid.resize((std::size_t) newRows);
+}
+
+void TermScreen::resizeLines(std::vector<Line>& lines)
+{
+    for (auto& line: lines)
+        line.resize((std::size_t) cols, blankCell());
+}
+
+// Columns that existed keep their stop; new columns get the default every
+// eighth column.
+void TermScreen::resizeTabStops(const std::vector<bool>& oldStops)
+{
+    const auto wasTabStop = [&](int x)
+    {
+        if (x < (int) oldStops.size())
+            return x > 0 && oldStops[(std::size_t) x];
+
+        return isDefaultTabStop(x);
+    };
+
     tabStops.assign((std::size_t) cols, false);
 
-    for (auto x = 8; x < cols; x += 8)
-        tabStops[(std::size_t) x] = true;
-
-    markDirty();
+    for (auto x = 0; x < cols; ++x)
+        tabStops[(std::size_t) x] = wasTabStop(x);
 }
 
 void TermScreen::resize(int newCols, int newRows)
 {
-    newCols = std::max(newCols, 2);
+    newCols = std::max(newCols, smallestColumnCount);
     newRows = std::max(newRows, 1);
 
-    if (newCols == cols && newRows == rowCount && !grid.empty())
+    if (isAlreadySize(newCols, newRows))
         return;
 
     cols = newCols;
-
-    for (auto* lines: {&grid, &altGrid})
-    {
-        // Shrink: overflow above the cursor becomes history so content is
-        // not lost. Grow: pull history back onto the screen.
-        while ((int) lines->size() > newRows)
-        {
-            if (cursor.y > 0 && lines == &grid)
-            {
-                scrollback.push_back(std::move(lines->front()));
-                lines->erase(lines->begin());
-                --cursor.y;
-            }
-            else
-            {
-                lines->pop_back();
-            }
-        }
-
-        while ((int) lines->size() < newRows)
-        {
-            if (lines == &grid && !scrollback.empty())
-            {
-                lines->insert(lines->begin(), std::move(scrollback.back()));
-                scrollback.pop_back();
-                ++cursor.y;
-            }
-            else
-            {
-                lines->emplace_back();
-            }
-        }
-
-        for (auto& line: *lines)
-            line.resize((std::size_t) cols, blankCell());
-    }
+    shrinkPrimaryGrid(newRows);
+    growPrimaryGrid(newRows);
+    resizeLines(grid);
+    resizeAlternateGrid(newRows);
+    resizeLines(altGrid);
 
     rowCount = newRows;
     scrollTop = 0;
     scrollBottom = rowCount - 1;
     wrapPending = false;
 
-    auto oldStops = tabStops;
-    tabStops.assign((std::size_t) cols, false);
-
-    for (auto x = 0; x < cols; ++x)
-        if (x < (int) oldStops.size() ? oldStops[(std::size_t) x] : x % 8 == 0)
-            tabStops[(std::size_t) x] = x > 0;
-
+    resizeTabStops(std::vector<bool> {tabStops});
     clampCursor();
     markDirty();
 }
