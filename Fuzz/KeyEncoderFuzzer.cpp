@@ -1,3 +1,4 @@
+#include <CowTermTerminal/KeyEncoding.h>
 #include <CowTermTerminal/KittyKeyEncoding.h>
 
 #include <cstddef>
@@ -6,11 +7,14 @@
 
 // Reads a key event from the fuzzer's bytes (key code, modifiers, action,
 // protocol flags, then the typed and unmodified text, split at the first NUL)
-// and encodes it under the kitty keyboard protocol.
+// and encodes it under the kitty keyboard protocol; the same text goes
+// through the paste encoder, which must never call a paste with a line
+// break safe outside bracketed mode.
 namespace
 {
 constexpr auto headerSize = std::size_t {5};
 constexpr auto actionCount = 3;
+constexpr auto bracketedPasteBit = 16;
 
 std::uint16_t readKeyCode(const std::uint8_t* data)
 {
@@ -57,5 +61,13 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* data, std::size_t size
     event.charactersIgnoringModifiers = split == std::string::npos ? text : text.substr(split + 1);
 
     term::encodeKittyKey(event, readAction(data[3]), data[4]);
+
+    const auto bracketed = (data[2] & bracketedPasteBit) != 0;
+    const auto pastesALineBreak = term::preparePastedText(text, false).find('\r') != std::string::npos;
+
+    if (term::isPasteSafe(text, false) && pastesALineBreak)
+        __builtin_trap();
+
+    term::preparePastedText(text, bracketed);
     return 0;
 }

@@ -14,6 +14,7 @@ if (COWTERM_ENABLE_FUZZING)
     add_executable(CowTermParserFuzzer
             ParserFuzzer.cpp
             ../Lib/CowTermCore/CharWidth.cpp
+            ../Lib/CowTermCore/GraphemeBreak.cpp
             ../Lib/CowTermCore/CsiParameters.cpp
             ../Lib/CowTermCore/HyperlinkTable.cpp
             ../Lib/CowTermCore/KittyKeyboardFlags.cpp
@@ -33,6 +34,7 @@ if (COWTERM_ENABLE_FUZZING)
     # The kitty key encoder, fed arbitrary key events and protocol flags.
     add_executable(CowTermKeyEncoderFuzzer
             KeyEncoderFuzzer.cpp
+            ../Lib/CowTermTerminal/KeyEncoding.cpp
             ../Lib/CowTermTerminal/KittyKeyEncoding.cpp)
 
     target_compile_options(CowTermKeyEncoderFuzzer PRIVATE ${COWTERM_SANITIZER_FLAGS} -g -O1)

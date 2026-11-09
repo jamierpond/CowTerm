@@ -110,6 +110,12 @@ public:
 
     void paste();
 
+    // A paste isPasteSafe rejects: the host asks the user, and calls
+    // pasteAnyway if they confirm. Without a host it pastes, as before.
+    std::function<void(const std::string& text, const eacp::Callback& pasteAnyway)>
+        confirmUnsafePaste = [](const std::string&, const eacp::Callback& pasteAnyway)
+    { pasteAnyway(); };
+
     std::function<void(const std::string&)> onTitleChanged =
         [](const std::string&) {};
     std::function<void(const std::string&)> onCwdChanged = [](const std::string&) {};
@@ -159,6 +165,7 @@ private:
     std::unique_lock<std::recursive_mutex> lockTerminal() const;
     void runOnUiThread(std::function<void()> action);
     void requestShowParsedOutput();
+    void pasteText(const std::string& text);
     void showParsedOutput();
     void reportFocusIfChanged();
     bool openHyperlinkUnderPointer(const eacp::Graphics::MouseEvent& event);
@@ -220,8 +227,11 @@ private:
     eacp::Graphics::Point calculateCellOrigin(int visualRow, int column) const;
     PaintedRow describeVisibleRow(int visualRow) const;
     GridPainter makePainter();
-    void rasterizeFrameGlyphs(GridPainter& painter, const std::string& copyIndicator);
-    void drawGrid(GridPainter& painter);
+    std::vector<PaintedRow> describeVisibleRows() const;
+    void rasterizeFrameGlyphs(GridPainter& painter,
+                              const std::vector<PaintedRow>& rows,
+                              const std::string& copyIndicator);
+    void drawGrid(GridPainter& painter, const std::vector<PaintedRow>& rows);
     void drawCursorLayer(eacp::GPU::RenderPass& pass,
                          GridPainter& painter,
                          const std::string& copyIndicator);

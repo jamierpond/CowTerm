@@ -54,8 +54,15 @@ std::optional<EditingShortcut>
     findControlShiftClipboardShortcut(const eacp::Graphics::KeyEvent& event);
 
 // CRLF folds to CR and LF becomes CR, as Enter would send; bracketed paste
-// wraps the result in its start and end markers.
+// wraps the result in its start and end markers. As in Ghostty's paste.zig,
+// control bytes that would act on the line rather than type (Esc, Ctrl+C,
+// Ctrl+U, Ctrl+W, ...) become spaces.
 std::string preparePastedText(std::string_view clipboardText, bool bracketedPaste);
+
+// Ghostty's paste protection: a paste is unsafe if it holds the bracketed
+// paste end marker (it could escape the bracket), or, when the program hasn't
+// turned bracketed paste on, any line break (the shell would run it).
+bool isPasteSafe(std::string_view clipboardText, bool bracketedPaste);
 
 struct SgrMouseReport
 {

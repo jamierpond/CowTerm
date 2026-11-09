@@ -26,7 +26,7 @@ constexpr auto doubleCellWidth = 2;
 constexpr auto underlineCursorShapes = std::array {3, 4};
 constexpr auto barCursorShapes = std::array {5, 6};
 
-bool hasAttribute(const Cell& cell, std::uint16_t attribute)
+bool hasAttribute(const ResolvedCell& cell, std::uint16_t attribute)
 {
     return (cell.attrs & attribute) != 0;
 }
@@ -43,17 +43,17 @@ bool isMonochromeDrawable(const GlyphSlot& slot)
 
 // A character the frame will draw: not a blank, a wide glyph's right half or
 // hidden text.
-bool needsGlyphThisFrame(const Cell& cell)
+bool needsGlyphThisFrame(const ResolvedCell& cell)
 {
     return cell.ch != U' ' && (cell.attrs & (Attr::WideCont | Attr::Hidden)) == 0;
 }
 
-bool hasVisibleCharacter(const Cell& cell)
+bool hasVisibleCharacter(const ResolvedCell& cell)
 {
     return cell.ch != U' ' && !hasAttribute(cell, Attr::WideCont);
 }
 
-bool isPlainBackground(const Cell& cell, bool selected, Rgb background, const Theme& theme)
+bool isPlainBackground(const ResolvedCell& cell, bool selected, Rgb background, const Theme& theme)
 {
     if (selected || hasAttribute(cell, Attr::Inverse))
         return false;
@@ -84,7 +84,7 @@ bool isBlinkingCursorShape(int cursorShape)
     return cursorShape == 0 || cursorShape % 2 == 1;
 }
 
-CellColours findCellColours(const Cell& cell, bool selected, const Theme& theme)
+CellColours findCellColours(const ResolvedCell& cell, bool selected, const Theme& theme)
 {
     auto colours = CellColours {cell.fg, cell.bg};
 
@@ -153,7 +153,7 @@ void GridPainter::rasterizeRowGlyphs(const PaintedRow& row)
         const auto& cell = row.line[(std::size_t) col];
 
         if (needsGlyphThisFrame(cell))
-            requestCellGlyph(cell);
+            forEachCellGlyph(cell, [](const GlyphSlot&) {});
     }
 }
 
@@ -200,7 +200,7 @@ void GridPainter::drawRowGlyphs(const PaintedRow& row)
 
 void GridPainter::drawCursor(Point cellOrigin,
                              CursorStyle style,
-                             const Line& line,
+                             const PaintedLine& line,
                              int column)
 {
     const auto cellW = tools.atlas.cellWidth();
@@ -238,7 +238,7 @@ void GridPainter::drawHollowCursor(Point cellOrigin)
                            hollowCursorLineWidth);
 }
 
-void GridPainter::drawBlockCursor(Point cellOrigin, const Line& line, int column)
+void GridPainter::drawBlockCursor(Point cellOrigin, const PaintedLine& line, int column)
 {
     tools.sprites.fillRect({cellOrigin.x,
                             cellOrigin.y,
@@ -270,15 +270,23 @@ void GridPainter::drawCopyModeBadge(const std::string& indicator, float viewWidt
     }
 }
 
-GlyphSlot GridPainter::requestCellGlyph(const Cell& cell)
+// A plain cell is one glyph; only a grapheme cluster pays for shaping.
+template <typename Visit>
+void GridPainter::forEachCellGlyph(const ResolvedCell& cell, Visit&& visit)
 {
     const auto cellsWide =
         hasAttribute(cell, Attr::Wide) ? doubleCellWidth : singleCellWidth;
+    const auto bold = hasAttribute(cell, Attr::Bold);
+    const auto italic = hasAttribute(cell, Attr::Italic);
 
-    return tools.atlas.glyph(cell.ch,
-                             hasAttribute(cell, Attr::Bold),
-                             hasAttribute(cell, Attr::Italic),
-                             cellsWide);
+    if (cell.text.empty())
+    {
+        visit(tools.atlas.glyph(cell.ch, bold, italic, cellsWide));
+        return;
+    }
+
+    for (const auto& slot: tools.atlas.clusterGlyphs(cell.text, bold, italic, cellsWide))
+        visit(slot);
 }
 
 // Placed by its own bearings from the cell origin and baseline, rather than
@@ -299,24 +307,27 @@ void GridPainter::queueGlyph(const GlyphSlot& slot,
                      colored);
 }
 
-void GridPainter::drawCellGlyph(const Cell& cell, Point cellOrigin, Rgb foreground)
+void GridPainter::drawCellGlyph(const ResolvedCell& cell, Point cellOrigin, Rgb foreground)
 {
     if (cell.ch == U' ')
         return;
 
-    const auto slot = requestCellGlyph(cell);
-
-    if (!isDrawable(slot))
-        return;
-
     const auto alpha = hasAttribute(cell, Attr::Faint) ? faintGlyphAlpha : opaqueAlpha;
-    const auto tint = slot.colored ? Color::white(alpha) : toColor(foreground, alpha);
     const auto pen = Point {cellOrigin.x, cellOrigin.y + tools.atlas.baseline()};
 
-    queueGlyph(slot, pen, tint, slot.colored);
+    forEachCellGlyph(cell,
+                     [&](const GlyphSlot& slot)
+                     {
+                         if (!isDrawable(slot))
+                             return;
+
+                         const auto tint =
+                             slot.colored ? Color::white(alpha) : toColor(foreground, alpha);
+                         queueGlyph(slot, pen, tint, slot.colored);
+                     });
 }
 
-void GridPainter::drawCellDecorations(const Cell& cell, Point cellOrigin, Rgb foreground)
+void GridPainter::drawCellDecorations(const ResolvedCell& cell, Point cellOrigin, Rgb foreground)
 {
     const auto cellW = tools.atlas.cellWidth();
     const auto width = hasAttribute(cell, Attr::Wide) ? cellW * doubleCellWidth : cellW;
@@ -337,7 +348,7 @@ void GridPainter::drawCellDecorations(const Cell& cell, Point cellOrigin, Rgb fo
     }
 }
 
-void GridPainter::drawGlyphOverCursor(Point cellOrigin, const Line& line, int column)
+void GridPainter::drawGlyphOverCursor(Point cellOrigin, const PaintedLine& line, int column)
 {
     if (column >= (int) line.size())
         return;
@@ -347,16 +358,17 @@ void GridPainter::drawGlyphOverCursor(Point cellOrigin, const Line& line, int co
     if (!hasVisibleCharacter(cell))
         return;
 
-    const auto slot = requestCellGlyph(cell);
-
-    if (!isMonochromeDrawable(slot))
-        return;
-
     const auto pen = Point {cellOrigin.x, cellOrigin.y + tools.atlas.baseline()};
-    queueGlyph(slot, pen, toColor(tools.theme.background), false);
+
+    forEachCellGlyph(cell,
+                     [&](const GlyphSlot& slot)
+                     {
+                         if (isMonochromeDrawable(slot))
+                             queueGlyph(slot, pen, toColor(tools.theme.background), false);
+                     });
 }
 
-bool GridPainter::isCellInkShown(const Cell& cell) const
+bool GridPainter::isCellInkShown(const ResolvedCell& cell) const
 {
     if (hasAttribute(cell, Attr::WideCont) || hasAttribute(cell, Attr::Hidden))
         return false;

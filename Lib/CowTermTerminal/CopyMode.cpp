@@ -160,7 +160,7 @@ private:
     char32_t characterAt(int col) const
     {
         const auto& line = findLineAtAbsoluteRow(screen, position.row);
-        return col < (int) line.size() ? line[(std::size_t) col].ch : U' ';
+        return col < (int) line.size() ? screen.resolveCell(line[(std::size_t) col]).ch : U' ';
     }
 
     const TermScreen& screen;

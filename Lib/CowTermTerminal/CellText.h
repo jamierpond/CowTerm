@@ -19,7 +19,7 @@ long findLastAbsoluteRow(const TermScreen& screen);
 int measureInkLength(const Line& line);
 
 // Every cell's character up to `columns`, trailing blanks trimmed.
-std::string extractVisibleRowText(const Line& line, int columns);
+std::string extractVisibleRowText(const TermScreen& screen, const Line& line, int columns);
 
 // The text from `start` to `end` inclusive, one line per row, each trimmed of
 // trailing blanks. Rows outside the buffer are skipped.

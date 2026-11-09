@@ -1,5 +1,7 @@
 #include "TermScreen.h"
+#include "GraphemeBreak.h"
 #include "Reflow.h"
+#include "SelectGraphicRendition.h"
 
 #include <algorithm>
 #include <limits>
@@ -43,22 +45,119 @@ std::uint16_t TermScreen::defaultColorAttributes() const
     return (std::uint16_t) (foregroundBit | backgroundBit);
 }
 
-Cell TermScreen::blankCell() const
+StyleId TermScreen::internStyle(const CellStyle& style)
 {
+    if (style == CellStyle {theme.foreground, theme.background})
+        return 0;
+
+    return (StyleId) styles.intern(style);
+}
+
+void TermScreen::refreshPenStyles()
+{
+    if (!penStylesDirty)
+        return;
+
+    constexpr auto penStyleCount = std::size_t {2};
+
+    if (!styles.hasRoomFor(penStyleCount))
+        compactTables();
+
+    penStylesDirty = false;
+    const auto fg = pen.defaultFg ? theme.foreground : pen.fg;
+    const auto bg = pen.defaultBg ? theme.background : pen.bg;
+    blankStyle = internStyle({fg, bg, defaultColorAttributes()});
+    penStyle = internStyle({fg, bg, (std::uint16_t) (pen.attrs | defaultColorAttributes())});
+}
+
+const CellStyle& TermScreen::findStyle(StyleId id) const
+{
+    static const auto unknown = CellStyle {};
+
+    if (styles.holds(id))
+        return styles.find(id);
+
+    return unknown;
+}
+
+Cell TermScreen::blankCell()
+{
+    refreshPenStyles();
     auto cell = Cell {};
-    cell.fg = pen.defaultFg ? theme.foreground : pen.fg;
-    cell.bg = pen.defaultBg ? theme.background : pen.bg;
-    cell.attrs = defaultColorAttributes();
+    cell.style = blankStyle;
     return cell;
 }
 
-Cell TermScreen::penCell(char32_t codepoint) const
+Cell TermScreen::penCell(char32_t codepoint)
 {
-    auto cell = blankCell();
-    cell.ch = codepoint;
-    cell.attrs = (std::uint16_t) (pen.attrs | defaultColorAttributes());
+    refreshPenStyles();
+    auto cell = Cell {};
+    cell.setCodepoint(codepoint);
+    cell.style = penStyle;
     cell.hyperlink = pen.hyperlink;
     return cell;
+}
+
+void TermScreen::applyGraphicRendition(const CsiParameters& parameters)
+{
+    applySelectGraphicRendition(pen, parameters, theme);
+    penStylesDirty = true;
+}
+
+std::string_view TermScreen::findHyperlinkUri(HyperlinkId id) const
+{
+    if (!hyperlinks.holds(id))
+        return {};
+
+    return hyperlinks.find(id);
+}
+
+std::u32string TermScreen::findClusterText(const Cell& cell) const
+{
+    if (cell.isGrapheme() && graphemes.holds(cell.value()))
+        return graphemes.find(cell.value());
+
+    return std::u32string(1, (char32_t) cell.value());
+}
+
+ResolvedCell TermScreen::resolveCell(const Cell& cell) const
+{
+    const auto defaultStyle = CellStyle {theme.foreground, theme.background};
+    const auto& style = cell.style == 0 ? defaultStyle : findStyle(cell.style);
+    auto resolved = ResolvedCell {};
+    resolved.fg = style.fg;
+    resolved.bg = style.bg;
+    resolved.attrs = style.attrs;
+    resolved.hyperlink = cell.hyperlink;
+    resolved.ch = (char32_t) cell.value();
+
+    if (cell.isGrapheme() && graphemes.holds(cell.value()))
+    {
+        resolved.text = graphemes.find(cell.value());
+        resolved.ch = resolved.text.front();
+    }
+
+    if (cell.hasFlag(CellFlag::Wide))
+        resolved.attrs |= Attr::Wide;
+
+    if (cell.hasFlag(CellFlag::WideCont))
+        resolved.attrs |= Attr::WideCont;
+
+    if (cell.hasFlag(CellFlag::WrapSpacer))
+        resolved.attrs |= Attr::WrapSpacer;
+
+    return resolved;
+}
+
+std::vector<ResolvedCell> TermScreen::resolveLine(const Line& line) const
+{
+    auto resolved = std::vector<ResolvedCell> {};
+    resolved.reserve(line.size());
+
+    for (const auto& cell: line)
+        resolved.push_back(resolveCell(cell));
+
+    return resolved;
 }
 
 KittyKeyboardStack& TermScreen::kittyKeyboard()
@@ -80,9 +179,9 @@ void TermScreen::setHyperlink(std::string_view uri)
     }
 
     if (hyperlinks.isFull())
-        dropUnusedHyperlinks();
+        compactTables();
 
-    pen.hyperlink = hyperlinks.intern(uri);
+    pen.hyperlink = (HyperlinkId) hyperlinks.intern(std::string {uri});
 }
 
 template <typename Visit>
@@ -95,21 +194,47 @@ void TermScreen::forEveryCell(Visit&& visit)
     std::for_each(scrollback.begin(), scrollback.end(), visitLine);
 }
 
-void TermScreen::dropUnusedHyperlinks()
+// Ghostty frees styles, links and clusters by reference count; here a full
+// table triggers one scan of every cell, which keeps what is still in use.
+void TermScreen::compactTables()
 {
-    constexpr auto idCount = std::numeric_limits<HyperlinkId>::max() + std::size_t {1};
-    auto isUsed = std::vector<bool>(idCount);
+    auto stylesUsed = std::vector<bool>(styles.size() + 1);
+    auto linksUsed = std::vector<bool>(hyperlinks.size() + 1);
+    auto clustersUsed = std::vector<bool>(graphemes.size() + 1);
 
-    forEveryCell([&](const Cell& cell) { isUsed[cell.hyperlink] = true; });
-    isUsed[savedPen.hyperlink] = true;
+    forEveryCell(
+        [&](const Cell& cell)
+        {
+            stylesUsed[cell.style] = true;
+            linksUsed[cell.hyperlink] = true;
 
-    const auto newIds = hyperlinks.keepOnly(isUsed);
+            if (cell.isGrapheme())
+                clustersUsed[cell.value()] = true;
+        });
 
-    forEveryCell([&](Cell& cell) { cell.hyperlink = newIds[cell.hyperlink]; });
-    savedPen.hyperlink = newIds[savedPen.hyperlink];
+    linksUsed[savedPen.hyperlink] = true;
+    linksUsed[pen.hyperlink] = true;
+
+    const auto newStyles = styles.keepOnly(stylesUsed);
+    const auto newLinks = hyperlinks.keepOnly(linksUsed);
+    const auto newClusters = graphemes.keepOnly(clustersUsed);
+
+    forEveryCell(
+        [&](Cell& cell)
+        {
+            cell.style = (StyleId) newStyles[cell.style];
+            cell.hyperlink = (HyperlinkId) newLinks[cell.hyperlink];
+
+            if (cell.isGrapheme())
+                cell.content = (cell.content & ~Cell::valueMask) | newClusters[cell.value()];
+        });
+
+    savedPen.hyperlink = (HyperlinkId) newLinks[savedPen.hyperlink];
+    pen.hyperlink = (HyperlinkId) newLinks[pen.hyperlink];
+    penStylesDirty = true;
 }
 
-Line TermScreen::blankLine() const
+Line TermScreen::blankLine()
 {
     auto line = Line {};
     line.assign((std::size_t) cols, blankCell());
@@ -127,18 +252,18 @@ void TermScreen::damageWidePair(int x, int y)
     auto& line = row(y);
     auto& cell = line[(std::size_t) x];
 
-    if ((cell.attrs & Attr::WideCont) != 0 && x > 0)
+    if (cell.hasFlag(CellFlag::WideCont) && x > 0)
     {
         auto& lead = line[(std::size_t) x - 1];
-        lead.ch = U' ';
-        lead.attrs &= (std::uint16_t) ~Attr::Wide;
+        lead.setCodepoint(U' ');
+        lead.setFlag(CellFlag::Wide, false);
     }
 
-    if ((cell.attrs & Attr::Wide) != 0 && x + 1 < cols)
+    if (cell.hasFlag(CellFlag::Wide) && x + 1 < cols)
     {
         auto& cont = line[(std::size_t) x + 1];
-        cont.ch = U' ';
-        cont.attrs &= (std::uint16_t) ~Attr::WideCont;
+        cont.setCodepoint(U' ');
+        cont.setFlag(CellFlag::WideCont, false);
     }
 }
 
@@ -181,7 +306,7 @@ void TermScreen::makeRoomForWideCharacter()
     if (modes.autowrap)
     {
         auto spacer = blankCell();
-        spacer.attrs |= Attr::WrapSpacer;
+        spacer.setFlag(CellFlag::WrapSpacer, true);
         writeCell(cursor.x, cursor.y, spacer);
         row(cursor.y).wrapped = true;
         newlineWithScroll();
@@ -192,12 +317,13 @@ void TermScreen::makeRoomForWideCharacter()
 
 void TermScreen::writeWideCell(Cell cell)
 {
-    cell.attrs |= Attr::Wide;
+    cell.setFlag(CellFlag::Wide, true);
     writeCell(cursor.x, cursor.y, cell);
 
     auto continuation = cell;
-    continuation.ch = U' ';
-    continuation.attrs = (std::uint16_t) ((cell.attrs & ~Attr::Wide) | Attr::WideCont);
+    continuation.setCodepoint(U' ');
+    continuation.setFlag(CellFlag::Wide, false);
+    continuation.setFlag(CellFlag::WideCont, true);
     writeCell(cursor.x + 1, cursor.y, continuation);
 }
 
@@ -212,8 +338,78 @@ void TermScreen::advanceAfterPrinting(int width)
     }
 }
 
+// The cell a codepoint would extend: the last one printed, left of the
+// cursor (or under it with a wrap pending), if the break rules join them.
+std::optional<TermScreen::ClusterTarget> TermScreen::findClusterToExtend(char32_t codepoint) const
+{
+    auto target = ClusterTarget {wrapPending ? cursor.x : cursor.x - 1, cursor.y};
+    const auto& line = activeGrid()[(std::size_t) target.y];
+
+    if (target.x >= 0 && line[(std::size_t) target.x].hasFlag(CellFlag::WideCont))
+        --target.x;
+
+    if (target.x < 0)
+        return std::nullopt;
+
+    const auto& cell = line[(std::size_t) target.x];
+
+    if (!isClusterExtender(codepoint) && !cell.isGrapheme())
+        return std::nullopt;
+
+    if (!doesExtendCluster(findClusterText(cell), codepoint))
+        return std::nullopt;
+
+    return target;
+}
+
+void TermScreen::extendCluster(ClusterTarget target, char32_t codepoint)
+{
+    if (graphemes.isFull())
+        compactTables();
+
+    auto& cell = row(target.y)[(std::size_t) target.x];
+    const auto id = graphemes.intern(findClusterText(cell) + codepoint);
+
+    if (id == GraphemeTable::none)
+        return;
+
+    cell.content = (cell.content & ~Cell::valueMask) | id | CellFlag::Grapheme;
+
+    if (codepoint == variationSelectorEmoji)
+        widenForEmojiPresentation(target);
+}
+
+// VS16 asks for the emoji form, which is two cells wide (Ghostty does the
+// same): widen a narrow cell when the cell after it is free.
+void TermScreen::widenForEmojiPresentation(ClusterTarget target)
+{
+    auto& line = row(target.y);
+    const auto isNextCellFree = !wrapPending && target.x + 1 == cursor.x && cursor.x < cols;
+
+    if (line[(std::size_t) target.x].hasFlag(CellFlag::Wide) || !isNextCellFree)
+        return;
+
+    line[(std::size_t) target.x].setFlag(CellFlag::Wide, true);
+    auto continuation = line[(std::size_t) target.x];
+    continuation.setCodepoint(U' ');
+    continuation.setFlag(CellFlag::Wide, false);
+    continuation.setFlag(CellFlag::WideCont, true);
+    writeCell(cursor.x, cursor.y, continuation);
+    advanceAfterPrinting(1);
+}
+
 void TermScreen::putChar(char32_t cp)
 {
+    constexpr auto firstCodepointThatCanJoin = char32_t {0x0300};
+    const auto mayJoinACluster = cp >= firstCodepointThatCanJoin;
+
+    if (const auto target = mayJoinACluster ? findClusterToExtend(cp) : std::nullopt)
+    {
+        extendCluster(*target, cp);
+        markDirty();
+        return;
+    }
+
     const auto width = charWidth(cp);
 
     if (width == 0)
@@ -379,6 +575,7 @@ void TermScreen::restoreCursor()
 {
     cursor = savedCursor;
     pen = savedPen;
+    penStylesDirty = true;
     wrapPending = false;
     clampCursor();
     markDirty();
@@ -615,6 +812,7 @@ void TermScreen::fullReset()
     pen = Pen {};
     pen.fg = theme.foreground;
     pen.bg = theme.background;
+    penStylesDirty = true;
     modes = Modes {};
     cursor = {0, 0};
     savedCursor = {0, 0};

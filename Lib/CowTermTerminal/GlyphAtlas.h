@@ -3,6 +3,8 @@
 #include <eacp/Text/Text.h>
 
 #include <string>
+#include <string_view>
+#include <vector>
 
 namespace term
 {
@@ -59,6 +61,11 @@ public:
 
     // `cells` is 1 or 2; a double-width glyph is centred across both.
     GlyphSlot glyph(char32_t codepoint, bool bold, bool italic, int cells = 1);
+
+    // A grapheme cluster (ZWJ emoji, a letter with combining marks) shaped as
+    // one string and centred across `cells`. Falls back to the first
+    // codepoint's glyph when the font can't shape every part.
+    std::vector<GlyphSlot> clusterGlyphs(std::u32string_view cluster, bool bold, bool italic, int cells);
 
     // Uploads whatever was rasterized since the last call. Call once per frame,
     // after every glyph the frame needs has been requested and before the first

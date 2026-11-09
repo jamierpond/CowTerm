@@ -13,6 +13,9 @@ struct CodepointRange
     char32_t last;
 };
 
+// Nothing below this is zero-width or double-width: the fast path for text.
+constexpr auto firstCombiningCodepoint = char32_t {0x0300};
+
 constexpr std::array<char32_t, 4> zeroWidthCodepoints = {0x200b, 0x200c, 0x200d, 0xfeff};
 
 constexpr std::array<CodepointRange, 6> combiningRanges = {{
@@ -62,6 +65,9 @@ bool isZeroWidth(char32_t codepoint)
 
 int charWidth(char32_t codepoint)
 {
+    if (codepoint < firstCombiningCodepoint)
+        return 1;
+
     if (isZeroWidth(codepoint))
         return 0;
 

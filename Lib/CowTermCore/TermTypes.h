@@ -4,14 +4,17 @@
 
 #include <array>
 #include <cstdint>
+#include <functional>
+#include <string_view>
 
 namespace term
 {
-// Packed 0xRRGGBB. Cells store resolved colors; the Default* attr bits mark
-// cells that follow the theme's default fg/bg so inverse video and future
-// theme switches stay faithful.
+// Packed 0xRRGGBB.
 using Rgb = std::uint32_t;
 
+// A resolved cell's attribute bits. The Default* bits mark colours that
+// follow the theme's default fg/bg so inverse video stays faithful; Wide,
+// WideCont and WrapSpacer come from the cell itself, not its style.
 namespace Attr
 {
 constexpr std::uint16_t Bold = 1 << 0;
@@ -32,15 +35,74 @@ constexpr std::uint16_t DefaultBg = 1 << 11;
 constexpr std::uint16_t WrapSpacer = 1 << 12;
 } // namespace Attr
 
-struct Cell
+// Colours and attributes, stored once per screen and shared by every cell
+// that uses them (Ghostty's style set).
+struct CellStyle
 {
-    char32_t ch = U' ';
     Rgb fg = 0;
     Rgb bg = 0;
     std::uint16_t attrs = Attr::DefaultFg | Attr::DefaultBg;
 
-    // An id in the screen's HyperlinkTable; 0 for none. Sits in what was
-    // padding, so a cell stays 16 bytes.
+    bool operator==(const CellStyle&) const = default;
+};
+
+struct CellStyleHash
+{
+    std::size_t operator()(const CellStyle& style) const
+    {
+        const auto colours = ((std::uint64_t) style.fg << 32) | style.bg;
+        return std::hash<std::uint64_t> {}(colours) ^ ((std::size_t) style.attrs << 1);
+    }
+};
+
+using StyleId = std::uint16_t;
+
+// What a cell holds besides its style and link, in content's top bits.
+namespace CellFlag
+{
+constexpr std::uint32_t Wide = 1u << 21;
+constexpr std::uint32_t WideCont = 1u << 22;
+constexpr std::uint32_t WrapSpacer = 1u << 23;
+
+// content's low bits are a grapheme cluster's id, not a codepoint.
+constexpr std::uint32_t Grapheme = 1u << 24;
+} // namespace CellFlag
+
+// One grid cell in 8 bytes: a codepoint (or a grapheme cluster's id) and
+// flags, a style id and a hyperlink id. The screen resolves the ids.
+struct Cell
+{
+    static constexpr std::uint32_t valueMask = (1u << 21) - 1;
+
+    std::uint32_t content = U' ';
+    StyleId style = 0;
+    std::uint16_t hyperlink = 0;
+
+    std::uint32_t value() const { return content & valueMask; }
+    bool hasFlag(std::uint32_t flag) const { return (content & flag) != 0; }
+    void setFlag(std::uint32_t flag, bool on) { content = on ? content | flag : content & ~flag; }
+    bool isGrapheme() const { return hasFlag(CellFlag::Grapheme); }
+
+    // The single codepoint, or 0 for a grapheme cluster.
+    char32_t codepoint() const { return isGrapheme() ? 0 : (char32_t) value(); }
+    bool isSpace() const { return !isGrapheme() && value() == U' '; }
+
+    void setCodepoint(char32_t codepoint)
+    {
+        content = (content & ~(valueMask | CellFlag::Grapheme)) | ((std::uint32_t) codepoint & valueMask);
+    }
+};
+
+// A cell as the renderer and text readers see it: its whole character, its
+// colours and every attribute bit.
+struct ResolvedCell
+{
+    // The first codepoint; text is the whole cluster (one codepoint or more).
+    char32_t ch = U' ';
+    std::u32string_view text;
+    Rgb fg = 0;
+    Rgb bg = 0;
+    std::uint16_t attrs = Attr::DefaultFg | Attr::DefaultBg;
     std::uint16_t hyperlink = 0;
 };
 

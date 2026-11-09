@@ -3,6 +3,7 @@
 # and the PTY tests link this without dragging in a renderer.
 add_library(CowTermCore STATIC
         CharWidth.cpp
+        GraphemeBreak.cpp
         CsiParameters.cpp
         FocusReports.cpp
         HyperlinkTable.cpp

@@ -3,6 +3,7 @@
 #include "ClaudeHud.h"
 #include "Config.h"
 #include "NotifyUserServer.h"
+#include "PasteConfirmation.h"
 #include "Palette.h"
 #include "PermissionsPanel.h"
 #include "Popup.h"
@@ -128,6 +129,7 @@ private:
     eacp::UI::ComponentHost overlayHost;
     TrayController tray {manager};
     NotifyUserServer notifyUserServer {config};
+    PasteConfirmation pasteConfirmation {config};
     TermSession* attached = nullptr;
     bool prefixArmed = false;
     bool popupPrefixArmed = false;

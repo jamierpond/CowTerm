@@ -10,8 +10,8 @@ constexpr auto wideCharacterWidth = 2;
 
 bool isBlank(const Cell& cell)
 {
-    constexpr auto defaultColors = (std::uint16_t) (Attr::DefaultFg | Attr::DefaultBg);
-    return cell.ch == U' ' && cell.attrs == defaultColors && cell.hyperlink == 0;
+    constexpr auto flags = CellFlag::Wide | CellFlag::WideCont | CellFlag::WrapSpacer;
+    return cell.isSpace() && !cell.hasFlag(flags) && cell.style == 0 && cell.hyperlink == 0;
 }
 
 // One line as the program wrote it, before the screen cut it into rows.
@@ -42,7 +42,7 @@ std::vector<LogicalLine> joinWrappedRows(const std::vector<Line>& rows, long cur
 
         for (const auto& cell: rows[index])
         {
-            if ((cell.attrs & Attr::WrapSpacer) == 0)
+            if (!cell.hasFlag(CellFlag::WrapSpacer))
                 line.cells.push_back(cell);
         }
 
@@ -113,16 +113,16 @@ private:
 
     void place(const Cell& cell)
     {
-        const auto isWide = (cell.attrs & Attr::Wide) != 0;
+        const auto isWide = cell.hasFlag(CellFlag::Wide);
         const auto used = (int) output.lines.back().size();
 
-        if ((cell.attrs & Attr::WideCont) != 0 && used == 0)
+        if (cell.hasFlag(CellFlag::WideCont) && used == 0)
             return;
 
         if (isWide && isLastColumn(used))
         {
             auto spacer = blank;
-            spacer.attrs |= Attr::WrapSpacer;
+            spacer.setFlag(CellFlag::WrapSpacer, true);
             output.lines.back().push_back(spacer);
             wrapRow();
         }
