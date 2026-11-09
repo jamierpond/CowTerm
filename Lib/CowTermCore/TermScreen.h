@@ -39,6 +39,7 @@ struct Modes
     bool mouseDrag = false;
     bool mouseMotion = false;
     bool mouseSgr = false;
+    bool synchronizedOutput = false;
 };
 
 // The terminal's cell grid: primary + alternate buffers, scrollback, cursor,

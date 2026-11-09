@@ -36,6 +36,10 @@ public:
     // requesting a desktop notification.
     std::function<void(const std::string&)> onNotify = [](const std::string&) {};
 
+    // Mode 2026 was set: the program is drawing a frame. The view holds its
+    // repaints until the mode is reset, or for at most a second after this.
+    std::function<void()> onSynchronizedOutputStarted = [] {};
+
     // DECSCUSR shape: 0/1 blinking block, 2 block, 3/4 underline, 5/6 bar.
     int cursorShape() const { return cursorStyle; }
 
@@ -65,6 +69,9 @@ private:
     void dispatchEscape(std::uint8_t byte);
     void dispatchCsi(std::uint8_t finalByte);
     void runCsi(std::uint8_t finalByte);
+    void runPrivateCsi(std::uint8_t finalByte);
+    void runCsiAction(std::uint8_t finalByte);
+    void reportPrivateMode(int mode);
     void dispatchOsc();
     void setPrivateMode(int mode, bool on);
     void reportDeviceStatus();
