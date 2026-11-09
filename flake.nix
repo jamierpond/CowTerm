@@ -48,6 +48,11 @@
             harfbuzz
             fontconfig
             curl
+            # eacp's X11 backend (FindX11Backend.cmake): xcb, its xkb, randr,
+            # xfixes and xinput extensions, the cursor and icccm utilities.
+            libxcb
+            libxcb-cursor
+            libxcb-wm
           ];
 
           # Vulkan is a *runtime* dependency, not a build one: eacp compiles
