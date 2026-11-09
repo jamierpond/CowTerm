@@ -2,6 +2,7 @@
 
 #include <eacp/Text/Text.h>
 
+#include <cstdint>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -75,6 +76,9 @@ public:
 
     eacp::Text::GlyphAtlas& atlas() { return *impl; }
     float scale() const { return backingScale; }
+
+    // Changes when the atlas resets and every slot handed out goes stale.
+    std::uint32_t generation() const { return impl->generation(); }
 
 private:
     eacp::OwningPointer<eacp::Text::GlyphAtlas> impl;

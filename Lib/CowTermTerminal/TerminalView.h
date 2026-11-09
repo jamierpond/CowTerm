@@ -6,6 +6,7 @@
 #include "GridSelection.h"
 #include "KeyEncoding.h"
 #include "KittyKeyEncoding.h"
+#include "RowDrawingCache.h"
 #include "OutputParserThread.h"
 
 #include "CowTermCore/FocusReports.h"
@@ -148,6 +149,11 @@ public:
         return shell->currentWorkingDirectory();
     }
 
+    // In a window, visible and with a non-empty size. Panes in background tabs
+    // (detached from the window) and panes behind a zoomed split (zero size)
+    // are not, and their output does not schedule frames.
+    bool isShownOnScreen() const;
+
     void render(eacp::GPU::Frame& frame) override;
     void resized() override;
 
@@ -169,6 +175,7 @@ private:
     void reportFocusIfChanged();
     bool openHyperlinkUnderPointer(const eacp::Graphics::MouseEvent& event);
     void repaintUnlessSynchronized();
+    void repaintIfShown();
     void startSynchronizedOutputTimeout();
     void send(std::string_view bytes);
     void sendAndScrollToBottom(std::string_view bytes);
@@ -230,11 +237,7 @@ private:
     eacp::Graphics::Point calculateCellOrigin(int visualRow, int column) const;
     PaintedRow describeVisibleRow(int visualRow) const;
     GridPainter makePainter();
-    std::vector<PaintedRow> describeVisibleRows() const;
-    void rasterizeFrameGlyphs(GridPainter& painter,
-                              const std::vector<PaintedRow>& rows,
-                              const std::string& copyIndicator);
-    void drawGrid(GridPainter& painter, const std::vector<PaintedRow>& rows);
+    void updateRowDrawings(GridPainter& painter);
     void drawCursorLayer(eacp::GPU::RenderPass& pass,
                          GridPainter& painter,
                          const std::string& copyIndicator);
@@ -272,6 +275,7 @@ private:
     bool selecting = false;
     CellRef selectionAnchor;
     SelectionRange selection;
+    RowDrawingCache rowDrawings;
 
     bool copyMode = false;
     bool copySelecting = false;

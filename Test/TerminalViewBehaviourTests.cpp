@@ -870,3 +870,19 @@ auto tMacArrowsKitty = test("View/macArrowsUnderKittyFlagsSendCsi") = []
     pane.showOutput("\033[?1h");
     check(pane.writtenForKey(macArrow(Graphics::KeyCode::UpArrow, macUp)) == "\033[A");
 };
+
+auto tPaneOutsideAWindowIsNotShown = test("View/aPaneOutsideAWindowIsNotShown") = []
+{
+    auto pane = TestPane {};
+    pane.showOutput("hello");
+
+    check(!pane.view->isShownOnScreen());
+};
+
+auto tPaneWithNoSizeIsNotShown = test("View/aPaneWithNoSizeIsNotShown") = []
+{
+    auto pane = TestPane {};
+    pane.view->setBounds({});
+
+    check(!pane.view->isShownOnScreen());
+};

@@ -41,13 +41,6 @@ bool isMonochromeDrawable(const GlyphSlot& slot)
     return isDrawable(slot) && !slot.colored;
 }
 
-// A character the frame will draw: not a blank, a wide glyph's right half or
-// hidden text.
-bool needsGlyphThisFrame(const ResolvedCell& cell)
-{
-    return cell.ch != U' ' && (cell.attrs & (Attr::WideCont | Attr::Hidden)) == 0;
-}
-
 bool hasVisibleCharacter(const ResolvedCell& cell)
 {
     return cell.ch != U' ' && !hasAttribute(cell, Attr::WideCont);
@@ -146,45 +139,69 @@ GridPainter::GridPainter(const PaintTools& toolsToUse,
 {
 }
 
-void GridPainter::rasterizeRowGlyphs(const PaintedRow& row)
-{
-    for (auto col = 0; col < row.columns; ++col)
-    {
-        const auto& cell = row.line[(std::size_t) col];
-
-        if (needsGlyphThisFrame(cell))
-            forEachCellGlyph(cell, [](const GlyphSlot&) {});
-    }
-}
-
 void GridPainter::rasterizeTextGlyphs(const std::string& text)
 {
     for (const auto c: text)
         tools.atlas.glyph((char32_t) c, false, false, singleCellWidth);
 }
 
-void GridPainter::drawRowBackgrounds(const PaintedRow& row)
+RowDrawing GridPainter::buildRowDrawing(const PaintedRow& row)
+{
+    auto drawing = RowDrawing {};
+    addRowBackgrounds(row, drawing);
+    addRowInk(row, drawing);
+    return drawing;
+}
+
+void GridPainter::submitRowDrawings(const std::vector<RowDrawing>& rows)
+{
+    for (const auto& row: rows)
+        fillRects(row.backgrounds);
+
+    for (const auto& row: rows)
+        fillRects(row.decorations);
+
+    for (const auto& row: rows)
+        addGlyphQuads(row.glyphs);
+}
+
+void GridPainter::fillRects(const std::vector<RectFill>& fills)
+{
+    for (const auto& fill: fills)
+        tools.sprites.fillRect(fill.rect, fill.colour);
+}
+
+void GridPainter::addGlyphQuads(const std::vector<GlyphQuad>& quads)
+{
+    for (const auto& quad: quads)
+        tools.glyphs.add(quad.destination, quad.source, quad.tint, quad.colored);
+}
+
+void GridPainter::addRowBackgrounds(const PaintedRow& row, RowDrawing& drawing)
 {
     const auto cellW = tools.atlas.cellWidth();
     const auto cellH = tools.atlas.cellHeight();
 
     for (const auto& run: findBackgroundRuns(row, selection, tools.theme))
     {
-        tools.sprites.fillRect({tools.margins.x + (float) run.firstColumn * cellW,
-                                row.y,
-                                (float) (run.endColumn - run.firstColumn) * cellW,
-                                cellH},
-                               toColor(run.colour));
+        drawing.backgrounds.push_back({{tools.margins.x + (float) run.firstColumn * cellW,
+                                        row.y,
+                                        (float) (run.endColumn - run.firstColumn) * cellW,
+                                        cellH},
+                                       toColor(run.colour)});
     }
 }
 
-void GridPainter::drawRowGlyphs(const PaintedRow& row)
+void GridPainter::addRowInk(const PaintedRow& row, RowDrawing& drawing)
 {
     const auto cellW = tools.atlas.cellWidth();
 
     for (auto col = 0; col < row.columns; ++col)
     {
         const auto& cell = row.line[(std::size_t) col];
+
+        if (hasAttribute(cell, Attr::Blink))
+            drawing.hasBlinkingText = true;
 
         if (!isCellInkShown(cell))
             continue;
@@ -193,8 +210,8 @@ void GridPainter::drawRowGlyphs(const PaintedRow& row)
         const auto foreground = findCellColours(cell, selected, tools.theme).foreground;
         const auto origin = Point {tools.margins.x + (float) col * cellW, row.y};
 
-        drawCellGlyph(cell, origin, foreground);
-        drawCellDecorations(cell, origin, foreground);
+        addCellGlyph(cell, origin, foreground, drawing);
+        addCellDecorations(cell, origin, foreground, drawing);
     }
 }
 
@@ -291,23 +308,35 @@ void GridPainter::forEachCellGlyph(const ResolvedCell& cell, Visit&& visit)
 
 // Placed by its own bearings from the cell origin and baseline, rather than
 // stretched to fill the cell.
+GlyphQuad GridPainter::placeGlyph(const GlyphSlot& slot,
+                                  Point penOnBaseline,
+                                  const Color& tint,
+                                  bool colored)
+{
+    const auto scale = tools.atlas.scale();
+
+    return {{penOnBaseline.x + slot.offset.x,
+             penOnBaseline.y + slot.offset.y,
+             slot.src.w / scale,
+             slot.src.h / scale},
+            slot.src,
+            tint,
+            colored};
+}
+
 void GridPainter::queueGlyph(const GlyphSlot& slot,
                              Point penOnBaseline,
                              const Color& tint,
                              bool colored)
 {
-    const auto scale = tools.atlas.scale();
-
-    tools.glyphs.add({penOnBaseline.x + slot.offset.x,
-                      penOnBaseline.y + slot.offset.y,
-                      slot.src.w / scale,
-                      slot.src.h / scale},
-                     slot.src,
-                     tint,
-                     colored);
+    const auto quad = placeGlyph(slot, penOnBaseline, tint, colored);
+    tools.glyphs.add(quad.destination, quad.source, quad.tint, quad.colored);
 }
 
-void GridPainter::drawCellGlyph(const ResolvedCell& cell, Point cellOrigin, Rgb foreground)
+void GridPainter::addCellGlyph(const ResolvedCell& cell,
+                               Point cellOrigin,
+                               Rgb foreground,
+                               RowDrawing& drawing)
 {
     if (cell.ch == U' ')
         return;
@@ -323,11 +352,14 @@ void GridPainter::drawCellGlyph(const ResolvedCell& cell, Point cellOrigin, Rgb 
 
                          const auto tint =
                              slot.colored ? Color::white(alpha) : toColor(foreground, alpha);
-                         queueGlyph(slot, pen, tint, slot.colored);
+                         drawing.glyphs.push_back(placeGlyph(slot, pen, tint, slot.colored));
                      });
 }
 
-void GridPainter::drawCellDecorations(const ResolvedCell& cell, Point cellOrigin, Rgb foreground)
+void GridPainter::addCellDecorations(const ResolvedCell& cell,
+                                     Point cellOrigin,
+                                     Rgb foreground,
+                                     RowDrawing& drawing)
 {
     const auto cellW = tools.atlas.cellWidth();
     const auto width = hasAttribute(cell, Attr::Wide) ? cellW * doubleCellWidth : cellW;
@@ -335,16 +367,16 @@ void GridPainter::drawCellDecorations(const ResolvedCell& cell, Point cellOrigin
     if (hasAttribute(cell, Attr::Underline))
     {
         const auto y = cellOrigin.y + tools.atlas.baseline() + underlineGapBelowBaseline;
-        tools.sprites.fillRect({cellOrigin.x, y, width, decorationThickness},
-                               toColor(foreground));
+        drawing.decorations.push_back({{cellOrigin.x, y, width, decorationThickness},
+                                       toColor(foreground)});
     }
 
     if (hasAttribute(cell, Attr::Strike))
     {
         const auto y =
             cellOrigin.y + tools.atlas.cellHeight() * strikethroughHeightFraction;
-        tools.sprites.fillRect({cellOrigin.x, y, width, decorationThickness},
-                               toColor(foreground));
+        drawing.decorations.push_back({{cellOrigin.x, y, width, decorationThickness},
+                                       toColor(foreground)});
     }
 }
 

@@ -253,6 +253,7 @@ void AppShell::attachActive(TermSession& session)
 
         attached = &session;
         addSubview(session.view);
+        session.view.repaintAllPanes();
 
         // A live peek swaps the attached terminal while an overlay is open;
         // re-raise the overlay host so it stays on top and keeps keyboard focus.

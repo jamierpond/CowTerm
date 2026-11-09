@@ -69,6 +69,7 @@ TerminalView::TerminalView(const TerminalConfig& config,
           {
               const auto lock = lockTerminal();
               blinkOn = !blinkOn;
+              rowDrawings.invalidateRowsWithBlinkingText();
               repaintUnlessSynchronized();
           },
           2)
@@ -199,8 +200,9 @@ void TerminalView::refreshCursor()
 {
     const auto lock = lockTerminal();
     blinkOn = true;
+    rowDrawings.invalidateRowsWithBlinkingText();
     reportFocusIfChanged();
-    repaint();
+    repaintIfShown();
 }
 
 void TerminalView::setWindowFocused(bool focused)
@@ -240,6 +242,20 @@ void TerminalView::showParsedOutput()
 void TerminalView::repaintUnlessSynchronized()
 {
     if (!screen.modes.synchronizedOutput)
+        repaintIfShown();
+}
+
+bool TerminalView::isShownOnScreen() const
+{
+    const auto bounds = getLocalBounds();
+    return getWindow() != nullptr && isVisible() && isPositiveSize(bounds.w, bounds.h);
+}
+
+// A pane in a background tab or behind a zoomed split skips its frames; whoever
+// shows it again repaints it: resized(), or SessionView::repaintAllPanes.
+void TerminalView::repaintIfShown()
+{
+    if (isShownOnScreen())
         repaint();
 }
 
@@ -259,7 +275,7 @@ void TerminalView::startSynchronizedOutputTimeout()
 
                            const auto lock = lockTerminal();
                            screen.modes.synchronizedOutput = false;
-                           repaint();
+                           repaintIfShown();
                        });
 }
 
@@ -272,8 +288,9 @@ void TerminalView::sendAndScrollToBottom(std::string_view bytes)
 {
     scrollOffset = 0;
     blinkOn = true;
+    rowDrawings.invalidateRowsWithBlinkingText();
     send(bytes);
-    repaint();
+    repaintIfShown();
 }
 
 void TerminalView::sendText(std::string_view text)
@@ -316,6 +333,7 @@ void TerminalView::resized()
     }
 
     applyGridSize();
+    rowDrawings.invalidateAllRows();
     repaint();
 }
 
@@ -375,6 +393,7 @@ void TerminalView::setFontSize(float newSize)
 
     fontSize = clamped;
     atlas.emplace(fontName, fontSize);
+    rowDrawings.invalidateAllRows();
     applyGridSize();
     repaint();
 }
@@ -385,7 +404,7 @@ void TerminalView::scrollBy(int lines)
     scrollOffset = std::clamp(scrollOffset + lines, 0, screen.scrollbackSize());
 
     if (scrollOffset != previous)
-        repaint();
+        repaintIfShown();
 }
 
 // ---- rendering -------------------------------------------------------------
@@ -416,17 +435,6 @@ PaintedRow TerminalView::describeVisibleRow(int visualRow) const
             std::min((int) line.size(), screen.columns())};
 }
 
-std::vector<PaintedRow> TerminalView::describeVisibleRows() const
-{
-    auto rows = std::vector<PaintedRow> {};
-    rows.reserve((std::size_t) screen.rows());
-
-    for (auto row = 0; row < screen.rows(); ++row)
-        rows.push_back(describeVisibleRow(row));
-
-    return rows;
-}
-
 GridPainter TerminalView::makePainter()
 {
     return {{*atlas, *sprites, *glyphs, theme, {marginX, marginY}}, selection, blinkOn};
@@ -441,23 +449,25 @@ std::string TerminalView::describeCopyModePosition() const
            + std::to_string(screen.scrollbackSize()) + "]";
 }
 
-void TerminalView::rasterizeFrameGlyphs(GridPainter& painter,
-                                        const std::vector<PaintedRow>& rows,
-                                        const std::string& copyIndicator)
+// Rows are cached by visual position, which only matches the screen's dirty
+// rows at the bottom of the scrollback; scrolled back, every row is rebuilt
+// and the next frame rebuilds again.
+void TerminalView::updateRowDrawings(GridPainter& painter)
 {
-    for (const auto& row: rows)
-        painter.rasterizeRowGlyphs(row);
+    const auto isScrolledBack = scrollOffset != 0;
 
-    painter.rasterizeTextGlyphs(copyIndicator);
-}
+    if (isScrolledBack)
+        rowDrawings.invalidateAllRows();
 
-void TerminalView::drawGrid(GridPainter& painter, const std::vector<PaintedRow>& rows)
-{
-    for (const auto& row: rows)
-        painter.drawRowBackgrounds(row);
+    rowDrawings.updateRows({screen.rows(),
+                            [this](int row) { return screen.isRowDirty(row); },
+                            [this, &painter](int row)
+                            { return painter.buildRowDrawing(describeVisibleRow(row)); },
+                            [this] { return atlas->generation(); }});
+    screen.clearDirtyRows();
 
-    for (const auto& row: rows)
-        painter.drawRowGlyphs(row);
+    if (isScrolledBack)
+        rowDrawings.invalidateAllRows();
 }
 
 bool TerminalView::isCursorBlinkingNow() const
@@ -537,11 +547,10 @@ void TerminalView::render(GPU::Frame& frame)
     auto painter = makePainter();
     const auto copyIndicator = describeCopyModePosition();
 
-    const auto rows = describeVisibleRows();
-
-    rasterizeFrameGlyphs(painter, rows, copyIndicator);
+    painter.rasterizeTextGlyphs(copyIndicator);
+    updateRowDrawings(painter);
     atlas->commit();
-    drawGrid(painter, rows);
+    painter.submitRowDrawings(rowDrawings.getRows());
 
     // The backgrounds have to reach the pass before the glyphs do. A sprite
     // batch is drawn when the pass ends -- after every glyph -- so left queued
@@ -567,7 +576,7 @@ void TerminalView::clearScreenAndScrollback()
     screen.setCursor(0, 0);
     scrollOffset = 0;
     send("\014");
-    repaint();
+    repaintIfShown();
 }
 
 void TerminalView::performEditingShortcut(EditingShortcut shortcut)
@@ -806,8 +815,9 @@ void TerminalView::copySelection()
 void TerminalView::selectRow(CellRef cell)
 {
     selection = {{cell.row, 0}, {cell.row, screen.columns() - 1}, true};
+    rowDrawings.invalidateAllRows();
     selecting = false;
-    repaint();
+    repaintIfShown();
 }
 
 void TerminalView::selectWordAt(CellRef cell)
@@ -815,16 +825,18 @@ void TerminalView::selectWordAt(CellRef cell)
     const auto word = findWordAround(findLineAtAbsoluteRow(screen, cell.row), cell.col);
 
     selection = {{cell.row, word.firstColumn}, {cell.row, word.lastColumn}, word.isOnWord};
+    rowDrawings.invalidateAllRows();
     selecting = false;
-    repaint();
+    repaintIfShown();
 }
 
 void TerminalView::beginDragSelection(CellRef cell)
 {
     selectionAnchor = cell;
     selection = {cell, cell, false};
+    rowDrawings.invalidateAllRows();
     selecting = true;
-    repaint();
+    repaintIfShown();
 }
 
 // ---- copy mode -------------------------------------------------------------
@@ -854,8 +866,9 @@ void TerminalView::exitCopyMode()
     copySelecting = false;
     copyLineSelect = false;
     selection.active = false;
+    rowDrawings.invalidateAllRows();
     scrollOffset = 0;
-    repaint();
+    repaintIfShown();
 }
 
 void TerminalView::setCopyCursor(CellRef target)
@@ -873,7 +886,7 @@ void TerminalView::setCopyCursor(CellRef target)
 
     scrollOffset = std::clamp(scrollOffset, 0, screen.scrollbackSize());
     updateCopySelection();
-    repaint();
+    repaintIfShown();
 }
 
 void TerminalView::updateCopySelection()
@@ -891,6 +904,7 @@ void TerminalView::updateCopySelection()
     }
 
     selection = {start, end, true};
+    rowDrawings.invalidateAllRows();
 }
 
 void TerminalView::cancelCopySelectionOrExit()
@@ -904,7 +918,8 @@ void TerminalView::cancelCopySelectionOrExit()
     copySelecting = false;
     copyLineSelect = false;
     selection.active = false;
-    repaint();
+    rowDrawings.invalidateAllRows();
+    repaintIfShown();
 }
 
 void TerminalView::yankAndExitCopyMode()
@@ -921,7 +936,7 @@ void TerminalView::beginCopySelection(bool wholeLines)
     copyLineSelect = wholeLines;
     copyAnchor = copyCursor;
     updateCopySelection();
-    repaint();
+    repaintIfShown();
 }
 
 void TerminalView::applyCopyModeCommand(const CopyModeCommand& command)
@@ -1055,7 +1070,8 @@ void TerminalView::mouseDragged(const MouseEvent& event)
 
     const auto cell = cellRefAt(event.pos);
     selection = {std::min(selectionAnchor, cell), std::max(selectionAnchor, cell), true};
-    repaint();
+    rowDrawings.invalidateAllRows();
+    repaintIfShown();
 }
 
 void TerminalView::mouseUp(const MouseEvent& event)
@@ -1068,10 +1084,13 @@ void TerminalView::mouseUp(const MouseEvent& event)
     }
 
     if (selecting && selection.start == selection.end)
+    {
         selection.active = false;
+        rowDrawings.invalidateAllRows();
+    }
 
     selecting = false;
-    repaint();
+    repaintIfShown();
 }
 
 int TerminalView::takeWholeWheelLines(float wheelDelta)
