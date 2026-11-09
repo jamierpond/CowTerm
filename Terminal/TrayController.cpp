@@ -51,6 +51,24 @@ TrayController::TrayController(SessionManager& sessionsToUse)
     refresh();
 }
 
+std::string TrayController::createSessionMenuTitle(const TermSession& session)
+{
+    auto title = std::string {};
+
+    if (sessions.active() == &session)
+        title += "● ";
+
+    if (session.isClaude())
+        title += "✳ ";
+
+    title += session.name;
+
+    if (!session.lastNotify.empty())
+        title += " — " + session.lastNotify;
+
+    return title;
+}
+
 void TrayController::refresh()
 {
     auto menu = Menu {};
@@ -61,20 +79,8 @@ void TrayController::refresh()
     for (auto& session: sessions.all())
     {
         auto* raw = session.get();
-        auto title = std::string {};
-
-        if (sessions.active() == raw)
-            title += "● ";
-
-        if (raw->isClaude())
-            title += "✳ ";
-
-        title += raw->name;
-
-        if (!raw->lastNotify.empty())
-            title += " — " + raw->lastNotify;
-
-        menu.add(MenuItem::withAction(title, [this, raw] { onPickSession(*raw); }));
+        menu.add(MenuItem::withAction(createSessionMenuTitle(*raw),
+                                      [this, raw] { onPickSession(*raw); }));
     }
 
     menu.addSeparator();

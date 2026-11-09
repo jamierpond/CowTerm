@@ -114,3 +114,27 @@ nano_add_executable(CowTermViewTests
             TerminalViewBehaviourTests.cpp
             TerminalViewLogicTests.cpp
         TARGETS CowTerm::Terminal)
+
+# The leader-key letters and digits AppShell turns into pane and session moves.
+nano_add_executable(CowTermLeaderKeysTests
+        SOURCES
+            LeaderKeysTests.cpp
+            ../Terminal/LeaderKeys.cpp)
+
+target_include_directories(CowTermLeaderKeysTests PRIVATE ../Terminal)
+
+# `ct`'s argument parsing and its recording state file; pure, no OS calls.
+nano_add_executable(CowTermCliTests
+        SOURCES
+            CliParsingTests.cpp
+            ../Terminal/CliParsing.cpp)
+
+target_include_directories(CowTermCliTests PRIVATE ../Terminal)
+
+# The palette's fzf-style scorer.
+nano_add_executable(CowTermFuzzyMatchTests
+        SOURCES
+            FuzzyMatchTests.cpp
+            ../Terminal/FuzzyMatch.cpp)
+
+target_include_directories(CowTermFuzzyMatchTests PRIVATE ../Terminal)

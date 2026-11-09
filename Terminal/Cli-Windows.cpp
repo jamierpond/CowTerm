@@ -68,53 +68,75 @@ std::vector<RECT> displays()
     return found;
 }
 
-// --display, --window or --rect, else the main display. A window id is its
-// HWND, in decimal or 0x hex.
-bool areaFor(const Options& options, Area& area, std::string& error)
+// A window id is its HWND, in decimal or 0x hex.
+bool areaForWindow(const std::string& window, Area& area, std::string& error)
 {
-    if (!options.window.empty())
+    area.window = reinterpret_cast<HWND>(
+        static_cast<std::uintptr_t>(std::strtoull(window.c_str(), nullptr, 0)));
+
+    if (!IsWindow(area.window) || !GetWindowRect(area.window, &area.rect))
     {
-        area.window = reinterpret_cast<HWND>(static_cast<std::uintptr_t>(
-            std::strtoull(options.window.c_str(), nullptr, 0)));
-
-        if (!IsWindow(area.window) || !GetWindowRect(area.window, &area.rect))
-        {
-            error = "no window " + options.window;
-            return false;
-        }
-
-        return true;
+        error = "no window " + window;
+        return false;
     }
 
-    if (!options.rect.empty())
+    return true;
+}
+
+bool isPositiveSize(long width, long height)
+{
+    return width > 0 && height > 0;
+}
+
+bool areaForRect(const std::string& rect, Area& area, std::string& error)
+{
+    constexpr auto rectFieldCount = 4;
+    auto x = 0L, y = 0L, width = 0L, height = 0L;
+    const auto fieldsRead = sscanf_s(rect.c_str(), "%ld,%ld,%ld,%ld", &x, &y, &width, &height);
+
+    if (fieldsRead != rectFieldCount || !isPositiveSize(width, height))
     {
-        auto x = 0L, y = 0L, width = 0L, height = 0L;
-
-        if (sscanf_s(
-                options.rect.c_str(), "%ld,%ld,%ld,%ld", &x, &y, &width, &height)
-                != 4
-            || width <= 0 || height <= 0)
-        {
-            error = "--rect wants x,y,w,h";
-            return false;
-        }
-
-        area.rect = {x, y, x + width, y + height};
-        return true;
+        error = "--rect wants x,y,w,h";
+        return false;
     }
 
+    area.rect = {x, y, x + width, y + height};
+    return true;
+}
+
+int findDisplayNumber(const std::string& display)
+{
+    if (display.empty())
+        return 1;
+
+    return std::atoi(display.c_str());
+}
+
+bool areaForDisplay(const std::string& display, Area& area, std::string& error)
+{
     const auto all = displays();
-    const auto index =
-        options.display.empty() ? 1 : std::atoi(options.display.c_str());
+    const auto index = findDisplayNumber(display);
 
     if (index < 1 || index > (int) all.size())
     {
-        error = "no display " + options.display;
+        error = "no display " + display;
         return false;
     }
 
     area.rect = all[(std::size_t) index - 1];
     return true;
+}
+
+// --display, --window or --rect, else the main display.
+bool areaFor(const Options& options, Area& area, std::string& error)
+{
+    if (!options.window.empty())
+        return areaForWindow(options.window, area, error);
+
+    if (!options.rect.empty())
+        return areaForRect(options.rect, area, error);
+
+    return areaForDisplay(options.display, area, error);
 }
 
 // The area's pixels as RGBA. A window draws itself (PrintWindow), so one
@@ -188,7 +210,10 @@ void attachToTerminal()
     const auto needsOutput = !hasHandle(STD_OUTPUT_HANDLE);
     const auto needsError = !hasHandle(STD_ERROR_HANDLE);
 
-    if ((!needsOutput && !needsError) || !AttachConsole(ATTACH_PARENT_PROCESS))
+    if (!needsOutput && !needsError)
+        return;
+
+    if (!AttachConsole(ATTACH_PARENT_PROCESS))
         return;
 
     auto* stream = (FILE*) nullptr;

@@ -27,6 +27,7 @@ public:
 
 private:
     static eacp::Graphics::Image makeIcon();
+    std::string createSessionMenuTitle(const TermSession& session);
 
     SessionManager& sessions;
     eacp::Graphics::TrayIcon icon;

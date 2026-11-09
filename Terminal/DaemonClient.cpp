@@ -132,54 +132,66 @@ void DaemonClient::handleMessage(const std::string& body)
 {
     auto message = proto::parse(body);
 
-    if (message.verb == "output" && !message.args.empty())
-    {
-        if (auto found = routes.find(message.args[0]); found != routes.end())
-            found->second.onOutput(std::move(message.payload));
-
-        return;
-    }
-
-    if (message.verb == "exit" && !message.args.empty())
-    {
-        if (auto found = routes.find(message.args[0]); found != routes.end())
-        {
-            auto route = std::move(found->second);
-            routes.erase(found);
-            route.onExit();
-        }
-
-        return;
-    }
-
     if (message.verb == "info")
     {
-        auto previous = std::move(info);
-        info.clear();
-        auto start = std::size_t {0};
-
-        while (start < message.payload.size())
-        {
-            const auto end =
-                std::min(message.payload.find('\n', start), message.payload.size());
-            const auto line = message.payload.substr(start, end - start);
-            start = end + 1;
-
-            const auto firstTab = line.find('\t');
-            const auto secondTab = line.find('\t', firstTab + 1);
-
-            if (firstTab == std::string::npos || secondTab == std::string::npos)
-                continue;
-
-            auto& entry = info[line.substr(0, firstTab)];
-            entry.foregroundProcess =
-                line.substr(firstTab + 1, secondTab - firstTab - 1);
-            entry.workingDirectory = line.substr(secondTab + 1);
-        }
-
-        if (info != previous)
-            onInfoChanged();
+        handleInfo(message.payload);
+        return;
     }
+
+    if (message.args.empty())
+        return;
+
+    if (message.verb == "output")
+        handleOutput(message.args[0], std::move(message.payload));
+    else if (message.verb == "exit")
+        handleExit(message.args[0]);
+}
+
+void DaemonClient::handleOutput(const std::string& id, std::string payload)
+{
+    if (auto found = routes.find(id); found != routes.end())
+        found->second.onOutput(std::move(payload));
+}
+
+void DaemonClient::handleExit(const std::string& id)
+{
+    if (auto found = routes.find(id); found != routes.end())
+    {
+        auto route = std::move(found->second);
+        routes.erase(found);
+        route.onExit();
+    }
+}
+
+// One "<id>\t<foreground process>\t<working directory>" line per shell.
+void DaemonClient::handleInfo(const std::string& payload)
+{
+    auto previous = std::move(info);
+    info.clear();
+    auto start = std::size_t {0};
+
+    while (start < payload.size())
+    {
+        const auto end = std::min(payload.find('\n', start), payload.size());
+        readInfoLine(payload.substr(start, end - start));
+        start = end + 1;
+    }
+
+    if (info != previous)
+        onInfoChanged();
+}
+
+void DaemonClient::readInfoLine(const std::string& line)
+{
+    const auto firstTab = line.find('\t');
+    const auto secondTab = line.find('\t', firstTab + 1);
+
+    if (firstTab == std::string::npos || secondTab == std::string::npos)
+        return;
+
+    auto& entry = info[line.substr(0, firstTab)];
+    entry.foregroundProcess = line.substr(firstTab + 1, secondTab - firstTab - 1);
+    entry.workingDirectory = line.substr(secondTab + 1);
 }
 
 void DaemonClient::requestInfo()

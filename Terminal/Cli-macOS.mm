@@ -2,25 +2,27 @@
 // the process tree. The commands themselves are Cli.cpp.
 
 #include "CliPlatform.h"
+#include "MacProcesses.h"
 
 #include <ApplicationServices/ApplicationServices.h>
 #include <CoreGraphics/CoreGraphics.h>
 #include <Foundation/Foundation.h>
 
 #include <fcntl.h>
-#include <mach-o/dyld.h>
 #include <libproc.h>
 #include <spawn.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
+#include <algorithm>
+#include <array>
 #include <chrono>
-#include <climits>
 #include <csignal>
 #include <cstdio>
 #include <cstring>
 #include <ctime>
 #include <sstream>
+#include <string_view>
 #include <thread>
 #include <vector>
 
@@ -34,83 +36,17 @@ namespace
 {
 constexpr auto screencapture = "/usr/sbin/screencapture";
 
-fs::path executablePath()
-{
-    auto size = uint32_t {PATH_MAX};
-    auto buffer = std::vector<char>(size);
-
-    if (_NSGetExecutablePath(buffer.data(), &size) != 0)
-    {
-        buffer.resize(size);
-        _NSGetExecutablePath(buffer.data(), &size);
-    }
-
-    auto error = std::error_code {};
-    auto resolved = fs::canonical(buffer.data(), error);
-    return error ? fs::path {buffer.data()} : resolved;
-}
-
-// The .app that contains this executable — through ~/.local/bin/ct's symlink,
-// since executablePath() resolves it.
-std::optional<fs::path> appBundlePath()
-{
-    for (auto path = executablePath(); path.has_parent_path() && path != path.root_path();
-         path = path.parent_path())
-        if (path.extension() == ".app")
-            return path;
-
-    return std::nullopt;
-}
-
 // Runs a program to completion, stdout and stderr merged into the result.
 Capture run(const std::vector<std::string>& args)
 {
-    auto result = Capture {};
-    int fds[2];
-
-    if (pipe(fds) != 0)
-        return result;
-
-    auto actions = posix_spawn_file_actions_t {};
-    posix_spawn_file_actions_init(&actions);
-    posix_spawn_file_actions_adddup2(&actions, fds[1], STDOUT_FILENO);
-    posix_spawn_file_actions_adddup2(&actions, fds[1], STDERR_FILENO);
-    posix_spawn_file_actions_addclose(&actions, fds[0]);
-
-    auto argv = std::vector<char*> {};
-    for (const auto& arg: args)
-        argv.push_back(const_cast<char*>(arg.c_str()));
-    argv.push_back(nullptr);
-
-    auto pid = pid_t {};
-    const auto spawned =
-        posix_spawn(&pid, argv[0], &actions, nullptr, argv.data(), environ);
-    posix_spawn_file_actions_destroy(&actions);
-    close(fds[1]);
-
-    if (spawned == 0)
-    {
-        char chunk[4096];
-        for (auto n = read(fds[0], chunk, sizeof chunk); n > 0;
-             n = read(fds[0], chunk, sizeof chunk))
-            result.message.append(chunk, (std::size_t) n);
-
-        auto status = 0;
-        waitpid(pid, &status, 0);
-        result.status = WIFEXITED(status) ? WEXITSTATUS(status) : -1;
-    }
-
-    close(fds[0]);
-    return result;
+    auto output = macos::runProcessCapturingOutput(args, macos::StandardInput::inherited);
+    return Capture {output.status, std::move(output.text)};
 }
 
 // Runs a program with ct's own stdio, for screencapture's interactive mode.
 int runAttached(const std::vector<std::string>& args)
 {
-    auto argv = std::vector<char*> {};
-    for (const auto& arg: args)
-        argv.push_back(const_cast<char*>(arg.c_str()));
-    argv.push_back(nullptr);
+    auto argv = macos::createArgumentVector(args);
 
     auto pid = pid_t {};
     if (posix_spawn(&pid, argv[0], nullptr, nullptr, argv.data(), environ) != 0)
@@ -168,7 +104,7 @@ bool requestCapture()
 
 void printGrantDetails()
 {
-    const auto app = appBundlePath();
+    const auto app = macos::findAppBundlePath();
     if (!app)
     {
         std::printf("app: none (not running from a .app bundle)\n");
@@ -220,9 +156,9 @@ Capture screenshot(const Options& options, const fs::path& path)
     return run(command);
 }
 
-std::optional<long long> startRecording(const Options& options,
-                                        const fs::path& path,
-                                        std::string& error)
+namespace
+{
+std::vector<std::string> createRecordingCommand(const Options& options, const fs::path& path)
 {
     auto command = std::vector<std::string> {screencapture, "-v"};
 
@@ -234,11 +170,33 @@ std::optional<long long> startRecording(const Options& options,
         command.insert(command.end(), {"-D", options.display});
 
     command.insert(command.end(), {"-x", path.string()});
+    return command;
+}
 
-    auto argv = std::vector<char*> {};
-    for (const auto& arg: command)
-        argv.push_back(const_cast<char*>(arg.c_str()));
-    argv.push_back(nullptr);
+// A bad display number or a refused capture ends it at once; report that
+// rather than a recording that isn't happening.
+std::optional<int> findEarlyRecorderExit(pid_t pid)
+{
+    constexpr auto recorderStartupGrace = std::chrono::milliseconds {500};
+    std::this_thread::sleep_for(recorderStartupGrace);
+
+    auto status = 0;
+    if (waitpid(pid, &status, WNOHANG) != pid)
+        return std::nullopt;
+
+    if (WIFEXITED(status))
+        return WEXITSTATUS(status);
+
+    return -1;
+}
+} // namespace
+
+std::optional<long long> startRecording(const Options& options,
+                                        const fs::path& path,
+                                        std::string& error)
+{
+    const auto command = createRecordingCommand(options, path);
+    auto argv = macos::createArgumentVector(command);
 
     // screencapture -v stops on any keypress from stdin, so stdin must never
     // deliver data or EOF. The child gets the read end of a pipe and also holds
@@ -278,14 +236,9 @@ std::optional<long long> startRecording(const Options& options,
         return std::nullopt;
     }
 
-    // A bad display number or a refused capture ends it at once; report that
-    // rather than a recording that isn't happening.
-    std::this_thread::sleep_for(std::chrono::milliseconds {500});
-    auto status = 0;
-    if (waitpid(pid, &status, WNOHANG) == pid)
+    if (const auto exitStatus = findEarlyRecorderExit(pid))
     {
-        error = "screencapture exited immediately (status "
-                + std::to_string(WIFEXITED(status) ? WEXITSTATUS(status) : -1) + ")";
+        error = "screencapture exited immediately (status " + std::to_string(*exitStatus) + ")";
         return std::nullopt;
     }
 
@@ -306,34 +259,67 @@ void stopRecording(long long pid)
     kill((pid_t) pid, SIGINT);
 }
 
+namespace
+{
+std::string findProcessExecutable(pid_t pid)
+{
+    char path[PROC_PIDPATHINFO_MAXSIZE];
+
+    if (proc_pidpath(pid, path, sizeof path) > 0)
+        return path;
+
+    return {};
+}
+
+bool isCowTermHost(const std::string& executable)
+{
+    constexpr auto hostSuffixes = std::array {
+        std::string_view {"/CowTerm.app/Contents/MacOS/CowTerm"},
+        std::string_view {"/CowTerm.app/Contents/MacOS/CowTermDaemon"},
+    };
+
+    return std::ranges::any_of(hostSuffixes,
+                               [&](std::string_view suffix) { return executable.ends_with(suffix); });
+}
+
+std::optional<pid_t> findParentProcess(pid_t pid)
+{
+    auto info = proc_bsdinfo {};
+
+    if (proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &info, sizeof info) != sizeof info)
+        return std::nullopt;
+
+    return static_cast<pid_t>(info.pbi_ppid);
+}
+
+std::string describeProcess(pid_t pid, const std::string& executable)
+{
+    if (executable.empty())
+        return "pid " + std::to_string(pid);
+
+    return executable;
+}
+} // namespace
+
 // Some ancestor must be the app or its daemon (which owns every CowTerm PTY).
 bool insideCowTerm(std::string& parent)
 {
-    const auto hostSuffixes = {"/CowTerm.app/Contents/MacOS/CowTerm",
-                               "/CowTerm.app/Contents/MacOS/CowTermDaemon"};
-
     for (auto pid = getppid(); pid > 1;)
     {
-        char path[PROC_PIDPATHINFO_MAXSIZE];
-        const auto executable =
-            proc_pidpath(pid, path, sizeof path) > 0 ? std::string {path} : std::string {};
+        const auto executable = findProcessExecutable(pid);
 
         if (parent.empty())
-            parent = executable.empty() ? "pid " + std::to_string(pid) : executable;
+            parent = describeProcess(pid, executable);
 
-        for (const auto* suffix: hostSuffixes)
-            if (executable.size() >= std::strlen(suffix)
-                && executable.compare(executable.size() - std::strlen(suffix),
-                                      std::string::npos,
-                                      suffix)
-                       == 0)
-                return true;
+        if (isCowTermHost(executable))
+            return true;
 
-        auto info = proc_bsdinfo {};
-        if (proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &info, sizeof info) != sizeof info)
+        const auto parentProcess = findParentProcess(pid);
+
+        if (!parentProcess)
             break;
 
-        pid = (pid_t) info.pbi_ppid;
+        pid = *parentProcess;
     }
 
     if (parent.empty())

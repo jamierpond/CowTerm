@@ -1,5 +1,7 @@
 #include "Permissions.h"
 
+#include "MacProcesses.h"
+
 #include "CowTermCore/Debug.h"
 
 #include <eacp/Core/App/App.h>
@@ -13,13 +15,11 @@
 
 #include <dirent.h>
 #include <fcntl.h>
-#include <mach-o/dyld.h>
 #include <spawn.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
 #include <atomic>
-#include <climits>
 #include <cstring>
 #include <filesystem>
 #include <memory>
@@ -71,22 +71,6 @@ void inBackground(std::function<void()> work)
     });
 }
 
-fs::path executablePath()
-{
-    auto size = uint32_t {PATH_MAX};
-    auto buffer = std::vector<char>(size);
-
-    if (_NSGetExecutablePath(buffer.data(), &size) != 0)
-    {
-        buffer.resize(size);
-        _NSGetExecutablePath(buffer.data(), &size);
-    }
-
-    auto error = std::error_code {};
-    auto resolved = fs::canonical(buffer.data(), error);
-    return error ? fs::path {buffer.data()} : resolved;
-}
-
 std::string home()
 {
     const auto* value = std::getenv("HOME");
@@ -98,52 +82,9 @@ NSString* toNSString(const std::string& text)
     return [NSString stringWithUTF8String:text.c_str()];
 }
 
-struct Output
+macos::ProcessOutput run(const std::vector<std::string>& args)
 {
-    int status = -1;
-    std::string text;
-};
-
-// Runs a program to completion, stdout and stderr merged into the result.
-Output run(const std::vector<std::string>& args)
-{
-    auto result = Output {};
-    int fds[2];
-
-    if (pipe(fds) != 0)
-        return result;
-
-    auto actions = posix_spawn_file_actions_t {};
-    posix_spawn_file_actions_init(&actions);
-    posix_spawn_file_actions_adddup2(&actions, fds[1], STDOUT_FILENO);
-    posix_spawn_file_actions_adddup2(&actions, fds[1], STDERR_FILENO);
-    posix_spawn_file_actions_addclose(&actions, fds[0]);
-    posix_spawn_file_actions_addopen(&actions, STDIN_FILENO, "/dev/null", O_RDONLY, 0);
-
-    auto argv = std::vector<char*> {};
-    for (const auto& arg: args)
-        argv.push_back(const_cast<char*>(arg.c_str()));
-    argv.push_back(nullptr);
-
-    auto pid = pid_t {};
-    const auto spawned = posix_spawn(&pid, argv[0], &actions, nullptr, argv.data(), environ);
-    posix_spawn_file_actions_destroy(&actions);
-    close(fds[1]);
-
-    if (spawned == 0)
-    {
-        char buffer[512];
-        for (auto n = read(fds[0], buffer, sizeof buffer); n > 0;
-             n = read(fds[0], buffer, sizeof buffer))
-            result.text.append(buffer, (std::size_t) n);
-
-        auto status = 0;
-        if (waitpid(pid, &status, 0) == pid && WIFEXITED(status))
-            result.status = WEXITSTATUS(status);
-    }
-
-    close(fds[0]);
-    return result;
+    return macos::runProcessCapturingOutput(args, macos::StandardInput::discarded);
 }
 
 // The verdict for one target app. A target that isn't running has none.
@@ -314,6 +255,93 @@ void launchSystemEvents(std::function<void()> then)
                                       inBackground(*shared);
                                     }];
 }
+Status statusFromGranted(bool granted)
+{
+    if (granted)
+        return Status::granted;
+
+    return Status::notGranted;
+}
+
+// Adds CowTerm to the list (switched off) and shows macOS's prompt, once;
+// from then on it only answers.
+void requestScreenRecording(bool prompted)
+{
+    if (prompted || CGRequestScreenCaptureAccess())
+        openSettings(Kind::screenRecording);
+}
+
+void requestAccessibility(bool prompted)
+{
+    if (prompted)
+    {
+        openSettings(Kind::accessibility);
+        return;
+    }
+
+    NSDictionary* options = @{(__bridge NSString*) kAXTrustedCheckOptionPrompt: @YES};
+    AXIsProcessTrustedWithOptions((__bridge CFDictionaryRef) options);
+}
+
+void requestAutomation(bool prompted, std::function<void()> done)
+{
+    if (prompted || automationStatus() == Status::denied)
+    {
+        openSettings(Kind::automation);
+        done();
+        return;
+    }
+
+    // AEDeterminePermissionToAutomateTarget blocks until the prompt
+    // is answered, so never on the main thread.
+    launchSystemEvents(
+        [done]
+        {
+            for (const auto* target: {finder, systemEvents})
+                automation(target, true);
+
+            onMain(done);
+        });
+}
+
+void requestFilesAndFolders(bool prompted, std::function<void()> done)
+{
+    if (prompted)
+    {
+        openSettings(Kind::filesAndFolders);
+        done();
+        return;
+    }
+
+    // Touching each folder is the request: macOS prompts on first
+    // access, and the access waits for the answer.
+    inBackground(
+        [done]
+        {
+            for (const auto& folder: protectedFolders())
+                canList(folder);
+
+            foldersAsked = true;
+            onMain(done);
+        });
+}
+
+void requestNotifications(bool prompted, std::function<void()> done)
+{
+    if (notificationStatus != Status::notGranted || prompted)
+    {
+        openSettings(Kind::notifications);
+        done();
+        return;
+    }
+
+    auto shared = std::make_shared<std::function<void()>>(std::move(done));
+    [UNUserNotificationCenter.currentNotificationCenter
+        requestAuthorizationWithOptions:(UNAuthorizationOptionAlert | UNAuthorizationOptionSound)
+                      completionHandler:^(BOOL, NSError*) {
+                        refreshNotifications(*shared);
+                      }];
+}
 } // namespace
 
 Status check(Kind kind)
@@ -321,9 +349,9 @@ Status check(Kind kind)
     switch (kind)
     {
         case Kind::screenRecording:
-            return CGPreflightScreenCaptureAccess() ? Status::granted : Status::notGranted;
+            return statusFromGranted(CGPreflightScreenCaptureAccess());
         case Kind::accessibility:
-            return AXIsProcessTrusted() ? Status::granted : Status::notGranted;
+            return statusFromGranted(AXIsProcessTrusted());
         case Kind::fullDiskAccess:
             return fullDiskAccessStatus();
         case Kind::automation:
@@ -342,7 +370,7 @@ void probeScreenRecording(std::function<void(bool)> done)
 {
     // `ct screen-cap check` is this same binary as a fresh process, charged to
     // this app (its parent), so it reads TCC as it stands now.
-    const auto self = executablePath().string();
+    const auto self = macos::getExecutablePath().string();
 
     inBackground(
         [self, done = std::move(done)]
@@ -357,81 +385,22 @@ void request(Kind kind, bool prompted, std::function<void()> done)
     switch (kind)
     {
         case Kind::screenRecording:
-            // Adds CowTerm to the list (switched off) and shows macOS's
-            // prompt, once; from then on it only answers.
-            if (prompted || CGRequestScreenCaptureAccess())
-                openSettings(kind);
+            requestScreenRecording(prompted);
             break;
-
         case Kind::accessibility:
-            if (prompted)
-                openSettings(kind);
-            else
-            {
-                NSDictionary* options = @{(__bridge NSString*) kAXTrustedCheckOptionPrompt: @YES};
-                AXIsProcessTrustedWithOptions((__bridge CFDictionaryRef) options);
-            }
+            requestAccessibility(prompted);
             break;
-
         case Kind::fullDiskAccess:
             openSettings(kind);
             break;
-
         case Kind::automation:
-            if (prompted || automationStatus() == Status::denied)
-            {
-                openSettings(kind);
-                break;
-            }
-
-            // AEDeterminePermissionToAutomateTarget blocks until the prompt
-            // is answered, so never on the main thread.
-            launchSystemEvents(
-                [done]
-                {
-                    for (const auto* target: {finder, systemEvents})
-                        automation(target, true);
-
-                    onMain(done);
-                });
+            requestAutomation(prompted, std::move(done));
             return;
-
         case Kind::filesAndFolders:
-            if (prompted)
-            {
-                openSettings(kind);
-                break;
-            }
-
-            // Touching each folder is the request: macOS prompts on first
-            // access, and the access waits for the answer.
-            inBackground(
-                [done]
-                {
-                    for (const auto& folder: protectedFolders())
-                        canList(folder);
-
-                    foldersAsked = true;
-                    onMain(done);
-                });
+            requestFilesAndFolders(prompted, std::move(done));
             return;
-
         case Kind::notifications:
-            if (notificationStatus != Status::notGranted || prompted)
-            {
-                openSettings(kind);
-                break;
-            }
-
-            {
-                auto shared = std::make_shared<std::function<void()>>(done);
-                [UNUserNotificationCenter.currentNotificationCenter
-                    requestAuthorizationWithOptions:(UNAuthorizationOptionAlert
-                                                     | UNAuthorizationOptionSound)
-                                  completionHandler:^(BOOL, NSError*) {
-                                    refreshNotifications(*shared);
-                                  }];
-            }
+            requestNotifications(prompted, std::move(done));
             return;
     }
 
@@ -450,7 +419,10 @@ bool startAppDrag(eacp::Graphics::View& view)
     auto* event = NSApp.currentEvent;
     const auto path = bundlePath();
 
-    if (nsView == nil || event == nil || path.empty())
+    if (nsView == nil || event == nil)
+        return false;
+
+    if (path.empty())
         return false;
 
     static auto* source = [CowTermAppDragSource new];
@@ -460,10 +432,16 @@ bool startAppDrag(eacp::Graphics::View& view)
         initWithPasteboardWriter:[NSURL fileURLWithPath:filePath]] autorelease];
 
     auto* image = [NSWorkspace.sharedWorkspace iconForFile:filePath];
-    image.size = NSMakeSize(64, 64);
+    constexpr auto dragIconSize = 64.0;
+    constexpr auto dragIconHalfSize = dragIconSize / 2;
+    image.size = NSMakeSize(dragIconSize, dragIconSize);
 
     auto at = [nsView convertPoint:event.locationInWindow fromView:nil];
-    [item setDraggingFrame:NSMakeRect(at.x - 32, at.y - 32, 64, 64) contents:image];
+    [item setDraggingFrame:NSMakeRect(at.x - dragIconHalfSize,
+                                      at.y - dragIconHalfSize,
+                                      dragIconSize,
+                                      dragIconSize)
+                  contents:image];
 
     return [nsView beginDraggingSessionWithItems:@[item] event:event source:source] != nil;
 }
@@ -493,13 +471,12 @@ eacp::Graphics::Image appIcon()
 
 std::string bundlePath()
 {
-    // Through ~/.local/bin/ct's symlink too, since executablePath() resolves it.
-    for (auto path = executablePath(); path.has_parent_path() && path != path.root_path();
-         path = path.parent_path())
-        if (path.extension() == ".app")
-            return path.string();
+    const auto app = macos::findAppBundlePath();
 
-    return {};
+    if (!app)
+        return {};
+
+    return app->string();
 }
 
 std::string bundleIdentifier()

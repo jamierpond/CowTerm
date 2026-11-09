@@ -4,6 +4,7 @@
 #include "CowTermVersion.h"
 #include "DaemonClient.h"
 #include "GitWorktree.h"
+#include "LeaderKeys.h"
 #include "Notifier.h"
 
 #include <eacp/Core/App/App.h>
@@ -11,7 +12,8 @@
 #include <eacp/Core/Threads/EventLoop.h>
 
 #include <algorithm>
-#include <cctype>
+#include <array>
+#include <cstdint>
 
 namespace term
 {
@@ -20,6 +22,15 @@ using Graphics::KeyEvent;
 namespace KeyCode = Graphics::KeyCode;
 
 AppShell::AppShell()
+{
+    wireSessionManager();
+    wireTray();
+    wireOverlays();
+    wireWorktreeActions();
+    wireNotifications();
+}
+
+void AppShell::wireSessionManager()
 {
     manager.onActiveChanged = [this](TermSession& session)
     {
@@ -55,14 +66,6 @@ AppShell::AppShell()
         rudderChanged();
     };
 
-    tray.onShowWindow = [this] { onBringToFront(); };
-
-    tray.onPickSession = [this](TermSession& session)
-    {
-        manager.switchTo(session);
-        onBringToFront();
-    };
-
     manager.onAllClosed = []
     {
         noteQuit("last session closed");
@@ -74,16 +77,17 @@ AppShell::AppShell()
         handleSessionNotify(session, text);
         tray.refresh();
     };
+}
 
-    palette.onClosed = [this] { hidePalette(); };
+void AppShell::wireTray()
+{
+    tray.onShowWindow = [this] { onBringToFront(); };
 
-    switcher.onClosed = [this] { hideSwitcher(); };
-
-    prDashboard.onClosed = [this] { hidePrDashboard(); };
-
-    claudeHud.onClosed = [this] { hideClaudeHud(); };
-
-    permissions.onClosed = [this] { hidePermissions(); };
+    tray.onPickSession = [this](TermSession& session)
+    {
+        manager.switchTo(session);
+        onBringToFront();
+    };
 
     if constexpr (Platform::isMac())
     {
@@ -94,7 +98,27 @@ AppShell::AppShell()
         };
         tray.refresh();
     }
+}
 
+void AppShell::wireOverlays()
+{
+    palette.onClosed = [this] { hideOverlayAndRefocus(); };
+
+    switcher.onClosed = [this] { hideOverlayAndRefocus(); };
+
+    prDashboard.onClosed = [this] { hideOverlayAndRefocus(); };
+
+    claudeHud.onClosed = [this] { hideOverlayAndRefocus(); };
+
+    permissions.onClosed = [this] { hideOverlayAndRefocus(); };
+
+    popup.onClosed = [this] { hidePopup(); };
+
+    popup.interceptKey = [this](const KeyEvent& event) { return popupKey(event); };
+}
+
+void AppShell::wireWorktreeActions()
+{
     // Branch a highlighted repo into a fresh worktree and drop a session in
     // it. Returns git's error on failure so the palette can show it in place.
     palette.onCreateWorktree =
@@ -124,11 +148,10 @@ AppShell::AppShell()
 
         return {};
     };
+}
 
-    popup.onClosed = [this] { hidePopup(); };
-
-    popup.interceptKey = [this](const KeyEvent& event) { return popupKey(event); };
-
+void AppShell::wireNotifications()
+{
     // Ring-backs name a session by its key; `ct notify-user` names a pane by
     // its Rudder context id.
     Notifier::initialize(
@@ -289,14 +312,22 @@ void AppShell::updateTitle()
     onWindowTitleChanged(title);
 }
 
+bool AppShell::isSessionInFrontOfUser(TermSession& session)
+{
+    const auto& paneTree = std::as_const(session.view);
+    const auto* pane = paneTree.activePane();
+
+    if (!windowFocused || manager.active() != &session)
+        return false;
+
+    return pane != nullptr && pane->hasFocus();
+}
+
 void AppShell::handleSessionNotify(TermSession& session, const std::string& text)
 {
     // The active, focused session is right in front of the user — no need
     // to shout about it.
-    const auto* pane = const_cast<const SessionView&>(session.view).activePane();
-
-    if (windowFocused && manager.active() == &session && pane != nullptr
-        && pane->hasFocus())
+    if (isSessionInFrontOfUser(session))
         return;
 
     Notifier::notify(session.key(), session.name, text);
@@ -325,6 +356,18 @@ void AppShell::hideOverlay()
     removeSubview(overlayHost);
 }
 
+void AppShell::hideOverlayAndRefocus()
+{
+    hideOverlay();
+    focusAttachedPane();
+}
+
+void AppShell::focusAttachedPane()
+{
+    if (attached != nullptr)
+        attached->view.focusActive();
+}
+
 // Re-raise whichever overlay is open above a freshly attached terminal view.
 void AppShell::raiseOverlay()
 {
@@ -349,17 +392,9 @@ void AppShell::showPalette()
     palette.show();
 }
 
-void AppShell::hidePalette()
-{
-    hideOverlay();
-
-    if (attached != nullptr)
-        attached->view.focusActive();
-}
-
 void AppShell::showSwitcher(bool reverse)
 {
-    if (switcher.isShown() || palette.isShown() || popup.isShown())
+    if (isSwitcherBlocked())
         return;
 
     showOverlay(switcher);
@@ -374,12 +409,9 @@ void AppShell::showSwitcher(bool reverse)
 
 }
 
-void AppShell::hideSwitcher()
+bool AppShell::isSwitcherBlocked() const
 {
-    hideOverlay();
-
-    if (attached != nullptr)
-        attached->view.focusActive();
+    return switcher.isShown() || palette.isShown() || popup.isShown();
 }
 
 void AppShell::showPrDashboard()
@@ -391,14 +423,6 @@ void AppShell::showPrDashboard()
     prDashboard.show();
 }
 
-void AppShell::hidePrDashboard()
-{
-    hideOverlay();
-
-    if (attached != nullptr)
-        attached->view.focusActive();
-}
-
 void AppShell::showClaudeHud()
 {
     if (anyOverlayShown())
@@ -406,14 +430,6 @@ void AppShell::showClaudeHud()
 
     showOverlay(claudeHud);
     claudeHud.show();
-}
-
-void AppShell::hideClaudeHud()
-{
-    hideOverlay();
-
-    if (attached != nullptr)
-        attached->view.focusActive();
 }
 
 // Like the other overlays, it waits for whichever one is open to close.
@@ -424,14 +440,6 @@ void AppShell::showPermissions(bool confirmReset)
 
     showOverlay(permissions);
     permissions.show(false, confirmReset);
-}
-
-void AppShell::hidePermissions()
-{
-    hideOverlay();
-
-    if (attached != nullptr)
-        attached->view.focusActive();
 }
 
 void AppShell::showPopup(const std::string& command)
@@ -453,51 +461,44 @@ void AppShell::showPopup(const std::string& command)
 void AppShell::hidePopup()
 {
     removeSubview(popup);
+    focusAttachedPane();
+}
 
-    if (attached != nullptr)
-        attached->view.focusActive();
+bool AppShell::isLeaderPrefixKey(const KeyEvent& event)
+{
+    return event.modifiers.control && event.charactersIgnoringModifiers == "a"
+           && !event.modifiers.command;
+}
+
+bool AppShell::doesKeyTogglePopup(const std::string& characters) const
+{
+    if (characters == "i")
+        return true;
+
+    return std::ranges::any_of(config.bindings,
+                               [&](const KeyBinding& binding)
+                               { return !binding.popup.empty() && characters == binding.key; });
 }
 
 bool AppShell::popupKey(const KeyEvent& event)
 {
-    if (popupPrefixArmed)
+    if (!popupPrefixArmed)
     {
-        popupPrefixArmed = false;
-
-        if (event.modifiers.control && event.charactersIgnoringModifiers == "a")
-            return false;
-
-        const auto togglesPopup = [&](const std::string& chars)
-        {
-            if (chars == "i")
-                return true;
-
-            for (const auto& binding: config.bindings)
-                if (!binding.popup.empty() && chars == binding.key)
-                    return true;
-
-            return false;
-        };
-
-        if (togglesPopup(event.charactersIgnoringModifiers))
-        {
-            popup.dismiss();
-            return true;
-        }
-
-        // The rest of the leader table targets panes hidden behind the
-        // popup; swallow rather than mutate what the user can't see.
-        return true;
+        popupPrefixArmed = isLeaderPrefixKey(event);
+        return popupPrefixArmed;
     }
 
-    if (event.modifiers.control && event.charactersIgnoringModifiers == "a"
-        && !event.modifiers.command)
-    {
-        popupPrefixArmed = true;
-        return true;
-    }
+    popupPrefixArmed = false;
 
-    return false;
+    if (event.modifiers.control && event.charactersIgnoringModifiers == "a")
+        return false;
+
+    // The rest of the leader table targets panes hidden behind the
+    // popup; swallow rather than mutate what the user can't see.
+    if (doesKeyTogglePopup(event.charactersIgnoringModifiers))
+        popup.dismiss();
+
+    return true;
 }
 
 bool AppShell::interceptKey(const KeyEvent& event)
@@ -511,15 +512,13 @@ bool AppShell::interceptKey(const KeyEvent& event)
     // Ctrl+Tab: the MRU session switcher, macOS Cmd+Tab style. Shift reverses.
     // Once it's up it owns the keyboard, so this only fires the first press;
     // the switcher itself handles the rest (further taps, release-to-commit).
-    if (event.modifiers.control && !event.modifiers.command
-        && event.keyCode == KeyCode::Tab)
+    if (isSwitcherKey(event))
     {
         showSwitcher(event.modifiers.shift);
         return true;
     }
 
-    if (event.modifiers.control && event.charactersIgnoringModifiers == "a"
-        && !event.modifiers.command)
+    if (isLeaderPrefixKey(event))
     {
         prefixArmed = true;
         return true;
@@ -531,269 +530,270 @@ bool AppShell::interceptKey(const KeyEvent& event)
     return false;
 }
 
+bool AppShell::isSwitcherKey(const KeyEvent& event)
+{
+    return event.modifiers.control && !event.modifiers.command
+           && event.keyCode == KeyCode::Tab;
+}
+
+void AppShell::withActivePaneTree(const std::function<void(SessionView&)>& action)
+{
+    if (auto* active = manager.active())
+        action(active->view);
+}
+
+void AppShell::withActivePane(const std::function<void(TerminalView&)>& action)
+{
+    withActivePaneTree(
+        [&](SessionView& paneTree)
+        {
+            if (auto* pane = paneTree.activePane())
+                action(*pane);
+        });
+}
+
+bool AppShell::runKeyAction(std::span<const KeyAction> actions,
+                            const std::string& characters)
+{
+    const auto found = std::ranges::find(actions, characters, &KeyAction::key);
+
+    if (found == actions.end())
+        return false;
+
+    (this->*found->action)();
+    return true;
+}
+
+bool AppShell::runConfigBinding(const std::string& characters)
+{
+    const auto found = std::ranges::find_if(
+        config.bindings,
+        [&](const KeyBinding& binding)
+        { return !binding.key.empty() && characters == binding.key; });
+
+    if (found == config.bindings.end())
+        return false;
+
+    if (!found->send.empty())
+        withActivePane([&](TerminalView& pane) { pane.sendText(found->send); });
+    else if (!found->popup.empty())
+        showPopup(found->popup);
+
+    return true;
+}
+
+// Arrows: plain moves focus (tmux select-pane); Ctrl resizes by one
+// cell, Alt by five.
+bool AppShell::runArrowKey(const KeyEvent& event)
+{
+    using ArrowDirection = std::pair<std::uint16_t, char>;
+
+    constexpr auto arrowDirections = std::array {
+        ArrowDirection {KeyCode::LeftArrow, 'h'},
+        ArrowDirection {KeyCode::DownArrow, 'j'},
+        ArrowDirection {KeyCode::UpArrow, 'k'},
+        ArrowDirection {KeyCode::RightArrow, 'l'},
+    };
+
+    const auto found =
+        std::ranges::find(arrowDirections, event.keyCode, &ArrowDirection::first);
+
+    if (found == arrowDirections.end())
+        return false;
+
+    const auto direction = found->second;
+    const auto& modifiers = event.modifiers;
+
+    withActivePaneTree(
+        [&](SessionView& paneTree)
+        {
+            if (modifiers.control || modifiers.alt)
+                paneTree.resizeActive(direction, calculateArrowResizeCells(modifiers.alt));
+            else
+                paneTree.focusDirection(direction);
+        });
+
+    return true;
+}
+
+float AppShell::calculateArrowResizeCells(bool altHeld)
+{
+    constexpr auto arrowResizeCells = 1.0f;
+    constexpr auto altArrowResizeCells = 5.0f;
+
+    if (altHeld)
+        return altArrowResizeCells;
+
+    return arrowResizeCells;
+}
+
+// Shift+H/J/K/L resize by one cell; plain h/j/k/l move focus whether or not
+// Ctrl is still down from the prefix roll. Ctrl is left out of resize on
+// purpose: rolling the prefix leaves it held, so Ctrl+h must mean "move
+// focus", never resize.
+bool AppShell::runPaneDirectionKey(const std::string& characters)
+{
+    constexpr auto letterResizeCells = 1.0f;
+
+    if (const auto direction = findPaneResizeDirection(characters))
+    {
+        withActivePaneTree([&](SessionView& paneTree)
+                           { paneTree.resizeActive(*direction, letterResizeCells); });
+        return true;
+    }
+
+    if (const auto direction = findPaneFocusDirection(characters))
+    {
+        withActivePaneTree([&](SessionView& paneTree)
+                           { paneTree.focusDirection(*direction); });
+        return true;
+    }
+
+    return false;
+}
+
+bool AppShell::runSessionDigitKey(const std::string& characters)
+{
+    const auto index = findSessionIndexForDigit(characters);
+
+    if (!index)
+        return false;
+
+    manager.switchToIndex(*index);
+    return true;
+}
+
 bool AppShell::handlePrefixed(const KeyEvent& event)
 {
-    const auto& chars = event.charactersIgnoringModifiers;
-    auto* active = manager.active();
-    auto* paneTree = active != nullptr ? &active->view : nullptr;
+    // f/w palette, p PR dashboard, a Claude HUD, i lazygit popup, " and %
+    // split below and beside, [ ] copy mode and paste, x kills the pane.
+    static constexpr auto leaderActions = std::array {
+        KeyAction {"f", &AppShell::showPalette},
+        KeyAction {"w", &AppShell::showPalette},
+        KeyAction {"p", &AppShell::showPrDashboard},
+        KeyAction {"a", &AppShell::showClaudeHud},
+        KeyAction {"i", &AppShell::showLazygitPopup},
+        KeyAction {"\"", &AppShell::splitActivePaneBelow},
+        KeyAction {"%", &AppShell::splitActivePaneBeside},
+        KeyAction {"z", &AppShell::toggleActivePaneZoom},
+        KeyAction {"[", &AppShell::enterCopyModeOnActivePane},
+        KeyAction {"]", &AppShell::pasteIntoActivePane},
+        KeyAction {"o", &AppShell::cycleActivePaneFocus},
+        KeyAction {"c", &AppShell::openSessionInActiveDirectory},
+        KeyAction {"x", &AppShell::closeActivePane},
+        KeyAction {"^", &AppShell::switchToLastSession},
+    };
+
+    const auto& characters = event.charactersIgnoringModifiers;
 
     // Prefix twice sends a literal Ctrl+A through to the shell.
-    if (event.modifiers.control && chars == "a")
+    if (event.modifiers.control && characters == "a")
         return false;
 
     // Config bindings first, so ~/.config/cowterm.json can override built-ins.
-    for (const auto& binding: config.bindings)
-    {
-        if (binding.key.empty() || chars != binding.key)
-            continue;
-
-        if (!binding.send.empty())
-        {
-            if (paneTree != nullptr)
-                if (auto* pane = paneTree->activePane())
-                    pane->sendText(binding.send);
-        }
-        else if (!binding.popup.empty())
-        {
-            showPopup(binding.popup);
-        }
-
+    if (runConfigBinding(characters) || runArrowKey(event))
         return true;
-    }
 
-    // Shift+H/J/K/L: resize the active pane by one cell. Ctrl is left out
-    // of resize on purpose: rolling the prefix leaves it held, so Ctrl+h
-    // must mean "move focus", never resize.
-    if (chars == "H" || chars == "J" || chars == "K" || chars == "L")
-    {
-        if (paneTree != nullptr)
-            paneTree->resizeActive((char) std::tolower((unsigned char) chars[0]),
-                                   1.0f);
-
+    if (runPaneDirectionKey(characters) || runKeyAction(leaderActions, characters))
         return true;
-    }
 
-    // Arrows: plain moves focus (tmux select-pane); Ctrl resizes by one
-    // cell, Alt by five.
-    const auto arrowDirection = [&]() -> char
-    {
-        switch (event.keyCode)
-        {
-            case KeyCode::LeftArrow:
-                return 'h';
-            case KeyCode::DownArrow:
-                return 'j';
-            case KeyCode::UpArrow:
-                return 'k';
-            case KeyCode::RightArrow:
-                return 'l';
-            default:
-                return 0;
-        }
-    }();
-
-    if (arrowDirection != 0)
-    {
-        if (paneTree != nullptr)
-        {
-            if (event.modifiers.control || event.modifiers.alt)
-                paneTree->resizeActive(arrowDirection,
-                                       event.modifiers.alt ? 5.0f : 1.0f);
-            else
-                paneTree->focusDirection(arrowDirection);
-        }
-
-        return true;
-    }
-
-    if (chars == "f" || chars == "w")
-    {
-        showPalette();
-        return true;
-    }
-
-    // The PR dashboard, on the same key the tmux setup bound it to.
-    if (chars == "p")
-    {
-        showPrDashboard();
-        return true;
-    }
-
-    // The Claude HUD: every conversation across every session, one glance.
-    if (chars == "a")
-    {
-        showClaudeHud();
-        return true;
-    }
-
-    // Lazygit over the active pane's directory, tmux display-popup style;
-    // quitting lazygit (or Ctrl+A i again) dismisses it.
-    if (chars == "i")
-    {
-        showPopup("lazygit");
-        return true;
-    }
-
-    // Pane splits, in the pane's current directory: " below, % beside.
-    if (chars == "\"")
-    {
-        if (paneTree != nullptr)
-            paneTree->splitActive(false);
-
-        return true;
-    }
-
-    if (chars == "%")
-    {
-        if (paneTree != nullptr)
-            paneTree->splitActive(true);
-
-        return true;
-    }
-
-    // Focus moves whether or not Ctrl is still down from the prefix roll.
-    if (chars == "h" || chars == "j" || chars == "k" || chars == "l")
-    {
-        if (paneTree != nullptr)
-            paneTree->focusDirection(chars[0]);
-
-        return true;
-    }
-
-    if (chars == "z")
-    {
-        if (paneTree != nullptr)
-            paneTree->toggleZoom();
-
-        return true;
-    }
-
-    // tmux copy mode on the active pane; ] pastes, completing the pair.
-    if (chars == "[")
-    {
-        if (paneTree != nullptr)
-            if (auto* pane = paneTree->activePane())
-                pane->enterCopyMode();
-
-        return true;
-    }
-
-    if (chars == "]")
-    {
-        if (paneTree != nullptr)
-            if (auto* pane = paneTree->activePane())
-                pane->paste();
-
-        return true;
-    }
-
-    if (chars == "o")
-    {
-        if (paneTree != nullptr)
-            paneTree->cycleFocus();
-
-        return true;
-    }
-
-    if (chars == "c")
-    {
-        if (active != nullptr)
-            manager.newSession(active->activeWorkingDirectory());
-
-        return true;
-    }
-
-    // Kill the active pane; the session ends with its last pane.
-    if (chars == "x")
-    {
-        if (paneTree != nullptr)
-            paneTree->closeActivePane();
-
-        return true;
-    }
-
-    if (chars == "^")
-    {
-        manager.switchToLast();
-        return true;
-    }
-
-    if (chars.size() == 1 && chars[0] >= '1' && chars[0] <= '9')
-    {
-        manager.switchToIndex(chars[0] - '1');
-        return true;
-    }
-
+    runSessionDigitKey(characters);
     return true;
 }
 
 bool AppShell::handleCommand(const KeyEvent& event)
 {
-    const auto& chars = event.charactersIgnoringModifiers;
+    // Zoom (= + - 0) is one size for the whole app: every pane in every
+    // session changes together, written back to ~/.config/cowterm.json.
+    static constexpr auto commandActions = std::array {
+        KeyAction {"k", &AppShell::showPalette},
+        KeyAction {"t", &AppShell::showPalette},
+        KeyAction {"w", &AppShell::closeActivePane},
+        KeyAction {"n", &AppShell::openSessionInActiveDirectory},
+        KeyAction {"d", &AppShell::splitActivePaneBeside},
+        KeyAction {"q", &AppShell::quitFromLeader},
+        KeyAction {"=", &AppShell::increaseGlobalFontSize},
+        KeyAction {"+", &AppShell::increaseGlobalFontSize},
+        KeyAction {"-", &AppShell::decreaseGlobalFontSize},
+        KeyAction {"0", &AppShell::resetGlobalFontSize},
+    };
 
-    if (chars == "k" || chars == "t")
-    {
-        showPalette();
-        return true;
-    }
+    const auto& characters = event.charactersIgnoringModifiers;
+    return runKeyAction(commandActions, characters) || runSessionDigitKey(characters);
+}
 
-    if (chars == "w")
-    {
-        if (auto* active = manager.active())
-            active->view.closeActivePane();
+// Lazygit over the active pane's directory, tmux display-popup style;
+// quitting lazygit (or Ctrl+A i again) dismisses it.
+void AppShell::showLazygitPopup()
+{
+    showPopup("lazygit");
+}
 
-        return true;
-    }
+void AppShell::splitActivePaneBelow()
+{
+    withActivePaneTree([](SessionView& paneTree) { paneTree.splitActive(false); });
+}
 
-    if (chars == "n")
-    {
-        if (auto* active = manager.active())
-            manager.newSession(active->activeWorkingDirectory());
+void AppShell::splitActivePaneBeside()
+{
+    withActivePaneTree([](SessionView& paneTree) { paneTree.splitActive(true); });
+}
 
-        return true;
-    }
+void AppShell::toggleActivePaneZoom()
+{
+    withActivePaneTree([](SessionView& paneTree) { paneTree.toggleZoom(); });
+}
 
-    if (chars == "d")
-    {
-        if (auto* active = manager.active())
-            active->view.splitActive(true);
+void AppShell::cycleActivePaneFocus()
+{
+    withActivePaneTree([](SessionView& paneTree) { paneTree.cycleFocus(); });
+}
 
-        return true;
-    }
+// The session ends with its last pane.
+void AppShell::closeActivePane()
+{
+    withActivePaneTree([](SessionView& paneTree) { paneTree.closeActivePane(); });
+}
 
-    if (chars == "q")
-    {
-        noteQuit("leader q");
-        Apps::quit();
-        return true;
-    }
+void AppShell::enterCopyModeOnActivePane()
+{
+    withActivePane([](TerminalView& pane) { pane.enterCopyMode(); });
+}
 
-    // Zoom: one size for the whole app. Every pane in every session changes
-    // together, and the new size is written back to ~/.config/cowterm.json.
-    if (chars == "=" || chars == "+")
-    {
-        setGlobalFontSize(config.fontSize + 1);
-        return true;
-    }
+void AppShell::pasteIntoActivePane()
+{
+    withActivePane([](TerminalView& pane) { pane.paste(); });
+}
 
-    if (chars == "-")
-    {
-        setGlobalFontSize(config.fontSize - 1);
-        return true;
-    }
+void AppShell::openSessionInActiveDirectory()
+{
+    if (auto* active = manager.active())
+        manager.newSession(active->activeWorkingDirectory());
+}
 
-    if (chars == "0")
-    {
-        setGlobalFontSize(AppConfig {}.fontSize);
-        return true;
-    }
+void AppShell::switchToLastSession()
+{
+    manager.switchToLast();
+}
 
-    if (chars.size() == 1 && chars[0] >= '1' && chars[0] <= '9')
-    {
-        manager.switchToIndex(chars[0] - '1');
-        return true;
-    }
+void AppShell::quitFromLeader()
+{
+    noteQuit("leader q");
+    Apps::quit();
+}
 
-    return false;
+void AppShell::increaseGlobalFontSize()
+{
+    setGlobalFontSize(config.fontSize + 1);
+}
+
+void AppShell::decreaseGlobalFontSize()
+{
+    setGlobalFontSize(config.fontSize - 1);
+}
+
+void AppShell::resetGlobalFontSize()
+{
+    setGlobalFontSize(AppConfig {}.fontSize);
 }
 } // namespace term

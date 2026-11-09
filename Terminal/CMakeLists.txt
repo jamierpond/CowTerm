@@ -25,10 +25,13 @@ add_executable(${COWTERM_EXECUTABLE_TARGET}
         AppShell.cpp
         ClaudeHud.cpp
         Cli.cpp
+        CliParsing.cpp
         Command.cpp
         Config.cpp
+        FuzzyMatch.cpp
         GitBranch.cpp
         GitWorktree.cpp
+        LeaderKeys.cpp
         MruStore.cpp
         NotifyUserClient.cpp
         NotifyUserPrompt.cpp
@@ -55,6 +58,7 @@ add_executable(${COWTERM_EXECUTABLE_TARGET}
 if (APPLE)
     target_sources(${COWTERM_EXECUTABLE_TARGET} PRIVATE
             Cli-macOS.mm
+            MacProcesses.mm
             Command-Posix.cpp
             DirWatcher-macOS.mm
             Notifier-macOS.mm

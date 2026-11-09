@@ -11,9 +11,12 @@
 #include <eacp/Core/Core.h>
 #include <eacp/Network/IPC/Messenger.h>
 
+#include <algorithm>
+#include <array>
 #include <map>
 #include <memory>
 #include <string>
+#include <string_view>
 
 using namespace eacp;
 
@@ -71,25 +74,63 @@ struct Daemon
             client->send(message);
     }
 
+    struct MessageHandler
+    {
+        std::string_view verb;
+        std::size_t minimumArgumentCount = 0;
+        void (Daemon::*handle)(const term::proto::Message& message);
+    };
+
     void handle(const term::proto::Message& message)
     {
-        if (message.verb == "spawn" && message.args.size() >= 3)
-            spawn(message.args[0],
-                  std::stoi(message.args[1]),
-                  std::stoi(message.args[2]),
-                  message.payload);
-        else if (message.verb == "write" && !message.args.empty())
-            write(message.args[0], message.payload);
-        else if (message.verb == "resize" && message.args.size() >= 3)
-            resize(message.args[0],
-                   std::stoi(message.args[1]),
-                   std::stoi(message.args[2]));
-        else if (message.verb == "kill" && !message.args.empty())
-            kill(message.args[0]);
-        else if (message.verb == "info")
-            sendInfo();
-        else if (message.verb == "quit-server")
-            Apps::quit();
+        static constexpr auto handlers = std::array {
+            MessageHandler {"spawn", 3, &Daemon::handleSpawn},
+            MessageHandler {"write", 1, &Daemon::handleWrite},
+            MessageHandler {"resize", 3, &Daemon::handleResize},
+            MessageHandler {"kill", 1, &Daemon::handleKill},
+            MessageHandler {"info", 0, &Daemon::handleInfo},
+            MessageHandler {"quit-server", 0, &Daemon::handleQuitServer},
+        };
+
+        const auto found = std::ranges::find(handlers, message.verb, &MessageHandler::verb);
+
+        if (found == handlers.end() || message.args.size() < found->minimumArgumentCount)
+            return;
+
+        (this->*(found->handle))(message);
+    }
+
+    void handleSpawn(const term::proto::Message& message)
+    {
+        spawn(message.args[0],
+              std::stoi(message.args[1]),
+              std::stoi(message.args[2]),
+              message.payload);
+    }
+
+    void handleWrite(const term::proto::Message& message)
+    {
+        write(message.args[0], message.payload);
+    }
+
+    void handleResize(const term::proto::Message& message)
+    {
+        resize(message.args[0], std::stoi(message.args[1]), std::stoi(message.args[2]));
+    }
+
+    void handleKill(const term::proto::Message& message)
+    {
+        kill(message.args[0]);
+    }
+
+    void handleInfo(const term::proto::Message&)
+    {
+        sendInfo();
+    }
+
+    void handleQuitServer(const term::proto::Message&)
+    {
+        Apps::quit();
     }
 
     void spawn(const std::string& id, int cols, int rows, const std::string& cwd)

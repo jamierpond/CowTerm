@@ -134,6 +134,17 @@ std::string statusLabel(Status status)
     return {};
 }
 
+namespace
+{
+bool canAskDirectly(const Info& grant, Status status, bool prompted)
+{
+    if (!grant.canPrompt || prompted)
+        return false;
+
+    return status != Status::denied;
+}
+} // namespace
+
 std::string actionLabel(const Info& grant, Status status, bool prompted)
 {
     if (status == Status::granted)
@@ -142,7 +153,7 @@ std::string actionLabel(const Info& grant, Status status, bool prompted)
     if (status == Status::needsRelaunch)
         return "Relaunch";
 
-    if (grant.canPrompt && !prompted && status != Status::denied)
+    if (canAskDirectly(grant, status, prompted))
         return "Grant";
 
     return "Open Settings";
