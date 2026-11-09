@@ -139,6 +139,8 @@ public:
 
 private:
     void flushOutput();
+    void repaintUnlessSynchronized();
+    void startSynchronizedOutputTimeout();
     void send(std::string_view bytes);
     void sendAndScrollToBottom(std::string_view bytes);
     bool handleCommandShortcut(const eacp::Graphics::KeyEvent& event);
@@ -241,5 +243,6 @@ private:
     float marginX = 6.0f;
     float marginY = 4.0f;
     std::uint64_t renderedVersion = 0;
+    std::uint64_t synchronizedOutputGeneration = 0;
 };
 } // namespace term

@@ -69,7 +69,7 @@ TerminalView::TerminalView(const TerminalConfig& config,
           [this]
           {
               blinkOn = !blinkOn;
-              repaint();
+              repaintUnlessSynchronized();
           },
           2)
 {
@@ -94,6 +94,7 @@ TerminalView::TerminalView(const TerminalConfig& config,
     };
 
     parser.onNotify = [this](const std::string& text) { onNotify(text); };
+    parser.onSynchronizedOutputStarted = [this] { startSynchronizedOutputTimeout(); };
 
     auto guard = std::weak_ptr<bool> {alive};
 
@@ -163,7 +164,32 @@ void TerminalView::flushOutput()
         scrollOffset = 0;
 
     scrollOffset = std::min(scrollOffset, screen.scrollbackSize());
-    repaint();
+    repaintUnlessSynchronized();
+}
+
+void TerminalView::repaintUnlessSynchronized()
+{
+    if (!screen.modes.synchronizedOutput)
+        repaint();
+}
+
+// Ghostty's timeout: a program that set mode 2026 and never reset it (it
+// crashed mid-frame) gets its screen shown a second after its last set.
+void TerminalView::startSynchronizedOutputTimeout()
+{
+    constexpr auto synchronizedOutputTimeout = Time::MS {1000};
+    const auto generation = ++synchronizedOutputGeneration;
+    auto guard = std::weak_ptr<bool> {alive};
+
+    Threads::callAfter(synchronizedOutputTimeout,
+                       [this, guard, generation]
+                       {
+                           if (guard.expired() || generation != synchronizedOutputGeneration)
+                               return;
+
+                           screen.modes.synchronizedOutput = false;
+                           repaint();
+                       });
 }
 
 void TerminalView::send(std::string_view bytes)

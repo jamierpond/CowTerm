@@ -314,7 +314,7 @@ struct TermParserActions
         {0x0f, [](TermParser& p) { p.activeCharset = 0; }},
     }};
 
-    static constexpr std::array<ModeFlagEntry, 9> privateModeFlags = {{
+    static constexpr std::array<ModeFlagEntry, 10> privateModeFlags = {{
         {1, &Modes::appCursorKeys},
         {7, &Modes::autowrap},
         {12, &Modes::cursorBlink},
@@ -324,6 +324,7 @@ struct TermParserActions
         {1003, &Modes::mouseMotion},
         {1006, &Modes::mouseSgr},
         {2004, &Modes::bracketedPaste},
+        {2026, &Modes::synchronizedOutput},
     }};
 
     static constexpr std::array<ModeEntry, 5> privateModeActions = {{
@@ -548,21 +549,48 @@ void TermParser::dispatchCsi(std::uint8_t finalByte)
 
 void TermParser::runCsi(std::uint8_t finalByte)
 {
-    const auto isModeChange = finalByte == 'h' || finalByte == 'l';
+    if (privateMarker == '?')
+        runPrivateCsi(finalByte);
+    else if (privateMarker == 0 || finalByte == 'c')
+        runCsiAction(finalByte);
+}
 
-    if (privateMarker == '?' && isModeChange)
+void TermParser::runPrivateCsi(std::uint8_t finalByte)
+{
+    if (intermediate == '$' && finalByte == 'p')
     {
-        for (std::size_t i = 0; i < params.size(); ++i)
-            setPrivateMode(params.value(i, -1), finalByte == 'h');
-
+        reportPrivateMode(params.value(0, 0));
         return;
     }
 
-    if (privateMarker != 0 && finalByte != 'c')
+    if (finalByte != 'h' && finalByte != 'l')
+    {
+        runCsiAction(finalByte);
         return;
+    }
 
+    for (std::size_t i = 0; i < params.size(); ++i)
+        setPrivateMode(params.value(i, -1), finalByte == 'h');
+}
+
+void TermParser::runCsiAction(std::uint8_t finalByte)
+{
     if (const auto action = findEntry(TermParserActions::csiActions, finalByte))
         action->run(*this);
+}
+
+// DECRQM: answers 1 for a set mode, 2 for a reset one, 0 for one we don't know.
+void TermParser::reportPrivateMode(int mode)
+{
+    constexpr auto unknownMode = 0;
+    constexpr auto modeIsSet = 1;
+    constexpr auto modeIsReset = 2;
+    auto answer = unknownMode;
+
+    if (const auto flag = findEntry(TermParserActions::privateModeFlags, mode))
+        answer = screen.modes.*(flag->flag) ? modeIsSet : modeIsReset;
+
+    respond("\033[?" + std::to_string(mode) + ";" + std::to_string(answer) + "$y");
 }
 
 void TermParser::reportDeviceStatus()
@@ -580,9 +608,15 @@ void TermParser::reportDeviceStatus()
 
 void TermParser::setPrivateMode(int mode, bool on)
 {
+    constexpr auto synchronizedOutputMode = 2026;
+
     if (const auto flag = findEntry(TermParserActions::privateModeFlags, mode))
     {
         screen.modes.*(flag->flag) = on;
+
+        if (mode == synchronizedOutputMode && on)
+            onSynchronizedOutputStarted();
+
         return;
     }
 
