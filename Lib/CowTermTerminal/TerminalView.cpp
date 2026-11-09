@@ -279,7 +279,7 @@ std::string TerminalView::debugScreenText() const
 
     for (int row = 0; row < screen.rows(); ++row)
     {
-        out += extractVisibleRowText(screen.lineAt(row, 0), screen.columns());
+        out += extractVisibleRowText(screen, screen.lineAt(row, 0), screen.columns());
         out += '\n';
     }
 
@@ -376,10 +376,21 @@ PaintedRow TerminalView::describeVisibleRow(int visualRow) const
 {
     const auto& line = screen.lineAt(visualRow, scrollOffset);
 
-    return {line,
+    return {screen.resolveLine(line),
             findTopVisibleAbsoluteRow() + visualRow,
             marginY + (float) visualRow * atlas->cellHeight(),
             std::min((int) line.size(), screen.columns())};
+}
+
+std::vector<PaintedRow> TerminalView::describeVisibleRows() const
+{
+    auto rows = std::vector<PaintedRow> {};
+    rows.reserve((std::size_t) screen.rows());
+
+    for (auto row = 0; row < screen.rows(); ++row)
+        rows.push_back(describeVisibleRow(row));
+
+    return rows;
 }
 
 GridPainter TerminalView::makePainter()
@@ -397,21 +408,22 @@ std::string TerminalView::describeCopyModePosition() const
 }
 
 void TerminalView::rasterizeFrameGlyphs(GridPainter& painter,
+                                        const std::vector<PaintedRow>& rows,
                                         const std::string& copyIndicator)
 {
-    for (auto row = 0; row < screen.rows(); ++row)
-        painter.rasterizeRowGlyphs(describeVisibleRow(row));
+    for (const auto& row: rows)
+        painter.rasterizeRowGlyphs(row);
 
     painter.rasterizeTextGlyphs(copyIndicator);
 }
 
-void TerminalView::drawGrid(GridPainter& painter)
+void TerminalView::drawGrid(GridPainter& painter, const std::vector<PaintedRow>& rows)
 {
-    for (auto row = 0; row < screen.rows(); ++row)
-        painter.drawRowBackgrounds(describeVisibleRow(row));
+    for (const auto& row: rows)
+        painter.drawRowBackgrounds(row);
 
-    for (auto row = 0; row < screen.rows(); ++row)
-        painter.drawRowGlyphs(describeVisibleRow(row));
+    for (const auto& row: rows)
+        painter.drawRowGlyphs(row);
 }
 
 bool TerminalView::isCursorBlinkingNow() const
@@ -442,7 +454,7 @@ void TerminalView::drawCursor(GridPainter& painter)
 
     painter.drawCursor(origin,
                        findCursorStyle(parser.cursorShape()),
-                       screen.lineAt(visualRow, scrollOffset),
+                       screen.resolveLine(screen.lineAt(visualRow, scrollOffset)),
                        screen.cursor.x);
 }
 
@@ -452,7 +464,7 @@ void TerminalView::drawCopyMode(GridPainter& painter, const std::string& indicat
 
     if (visualRow >= 0 && visualRow < screen.rows())
         painter.drawBlockCursor(calculateCellOrigin(visualRow, copyCursor.col),
-                                findLineAtAbsoluteRow(screen, copyCursor.row),
+                                screen.resolveLine(findLineAtAbsoluteRow(screen, copyCursor.row)),
                                 copyCursor.col);
 
     painter.drawCopyModeBadge(indicator, getLocalBounds().w);
@@ -491,9 +503,11 @@ void TerminalView::render(GPU::Frame& frame)
     auto painter = makePainter();
     const auto copyIndicator = describeCopyModePosition();
 
-    rasterizeFrameGlyphs(painter, copyIndicator);
+    const auto rows = describeVisibleRows();
+
+    rasterizeFrameGlyphs(painter, rows, copyIndicator);
     atlas->commit();
-    drawGrid(painter);
+    drawGrid(painter, rows);
 
     // The backgrounds have to reach the pass before the glyphs do. A sprite
     // batch is drawn when the pass ends -- after every glyph -- so left queued

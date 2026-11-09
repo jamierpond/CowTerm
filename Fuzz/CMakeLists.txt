@@ -14,6 +14,7 @@ if (COWTERM_ENABLE_FUZZING)
     add_executable(CowTermParserFuzzer
             ParserFuzzer.cpp
             ../Lib/CowTermCore/CharWidth.cpp
+            ../Lib/CowTermCore/GraphemeBreak.cpp
             ../Lib/CowTermCore/CsiParameters.cpp
             ../Lib/CowTermCore/HyperlinkTable.cpp
             ../Lib/CowTermCore/KittyKeyboardFlags.cpp

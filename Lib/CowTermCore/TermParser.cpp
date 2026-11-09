@@ -280,7 +280,7 @@ struct TermParserActions
         {'c', answerDeviceAttributes},
         {'d', setRow},
         {'g', [](TermParser& p) { p.screen.clearTabStops(p.params.value(0, 0)); }},
-        {'m', [](TermParser& p) { applySelectGraphicRendition(p.screen.pen, p.params, p.theme); }},
+        {'m', [](TermParser& p) { p.screen.applyGraphicRendition(p.params); }},
         {'n', [](TermParser& p) { p.reportDeviceStatus(); }},
         {'q', setCursorStyle},
         {'r', setScrollRegion},

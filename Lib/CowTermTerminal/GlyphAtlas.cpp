@@ -1,6 +1,7 @@
 #include "GlyphAtlas.h"
 
 #include <ResEmbed/ResEmbed.h>
+#include <eacp/Text/Utf8.h>
 
 #include <algorithm>
 #include <cmath>
@@ -8,6 +9,11 @@
 namespace term
 {
 using namespace eacp;
+
+namespace
+{
+constexpr auto longestUtf8Sequence = 4;
+}
 
 void registerEmbeddedFonts()
 {
@@ -101,6 +107,46 @@ GlyphSlot GlyphAtlas::glyph(char32_t codepoint, bool bold, bool italic, int cell
     slot.offset = {centring + glyph.offset.x, glyph.offset.y};
 
     return slot;
+}
+
+std::vector<GlyphSlot>
+    GlyphAtlas::clusterGlyphs(std::u32string_view cluster, bool bold, bool italic, int cells)
+{
+    auto utf8 = std::string {};
+
+    for (const auto codepoint: cluster)
+    {
+        char encoded[longestUtf8Sequence];
+        utf8.append(encoded, (std::size_t) Text::encodeUtf8(codepoint, encoded));
+    }
+
+    const auto shaped = impl->shape(utf8, Text::variantOf(Text::toFontStyle(bold, italic)));
+    const auto isWhollyShaped =
+        !shaped.glyphs.empty()
+        && std::all_of(shaped.glyphs.begin(),
+                       shaped.glyphs.end(),
+                       [](const Text::ShapedSlot& shapedSlot) { return shapedSlot.slot.valid; });
+
+    if (!isWhollyShaped)
+        return {glyph(cluster.front(), bold, italic, cells)};
+
+    const auto span = static_cast<float>(std::max(cells, 1)) * cellW;
+    const auto centring = std::max((span - shaped.advance) * 0.5f, 0.f);
+    auto slots = std::vector<GlyphSlot> {};
+
+    for (const auto& shapedSlot: shaped.glyphs)
+    {
+        auto slot = GlyphSlot {};
+        slot.valid = true;
+        slot.empty = shapedSlot.slot.empty;
+        slot.colored = shapedSlot.slot.format == Text::GlyphFormat::Color;
+        slot.src = shapedSlot.slot.src;
+        slot.offset = {centring + shapedSlot.pen.x + shapedSlot.slot.offset.x,
+                       shapedSlot.pen.y + shapedSlot.slot.offset.y};
+        slots.push_back(slot);
+    }
+
+    return slots;
 }
 
 void GlyphAtlas::commit()

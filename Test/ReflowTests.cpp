@@ -22,7 +22,7 @@ struct ReflowScreen
     {
         auto text = std::string {};
 
-        for (const auto& cell: screen.lineAt(visualRow, scrollOffset))
+        for (const auto& cell: screen.resolveLine(screen.lineAt(visualRow, scrollOffset)))
         {
             if ((cell.attrs & Attr::WideCont) == 0)
                 text += cell.ch < 0x80 ? (char) cell.ch : '#';
