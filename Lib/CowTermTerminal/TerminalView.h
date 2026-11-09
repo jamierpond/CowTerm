@@ -196,6 +196,7 @@ private:
     int calculateScrollLinesForJump(ViewportJump jump) const;
     void copySelection();
     void applyGridSize();
+    void scheduleGridSizeOnceBoundsSettle();
     void restoreTerminalState(const std::string& serialized);
     void startShell(const TerminalConfig& config,
                     const std::string& workingDirectory,
@@ -287,6 +288,8 @@ private:
     float marginY = 4.0f;
     std::uint64_t renderedVersion = 0;
     std::uint64_t synchronizedOutputGeneration = 0;
+    std::uint64_t gridResizeGeneration = 0;
+    bool hasGridSizeFromBounds = false;
     bool windowFocused = true;
 
     // Keys whose press went to the program under the kitty protocol, so only

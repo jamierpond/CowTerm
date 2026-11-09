@@ -7,6 +7,7 @@
 #include <cmath>
 #include <memory>
 #include <string>
+#include <vector>
 
 // What a pane sends its shell and draws for a given input, pinned through the
 // widget's public surface: key presses, mouse events and copy mode. The shell
@@ -39,6 +40,7 @@ constexpr std::uint16_t macPageDown = 0x79;
 struct ShellRecording
 {
     std::string written;
+    std::vector<PtySize> resizes;
     std::function<void(std::string)> deliverOutput;
 };
 
@@ -59,7 +61,7 @@ public:
     }
 
     void write(std::string_view data) override { recording->written += data; }
-    void resize(const PtySize&) override {}
+    void resize(const PtySize& size) override { recording->resizes.push_back(size); }
     std::string foregroundProcess() const override { return {}; }
     std::string currentWorkingDirectory() const override { return {}; }
     void terminate() override {}
@@ -885,4 +887,33 @@ auto tPaneWithNoSizeIsNotShown = test("View/aPaneWithNoSizeIsNotShown") = []
     pane.view->setBounds({});
 
     check(!pane.view->isShownOnScreen());
+};
+
+auto tDraggedResizesCoalesce = test("View/resizesWhileDraggingReachTheShellOnceWithTheFinalSize") = []
+{
+    constexpr auto dragStepWidth = 40.f;
+    constexpr auto dragSteps = 4;
+    constexpr auto settleTimeout = Time::MS {2000};
+
+    auto pane = TestPane {};
+    pane.recording->resizes.clear();
+
+    for (int step = 1; step <= dragSteps; ++step)
+    {
+        const auto width = viewWidth + dragStepWidth * (float) step;
+        pane.view->setBounds({0.f, 0.f, width, viewHeight});
+        pane.view->resized();
+    }
+
+    check(pane.recording->resizes.empty());
+
+    Threads::runEventLoopUntil([&] { return !pane.recording->resizes.empty(); },
+                               settleTimeout);
+
+    const auto finalWidth = viewWidth + dragStepWidth * (float) dragSteps;
+    const auto expectedColumns =
+        (int) ((finalWidth - 2 * marginX) / referenceAtlas().cellWidth());
+
+    check(pane.recording->resizes.size() == 1);
+    check(pane.recording->resizes.back().cols == expectedColumns);
 };
