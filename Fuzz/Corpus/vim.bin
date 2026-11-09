@@ -1,0 +1,52 @@
+PP[?1049h[>4;2m[?1h=[?2004h[?1004h[1;24r[?12h[?12l[22;2t[22;1t[27m[23m[29m[m[H[2J[?25l[24;1H"Lib/CowTermCore/TermParser.cpp" 852L, 21533B[2;1H▽[6n[2;1H  [3;1HPzz\[0%m[6n[3;1H           [1;1H[>c[1;1H#include "TermParser.h"[2;1H[K[3;1H#include <algorithm>[3;21H[K[4;1H#include <array>
+#include <cstdio>
+
+namespace term
+{
+namespace
+{
+// DEC special graphics (ESC ( 0): the 0x60..0x7e range becomes line-drawing
+// glyphs. Everything full-screen apps draw borders with on a non-UTF-8 path.
+constexpr std::array<char32_t, 31> decGraphics = {
+    U'◆[14;8H', U'▒[14;14H', U'␉', U'␌', U'␍', U'␊', U'°[14;44H', U'±[14;50H', U'␤', U'␋', U'┘[14;68H',
+    U'┐[15;8H', U'┌[15;14H', U'└[15;20H', U'┼[15;26H', U'⎺', U'⎻', U'─[15;44H', U'⎼', U'⎽', U'├[15;62H', U'┤[15;68H',
+    U'┴[16;8H', U'┬[16;14H', U'│[16;20H', U'≤[16;26H', U'≥[16;32H', U'π[16;38H', U'≠[16;44H', U'£', U'·[16;56H'};
+} // namespace
+
+TermParser::TermParser(TermScreen& screenToUse, const Theme& themeToUse)
+    : screen(screenToUse)
+    , theme(themeToUse)
+{
+    params.reserve(8);[1;1H[?25h[?4m
+
+
+
+[?25l[24;70HG[5;1H[24;70H [23;1H[1;1H        char reply[64];[2;9Hstd::snprintf(reply,
+                      sizeof(reply),
+                      "\033]%s;rgb:%02x%02x/%02x%02x/%02x%02x\033\\",
+                      code.c_str(),[6;23H(rgb >> 16) & 0xff,
+              [8C(rgb >> 16) & 0xff,
+ [21C(rgb >> 8) & 0xff,
+         [13C(rgb >> 8) & 0xff,
+ [21Crgb & 0xff,
+                      rgb & 0xff);[11;36H[K[12;1H        respond(reply);[12;24H[K[13;1H    }[13;6H[K[14;1H}[14;5H[K[15;5H[K[16;1Hvoid TermParser::putCodepoint(char32_t cp)[16;43H[K[17;1H{[17;3H[K[18;5Hif (charsetSpecial[activeCharset] && cp >= 0x60 && cp <= 0x7e)
+        cp = decGraphics[cp - 0x60];[19;37H[K[20;5H[K[21;5Hscreen.putChar(cp);
+}
+} // namespace term[23;20H[K[23;1H[?25h[?25l[1;1H#include "TermParser.h"[2;9H[K[3;1H#include <algorithm>[3;23H[K[4;1H#include <array>[4;23H[K[5;1H#include <cstdio>[5;23H[K[6;23H[K[7;1Hnamespace term[7;23H[K[8;1H{[8;23H[K[9;1Hnamespace[9;23H[K[10;1H{[10;23H[K[11;1H// DEC special graphics (ESC ( 0): the 0x60..0x7e range becomes line-drawing
+// glyphs. Everything full-screen apps draw borders with on a non-UTF-8 path.
+constexpr std::array<char32_t, 31> decGraphics = {
+    U'◆[14;8H', U'▒[14;14H', U'␉', U'␌', U'␍', U'␊', U'°[14;44H', U'±[14;50H', U'␤', U'␋', U'┘[14;68H',
+    U'┐[15;8H', U'┌[15;14H', U'└[15;20H', U'┼[15;26H', U'⎺', U'⎻', U'─[15;44H', U'⎼', U'⎽', U'├[15;62H', U'┤[15;68H',
+    U'┴[16;8H', U'┬[16;14H', U'│[16;20H', U'≤[16;26H', U'≥[16;32H', U'π[16;38H', U'≠[16;44H', U'£', U'·[16;56H'};
+} // namespace[18;5H[K[19;1HTermParser::TermParser(TermScreen& screenToUse, const Theme& themeToUse)
+    : screen(screenToUse)
+    , theme(themeToUse)
+{
+    params.reserve(8);[1;1H[?25h[?25l[24;1H[K[24;1H/dispatch[1;1H                utf8Remaining = 3;[2;13H}
+            else[3;17H[K[4;1H            {[4;14H[K[5;1H                putCodepoint(U'�[5;33H');[6;13H}[7;1H[K[8;1H [11Creturn;
+        }[10;1H[K[11;1H        case State::Escape:[11;28H[K[12;1H            dispatchEscape(byte);[12;35H[K[13;1H            return;[13;20H[K[14;5H[K[15;5H    case State::Csi:[15;25H[K[16;5H    {[16;11H[K[17;1H            if (byte == 0x1b)[18;13H{
+                state = State::Escape;[19;39H[K[20;5H            return;[20;24H[K[21;5H        }[21;14H[K[22;1H[K[23;5H        if (byte == 0x18 || byte == 0x1a)[12;13H[?25h[?25l[30m[48;5;248m            [md[30m[48;5;248mispatchEscape(byte); [m[24;1H[1m-- VISUAL LINE --[12;13H[?25h[?25l[m[30m[48;5;248md
+            [mr[30m[48;5;248meturn; [13;13H[?25h[?25lr
+[?25h[?25l[m[12;1H            dispatchEscape(byte);[12;34H[K[13;1H            return;[13;20H[K[24;1H[K[24;1H3 lines yanked[12;1H[?25h[?25l[24;1H[K[24;1H:split[1;17H[K[2;13Hreturn;[3;9H}[3;13H[K[4;13H[K[5;9Hcase State::Escape:[5;28H[K[6;13HdispatchEscape(byte);[7;13Hreturn;[8;13H[K[9;9Hcase State::Csi:[10;9H{[11;9H    if (byte == 0x1b)
+[1m[7mLib/CowTermCore/TermParser.cpp                                                  [m[14;9H}[15;9H[K[16;9Hcase State::Escape:[17;13HdispatchEscape(byte);[18;13Hreturn;[19;17H[K[20;9Hcase State::Csi:[21;9H{[21;13H[K[22;13Hif (byte == 0x1b)
+[7mLib/CowTermCore/TermParser.cpp                                                  [6;1H[?25h[?25l[m[24;1H[K[24;1H:syntax on[2;13H[38;5;130mreturn[5;9Hcase[7;13Hreturn[9;9Hcase[11;13Hif[m[10C[31m0x1b[m[13;13H[38;5;130mreturn[16;9Hcase[18;13Hreturn[20;9Hcase[22;13Hif[m[10C[31m0x1b[6;1H[?25h[?25l[m[24;1H[K[24;1H:q![1;17Hutf8Remaining = [31m3[m;[2;13H}[2;14H[K[3;9H    [38;5;130melse[m[4;13H{[5;9H        putCodepoint([31mU'�[5;33H'[m);[6;13H}[6;14H[K[7;13H[K[8;13H[38;5;130mreturn[m;[9;9H}[9;10H[K[10;9H[K[11;9H[38;5;130mcase[m State::Escape:[11;28H[K[12;1H            dispatchEscape(byte);[12;34H[K[14;9H[K[15;9H[38;5;130mcase[m State::Csi:[16;9H{[16;10H[K[17;13H[38;5;130mif[m (byte == [31m0x1b[m)[17;30H[K[18;13H{[18;14H[K[19;17Hstate = State::Escape;[20;9H        [38;5;130mreturn[m;[20;24H[K[21;9H    }[22;13H[K[23;1H            [38;5;130mif[m (byte == [31m0x18[m || byte == [31m0x1a[m)[23;46H[K[12;1H[?25h[?25l[24;1H[K[24;1H:q![?2004l[>4;m[23;2t[23;1t[24;1H[K[24;1H[?1004l[?2004l[?1l>[?1049l[?25h[>4;m

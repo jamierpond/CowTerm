@@ -1,0 +1,68 @@
+dd[?9001h[?1004h[?25l[2J[m[H
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+[H]0;C:\WINDOWS\system32\conhost.exe[?25hWindows PowerShell
+Copyright (C) Microsoft Corporation. All rights reserved.[?25l[4;1H]0;Administrator: C:\WINDOWS\system32\conhost.exe[?25h[6 q[32m[1m➜ [36m[22mjamie [m[?25l[93mGet-ChildItem [37mC:\Windows | [93mSelect-Object [90m-First [97m15
+[?25h[m
+[?25l
+    Directory: C:\Windows[10;1HMode                 LastWriteTime         Length Name[45X
+----                 -------------         ------ ----[45X
+d-----         8/27/2026   3:33 PM                appcompat[40X
+d-----        10/19/2026  12:38 PM                apppatch[41X
+d-----         10/1/2026   1:59 PM                AppReadiness[37X
+d-----         7/22/2026   9:21 PM                assembly[41X
+d-----        10/14/2026   4:33 AM                bcastdvr[41X
+d-----          4/1/2024  12:34 AM                Boot[45X
+d-----          4/1/2024  12:26 AM                Branding[41X
+d-----        10/14/2026   4:33 AM                BrowserCore[38X
+d-----         11/8/2026   1:17 PM                CbsTemp[42X
+d-----          4/1/2024  12:26 AM                Cursors[42X
+d-----         7/22/2026   9:44 PM                debug[44X
+d-----          4/1/2024  12:34 AM                diagnostics[38X
+d-----         8/11/2026  11:45 PM                DiagTrack[40X
+d-----          4/1/2024   1:06 AM                DigitalLocker[36X
+d---s-          4/1/2024  12:26 AM                Downloaded Program Files[25X[29;1H[?25h[6 q[32m[1m➜ [36m[22mjamie [m[?25l[93mWrite-Host [90m-ForegroundColor [37mRed error; [93mGet-Process [37m| [93mSelect [90m-First [97m10 [37m| [93mFormat-Tabl[?25h[?25l[m[93m[29;9HWrite-Host [90m-ForegroundColor [37mRed error; [93mGet-Process [37m| [93mSelect [90m-First [97m10 [37m| [93mFormat-Table
+[?25h[m[38;5;9merror[m
+
+Handles  NPM(K)    PM(K)      WS(K)     CPU(s)     Id  SI ProcessName
+-------  ------    -----      -----     ------     --  -- -----------
+    216      13     5508      19084      18.30   6932   0 AggregatorHost[27X[27C
+    572      30    44628      70420      31.75   5740   0 AnyDesk
+    419      26    63916      79008  10,256.83  21364   1 AnyDesk
+  14115      51    43560      61912      14.63   3476   1 ApplicationFrameHost
+     85       7     1408       6600       0.02   1452   0 bash[37X
+     83       7     1464       6524       0.00   7172   0 bash
+    156      10     6708      11492       0.02   7480   0 bash
+    159      10     6700      11488       0.03   9604   0 bash
+    136       8     6460       9236       0.00  22544   0 bash
+     82       7     1396       6592       0.02  27380   0 bash
+
+
+[6 q[32m[1m➜ [36m[22mjamie [m[?25l[92mexit[?25h[?9001l[?1004l[m
+Connection to tamby-windows closed.

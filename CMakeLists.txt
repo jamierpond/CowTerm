@@ -92,6 +92,7 @@ set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
 add_subdirectory(Lib)
 add_subdirectory(Daemon)
 add_subdirectory(Terminal)
+add_subdirectory(Fuzz)
 
 # Unit tests, including the PTY teardown regressions (the quit-hang fix) for
 # both the POSIX PTY and ConPTY.

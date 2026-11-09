@@ -1,0 +1,26 @@
+#!/bin/sh
+# Builds the TermParser libFuzzer target with Homebrew's LLVM (or the clang on
+# PATH elsewhere) and fuzzes for SECONDS (default 300), starting from the
+# committed corpus. New interesting inputs go to build-fuzz/corpus, crashes to
+# build-fuzz/crashes. Copy a fixed crash into Fuzz/Corpus to keep it covered.
+#
+#   Scripts/run-parser-fuzzer [SECONDS] [extra libFuzzer flags...]
+set -eu
+cd "$(dirname "$0")/.."
+seconds="${1:-300}"
+[ $# -gt 0 ] && shift
+
+llvm_bin=""
+if command -v brew >/dev/null 2>&1 && [ -d "$(brew --prefix llvm)/bin" ]; then
+    llvm_bin="$(brew --prefix llvm)/bin/"
+fi
+
+cmake -S . -B build-fuzz -G Ninja -DCMAKE_BUILD_TYPE=Debug \
+    -DCMAKE_C_COMPILER="${llvm_bin}clang" -DCMAKE_CXX_COMPILER="${llvm_bin}clang++" \
+    -DCOWTERM_ENABLE_FUZZING=ON -DCOWTERM_ENABLE_TESTS=OFF
+cmake --build build-fuzz --target CowTermParserFuzzer
+
+mkdir -p build-fuzz/corpus build-fuzz/crashes
+build-fuzz/Fuzz/CowTermParserFuzzer build-fuzz/corpus Fuzz/Corpus \
+    -max_total_time="$seconds" -max_len=65536 -timeout=10 \
+    -artifact_prefix=build-fuzz/crashes/ -dict=Fuzz/escape-sequences.dict "$@"
