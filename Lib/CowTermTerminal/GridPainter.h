@@ -23,6 +23,9 @@ enum class CursorStyle
 CursorStyle findCursorStyle(int cursorShape);
 bool isBlinkingCursorShape(int cursorShape);
 
+// One row's cells with styles and clusters looked up, for one frame.
+using PaintedLine = std::vector<ResolvedCell>;
+
 struct CellColours
 {
     Rgb foreground = 0;
@@ -30,12 +33,12 @@ struct CellColours
 };
 
 // fg/bg after inverse video and selection are applied.
-CellColours findCellColours(const Cell& cell, bool selected, const Theme& theme);
+CellColours findCellColours(const ResolvedCell& cell, bool selected, const Theme& theme);
 
 // One visible row as the painter sees it.
 struct PaintedRow
 {
-    const Line& line;
+    PaintedLine line;
     long absoluteRow = 0;
     float y = 0;
     int columns = 0;
@@ -83,33 +86,34 @@ public:
 
     void drawCursor(eacp::Graphics::Point cellOrigin,
                     CursorStyle style,
-                    const Line& line,
+                    const PaintedLine& line,
                     int column);
     void drawHollowCursor(eacp::Graphics::Point cellOrigin);
 
     // A filled cell with the glyph under it redrawn in the background colour
     // so it stays legible.
-    void drawBlockCursor(eacp::Graphics::Point cellOrigin, const Line& line, int column);
+    void drawBlockCursor(eacp::Graphics::Point cellOrigin, const PaintedLine& line, int column);
 
     // tmux's position badge, top right.
     void drawCopyModeBadge(const std::string& indicator, float viewWidth);
 
 private:
-    GlyphSlot requestCellGlyph(const Cell& cell);
+    template <typename Visit>
+    void forEachCellGlyph(const ResolvedCell& cell, Visit&& visit);
     void queueGlyph(const GlyphSlot& slot,
                     eacp::Graphics::Point penOnBaseline,
                     const eacp::Graphics::Color& tint,
                     bool colored);
-    void drawCellGlyph(const Cell& cell,
+    void drawCellGlyph(const ResolvedCell& cell,
                        eacp::Graphics::Point cellOrigin,
                        Rgb foreground);
-    void drawCellDecorations(const Cell& cell,
+    void drawCellDecorations(const ResolvedCell& cell,
                              eacp::Graphics::Point cellOrigin,
                              Rgb foreground);
     void drawGlyphOverCursor(eacp::Graphics::Point cellOrigin,
-                             const Line& line,
+                             const PaintedLine& line,
                              int column);
-    bool isCellInkShown(const Cell& cell) const;
+    bool isCellInkShown(const ResolvedCell& cell) const;
 
     PaintTools tools;
     const SelectionRange& selection;

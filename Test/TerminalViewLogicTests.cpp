@@ -258,8 +258,8 @@ auto tTextBetweenWide = test("ViewLogic/wideCharactersAppearOnce") = []
 auto tVisibleRowText = test("ViewLogic/visibleRowTextStopsAtTheColumns") = []
 {
     const auto parsed = ParsedScreen {"abcdef  "};
-    check(extractVisibleRowText(parsed.screen.lineAt(0, 0), 4) == "abcd");
-    check(extractVisibleRowText(parsed.screen.lineAt(0, 0), screenColumns) == "abcdef");
+    check(extractVisibleRowText(parsed.screen, parsed.screen.lineAt(0, 0), 4) == "abcd");
+    check(extractVisibleRowText(parsed.screen, parsed.screen.lineAt(0, 0), screenColumns) == "abcdef");
 };
 
 auto tWordAround = test("ViewLogic/wordAroundAColumn") = []
@@ -305,7 +305,7 @@ auto tCursorStyles = test("ViewLogic/cursorShapes") = []
 auto tCellColours = test("ViewLogic/inverseAndSelectionColours") = []
 {
     const auto theme = Theme {};
-    auto cell = Cell {U'a', 0x111111, 0x222222};
+    auto cell = ResolvedCell {U'a', {}, 0x111111, 0x222222};
 
     const auto plain = findCellColours(cell, false, theme);
     check(plain.foreground == 0x111111 && plain.background == 0x222222);
@@ -322,7 +322,7 @@ auto tBackgroundRuns = test("ViewLogic/backgroundRunsMergeAndSkipTheDefault") = 
 {
     const auto parsed = ParsedScreen {"\033[41mab\033[42mc\033[0m d\033[41me"};
     const auto& line = parsed.screen.lineAt(0, 0);
-    const auto row = PaintedRow {line, 0, 0.f, screenColumns};
+    const auto row = PaintedRow {parsed.screen.resolveLine(line), 0, 0.f, screenColumns};
     const auto selection = SelectionRange {{0, 9}, {0, 10}, true};
 
     const auto runs = findBackgroundRuns(row, selection, parsed.theme);

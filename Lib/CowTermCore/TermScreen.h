@@ -1,11 +1,14 @@
 #pragma once
 
+#include "CsiParameters.h"
 #include "HyperlinkTable.h"
 #include "KittyKeyboardFlags.h"
 #include "TermTypes.h"
 
 #include <cstdint>
 #include <deque>
+#include <optional>
+#include <string>
 #include <vector>
 
 namespace term
@@ -104,7 +107,15 @@ public:
 
     // OSC 8: cells printed from here on link to uri; an empty uri ends the link.
     void setHyperlink(std::string_view uri);
-    std::string_view findHyperlinkUri(HyperlinkId id) const { return hyperlinks.findUri(id); }
+    std::string_view findHyperlinkUri(HyperlinkId id) const;
+
+    // SGR (CSI ... m) on the pen.
+    void applyGraphicRendition(const CsiParameters& parameters);
+
+    // A cell with its style, cluster and flags looked up. The cluster view
+    // lasts until the screen next changes.
+    ResolvedCell resolveCell(const Cell& cell) const;
+    std::vector<ResolvedCell> resolveLine(const Line& line) const;
 
     // The active screen's kitty keyboard flags; each screen keeps its own.
     KittyKeyboardStack& kittyKeyboard();
@@ -113,11 +124,27 @@ public:
     // Bumped on every visible change; the view repaints when it moves.
     std::uint64_t version() const { return changeVersion; }
 
-    Pen pen;
     Modes modes;
     CursorPos cursor;
 
 private:
+    using StyleTable = InternTable<CellStyle, 65535, CellStyleHash>;
+    using GraphemeTable = InternTable<std::u32string, 65535>;
+
+    struct ClusterTarget
+    {
+        int x = 0;
+        int y = 0;
+    };
+
+    void compactTables();
+    StyleId internStyle(const CellStyle& style);
+    void refreshPenStyles();
+    const CellStyle& findStyle(StyleId id) const;
+    std::u32string findClusterText(const Cell& cell) const;
+    std::optional<ClusterTarget> findClusterToExtend(char32_t codepoint) const;
+    void extendCluster(ClusterTarget target, char32_t codepoint);
+    void widenForEmojiPresentation(ClusterTarget target);
     Line& row(int index) { return activeGrid()[(std::size_t) index]; }
     std::vector<Line>& activeGrid() { return modes.altScreen ? altGrid : grid; }
     const std::vector<Line>& activeGrid() const
@@ -126,9 +153,9 @@ private:
     }
 
     std::uint16_t defaultColorAttributes() const;
-    Cell blankCell() const;
-    Cell penCell(char32_t codepoint) const;
-    Line blankLine() const;
+    Cell blankCell();
+    Cell penCell(char32_t codepoint);
+    Line blankLine();
     bool isOnScreen(int x, int y) const;
     bool isScrollingIntoHistory(int top) const;
     bool isAlreadySize(int newCols, int newRows) const;
@@ -156,7 +183,6 @@ private:
     void scrollUpRegion(int count, int top, int bottom);
     void scrollDownRegion(int count, int top, int bottom);
     void newlineWithScroll();
-    void dropUnusedHyperlinks();
     template <typename Visit>
     void forEveryCell(Visit&& visit);
 
@@ -173,7 +199,16 @@ private:
     bool wrapPending = false;
     char32_t lastPrinted = 0;
     std::vector<bool> tabStops;
+    Pen pen;
     HyperlinkTable hyperlinks;
+    StyleTable styles;
+    GraphemeTable graphemes;
+
+    // The pen's interned styles, for printed and erased cells; refreshed when
+    // the pen or the tables change.
+    StyleId penStyle = 0;
+    StyleId blankStyle = 0;
+    bool penStylesDirty = true;
     KittyKeyboardStack primaryKittyKeyboard;
     KittyKeyboardStack alternateKittyKeyboard;
     std::uint64_t changeVersion = 1;

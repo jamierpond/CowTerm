@@ -22,9 +22,9 @@ struct Parsed
         parser.feed(bytes);
     }
 
-    const Cell& cell(int column = 0) const
+    ResolvedCell cell(int column = 0) const
     {
-        return screen.lineAt(0, 0)[(std::size_t) column];
+        return screen.resolveCell(screen.lineAt(0, 0)[(std::size_t) column]);
     }
 
     Theme theme;
@@ -96,6 +96,6 @@ auto tHighlightedRowRun = test("ScreenColor/aHighlightedRowKeepsItsBackground") 
     const auto& row = parsed.screen.lineAt(1, 0);
 
     for (auto column = 0; column < 12; ++column)
-        check(row[(std::size_t) column].bg != parsed.theme.background,
+        check(parsed.screen.resolveCell(row[(std::size_t) column]).bg != parsed.theme.background,
               "every cell of the run carries the highlight");
 };

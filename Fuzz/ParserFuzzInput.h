@@ -49,6 +49,25 @@ inline ParserFuzzInput splitParserFuzzInput(std::string_view bytes)
     return input;
 }
 
+inline void appendNumber(std::string& text, std::uint64_t value)
+{
+    text += std::to_string(value);
+    text += ' ';
+}
+
+// A cell's codepoints (all of a cluster's), colours and attribute bits.
+inline void describeCell(std::string& text, const ResolvedCell& cell)
+{
+    appendNumber(text, (std::uint32_t) cell.ch);
+
+    for (const auto codepoint: cell.text.substr(std::min(cell.text.size(), std::size_t {1})))
+        appendNumber(text, (std::uint32_t) codepoint);
+
+    appendNumber(text, cell.fg);
+    appendNumber(text, cell.bg);
+    appendNumber(text, cell.attrs);
+}
+
 // Renders the visible grid and scrollback as text, one line per row, so a
 // replay can be compared against a recorded snapshot.
 inline std::string describeScreen(const TermScreen& screen, int cursorShape)
@@ -70,13 +89,8 @@ inline std::string describeScreen(const TermScreen& screen, int cursorShape)
     {
         for (auto row = 0; row < screen.rows(); ++row)
         {
-            for (const auto& cell: screen.lineAt(row, offset))
-            {
-                appendNumber((std::uint32_t) cell.ch);
-                appendNumber(cell.fg);
-                appendNumber(cell.bg);
-                appendNumber(cell.attrs);
-            }
+            for (const auto& cell: screen.resolveLine(screen.lineAt(row, offset)))
+                describeCell(text, cell);
 
             text += '\n';
         }

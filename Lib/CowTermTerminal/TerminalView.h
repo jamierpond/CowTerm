@@ -220,8 +220,11 @@ private:
     eacp::Graphics::Point calculateCellOrigin(int visualRow, int column) const;
     PaintedRow describeVisibleRow(int visualRow) const;
     GridPainter makePainter();
-    void rasterizeFrameGlyphs(GridPainter& painter, const std::string& copyIndicator);
-    void drawGrid(GridPainter& painter);
+    std::vector<PaintedRow> describeVisibleRows() const;
+    void rasterizeFrameGlyphs(GridPainter& painter,
+                              const std::vector<PaintedRow>& rows,
+                              const std::string& copyIndicator);
+    void drawGrid(GridPainter& painter, const std::vector<PaintedRow>& rows);
     void drawCursorLayer(eacp::GPU::RenderPass& pass,
                          GridPainter& painter,
                          const std::string& copyIndicator);

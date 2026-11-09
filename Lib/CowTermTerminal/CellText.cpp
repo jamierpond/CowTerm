@@ -22,12 +22,21 @@ void removeTrailingSpaces(std::string& text)
         text.pop_back();
 }
 
-bool isWideContinuation(const Cell& cell)
+void appendCellText(std::string& out, const TermScreen& screen, const Cell& cell)
 {
-    return (cell.attrs & Attr::WideCont) != 0;
+    const auto resolved = screen.resolveCell(cell);
+
+    if (resolved.text.empty())
+    {
+        appendUtf8(out, resolved.ch);
+        return;
+    }
+
+    for (const auto codepoint: resolved.text)
+        appendUtf8(out, codepoint);
 }
 
-std::string extractRowText(const Line& line, int fromCol, int toCol)
+std::string extractRowText(const TermScreen& screen, const Line& line, int fromCol, int toCol)
 {
     auto text = std::string {};
     const auto lastCol = std::min(toCol, (int) line.size() - 1);
@@ -36,8 +45,8 @@ std::string extractRowText(const Line& line, int fromCol, int toCol)
     {
         const auto& cell = line[(std::size_t) col];
 
-        if (!isWideContinuation(cell))
-            appendUtf8(text, cell.ch);
+        if (!cell.hasFlag(CellFlag::WideCont))
+            appendCellText(text, screen, cell);
     }
 
     removeTrailingSpaces(text);
@@ -57,7 +66,7 @@ bool isWordCharacterAt(const Line& line, int column)
     if (column < 0 || column >= (int) line.size())
         return false;
 
-    return line[(std::size_t) column].ch != U' ';
+    return !line[(std::size_t) column].isSpace();
 }
 } // namespace
 
@@ -75,19 +84,19 @@ int measureInkLength(const Line& line)
 {
     auto length = (int) line.size();
 
-    while (length > 0 && line[(std::size_t) length - 1].ch == U' ')
+    while (length > 0 && line[(std::size_t) length - 1].isSpace())
         --length;
 
     return length;
 }
 
-std::string extractVisibleRowText(const Line& line, int columns)
+std::string extractVisibleRowText(const TermScreen& screen, const Line& line, int columns)
 {
     auto text = std::string {};
     const auto lastCol = std::min(columns, (int) line.size());
 
     for (int col = 0; col < lastCol; ++col)
-        appendUtf8(text, line[(std::size_t) col].ch);
+        appendCellText(text, screen, line[(std::size_t) col]);
 
     removeTrailingSpaces(text);
     return text;
@@ -106,7 +115,7 @@ std::string extractTextBetween(const TermScreen& screen, CellRef start, CellRef 
         const auto fromCol = row == start.row ? start.col : 0;
         const auto toCol = row == end.row ? end.col : (int) line.size() - 1;
 
-        result += extractRowText(line, fromCol, toCol);
+        result += extractRowText(screen, line, fromCol, toCol);
 
         if (row != end.row)
             result.push_back('\n');
