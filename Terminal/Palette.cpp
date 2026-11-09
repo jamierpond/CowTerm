@@ -3,7 +3,7 @@
 #include "FuzzyMatch.h"
 #include "GitWorktree.h"
 #include "Projects.h"
-
+#include "TextLayout.h"
 
 #include <algorithm>
 
@@ -19,58 +19,93 @@ namespace KeyCode = UI::KeyCode;
 
 namespace
 {
-// The painter measures and draws in the face currently in force, so these keep
-// the old call shape -- text, position, font -- rather than making every call
-// site set the font first.
-void drawText(UI::Graphics& g,
-              const std::string& text,
-              UI::Point position,
-              const UI::Font& font)
+constexpr auto listMetrics = ListPanelMetrics {.maximumWidth = 680.0f,
+                                               .rowHeight = 34.0f,
+                                               .headerHeight = 46.0f,
+                                               .hintHeight = 0.0f,
+                                               .maximumRows = 12,
+                                               .topFraction = 0.14f};
+constexpr auto fontSizes = OverlayFontSizes {.header = 16.0f, .row = 14.0f, .detail = 12.0f};
+
+constexpr auto subPromptRowCount = 3;
+constexpr auto cardBorderAlpha = 0.8f;
+constexpr auto textLeft = 18.0f;
+constexpr auto headerBaseline = 30.0f;
+constexpr auto subPromptTitleGap = 12.0f;
+constexpr auto subPromptTargetLength = 40;
+constexpr auto subPromptBodyFraction = 0.7f;
+constexpr auto subPromptHintFraction = 1.9f;
+constexpr auto subPromptErrorLength = 66;
+constexpr auto branchFieldLeft = 88.0f;
+
+constexpr auto rowSideInset = 8.0f;
+constexpr auto rowGap = 2.0f;
+constexpr auto baselineFraction = 0.62f;
+constexpr auto iconLeft = 12.0f;
+constexpr auto labelAfterIcon = 24.0f;
+constexpr auto labelLength = 32;
+constexpr auto labelToDetailGap = 14.0f;
+constexpr auto detailLength = 48;
+constexpr auto badgeRightPadding = 12.0f;
+
+bool isSessionItem(const PaletteItem& item)
 {
-    g.setFont(font);
-    g.drawText(text, position);
+    return item.kind == PaletteItem::Kind::Session;
 }
 
-float measureWidth(UI::Graphics& g, const std::string& text, const UI::Font& font)
+bool isOpenSession(const PaletteItem& item)
 {
-    g.setFont(font);
-    return g.measureText(text);
-}
-constexpr float panelWidth = 680.0f;
-constexpr float rowHeight = 34.0f;
-constexpr float headerHeight = 46.0f;
-constexpr int maxRows = 12;
-
-std::string compactPath(std::string path)
-{
-    const auto home = FilePath::homeDirectory().str();
-
-    if (!home.empty() && path.starts_with(home))
-        path = "~" + path.substr(home.size());
-
-    return path;
+    return isSessionItem(item) && item.session != nullptr;
 }
 
-std::string truncated(const std::string& text, std::size_t max)
+std::string getItemIcon(const PaletteItem& item)
 {
-    if (text.size() <= max)
-        return text;
+    if (item.claude)
+        return "✳";
 
-    return text.substr(0, max - 1) + "…";
+    if (isSessionItem(item))
+        return "●";
+
+    return "▸";
 }
 
+Rgb getItemIconColour(const PaletteItem& item, const Theme& theme)
+{
+    if (item.claude)
+        return theme.ansi[5];
+
+    if (isSessionItem(item))
+        return theme.ansi[2];
+
+    return theme.ansi[8];
+}
+
+std::string describeItem(const PaletteItem& item)
+{
+    if (!item.status.empty())
+        return truncateWithEllipsis(item.status, detailLength);
+
+    return truncateWithEllipsis(item.detail, detailLength);
+}
+
+bool isPlainTypedText(const KeyEvent& event)
+{
+    return !event.modifiers.command && !event.modifiers.control
+           && isPrintableTypedText(event.characters);
+}
+
+bool isOrderedForEmptyQuery(const PaletteItem& a, const PaletteItem& b)
+{
+    if (a.kind != b.kind)
+        return isSessionItem(a);
+
+    return a.lastUsed > b.lastUsed;
+}
 } // namespace
 
 Palette::Palette(const AppConfig& configToUse, SessionManager& sessionsToUse)
-    : config(configToUse)
-    , sessions(sessionsToUse)
-    , theme(themeByName(configToUse.theme))
-    , queryFont({config.font, 16.0f})
-    , rowFont({config.font, 14.0f})
-    , detailFont({config.font, 12.0f})
+    : OverlayPanel(configToUse, sessionsToUse, fontSizes)
 {
-    setInterceptsMouseClicks(true);
-    setWantsKeyboardFocus(true);
 }
 
 void Palette::show()
@@ -92,46 +127,53 @@ void Palette::show()
     repaint();
 }
 
+PaletteItem Palette::makeSessionItem(TermSession& session) const
+{
+    auto item = PaletteItem {};
+    item.kind = PaletteItem::Kind::Session;
+    item.session = &session;
+    item.key = session.key();
+    item.label = session.name;
+    item.claude = session.isClaude();
+    item.lastUsed = sessions.lastUsed(item.key);
+
+    const auto title = session.activeTitle();
+    item.detail = title;
+
+    if (!item.claude || title.empty())
+        item.detail = compactHomePath(session.activeWorkingDirectory());
+
+    if (const auto panes = session.view.paneCount(); panes > 1)
+        item.detail += "  ·  " + std::to_string(panes) + " panes";
+
+    if (!session.lastNotify.empty())
+        item.status = session.lastNotify;
+
+    return item;
+}
+
+PaletteItem Palette::makeProjectItem(const std::string& name, const std::string& path) const
+{
+    auto item = PaletteItem {};
+    item.kind = PaletteItem::Kind::Project;
+    item.key = path;
+    item.label = name;
+    item.detail = compactHomePath(path);
+    item.lastUsed = sessions.lastUsed(path);
+    return item;
+}
+
 void Palette::rebuild()
 {
     allItems.clear();
 
     for (auto& session: sessions.all())
-    {
-        auto item = PaletteItem {};
-        item.kind = PaletteItem::Kind::Session;
-        item.session = session.get();
-        item.key = session->key();
-        item.label = session->name;
-        item.claude = session->isClaude();
-        item.lastUsed = sessions.lastUsed(item.key);
-
-        const auto title = session->activeTitle();
-        item.detail = item.claude && !title.empty()
-                          ? title
-                          : compactPath(session->activeWorkingDirectory());
-
-        if (const auto panes = session->view.paneCount(); panes > 1)
-            item.detail += "  ·  " + std::to_string(panes) + " panes";
-
-        if (!session->lastNotify.empty())
-            item.status = session->lastNotify;
-
-        allItems.push_back(std::move(item));
-    }
+        allItems.push_back(makeSessionItem(*session));
 
     for (auto& project: scanProjects(config))
     {
-        if (sessions.find(project.path) != nullptr)
-            continue;
-
-        auto item = PaletteItem {};
-        item.kind = PaletteItem::Kind::Project;
-        item.key = project.path;
-        item.label = project.name;
-        item.detail = compactPath(project.path);
-        item.lastUsed = sessions.lastUsed(project.path);
-        allItems.push_back(std::move(item));
+        if (sessions.find(project.path) == nullptr)
+            allItems.push_back(makeProjectItem(project.name, project.path));
     }
 }
 
@@ -143,15 +185,7 @@ void Palette::applyQuery()
     {
         // Open sessions first, then projects, each most-recently-used first.
         visible = allItems;
-        std::stable_sort(visible.begin(),
-                         visible.end(),
-                         [](const auto& a, const auto& b)
-                         {
-                             if (a.kind != b.kind)
-                                 return a.kind == PaletteItem::Kind::Session;
-
-                             return a.lastUsed > b.lastUsed;
-                         });
+        std::stable_sort(visible.begin(), visible.end(), isOrderedForEmptyQuery);
     }
     else
     {
@@ -183,13 +217,13 @@ void Palette::applyQuery()
     selected = std::clamp(selected, 0, std::max((int) visible.size() - 1, 0));
 }
 
-void Palette::choose()
+void Palette::chooseSelected()
 {
     if (selected < (int) visible.size())
     {
         const auto item = visible[(std::size_t) selected];
 
-        if (item.kind == PaletteItem::Kind::Session && item.session != nullptr)
+        if (isOpenSession(item))
         {
             // The peek already put us here; Enter just commits it as a real
             // switch (recording recency) and dismisses the box.
@@ -214,7 +248,7 @@ void Palette::choose()
     onClosed();
 }
 
-void Palette::cancel()
+void Palette::dismiss()
 {
     // Escape / click-away: the peek was only a preview, so put the terminal
     // back where it was.
@@ -232,7 +266,7 @@ void Palette::peekSelected()
 
     // Only open sessions live-peek — switching to one is free. Projects would
     // spawn a shell per highlighted row, so they wait for Enter.
-    if (item.kind == PaletteItem::Kind::Session && item.session != nullptr)
+    if (isOpenSession(item))
         sessions.peekTo(*item.session);
 }
 
@@ -240,127 +274,101 @@ void Palette::moveSelection(int delta)
 {
     if (!visible.empty())
     {
-        selected = (selected + delta + (int) visible.size()) % (int) visible.size();
+        selected = wrapSelection(selected, delta, (int) visible.size());
         peekSelected();
         repaint();
-    }
-}
-
-void Palette::popQueryChar()
-{
-    while (!query.empty())
-    {
-        const auto last = (unsigned char) query.back();
-        query.pop_back();
-
-        if ((last & 0xc0) != 0x80)
-            break;
     }
 }
 
 bool Palette::keyDown(const KeyEvent& event)
 {
     if (worktreeMode)
-    {
         worktreeKeyDown(event);
-        return true;
-    }
-
-    if (confirmDeleteMode)
-    {
+    else if (confirmDeleteMode)
         confirmDeleteKeyDown(event);
-        return true;
-    }
-
-    if (event.keyCode == KeyCode::Escape
-        || (event.modifiers.command && event.charactersIgnoringModifiers == "k"))
-    {
-        cancel();
-        return true;
-    }
-
-    if (event.keyCode == KeyCode::Return)
-    {
-        choose();
-        return true;
-    }
-
-    if (event.keyCode == KeyCode::UpArrow
-        || (event.modifiers.control && event.charactersIgnoringModifiers == "p"))
-    {
-        moveSelection(-1);
-        return true;
-    }
-
-    if (event.keyCode == KeyCode::DownArrow
-        || (event.modifiers.control && event.charactersIgnoringModifiers == "n"))
-    {
-        moveSelection(1);
-        return true;
-    }
-
-    if (event.keyCode == KeyCode::Delete)
-    {
-        popQueryChar();
-        applyQuery();
-        peekSelected();
-        repaint();
-        return true;
-    }
-
-    // Ctrl+W on the highlighted repo: branch off it into a fresh worktree.
-    if (event.modifiers.control && event.charactersIgnoringModifiers == "w")
-    {
-        beginWorktree();
-        return true;
-    }
-
-    // Ctrl+X on a highlighted worktree: move it to the trash (with a confirm).
-    if (event.modifiers.control && event.charactersIgnoringModifiers == "x")
-    {
-        beginRemoveWorktree();
-        return true;
-    }
-
-    if (event.modifiers.command || event.modifiers.control)
-        return true;
-
-    const auto& text = event.characters;
-
-    if (!text.empty() && (unsigned char) text[0] >= 0x20 && text[0] != 0x7f)
-    {
-        query += text;
-        selected = 0;
-        applyQuery();
-        peekSelected();
-        repaint();
-    }
+    else if (!handleNavigationKey(event) && !handleCommandKey(event))
+        editQuery(event);
 
     return true;
 }
 
-void Palette::beginWorktree()
+bool Palette::handleNavigationKey(const KeyEvent& event)
+{
+    const auto isCloseKey = event.keyCode == KeyCode::Escape
+                            || (event.modifiers.command
+                                && event.charactersIgnoringModifiers == "k");
+
+    if (isCloseKey)
+        dismiss();
+    else if (event.keyCode == KeyCode::Return)
+        chooseSelected();
+    else if (isSelectPreviousKey(event))
+        moveSelection(-1);
+    else if (isSelectNextKey(event))
+        moveSelection(1);
+    else
+        return false;
+
+    return true;
+}
+
+bool Palette::handleCommandKey(const KeyEvent& event)
+{
+    if (event.keyCode == KeyCode::Delete)
+        return false;
+
+    const auto& chars = event.charactersIgnoringModifiers;
+
+    // Ctrl+W on the highlighted repo: branch off it into a fresh worktree.
+    if (event.modifiers.control && chars == "w")
+        beginWorktree();
+
+    // Ctrl+X on a highlighted worktree: move it to the trash (with a confirm).
+    else if (event.modifiers.control && chars == "x")
+        beginRemoveWorktree();
+
+    return event.modifiers.command || event.modifiers.control;
+}
+
+void Palette::editQuery(const KeyEvent& event)
+{
+    if (!editQueryText(query, event))
+        return;
+
+    applyQuery();
+    peekSelected();
+    repaint();
+}
+
+// A repo the user already has open shows up as a Session, so take its project
+// dir; an unopened one is a Project whose key is the path.
+std::optional<Palette::SelectedRepository> Palette::findSelectedRepository() const
 {
     if (selected >= (int) visible.size())
-        return;
+        return std::nullopt;
 
     const auto& item = visible[(std::size_t) selected];
 
-    // A repo the user already has open shows up as a Session, so take its
-    // project dir; an unopened one is a Project whose key is the path.
-    const auto repo =
-        item.session != nullptr ? item.session->projectDir : item.key;
+    if (item.session != nullptr)
+        return SelectedRepository {item.session->projectDir, item.label};
 
-    if (repo.empty())
+    return SelectedRepository {item.key, item.label};
+}
+
+void Palette::beginWorktree()
+{
+    const auto repo = findSelectedRepository();
+
+    if (!repo || repo->path.empty())
         return;
 
-    // Keep the source repo's live peek up while we name the branch — the
+    // Keep the source repo's live peek up while we name the branch -- the
     // background terminal should show the session we're forking, not the one
     // the palette was opened from. Navigation already peeked this row (open
     // sessions only); an unopened project has nothing to preview.
     worktreeMode = true;
-    worktreeRepoPath = repo;
-    worktreeRepoName = item.label;
+    worktreeRepoPath = repo->path;
+    worktreeRepoName = repo->label;
     branchName.clear();
     worktreeError.clear();
     repaint();
@@ -381,32 +389,14 @@ void Palette::worktreeKeyDown(const KeyEvent& event)
     }
 
     if (event.keyCode == KeyCode::Delete)
-    {
-        while (!branchName.empty())
-        {
-            const auto last = (unsigned char) branchName.back();
-            branchName.pop_back();
-
-            if ((last & 0xc0) != 0x80)
-                break;
-        }
-
-        worktreeError.clear();
-        repaint();
-        return;
-    }
-
-    if (event.modifiers.command || event.modifiers.control)
+        eraseLastCodepoint(branchName);
+    else if (isPlainTypedText(event))
+        branchName += event.characters;
+    else
         return;
 
-    const auto& text = event.characters;
-
-    if (!text.empty() && (unsigned char) text[0] >= 0x20 && text[0] != 0x7f)
-    {
-        branchName += text;
-        worktreeError.clear();
-        repaint();
-    }
+    worktreeError.clear();
+    repaint();
 }
 
 void Palette::createWorktreeFromInput()
@@ -450,29 +440,21 @@ void Palette::exitWorktree()
 
 void Palette::beginRemoveWorktree()
 {
-    if (selected >= (int) visible.size())
-        return;
+    const auto target = findSelectedRepository();
 
-    const auto& item = visible[(std::size_t) selected];
-
-    // An open repo is a Session (take its project dir); an unopened one is a
-    // Project keyed by path. Either way, only worktree checkouts can be binned.
-    const auto path =
-        item.session != nullptr ? item.session->projectDir : item.key;
-
-    // Only a genuine linked worktree may be trashed — git decides, since the
+    // Only a genuine linked worktree may be trashed -- git decides, since the
     // "<repo>-<leaf>" layout is otherwise indistinguishable from a plain repo.
-    if (!isWorktree(path))
+    if (!target || !isWorktree(target->path))
         return;
 
-    // Trashing is a side effect, not a switch — and the target may well be the
+    // Trashing is a side effect, not a switch -- and the target may well be the
     // session we're currently peeking. Drop the preview back to the origin
     // before we take over the panel, so we're not previewing a doomed session.
     sessions.endPeek(false);
 
     confirmDeleteMode = true;
-    deleteTargetPath = path;
-    deleteTargetName = item.label;
+    deleteTargetPath = target->path;
+    deleteTargetName = target->label;
     deleteError.clear();
     repaint();
 }
@@ -522,27 +504,14 @@ void Palette::exitConfirmDelete()
     repaint();
 }
 
-Rect Palette::panelBounds() const
+Rect Palette::calculatePanelBounds() const
 {
-    const auto bounds = getLocalBounds();
-    const auto width = std::min(panelWidth, bounds.w - 60.0f);
-    const auto rows = std::min((int) visible.size(), maxRows);
-    const auto height = headerHeight + (float) std::max(rows, 1) * rowHeight + 12.0f;
-
-    return {
-        (bounds.w - width) / 2.0f, std::max(bounds.h * 0.14f, 20.0f), width, height};
+    return calculateListPanelBounds(getLocalBounds(), listMetrics, (int) visible.size());
 }
 
-int Palette::rowAt(Point pos) const
+int Palette::findRowAt(Point pos) const
 {
-    const auto panel = panelBounds();
-    const auto y = pos.y - (panel.y + headerHeight + 4.0f);
-
-    if (pos.x < panel.x || pos.x > panel.right() || y < 0)
-        return -1;
-
-    const auto row = (int) (y / rowHeight);
-    return row < std::min((int) visible.size(), maxRows) ? row : -1;
+    return findListRowAt(calculatePanelBounds(), listMetrics, (int) visible.size(), pos);
 }
 
 void Palette::mouseMove(const MouseEvent& event)
@@ -550,7 +519,7 @@ void Palette::mouseMove(const MouseEvent& event)
     if (worktreeMode || confirmDeleteMode)
         return;
 
-    if (const auto row = rowAt(event.position); row >= 0 && row != selected)
+    if (const auto row = findRowAt(event.position); row >= 0 && row != selected)
     {
         selected = row;
         peekSelected();
@@ -561,132 +530,115 @@ void Palette::mouseMove(const MouseEvent& event)
 void Palette::mouseDown(const MouseEvent& event)
 {
     // The sub-prompts are keyboard-only; a stray click mustn't tear them down.
-    if (worktreeMode || confirmDeleteMode)
-        return;
+    if (!worktreeMode && !confirmDeleteMode)
+        OverlayPanel::mouseDown(event);
+}
 
-    const auto row = rowAt(event.position);
+Rect Palette::paintSubPrompt(UI::Graphics& g, const SubPrompt& prompt)
+{
+    const auto panel =
+        calculateListPanelBounds(getLocalBounds(), listMetrics, subPromptRowCount);
+    const auto titleBaseline = panel.y + headerBaseline;
 
-    if (row >= 0)
+    paintListBackdropAndCardWithBorder(g, panel, prompt.borderColour);
+
+    // Header: what we're doing, and which repo it acts on.
+    g.setColour(prompt.titleColour);
+    drawTextInFont(g, prompt.title, {panel.x + textLeft, titleBaseline}, headerFont);
+
+    const auto titleWidth = measureTextInFont(g, prompt.title, headerFont);
+    g.setColour(toColor(theme.ansi[8]));
+    drawTextInFont(g,
+                   "·  " + truncateWithEllipsis(prompt.targetName, subPromptTargetLength),
+                   {panel.x + textLeft + titleWidth + subPromptTitleGap, titleBaseline},
+                   headerFont);
+
+    paintHeaderDivider(g, panel, listMetrics.headerHeight);
+
+    // Hint, or the complaint if the last attempt failed.
+    const auto hintPosition =
+        Point {panel.x + textLeft,
+               panel.y + listMetrics.headerHeight + listMetrics.rowHeight * subPromptHintFraction};
+
+    if (!prompt.error.empty())
     {
-        selected = row;
-        choose();
-        return;
+        g.setColour(toColor(theme.ansi[1]));
+        drawTextInFont(g,
+                       truncateWithEllipsis(prompt.error, subPromptErrorLength),
+                       hintPosition,
+                       detailFont);
+    }
+    else
+    {
+        g.setColour(toColor(theme.ansi[8]));
+        drawTextInFont(g, prompt.hint, hintPosition, detailFont);
     }
 
-    if (!panelBounds().contains(event.position))
-        cancel();
+    return panel;
 }
 
 void Palette::paintWorktree(UI::Graphics& g)
 {
-    const auto bounds = getLocalBounds();
-    const auto width = std::min(panelWidth, bounds.w - 60.0f);
-    const auto height = headerHeight + rowHeight * 3.0f + 12.0f;
-    const auto panel = Rect {
-        (bounds.w - width) / 2.0f, std::max(bounds.h * 0.14f, 20.0f), width, height};
+    const auto panel = paintSubPrompt(g,
+                                      {.title = "new worktree",
+                                       .targetName = worktreeRepoName,
+                                       .error = worktreeError,
+                                       .hint = "Enter: create worktree · Esc: back",
+                                       .titleColour = toColor(theme.ansi[5]),
+                                       .borderColour = toColor(theme.selection, cardBorderAlpha)});
 
-    g.setColour(Color::black(0.38f));
-    g.fillRect(bounds);
-
-    g.setColour(toColor(theme.background).brighter(0.04f));
-    g.fillRoundedRect(panel, 12.0f);
-
-    g.setColour(toColor(theme.selection, 0.8f));
-    g.drawRect(panel, 1.0f);
-
-    // Header: what we're doing, and which repo it branches from.
-    g.setColour(toColor(theme.ansi[5]));
-    drawText(g, "new worktree", {panel.x + 18.0f, panel.y + 30.0f}, queryFont);
-
-    const auto headWidth =
-        measureWidth(g, "new worktree", queryFont);
+    const auto branchY =
+        panel.y + listMetrics.headerHeight + listMetrics.rowHeight * subPromptBodyFraction;
     g.setColour(toColor(theme.ansi[8]));
-    drawText(g, "·  " + truncated(worktreeRepoName, 40),
-                     {panel.x + 18.0f + headWidth + 12.0f, panel.y + 30.0f},
-                     queryFont);
-
-    g.setColour(toColor(theme.selection));
-    g.drawLine({panel.x + 12.0f, panel.y + headerHeight - 2.0f},
-                     {panel.right() - 12.0f, panel.y + headerHeight - 2.0f});
-
-    // Branch-name field.
-    const auto branchY = panel.y + headerHeight + rowHeight * 0.7f;
-    g.setColour(toColor(theme.ansi[8]));
-    drawText(g, "branch", {panel.x + 18.0f, branchY}, detailFont);
+    drawTextInFont(g, "branch", {panel.x + textLeft, branchY}, detailFont);
     g.setColour(toColor(theme.foreground));
-    drawText(g, "› " + branchName + "▏", {panel.x + 88.0f, branchY}, rowFont);
-
-    // Hint, or git's complaint if the last attempt failed.
-    const auto hintY = panel.y + headerHeight + rowHeight * 1.9f;
-
-    if (!worktreeError.empty())
-    {
-        g.setColour(toColor(theme.ansi[1]));
-        drawText(g, truncated(worktreeError, 66), {panel.x + 18.0f, hintY}, detailFont);
-    }
-    else
-    {
-        g.setColour(toColor(theme.ansi[8]));
-        drawText(g, "Enter: create worktree · Esc: back",
-                         {panel.x + 18.0f, hintY},
-                         detailFont);
-    }
+    drawTextInFont(g, "› " + branchName + "▏", {panel.x + branchFieldLeft, branchY}, rowFont);
 }
 
 void Palette::paintConfirmDelete(UI::Graphics& g)
 {
-    const auto bounds = getLocalBounds();
-    const auto width = std::min(panelWidth, bounds.w - 60.0f);
-    const auto height = headerHeight + rowHeight * 3.0f + 12.0f;
-    const auto panel = Rect {
-        (bounds.w - width) / 2.0f, std::max(bounds.h * 0.14f, 20.0f), width, height};
-
-    g.setColour(Color::black(0.38f));
-    g.fillRect(bounds);
-
-    g.setColour(toColor(theme.background).brighter(0.04f));
-    g.fillRoundedRect(panel, 12.0f);
-
     // Red-tinted border flags this as the destructive branch.
-    g.setColour(toColor(theme.ansi[1], 0.8f));
-    g.drawRect(panel, 1.0f);
+    const auto panel = paintSubPrompt(g,
+                                      {.title = "trash worktree",
+                                       .targetName = deleteTargetName,
+                                       .error = deleteError,
+                                       .hint = "y: move to Trash · n: cancel",
+                                       .titleColour = toColor(theme.ansi[1]),
+                                       .borderColour = toColor(theme.ansi[1], cardBorderAlpha)});
 
-    // Header: what we're doing, and which worktree it targets.
-    g.setColour(toColor(theme.ansi[1]));
-    drawText(g, "trash worktree", {panel.x + 18.0f, panel.y + 30.0f}, queryFont);
-
-    const auto headWidth =
-        measureWidth(g, "trash worktree", queryFont);
-    g.setColour(toColor(theme.ansi[8]));
-    drawText(g, "·  " + truncated(deleteTargetName, 40),
-                     {panel.x + 18.0f + headWidth + 12.0f, panel.y + 30.0f},
-                     queryFont);
-
-    g.setColour(toColor(theme.selection));
-    g.drawLine({panel.x + 12.0f, panel.y + headerHeight - 2.0f},
-                     {panel.right() - 12.0f, panel.y + headerHeight - 2.0f});
-
-    // The question.
-    const auto questionY = panel.y + headerHeight + rowHeight * 0.7f;
+    const auto questionY =
+        panel.y + listMetrics.headerHeight + listMetrics.rowHeight * subPromptBodyFraction;
     g.setColour(toColor(theme.foreground));
-    drawText(g, "Move this worktree to the Trash?",
-                     {panel.x + 18.0f, questionY},
-                     rowFont);
+    drawTextInFont(
+        g, "Move this worktree to the Trash?", {panel.x + textLeft, questionY}, rowFont);
+}
 
-    // Hint, or the OS/git complaint if the last attempt failed.
-    const auto hintY = panel.y + headerHeight + rowHeight * 1.9f;
+void Palette::paintRow(UI::Graphics& g, const PaletteItem& item, Rect rowArea)
+{
+    const auto baseline = rowArea.y + listMetrics.rowHeight * baselineFraction;
+    auto x = rowArea.x + iconLeft;
 
-    if (!deleteError.empty())
+    g.setColour(toColor(getItemIconColour(item, theme)));
+    drawTextInFont(g, getItemIcon(item), {x, baseline}, rowFont);
+    x += labelAfterIcon;
+
+    const auto label = truncateWithEllipsis(item.label, labelLength);
+    g.setColour(toColor(theme.foreground));
+    drawTextInFont(g, label, {x, baseline}, rowFont);
+    x += measureTextInFont(g, label, rowFont) + labelToDetailGap;
+
+    g.setColour(toColor(theme.ansi[8]));
+    drawTextInFont(g, describeItem(item), {x, baseline}, detailFont);
+
+    if (item.claude)
     {
-        g.setColour(toColor(theme.ansi[1]));
-        drawText(g, truncated(deleteError, 66), {panel.x + 18.0f, hintY}, detailFont);
-    }
-    else
-    {
-        g.setColour(toColor(theme.ansi[8]));
-        drawText(g, "y: move to Trash · n: cancel",
-                         {panel.x + 18.0f, hintY},
-                         detailFont);
+        const auto badge = std::string {"claude"};
+        const auto badgeWidth = measureTextInFont(g, badge, detailFont);
+        g.setColour(toColor(theme.ansi[5]));
+        drawTextInFont(g,
+                       badge,
+                       {rowArea.right() - badgeWidth - badgeRightPadding, baseline},
+                       detailFont);
     }
 }
 
@@ -704,82 +656,37 @@ void Palette::paint(UI::Graphics& g)
         return;
     }
 
-    const auto panel = panelBounds();
+    const auto panel = calculatePanelBounds();
 
-    g.setColour(Color::black(0.38f));
-    g.fillRect(getLocalBounds());
+    paintListBackdropAndCard(g, panel);
 
-    g.setColour(toColor(theme.background).brighter(0.04f));
-    g.fillRoundedRect(panel, 12.0f);
-
-    g.setColour(toColor(theme.selection, 0.8f));
-    g.drawRect(panel, 1.0f);
-
-    // Query line
-    const auto queryText = "› " + query + "▏";
     g.setColour(toColor(theme.foreground));
-    drawText(g, queryText, {panel.x + 18.0f, panel.y + 30.0f}, queryFont);
+    drawTextInFont(
+        g, "› " + query + "▏", {panel.x + textLeft, panel.y + headerBaseline}, headerFont);
 
-    g.setColour(toColor(theme.selection));
-    g.drawLine({panel.x + 12.0f, panel.y + headerHeight - 2.0f},
-                     {panel.right() - 12.0f, panel.y + headerHeight - 2.0f});
+    paintHeaderDivider(g, panel, listMetrics.headerHeight);
 
-    // Rows
-    const auto rows = std::min((int) visible.size(), maxRows);
+    const auto rows = countVisibleListRows(listMetrics, (int) visible.size());
 
     for (auto i = 0; i < rows; ++i)
     {
-        const auto& item = visible[(std::size_t) i];
-        const auto y = panel.y + headerHeight + 4.0f + (float) i * rowHeight;
-        const auto rowRect =
-            Rect {panel.x + 8.0f, y, panel.w - 16.0f, rowHeight - 2.0f};
+        const auto rowArea = Rect {panel.x + rowSideInset,
+                                   calculateListRowTop(panel, listMetrics, i),
+                                   panel.w - 2.0f * rowSideInset,
+                                   listMetrics.rowHeight - rowGap};
 
         if (i == selected)
-        {
-            g.setColour(toColor(theme.selection, 0.85f));
-            g.fillRoundedRect(rowRect, 6.0f);
-        }
+            paintSelectedRowHighlight(g, rowArea);
 
-        const auto baseline = y + rowHeight * 0.62f;
-        auto x = rowRect.x + 12.0f;
-
-        const auto open = item.kind == PaletteItem::Kind::Session;
-        const auto icon = item.claude ? "✳" : (open ? "●" : "▸");
-        const auto iconColor =
-            item.claude ? toColor(theme.ansi[5])
-                        : (open ? toColor(theme.ansi[2]) : toColor(theme.ansi[8]));
-        g.setColour(iconColor);
-        drawText(g, icon, {x, baseline}, rowFont);
-        x += 24.0f;
-
-        g.setColour(toColor(theme.foreground));
-        drawText(g, truncated(item.label, 32), {x, baseline}, rowFont);
-        x += measureWidth(g, truncated(item.label, 32), rowFont)
-             + 14.0f;
-
-        const auto detail = !item.status.empty() ? truncated(item.status, 48)
-                                                 : truncated(item.detail, 48);
-        g.setColour(toColor(theme.ansi[8]));
-        drawText(g, detail, {x, baseline}, detailFont);
-
-        if (item.claude)
-        {
-            const auto badge = std::string {"claude"};
-            const auto badgeWidth =
-                measureWidth(g, badge, detailFont);
-            g.setColour(toColor(theme.ansi[5]));
-            drawText(g, 
-                badge, {rowRect.right() - badgeWidth - 12.0f, baseline}, detailFont);
-        }
+        paintRow(g, visible[(std::size_t) i], rowArea);
     }
 
     if (visible.empty())
     {
+        const auto emptyBaseline =
+            panel.y + listMetrics.headerHeight + listMetrics.rowHeight * baselineFraction;
         g.setColour(toColor(theme.ansi[8]));
-        drawText(g, 
-            "no matches",
-            {panel.x + 18.0f, panel.y + headerHeight + rowHeight * 0.62f},
-            rowFont);
+        drawTextInFont(g, "no matches", {panel.x + textLeft, emptyBaseline}, rowFont);
     }
 }
 } // namespace term

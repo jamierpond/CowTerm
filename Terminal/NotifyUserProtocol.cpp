@@ -1,5 +1,6 @@
 #include "NotifyUserProtocol.h"
 #include "Protocol.h"
+#include "TextLayout.h"
 
 namespace term
 {
@@ -19,26 +20,6 @@ constexpr auto titleField = std::size_t {1};
 constexpr auto allowsTypedResponseField = std::size_t {2};
 constexpr auto contentField = std::size_t {3};
 constexpr auto firstOptionField = std::size_t {4};
-
-std::vector<std::string> splitFields(const std::string& payload)
-{
-    auto fields = std::vector<std::string> {};
-    auto start = std::size_t {0};
-
-    while (true)
-    {
-        const auto end = payload.find(fieldSeparator, start);
-
-        if (end == std::string::npos)
-        {
-            fields.push_back(payload.substr(start));
-            return fields;
-        }
-
-        fields.push_back(payload.substr(start, end - start));
-        start = end + 1;
-    }
-}
 } // namespace
 
 std::string encodeNotifyUserRequest(const NotifyUserRequest& request)
@@ -70,7 +51,7 @@ std::optional<NotifyUserRequest> decodeNotifyUserRequest(const std::string& mess
     if (parsed.verb != requestVerb)
         return std::nullopt;
 
-    const auto fields = splitFields(parsed.payload);
+    const auto fields = splitAtSeparator(parsed.payload, fieldSeparator);
 
     if (fields.size() < firstOptionField)
         return std::nullopt;

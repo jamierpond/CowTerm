@@ -2,6 +2,7 @@
 #include "DaemonClient.h"
 
 #include <algorithm>
+#include <optional>
 
 namespace term
 {
@@ -13,9 +14,95 @@ namespace
 constexpr float gutter = 3.0f;
 constexpr int maxTreeDepth = 16;
 
+constexpr float minimumRatio = 0.1f;
+constexpr float maximumRatio = 0.9f;
+constexpr float evenRatio = 0.5f;
+constexpr float edgeTolerance = 1.0f;
+constexpr float resizeCellWidth = 9.0f;
+constexpr float resizeCellHeight = 18.0f;
+
 bool overlaps(float aStart, float aEnd, float bStart, float bEnd)
 {
-    return std::min(aEnd, bEnd) - std::max(aStart, bStart) > 1.0f;
+    return std::min(aEnd, bEnd) - std::max(aStart, bStart) > edgeTolerance;
+}
+
+bool overlapVertically(const Rect& a, const Rect& b)
+{
+    return overlaps(a.y, a.y + a.h, b.y, b.y + b.h);
+}
+
+bool overlapHorizontally(const Rect& a, const Rect& b)
+{
+    return overlaps(a.x, a.x + a.w, b.x, b.x + b.w);
+}
+
+std::optional<float> measureDistanceLeft(const Rect& from, const Rect& to)
+{
+    if (to.right() > from.x + edgeTolerance || !overlapVertically(from, to))
+        return std::nullopt;
+
+    return from.x - to.right();
+}
+
+std::optional<float> measureDistanceRight(const Rect& from, const Rect& to)
+{
+    if (to.x < from.right() - edgeTolerance || !overlapVertically(from, to))
+        return std::nullopt;
+
+    return to.x - from.right();
+}
+
+std::optional<float> measureDistanceUp(const Rect& from, const Rect& to)
+{
+    if (to.y + to.h > from.y + edgeTolerance || !overlapHorizontally(from, to))
+        return std::nullopt;
+
+    return from.y - (to.y + to.h);
+}
+
+std::optional<float> measureDistanceDown(const Rect& from, const Rect& to)
+{
+    if (to.y < from.y + from.h - edgeTolerance || !overlapHorizontally(from, to))
+        return std::nullopt;
+
+    return to.y - (from.y + from.h);
+}
+
+// How far `to` lies from `from` in a vi direction (h left, l right, k up,
+// j down), when it lies that way at all and shares some of from's edge.
+std::optional<float> measureDistanceInDirection(const Rect& from, const Rect& to, char direction)
+{
+    switch (direction)
+    {
+        case 'h': return measureDistanceLeft(from, to);
+        case 'l': return measureDistanceRight(from, to);
+        case 'k': return measureDistanceUp(from, to);
+        case 'j': return measureDistanceDown(from, to);
+        default: return std::nullopt;
+    }
+}
+
+bool isCloser(std::optional<float> distance, std::optional<float> bestDistance)
+{
+    if (!distance)
+        return false;
+
+    return !bestDistance || *distance < *bestDistance;
+}
+
+bool isHorizontalDirection(char direction)
+{
+    return direction == 'h' || direction == 'l';
+}
+
+bool isGrowingDirection(char direction)
+{
+    return direction == 'l' || direction == 'j';
+}
+
+bool isValidSavedIndex(const std::vector<SavedPane>& saved, int index)
+{
+    return index >= 0 && index < (int) saved.size();
 }
 } // namespace
 
@@ -79,16 +166,14 @@ void SessionView::restore(const std::vector<SavedPane>& saved)
     if (root == nullptr)
         root = makeLeaf(fallbackDir);
 
-    auto leaves = std::vector<Node*> {};
-    collectLeaves(root.get(), leaves);
-    active = leaves.empty() ? nullptr : leaves.front();
+    active = findFirstLeafUnder(root.get());
     layout();
 }
 
 std::unique_ptr<SessionView::Node> SessionView::buildFromSaved(
     const std::vector<SavedPane>& saved, int index, int depth)
 {
-    if (index < 0 || index >= (int) saved.size() || depth > maxTreeDepth)
+    if (!isValidSavedIndex(saved, index) || depth > maxTreeDepth)
         return nullptr;
 
     const auto& savedNode = saved[(std::size_t) index];
@@ -104,7 +189,7 @@ std::unique_ptr<SessionView::Node> SessionView::buildFromSaved(
 
     auto node = std::make_unique<Node>();
     node->horizontal = savedNode.horizontal;
-    node->ratio = std::clamp(savedNode.ratio, 0.1f, 0.9f);
+    node->ratio = std::clamp(savedNode.ratio, minimumRatio, maximumRatio);
     first->parent = node.get();
     second->parent = node.get();
     node->first = std::move(first);
@@ -250,7 +335,10 @@ void SessionView::setActive(Node* leaf)
     // Repaint both panes so the cursor swaps solid/hollow immediately
     // instead of on the next blink tick. A split moves the previous node's
     // view into a child, so it can be gone.
-    if (previous != nullptr && previous != leaf && previous->view != nullptr)
+    const auto previousStillHasView =
+        previous != nullptr && previous != leaf && previous->view != nullptr;
+
+    if (previousStillHasView)
         previous->view->refreshCursor();
 
     if (active != nullptr)
@@ -291,7 +379,7 @@ void SessionView::splitActive(bool horizontal)
     secondChild->parent = splitting;
 
     splitting->horizontal = horizontal;
-    splitting->ratio = 0.5f;
+    splitting->ratio = evenRatio;
     splitting->first = std::move(firstChild);
     splitting->second = std::move(secondChild);
 
@@ -321,42 +409,48 @@ void SessionView::removeLeaf(Node* leaf)
         active = nullptr;
 
     auto* parent = leaf->parent;
+    collapseIntoSurvivingSibling(*parent, *leaf);
+
+    layout();
+
+    if (closingActive)
+        setActive(findFirstLeafUnder(parent));
+    else
+        onActivePaneChanged();
+}
+
+// The parent split collapses into the surviving subtree. The old children
+// (including `closing`) are destroyed by the reassignments.
+void SessionView::collapseIntoSurvivingSibling(Node& parent, const Node& closing)
+{
     auto sibling =
-        std::move(parent->first.get() == leaf ? parent->second : parent->first);
+        std::move(parent.first.get() == &closing ? parent.second : parent.first);
 
     // The sibling's contents move up into the parent and the sibling node
     // dies with this scope. If the sibling was the active leaf, the parent is
     // now that leaf; left alone, `active` would point at a node whose view
     // has just been moved out.
     if (active == sibling.get())
-        active = parent;
+        active = &parent;
 
-    // The parent split collapses into the surviving subtree. The old
-    // children (including `leaf`) are destroyed by the reassignments.
-    parent->view = std::move(sibling->view);
-    parent->horizontal = sibling->horizontal;
-    parent->ratio = sibling->ratio;
-    parent->first = std::move(sibling->first);
-    parent->second = std::move(sibling->second);
+    parent.view = std::move(sibling->view);
+    parent.horizontal = sibling->horizontal;
+    parent.ratio = sibling->ratio;
+    parent.first = std::move(sibling->first);
+    parent.second = std::move(sibling->second);
 
-    if (parent->first != nullptr)
-        parent->first->parent = parent;
+    if (parent.first != nullptr)
+        parent.first->parent = &parent;
 
-    if (parent->second != nullptr)
-        parent->second->parent = parent;
+    if (parent.second != nullptr)
+        parent.second->parent = &parent;
+}
 
-    layout();
-
-    if (closingActive)
-    {
-        auto leaves = std::vector<Node*> {};
-        collectLeaves(parent, leaves);
-        setActive(leaves.empty() ? nullptr : leaves.front());
-    }
-    else
-    {
-        onActivePaneChanged();
-    }
+SessionView::Node* SessionView::findFirstLeafUnder(Node* node) const
+{
+    auto leaves = std::vector<Node*> {};
+    collectLeaves(node, leaves);
+    return leaves.empty() ? nullptr : leaves.front();
 }
 
 void SessionView::closeActivePane()
@@ -387,6 +481,31 @@ void SessionView::terminateAll()
         leaf->view->terminateShell();
 }
 
+SessionView::Node* SessionView::findNearestLeafInDirection(char direction) const
+{
+    auto leaves = std::vector<Node*> {};
+    collectLeaves(root.get(), leaves);
+
+    Node* best = nullptr;
+    auto bestDistance = std::optional<float> {};
+
+    for (auto* leaf: leaves)
+    {
+        if (leaf == active)
+            continue;
+
+        const auto distance = measureDistanceInDirection(active->bounds, leaf->bounds, direction);
+
+        if (isCloser(distance, bestDistance))
+        {
+            bestDistance = distance;
+            best = leaf;
+        }
+    }
+
+    return best;
+}
+
 void SessionView::focusDirection(char direction)
 {
     if (active == nullptr)
@@ -394,46 +513,30 @@ void SessionView::focusDirection(char direction)
 
     zoomed = nullptr;
 
-    auto leaves = std::vector<Node*> {};
-    collectLeaves(root.get(), leaves);
-
-    const auto& from = active->bounds;
-    Node* best = nullptr;
-    auto bestDistance = 1e9f;
-
-    for (auto* leaf: leaves)
-    {
-        if (leaf == active)
-            continue;
-
-        const auto& to = leaf->bounds;
-        auto distance = 1e9f;
-
-        if (direction == 'h' && to.right() <= from.x + 1.0f
-            && overlaps(from.y, from.y + from.h, to.y, to.y + to.h))
-            distance = from.x - to.right();
-        else if (direction == 'l' && to.x >= from.right() - 1.0f
-                 && overlaps(from.y, from.y + from.h, to.y, to.y + to.h))
-            distance = to.x - from.right();
-        else if (direction == 'k' && to.y + to.h <= from.y + 1.0f
-                 && overlaps(from.x, from.x + from.w, to.x, to.x + to.w))
-            distance = from.y - (to.y + to.h);
-        else if (direction == 'j' && to.y >= from.y + from.h - 1.0f
-                 && overlaps(from.x, from.x + from.w, to.x, to.x + to.w))
-            distance = to.y - (from.y + from.h);
-
-        if (distance < bestDistance)
-        {
-            bestDistance = distance;
-            best = leaf;
-        }
-    }
-
-    if (best != nullptr)
+    if (auto* best = findNearestLeafInDirection(direction))
     {
         setActive(best);
         layout();
     }
+}
+
+// The nearest enclosing split on the matching axis is the one whose ratio
+// moves; which side the active pane sits on decides the sign.
+std::optional<SessionView::EnclosingSplit> SessionView::findEnclosingSplit(bool horizontal) const
+{
+    auto* child = active;
+    auto* split = active->parent;
+
+    while (split != nullptr && split->horizontal != horizontal)
+    {
+        child = split;
+        split = split->parent;
+    }
+
+    if (split == nullptr)
+        return std::nullopt;
+
+    return EnclosingSplit {*split, *child};
 }
 
 void SessionView::resizeActive(char direction, float cells)
@@ -441,34 +544,27 @@ void SessionView::resizeActive(char direction, float cells)
     if (active == nullptr)
         return;
 
-    const auto wantHorizontal = direction == 'h' || direction == 'l';
-    const auto grow = direction == 'l' || direction == 'j';
+    const auto wantHorizontal = isHorizontalDirection(direction);
+    const auto enclosing = findEnclosingSplit(wantHorizontal);
 
-    // The nearest enclosing split on the matching axis is the one whose
-    // ratio moves; which side the active pane sits on decides the sign.
-    auto* child = active;
-    auto* split = active->parent;
-
-    while (split != nullptr && split->horizontal != wantHorizontal)
-    {
-        child = split;
-        split = split->parent;
-    }
-
-    if (split == nullptr)
+    if (!enclosing)
         return;
 
-    const auto extent = wantHorizontal ? split->bounds.w : split->bounds.h;
+    auto& split = enclosing->split;
+    const auto& child = enclosing->child;
+
+    const auto extent = wantHorizontal ? split.bounds.w : split.bounds.h;
 
     if (extent <= 0)
         return;
 
     // A "cell" of resize is ~9pt wide / ~18pt tall at the default font.
-    const auto step = cells * (wantHorizontal ? 9.0f : 18.0f) / extent;
-    const auto firstSide = split->first.get() == child;
-    const auto delta = firstSide == grow ? step : -step;
+    const auto cellSize = wantHorizontal ? resizeCellWidth : resizeCellHeight;
+    const auto step = cells * cellSize / extent;
+    const auto growsFirstSide = (split.first.get() == &child) == isGrowingDirection(direction);
+    const auto delta = growsFirstSide ? step : -step;
 
-    split->ratio = std::clamp(split->ratio + delta, 0.1f, 0.9f);
+    split.ratio = std::clamp(split.ratio + delta, minimumRatio, maximumRatio);
     layout();
 }
 

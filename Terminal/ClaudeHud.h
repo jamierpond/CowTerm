@@ -1,9 +1,6 @@
 #pragma once
 
-#include "Config.h"
-
-#include <eacp/UI/UI.h>
-#include "Session.h"
+#include "OverlayPanel.h"
 
 #include <eacp/Core/Threads/Timer.h>
 
@@ -20,7 +17,7 @@ namespace term
 // Rows needing attention sort first. Enter jumps to that session and focuses
 // the pane the conversation runs in; while shown the list refreshes itself
 // once a second, so state changes appear live.
-class ClaudeHud final : public eacp::UI::Component
+class ClaudeHud final : public OverlayPanel
 {
 public:
     ClaudeHud(const AppConfig& configToUse, SessionManager& sessionsToUse);
@@ -32,7 +29,6 @@ public:
 
     void paint(eacp::UI::Graphics& g) override;
     bool keyDown(const eacp::UI::KeyEvent& event) override;
-    void mouseDown(const eacp::UI::MouseEvent& event) override;
     void mouseMove(const eacp::UI::MouseEvent& event) override;
 
 private:
@@ -50,26 +46,27 @@ private:
     };
 
     void rebuild();
-    void choose();
-    void cancel();
+    void sortByAttentionThenRecency();
+    void keepSelectionOn(const TerminalView* pane);
+    void chooseSelected() override;
+    void dismiss() override;
     void moveSelection(int delta);
-    int rowAt(eacp::UI::Point pos) const;
-    eacp::UI::Rect panelBounds() const;
+    int findRowAt(eacp::UI::Point pos) const override;
+    eacp::UI::Rect calculatePanelBounds() const override;
 
-    const AppConfig& config;
-    SessionManager& sessions;
-    Theme theme;
+    void paintHeader(eacp::UI::Graphics& g, eacp::UI::Rect panel);
+    void paintRow(eacp::UI::Graphics& g,
+                  const Item& item,
+                  eacp::UI::Rect rowArea,
+                  std::int64_t now);
+    std::string calculateSummary() const;
+    int countWaitingInstances() const;
 
     std::vector<Item> items;
-    int selected = 0;
     bool shown = false;
 
     // Live refresh while the HUD is up: titles, notifications and process
     // state move underneath us as conversations progress.
     std::unique_ptr<eacp::Threads::Timer> tick;
-
-    eacp::UI::Font headerFont;
-    eacp::UI::Font rowFont;
-    eacp::UI::Font detailFont;
 };
 } // namespace term

@@ -2,6 +2,8 @@
 
 #include <eacp/Core/App/Clipboard.h>
 
+#include "TextLayout.h"
+
 #include <algorithm>
 #include <cmath>
 
@@ -38,8 +40,6 @@ constexpr auto backgroundBrightening = 0.04f;
 constexpr auto hoverBrightening = 0.15f;
 constexpr auto firstOptionShortcut = '1';
 constexpr auto lastOptionShortcut = '9';
-constexpr auto firstPrintableCharacter = 0x20;
-constexpr auto deleteCharacter = 0x7f;
 
 constexpr auto okCaption = "OK";
 constexpr auto sendCaption = "Send";
@@ -47,57 +47,15 @@ constexpr auto showPaneCaption = "Show pane";
 constexpr auto dismissCaption = "Dismiss";
 constexpr auto showPaneHint = "show pane ↗";
 constexpr auto ellipsis = "…";
+constexpr auto minimumContentLineCount = 1.0f;
 constexpr auto typingCursor = "▏";
 
-bool isUtf8ContinuationByte(char byte)
+bool isOptionShortcut(const std::string& typed)
 {
-    const auto value = (unsigned char) byte;
-    return (value & 0xc0) == 0x80;
-}
+    if (typed.size() != 1)
+        return false;
 
-std::size_t findPreviousCodepointStart(const std::string& text, std::size_t end)
-{
-    auto start = end;
-
-    while (start > 0)
-    {
-        --start;
-
-        if (!isUtf8ContinuationByte(text[start]))
-            return start;
-    }
-
-    return 0;
-}
-
-std::size_t findNextCodepointEnd(const std::string& text, std::size_t start)
-{
-    auto end = start + 1;
-
-    while (end < text.size() && isUtf8ContinuationByte(text[end]))
-        ++end;
-
-    return end;
-}
-
-std::vector<std::string> splitIntoParagraphs(const std::string& text)
-{
-    auto paragraphs = std::vector<std::string> {};
-    auto start = std::size_t {0};
-
-    while (true)
-    {
-        const auto end = text.find('\n', start);
-
-        if (end == std::string::npos)
-        {
-            paragraphs.push_back(text.substr(start));
-            return paragraphs;
-        }
-
-        paragraphs.push_back(text.substr(start, end - start));
-        start = end + 1;
-    }
+    return typed[0] >= firstOptionShortcut && typed[0] <= lastOptionShortcut;
 }
 
 std::string firstLineOf(const std::string& text)
@@ -127,190 +85,101 @@ std::vector<std::string> NotifyUserPrompt::answerChoices() const
     return text.options;
 }
 
-std::vector<std::string> NotifyUserPrompt::wrapTextToWidth(const std::string& source,
-                                                           float width) const
+TextWidthMeasurer NotifyUserPrompt::createMeasurer(const UI::Font& font) const
 {
-    auto lines = std::vector<std::string> {};
-
-    const auto fits = [&](const std::string& candidate)
-    { return measureText(candidate, contentFont) <= width; };
-
-    for (const auto& paragraph: splitIntoParagraphs(source))
-    {
-        auto line = std::string {};
-        auto start = std::size_t {0};
-
-        while (start <= paragraph.size())
-        {
-            const auto end = std::min(paragraph.find(' ', start), paragraph.size());
-            auto word = paragraph.substr(start, end - start);
-            start = end + 1;
-
-            const auto joined = line.empty() ? word : line + " " + word;
-
-            if (fits(joined))
-            {
-                line = joined;
-                continue;
-            }
-
-            if (!line.empty())
-                lines.push_back(line);
-
-            line.clear();
-
-            // A word wider than the whole line breaks between characters.
-            while (!fits(word))
-            {
-                auto piece = std::string {};
-                auto cut = std::size_t {0};
-
-                while (cut < word.size())
-                {
-                    const auto next = findNextCodepointEnd(word, cut);
-
-                    if (!piece.empty() && !fits(word.substr(0, next)))
-                        break;
-
-                    piece = word.substr(0, next);
-                    cut = next;
-                }
-
-                lines.push_back(piece);
-                word.erase(0, cut);
-            }
-
-            line = word;
-        }
-
-        lines.push_back(line);
-    }
-
-    return lines;
+    return [this, &font](const std::string& candidate) { return measureText(candidate, font); };
 }
 
 std::string NotifyUserPrompt::truncateTextToWidth(const std::string& source,
                                                   float width,
                                                   const UI::Font& font) const
 {
-    if (measureText(source, font) <= width)
-        return source;
-
-    auto truncated = source;
-
-    while (!truncated.empty() && measureText(truncated + ellipsis, font) > width)
-        truncated.erase(findPreviousCodepointStart(truncated, truncated.size()));
-
-    return truncated + ellipsis;
+    return term::truncateTextToWidth(source, width, createMeasurer(font));
 }
 
-NotifyUserPrompt::Layout NotifyUserPrompt::calculateLayout(float width) const
+float NotifyUserPrompt::calculateLineHeight(const UI::Font& font) const
 {
-    auto result = Layout {};
-    const auto innerWidth = std::max(0.0f, width - 2.0f * outerPadding);
-    const auto left = outerPadding;
-
-    auto* host = getHost();
-    const auto lineHeightOf = [&](const UI::Font& font)
-    {
-        if (host == nullptr)
-            return font.pointSize * contentLineSpacing;
-
+    if (auto* host = getHost())
         return host->getLineHeight(font);
-    };
 
-    auto y = outerPadding;
+    return font.pointSize * contentLineSpacing;
+}
 
-    const auto headerHeight = lineHeightOf(titleFont) + lineHeightOf(subtitleFont);
-    result.header = {left, y, innerWidth, headerHeight};
-    y += headerHeight + headerToContentGap;
+float NotifyUserPrompt::calculateButtonWidth(const std::string& caption) const
+{
+    return std::max(minimumButtonWidth,
+                    measureText(caption, buttonFont) + 2.0f * buttonCaptionPadding);
+}
 
-    result.contentTop = y;
-    const auto contentLineHeight = lineHeightOf(contentFont) * contentLineSpacing;
-    result.contentLines = wrapTextToWidth(text.content, innerWidth);
-
-    // Buttons flow left to right, wrapping onto new rows.
-    auto buttonsHeight = 0.0f;
+// Buttons flow left to right, wrapping onto new rows; their tops are relative
+// to the first row until the content height is known.
+NotifyUserPrompt::AnswerButtonFlow NotifyUserPrompt::layoutAnswerButtons(float left,
+                                                                         float innerWidth) const
+{
+    auto flow = AnswerButtonFlow {};
     auto rowX = left;
-    auto rowCount = 0.0f;
-    auto flowButtons = std::vector<Button> {};
 
     for (const auto& choice: answerChoices())
     {
         const auto caption = truncateTextToWidth(
             choice, innerWidth - 2.0f * buttonCaptionPadding, buttonFont);
-        const auto buttonWidth = std::max(
-            minimumButtonWidth, measureText(caption, buttonFont) + 2.0f * buttonCaptionPadding);
+        const auto buttonWidth = calculateButtonWidth(caption);
 
-        if (rowCount == 0.0f || rowX + buttonWidth > left + innerWidth)
+        if (flow.rowCount == 0.0f || rowX + buttonWidth > left + innerWidth)
         {
             rowX = left;
-            rowCount += 1.0f;
+            flow.rowCount += 1.0f;
         }
 
-        const auto rowTop = (rowCount - 1.0f) * (buttonHeight + rowGap);
-        flowButtons.push_back({ButtonAction::AnswerWithOption,
-                               caption,
-                               choice,
-                               {rowX, rowTop, buttonWidth, buttonHeight}});
+        const auto rowTop = (flow.rowCount - 1.0f) * (buttonHeight + rowGap);
+        flow.buttons.push_back({ButtonAction::AnswerWithOption,
+                                caption,
+                                choice,
+                                {rowX, rowTop, buttonWidth, buttonHeight}});
         rowX += buttonWidth + buttonGap;
     }
 
-    buttonsHeight = rowCount * (buttonHeight + rowGap);
+    return flow;
+}
 
-    if (text.allowsTypedResponse)
-        buttonsHeight += buttonHeight + rowGap;
+void NotifyUserPrompt::fitContentLines(Layout& result,
+                                       float innerWidth,
+                                       float maximumLineCount) const
+{
+    const auto fittingLineCount = static_cast<std::size_t>(
+        std::max(minimumContentLineCount, std::max(0.0f, maximumLineCount)));
 
-    const auto footerHeight = buttonHeight;
-    const auto fixedHeight = y + contentToButtonsGap + buttonsHeight + footerHeight
-                             + outerPadding;
+    if (result.contentLines.size() <= fittingLineCount)
+        return;
 
-    const auto availableContentHeight = maximumPromptHeight - fixedHeight;
-    const auto fittingLinesAsFloat = std::floor(availableContentHeight / contentLineHeight);
-    const auto fittingLineCount =
-        std::max(std::size_t {1}, static_cast<std::size_t>(std::max(0.0f, fittingLinesAsFloat)));
+    result.contentLines.resize(fittingLineCount);
+    auto& last = result.contentLines.back();
+    last = truncateTextToWidth(last + ellipsis, innerWidth, contentFont);
+}
 
-    if (result.contentLines.size() > fittingLineCount)
-    {
-        result.contentLines.resize(fittingLineCount);
-        auto& last = result.contentLines.back();
-        last = truncateTextToWidth(last + ellipsis, innerWidth, contentFont);
-    }
+float NotifyUserPrompt::layoutTypedResponseRow(Layout& result,
+                                               float left,
+                                               float innerWidth,
+                                               float y) const
+{
+    const auto sendWidth = calculateButtonWidth(sendCaption);
 
-    const auto contentLineCount = static_cast<float>(result.contentLines.size());
-    y += contentLineCount * contentLineHeight + contentToButtonsGap;
+    result.typedResponseField =
+        Rect {left, y, innerWidth - sendWidth - buttonGap, buttonHeight};
+    result.buttons.push_back({ButtonAction::SendTypedResponse,
+                              sendCaption,
+                              {},
+                              {left + innerWidth - sendWidth, y, sendWidth, buttonHeight}});
+    return y + buttonHeight + rowGap;
+}
 
-    for (auto& button: flowButtons)
-    {
-        button.bounds.y += y;
-        result.buttons.push_back(button);
-    }
-
-    y += rowCount * (buttonHeight + rowGap);
-
-    if (text.allowsTypedResponse)
-    {
-        const auto sendWidth =
-            std::max(minimumButtonWidth,
-                     measureText(sendCaption, buttonFont) + 2.0f * buttonCaptionPadding);
-
-        result.typedResponseField =
-            Rect {left, y, innerWidth - sendWidth - buttonGap, buttonHeight};
-        result.buttons.push_back({ButtonAction::SendTypedResponse,
-                                  sendCaption,
-                                  {},
-                                  {left + innerWidth - sendWidth, y, sendWidth, buttonHeight}});
-        y += buttonHeight + rowGap;
-    }
-
-    const auto footerButtonWidthFor = [&](const std::string& caption)
-    {
-        return std::max(minimumButtonWidth,
-                        measureText(caption, buttonFont) + 2.0f * buttonCaptionPadding);
-    };
-
-    const auto showPaneWidth = footerButtonWidthFor(showPaneCaption);
-    const auto dismissWidth = footerButtonWidthFor(dismissCaption);
+float NotifyUserPrompt::layoutFooterButtons(Layout& result,
+                                            float left,
+                                            float innerWidth,
+                                            float y) const
+{
+    const auto showPaneWidth = calculateButtonWidth(showPaneCaption);
+    const auto dismissWidth = calculateButtonWidth(dismissCaption);
 
     result.buttons.push_back(
         {ButtonAction::ShowPane, showPaneCaption, {}, {left, y, showPaneWidth, buttonHeight}});
@@ -318,9 +187,51 @@ NotifyUserPrompt::Layout NotifyUserPrompt::calculateLayout(float width) const
                               dismissCaption,
                               {},
                               {left + innerWidth - dismissWidth, y, dismissWidth, buttonHeight}});
-    y += footerHeight + outerPadding;
+    return y + buttonHeight + outerPadding;
+}
 
-    result.height = y;
+NotifyUserPrompt::Layout NotifyUserPrompt::calculateLayout(float width) const
+{
+    auto result = Layout {};
+    const auto innerWidth = std::max(0.0f, width - 2.0f * outerPadding);
+    const auto left = outerPadding;
+    auto y = outerPadding;
+
+    const auto headerHeight = calculateLineHeight(titleFont) + calculateLineHeight(subtitleFont);
+    result.header = {left, y, innerWidth, headerHeight};
+    y += headerHeight + headerToContentGap;
+
+    result.contentTop = y;
+    const auto contentLineHeight = calculateLineHeight(contentFont) * contentLineSpacing;
+    result.contentLines = wrapTextToWidth(text.content, innerWidth, createMeasurer(contentFont));
+
+    const auto flow = layoutAnswerButtons(left, innerWidth);
+    const auto answerRowsHeight = flow.rowCount * (buttonHeight + rowGap);
+    const auto typedResponseHeight =
+        text.allowsTypedResponse ? buttonHeight + rowGap : 0.0f;
+    const auto footerHeight = buttonHeight;
+    const auto fixedHeight = y + contentToButtonsGap + answerRowsHeight
+                             + typedResponseHeight + footerHeight + outerPadding;
+
+    fitContentLines(result,
+                    innerWidth,
+                    std::floor((maximumPromptHeight - fixedHeight) / contentLineHeight));
+
+    const auto contentLineCount = static_cast<float>(result.contentLines.size());
+    y += contentLineCount * contentLineHeight + contentToButtonsGap;
+
+    for (auto button: flow.buttons)
+    {
+        button.bounds.y += y;
+        result.buttons.push_back(button);
+    }
+
+    y += answerRowsHeight;
+
+    if (text.allowsTypedResponse)
+        y = layoutTypedResponseRow(result, left, innerWidth, y);
+
+    result.height = layoutFooterButtons(result, left, innerWidth, y);
     return result;
 }
 
@@ -390,64 +301,43 @@ void NotifyUserPrompt::deleteLastTypedCharacter()
 bool NotifyUserPrompt::keyDown(const KeyEvent& event)
 {
     if (event.keyCode == KeyCode::Escape)
-    {
         onDismissed();
+    else if (event.keyCode == KeyCode::Return && text.allowsTypedResponse)
+        onAnswered(typedResponse);
+    else if (event.keyCode == KeyCode::Return && answerChoices().size() == 1)
+        onAnswered(answerChoices().front());
+    else if (event.keyCode == KeyCode::Return)
         return true;
-    }
-
-    if (event.keyCode == KeyCode::Return)
-    {
-        if (text.allowsTypedResponse)
-            onAnswered(typedResponse);
-        else if (answerChoices().size() == 1)
-            onAnswered(answerChoices().front());
-
-        return true;
-    }
-
-    if (!text.allowsTypedResponse)
-    {
-        const auto& typed = event.charactersIgnoringModifiers;
-
-        if (typed.size() == 1 && typed[0] >= firstOptionShortcut
-            && typed[0] <= lastOptionShortcut)
-        {
-            const auto shortcutOffset = typed[0] - firstOptionShortcut;
-            const auto number = static_cast<std::size_t>(shortcutOffset) + 1;
-            answerWithOptionNumber(number);
-        }
-
-        return true;
-    }
-
-    if (event.modifiers.command && event.charactersIgnoringModifiers == "v")
-    {
-        pasteIntoTypedResponse();
-        return true;
-    }
-
-    if (event.keyCode == KeyCode::Delete)
-    {
-        deleteLastTypedCharacter();
-        return true;
-    }
-
-    if (event.modifiers.command || event.modifiers.control)
-        return true;
-
-    const auto& characters = event.characters;
-    if (characters.empty())
-        return true;
-
-    const auto firstByte = static_cast<unsigned char>(characters[0]);
-
-    if (firstByte >= firstPrintableCharacter && firstByte != deleteCharacter)
-    {
-        typedResponse += characters;
-        repaint();
-    }
+    else if (!text.allowsTypedResponse)
+        answerWithOptionShortcut(event.charactersIgnoringModifiers);
+    else
+        editTypedResponse(event);
 
     return true;
+}
+
+void NotifyUserPrompt::answerWithOptionShortcut(const std::string& typed)
+{
+    if (!isOptionShortcut(typed))
+        return;
+
+    const auto shortcutOffset = typed[0] - firstOptionShortcut;
+    answerWithOptionNumber(static_cast<std::size_t>(shortcutOffset) + 1);
+}
+
+void NotifyUserPrompt::editTypedResponse(const KeyEvent& event)
+{
+    if (event.modifiers.command && event.charactersIgnoringModifiers == "v")
+        pasteIntoTypedResponse();
+    else if (event.keyCode == KeyCode::Delete)
+        deleteLastTypedCharacter();
+    else if (event.modifiers.command || event.modifiers.control)
+        return;
+    else if (isPrintableTypedText(event.characters))
+    {
+        typedResponse += event.characters;
+        repaint();
+    }
 }
 
 void NotifyUserPrompt::mouseDown(const MouseEvent& event)

@@ -1,9 +1,6 @@
 #pragma once
 
-#include "Config.h"
-
-#include <eacp/UI/UI.h>
-#include "Session.h"
+#include "OverlayPanel.h"
 
 #include <map>
 #include <memory>
@@ -31,6 +28,13 @@ struct PrItem
     std::string sessionName;
 };
 
+// Where an Enter jump landed, or why it didn't: exactly one is non-empty.
+struct PrJumpResult
+{
+    std::string path;
+    std::string error;
+};
+
 // The PR dashboard (Ctrl+A p): every open PR you authored across all repos,
 // newest push first — CI state, age, review state, and which open session has
 // the repo checked out. The native port of tmux-pr-dashboard.
@@ -44,7 +48,7 @@ struct PrItem
 // gh runs on a worker thread and the last fetch is cached on disk, so the
 // panel opens instantly with slightly-stale rows while fresh ones stream in.
 // Typing filters the list fuzzily, like the palette.
-class PrDashboard final : public eacp::UI::Component
+class PrDashboard final : public OverlayPanel
 {
 public:
     PrDashboard(const AppConfig& configToUse, SessionManager& sessionsToUse);
@@ -57,7 +61,6 @@ public:
 
     void paint(eacp::UI::Graphics& g) override;
     bool keyDown(const eacp::UI::KeyEvent& event) override;
-    void mouseDown(const eacp::UI::MouseEvent& event) override;
     void mouseMove(const eacp::UI::MouseEvent& event) override;
 
 private:
@@ -66,21 +69,38 @@ private:
     void applySessionMap();
     void applyQuery();
     void loadCache();
-    void choose();
-    void cancel();
+    void chooseSelected() override;
+    void dismiss() override;
     void openWorktree(const PrItem& item);
+    std::vector<std::string> collectCandidateCheckouts(const PrItem& item,
+                                                       const std::string& repoName) const;
+    void finishJump(const PrJumpResult& result);
+    void finishJumpIfStillWanted(const PrJumpResult& result, int generation);
     void switchToSession(const PrItem& item);
     void openInBrowser(const PrItem& item);
     void copyUrl(const PrItem& item);
     void moveSelection(int delta);
-    void popQueryChar();
+    bool handleNavigationKey(const eacp::UI::KeyEvent& event);
+    void handleControlShortcut(const eacp::UI::KeyEvent& event);
+    void editQuery(const eacp::UI::KeyEvent& event);
     const PrItem* selectedItem() const;
-    int rowAt(eacp::UI::Point pos) const;
-    eacp::UI::Rect panelBounds() const;
+    int findRowAt(eacp::UI::Point pos) const override;
+    eacp::UI::Rect calculatePanelBounds() const override;
 
-    const AppConfig& config;
-    SessionManager& sessions;
-    Theme theme;
+    void paintHeader(eacp::UI::Graphics& g, eacp::UI::Rect panel);
+    void paintRow(eacp::UI::Graphics& g,
+                  const PrItem& item,
+                  eacp::UI::Rect rowArea,
+                  std::int64_t now);
+    void paintReviewState(eacp::UI::Graphics& g,
+                          const PrItem& item,
+                          eacp::UI::Rect rowArea,
+                          float baseline);
+    void paintOwningSession(eacp::UI::Graphics& g,
+                            const PrItem& item,
+                            eacp::UI::Rect rowArea,
+                            float baseline);
+    void paintFooter(eacp::UI::Graphics& g, eacp::UI::Rect panel);
 
     std::vector<PrItem> allItems;
     std::vector<PrItem> visible;
@@ -90,7 +110,6 @@ private:
     std::map<std::string, std::pair<std::string, std::string>> sessionsByRepo;
 
     std::string query;
-    int selected = 0;
     bool shown = false;
     bool refreshing = false;
     std::string status;  // header-right state: row count, "refreshing…", or the error
@@ -101,9 +120,5 @@ private:
     int jumpGeneration = 0;
 
     std::shared_ptr<bool> alive = std::make_shared<bool>(true);
-
-    eacp::UI::Font queryFont;
-    eacp::UI::Font rowFont;
-    eacp::UI::Font detailFont;
 };
 } // namespace term

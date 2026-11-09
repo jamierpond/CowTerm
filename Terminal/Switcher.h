@@ -1,10 +1,8 @@
 #pragma once
 
-#include "Config.h"
-#include "Session.h"
+#include "OverlayPanel.h"
 
 #include <eacp/Core/Threads/Timer.h>
-#include <eacp/UI/UI.h>
 
 #include <memory>
 #include <vector>
@@ -18,7 +16,7 @@ namespace term
 // the frozen order (Shift reverses); releasing Ctrl commits the highlight.
 // The order never re-sorts mid-walk — only the committed session floats to the
 // top of the MRU, ready for the next flip.
-class Switcher final : public eacp::UI::Component
+class Switcher final : public OverlayPanel
 {
 public:
     Switcher(const AppConfig& configToUse, SessionManager& sessionsToUse);
@@ -40,31 +38,25 @@ public:
 
     void paint(eacp::UI::Graphics& g) override;
     bool keyDown(const eacp::UI::KeyEvent& event) override;
-    void mouseDown(const eacp::UI::MouseEvent& event) override;
     void mouseMove(const eacp::UI::MouseEvent& event) override;
 
 private:
-    void commit();
-    void cancel();
+    void chooseSelected() override;
+    void dismiss() override;
     void peekSelected();
     void stopPolling();
 
     float cardWidth() const;
-    eacp::UI::Rect panelBounds() const;
-    int cardAt(eacp::UI::Point pos) const;
+    eacp::UI::Rect calculatePanelBounds() const override;
+    int findRowAt(eacp::UI::Point pos) const override;
 
-    const AppConfig& config;
-    SessionManager& sessions;
-    Theme theme;
+    void paintCard(eacp::UI::Graphics& g, int index, eacp::UI::Rect card);
+    void paintSelectedDetail(eacp::UI::Graphics& g, eacp::UI::Rect panel);
+    std::string describeSession(const TermSession& session) const;
 
     // Frozen MRU snapshot taken on begin(); index 0 is the current session.
     std::vector<TermSession*> order;
-    int selected = 0;
     bool shown = false;
-
-    eacp::UI::Font titleFont;
-    eacp::UI::Font labelFont;
-    eacp::UI::Font detailFont;
 
     // Polls the modifier keys while open so releasing Ctrl commits, the way the
     // macOS app switcher commits when you let go of Cmd. eacp no longer pushes
