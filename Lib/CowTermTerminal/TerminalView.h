@@ -10,8 +10,7 @@
 
 #include "CowTermCore/FocusReports.h"
 #include "CowTermCore/Shell.h"
-#include "CowTermCore/TermParser.h"
-#include "CowTermCore/TermScreen.h"
+#include "CowTermCore/TerminalModel.h"
 
 #include <eacp/Core/Threads/EventLoop.h>
 #include <eacp/Core/Threads/Timer.h>
@@ -190,6 +189,10 @@ private:
     int calculateScrollLinesForJump(ViewportJump jump) const;
     void copySelection();
     void applyGridSize();
+    void restoreTerminalState(const std::string& serialized);
+    void startShell(const TerminalConfig& config,
+                    const std::string& workingDirectory,
+                    const std::string& commandToRun);
     void scrollBy(int lines);
 
     bool handleCopyModeKey(const eacp::Graphics::KeyEvent& event);
@@ -241,8 +244,9 @@ private:
 
     Theme theme;
     std::string fontName;
-    TermScreen screen;
-    TermParser parser;
+    TerminalModel terminal;
+    TermScreen& screen = terminal.screen;
+    TermParser& parser = terminal.parser;
     std::string cwd;
     std::string title;
     float fontSize = 13.0f;

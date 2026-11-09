@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>
+#include <utility>
 #include <vector>
 
 namespace term
@@ -29,6 +30,18 @@ public:
     // True once the sequence held more numbers than any real one uses
     // (Ghostty's limit); the caller drops such a sequence.
     bool hasTooManyNumbers() const { return tooManyNumbers; }
+
+    // Everything a sequence cut off mid-way has collected, for saving and
+    // restoring the parser.
+    struct Collected
+    {
+        std::vector<Group> groups;
+        std::size_t numberCount = 1;
+        bool tooManyNumbers = false;
+    };
+
+    Collected getCollected() const { return {groups, numberCount, tooManyNumbers}; }
+    void restoreCollected(Collected saved);
 
 private:
     Group& lastGroupWithAValue();

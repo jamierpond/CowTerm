@@ -38,10 +38,18 @@ public:
     void change(std::uint8_t flags, KittyFlagsChange how);
     void clear();
 
-private:
     static constexpr std::size_t depth = 8;
+    using Entries = std::array<std::uint8_t, depth>;
 
-    std::array<std::uint8_t, depth> entries {};
+    const Entries& getEntries() const { return entries; }
+    std::size_t getTop() const { return top; }
+
+    // Takes a saved stack back; flags outside the protocol and a top past
+    // the end are dropped.
+    void restore(const Entries& savedEntries, std::size_t savedTop);
+
+private:
+    Entries entries {};
     std::size_t top = 0;
 };
 } // namespace term

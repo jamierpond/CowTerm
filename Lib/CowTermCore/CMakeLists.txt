@@ -12,14 +12,11 @@ add_library(CowTermCore STATIC
         SelectGraphicRendition.cpp
         TermScreen.cpp
         TermParser.cpp
-        DevShellEnvironmentCache.cpp)
+        TermState.cpp
+        TerminalModel.cpp)
 
 if (WIN32)
     target_sources(CowTermCore PRIVATE Pty-Windows.cpp)
-
-    # CreateEnvironmentBlock, for the login environment the developer-shell
-    # capture starts from.
-    target_link_libraries(CowTermCore PRIVATE userenv)
 
     # The parser and screen sources hold Unicode literals (box drawing,
     # powerline glyphs); MSVC assumes the ANSI codepage without this.

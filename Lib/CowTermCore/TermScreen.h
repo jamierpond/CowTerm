@@ -3,6 +3,7 @@
 #include "CsiParameters.h"
 #include "HyperlinkTable.h"
 #include "KittyKeyboardFlags.h"
+#include "TermState.h"
 #include "TermTypes.h"
 
 #include <cstdint>
@@ -121,6 +122,9 @@ public:
     KittyKeyboardStack& kittyKeyboard();
     const KittyKeyboardStack& kittyKeyboard() const;
 
+    ScreenState saveState() const;
+    void restoreState(const ScreenState& state);
+
     // Bumped on every visible change; the view repaints when it moves.
     std::uint64_t version() const { return changeVersion; }
 
@@ -136,6 +140,23 @@ private:
         int x = 0;
         int y = 0;
     };
+
+    // Each saved table id's id in the rebuilt tables, indexed by saved id.
+    struct RestoredTableIds
+    {
+        std::vector<std::uint32_t> styles;
+        std::vector<std::uint32_t> hyperlinks;
+        std::vector<std::uint32_t> graphemes;
+    };
+
+    void saveTables(ScreenState& state) const;
+    CellStyle restoreStyle(const SavedStyle& saved) const;
+    RestoredTableIds restoreTables(const ScreenState& state);
+    Cell restoreCell(char32_t value, const SavedCellRun& run, const RestoredTableIds& ids) const;
+    Line restoreLine(const SavedLine& saved, const RestoredTableIds& ids) const;
+    template <typename Lines>
+    Lines restoreLines(const std::vector<SavedLine>& saved, const RestoredTableIds& ids) const;
+    Pen restorePen(const SavedPen& saved, const RestoredTableIds& ids) const;
 
     void compactTables();
     StyleId internStyle(const CellStyle& style);
