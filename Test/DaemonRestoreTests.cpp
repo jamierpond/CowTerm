@@ -18,6 +18,8 @@ namespace
 constexpr auto messageTimeout = Time::MS {15000};
 constexpr auto paneId = "restore-test-pane";
 constexpr auto marker = "restore-me-42";
+// sh and PowerShell both drop the empty quotes: the typed line never matches the marker.
+constexpr auto echoMarkerCommand = "echo restore-me-\"\"42\r";
 
 std::string makeInstanceName()
 {
@@ -132,8 +134,8 @@ auto tPaneComesBackAfterDaemonRestart = test("DaemonRestore/paneComesBackAfterDa
 
         first.messenger.send(term::proto::make("spawn", {paneId, "80", "24"}, "/tmp"));
         first.messenger.send(
-            term::proto::make("write", {paneId}, std::string {"echo "} + marker + "\n"));
-        check(first.waitForOutputContaining(std::string {marker} + "\r\n"));
+            term::proto::make("write", {paneId}, echoMarkerCommand));
+        check(first.waitForOutputContaining(marker));
         first.quitDaemon();
     }
 
