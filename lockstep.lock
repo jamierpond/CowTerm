@@ -98,6 +98,38 @@
       "usesGitLfs": false
     },
     {
+      "commit": "409c16be502e39fe70dd6fe2d9ad4842ef2c9a53",
+      "hash": "4a4c35ff0b6f60b20c2996b22ce2d2191dbefaaebb99bbaa14b33352b1edcde3",
+      "kind": "git",
+      "name": "VulkanHeaders",
+      "patches": [],
+      "requestedRef": "vulkan-sdk-1.4.313.0",
+      "submoduleSelection": {
+        "isRecursive": true,
+        "isRestricted": false,
+        "paths": []
+      },
+      "submodules": [],
+      "url": "https://github.com/KhronosGroup/Vulkan-Headers.git",
+      "usesGitLfs": false
+    },
+    {
+      "commit": "3aa921224c154a0d2c43912bc88e1c42ce1f7607",
+      "hash": "2771260a3954cbdd7b7a5f3d5fe5e3662fb090c6abbe6774ac1f969f47d17e9d",
+      "kind": "git",
+      "name": "VulkanMemoryAllocator",
+      "patches": [],
+      "requestedRef": "v3.4.0",
+      "submoduleSelection": {
+        "isRecursive": true,
+        "isRestricted": false,
+        "paths": []
+      },
+      "submodules": [],
+      "url": "https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator.git",
+      "usesGitLfs": false
+    },
+    {
       "commit": "9a124ea146fa48e406eeb2120dd4cd8888d961a4",
       "hash": "74ffff42245d21c6ff0c0ad5edec6b91ff62a4cf074c453d3833f26a4b2655b3",
       "kind": "git",
@@ -128,8 +160,40 @@
       "submodules": [],
       "url": "https://github.com/tamber-inc/emberstore.git",
       "usesGitLfs": false
+    },
+    {
+      "commit": "a8d28bd082bff18ffbe80996e922b012f915cf07",
+      "hash": "3f41212a26fa42c9a22279d049ebeff03f90a25786285da20ef7e753e4ed584d",
+      "kind": "git",
+      "name": "glslang",
+      "patches": [],
+      "requestedRef": "16.5.0",
+      "submoduleSelection": {
+        "isRecursive": true,
+        "isRestricted": false,
+        "paths": []
+      },
+      "submodules": [],
+      "url": "https://github.com/KhronosGroup/glslang.git",
+      "usesGitLfs": false
+    },
+    {
+      "commit": "43c29e655cb8117fd9cfb65ad9cefe2d40965102",
+      "hash": "be3c2defada9b5bb6aec7837e15406762bccfc7e3ab29741c5e14d7d91a806cd",
+      "kind": "git",
+      "name": "volk",
+      "patches": [],
+      "requestedRef": "vulkan-sdk-1.4.313.0",
+      "submoduleSelection": {
+        "isRecursive": true,
+        "isRestricted": false,
+        "paths": []
+      },
+      "submodules": [],
+      "url": "https://github.com/zeux/volk.git",
+      "usesGitLfs": false
     }
   ],
-  "root": "4cf7f2b8ad65bcadca053e0bfce8a90a3ebb9ad8fb524b164070841274bab42a",
+  "root": "8c819e6cd3afbd1d52be72f58f3f33ce79f88985947e107504be0abc29305cd7",
   "version": 1
 }
