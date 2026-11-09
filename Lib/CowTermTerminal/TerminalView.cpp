@@ -332,9 +332,34 @@ void TerminalView::resized()
         glyphs->setViewportSize({bounds.w, bounds.h});
     }
 
-    applyGridSize();
+    if (hasGridSizeFromBounds)
+        scheduleGridSizeOnceBoundsSettle();
+    else
+        applyGridSize();
+
     rowDrawings.invalidateAllRows();
     repaint();
+}
+
+// Ghostty's coalescing: while a window edge is dragged, the grid reflows and
+// the shell gets SIGWINCH once, after the size has stopped changing.
+void TerminalView::scheduleGridSizeOnceBoundsSettle()
+{
+    constexpr auto gridResizeQuietPeriod = Time::MS {25};
+    const auto generation = ++gridResizeGeneration;
+    auto guard = std::weak_ptr<bool> {alive};
+
+    Threads::callAfter(gridResizeQuietPeriod,
+                       [this, guard, generation]
+                       {
+                           if (guard.expired() || generation != gridResizeGeneration)
+                               return;
+
+                           const auto lock = lockTerminal();
+                           applyGridSize();
+                           rowDrawings.invalidateAllRows();
+                           repaintIfShown();
+                       });
 }
 
 void TerminalView::applyGridSize()
@@ -348,6 +373,7 @@ void TerminalView::applyGridSize()
 
     const auto cols = std::max(2, (int) ((bounds.w - 2 * marginX) / cellW));
     const auto rows = std::max(1, (int) ((bounds.h - 2 * marginY) / cellH));
+    hasGridSizeFromBounds = true;
 
     if (commandTerminal)
         debugLog("[grid] popup bounds w=%.1f h=%.1f cell=%.2fx%.2f font=%.1f -> %dx%d\n",

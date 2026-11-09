@@ -66,6 +66,12 @@ void Popup::show(const std::string& command, const std::string& workingDirectory
             });
 }
 
+void Popup::focusTerminal()
+{
+    if (terminal != nullptr)
+        terminal->focus();
+}
+
 void Popup::dismiss()
 {
     if (terminal == nullptr || closing)
