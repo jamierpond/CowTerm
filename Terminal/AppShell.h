@@ -99,6 +99,7 @@ private:
     void wireWorktreeActions();
     void wireNotifications();
     void raiseOverlay();
+    void raisePopup();
     void showPalette();
     void showSwitcher(bool reverse);
     void showPopup(const std::string& command);
