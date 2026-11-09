@@ -68,6 +68,7 @@ TerminalView::TerminalView(const TerminalConfig& config,
     , blinkTimer(
           [this]
           {
+              const auto lock = lockTerminal();
               blinkOn = !blinkOn;
               repaintUnlessSynchronized();
           },
@@ -79,22 +80,8 @@ TerminalView::TerminalView(const TerminalConfig& config,
 
     atlas.emplace(fontName, fontSize);
 
-    parser.respond = [this](std::string_view bytes) { send(bytes); };
-
-    parser.onTitleChanged = [this](const std::string& newTitle)
-    {
-        title = newTitle;
-        onTitleChanged(newTitle);
-    };
-
-    parser.onCwdChanged = [this](const std::string& newCwd)
-    {
-        cwd = newCwd;
-        onCwdChanged(newCwd);
-    };
-
-    parser.onNotify = [this](const std::string& text) { onNotify(text); };
-    parser.onSynchronizedOutputStarted = [this] { startSynchronizedOutputTimeout(); };
+    connectParserToUiThread();
+    startOutputParserThread();
 
     auto guard = std::weak_ptr<bool> {alive};
 
@@ -103,20 +90,7 @@ TerminalView::TerminalView(const TerminalConfig& config,
          workingDirectory,
          commandToRun,
          environmentFor(config, paneShellId, commandToRun)},
-        [this, guard](const std::string& data)
-        {
-            {
-                auto lock = std::scoped_lock {outputLock};
-                pendingOutput += data;
-            }
-
-            Threads::callAsync(
-                [this, guard]
-                {
-                    if (!guard.expired())
-                        flushOutput();
-                });
-        },
+        [this](const std::string& data) { outputParser->append(data); },
         [this, guard]
         {
             Threads::callAsync(
@@ -128,11 +102,14 @@ TerminalView::TerminalView(const TerminalConfig& config,
         });
 }
 
+// The shell stops delivering output before the thread that parses it goes,
+// and that thread is gone before alive is reset under it.
 TerminalView::~TerminalView()
 {
+    shell->detach();
+    outputParser.reset();
     *alive = false;
     alive.reset();
-    shell->detach();
 }
 
 void TerminalView::terminateShell()
@@ -140,8 +117,75 @@ void TerminalView::terminateShell()
     shell->terminate();
 }
 
+void TerminalView::connectParserToUiThread()
+{
+    // The parser runs on the output thread: replies go straight to the shell,
+    // everything the host sees is handed to the UI thread.
+    parser.respond = [this](std::string_view bytes) { send(bytes); };
+
+    parser.onTitleChanged = [this](const std::string& newTitle)
+    {
+        runOnUiThread(
+            [this, newTitle]
+            {
+                title = newTitle;
+                onTitleChanged(newTitle);
+            });
+    };
+
+    parser.onCwdChanged = [this](const std::string& newCwd)
+    {
+        runOnUiThread(
+            [this, newCwd]
+            {
+                cwd = newCwd;
+                onCwdChanged(newCwd);
+            });
+    };
+
+    parser.onNotify = [this](const std::string& text)
+    { runOnUiThread([this, text] { onNotify(text); }); };
+
+    parser.onSynchronizedOutputStarted = [this]
+    { runOnUiThread([this] { startSynchronizedOutputTimeout(); }); };
+}
+
+void TerminalView::startOutputParserThread()
+{
+    outputParser = std::make_unique<OutputParserThread>(
+        [this](std::string_view bytes)
+        {
+            const auto lock = lockTerminal();
+            parser.feed(bytes);
+        },
+        [this] { requestShowParsedOutput(); });
+}
+
+std::unique_lock<std::recursive_mutex> TerminalView::lockTerminal() const
+{
+    return std::unique_lock {terminalLock};
+}
+
+void TerminalView::runOnUiThread(std::function<void()> action)
+{
+    auto guard = std::weak_ptr<bool> {alive};
+
+    Threads::callAsync(
+        [guard, action = std::move(action)]
+        {
+            if (!guard.expired())
+                action();
+        });
+}
+
+void TerminalView::waitForParsedOutput()
+{
+    outputParser->waitUntilIdle();
+}
+
 void TerminalView::refreshCursor()
 {
+    const auto lock = lockTerminal();
     blinkOn = true;
     reportFocusIfChanged();
     repaint();
@@ -161,19 +205,18 @@ void TerminalView::reportFocusIfChanged()
         send(report);
 }
 
-void TerminalView::flushOutput()
+// Called on the output thread after each batch; at most one showParsedOutput
+// is queued however fast batches come.
+void TerminalView::requestShowParsedOutput()
 {
-    auto data = std::string {};
+    if (!parsedOutputQueued.exchange(true))
+        runOnUiThread([this] { showParsedOutput(); });
+}
 
-    {
-        auto lock = std::scoped_lock {outputLock};
-        data.swap(pendingOutput);
-    }
-
-    if (data.empty())
-        return;
-
-    parser.feed(data);
+void TerminalView::showParsedOutput()
+{
+    parsedOutputQueued = false;
+    const auto lock = lockTerminal();
 
     if (screen.modes.altScreen)
         scrollOffset = 0;
@@ -202,6 +245,7 @@ void TerminalView::startSynchronizedOutputTimeout()
                            if (guard.expired() || generation != synchronizedOutputGeneration)
                                return;
 
+                           const auto lock = lockTerminal();
                            screen.modes.synchronizedOutput = false;
                            repaint();
                        });
@@ -222,6 +266,7 @@ void TerminalView::sendAndScrollToBottom(std::string_view bytes)
 
 void TerminalView::sendText(std::string_view text)
 {
+    const auto lock = lockTerminal();
     auto bytes = std::string {text};
     std::replace(bytes.begin(), bytes.end(), '\n', '\r');
     sendAndScrollToBottom(bytes);
@@ -229,6 +274,7 @@ void TerminalView::sendText(std::string_view text)
 
 std::string TerminalView::debugScreenText() const
 {
+    const auto lock = lockTerminal();
     auto out = std::string {};
 
     for (int row = 0; row < screen.rows(); ++row)
@@ -242,6 +288,7 @@ std::string TerminalView::debugScreenText() const
 
 void TerminalView::resized()
 {
+    const auto lock = lockTerminal();
     GPUView::resized();
 
     const auto bounds = getLocalBounds();
@@ -286,6 +333,7 @@ void TerminalView::applyGridSize()
 
 void TerminalView::setFontSize(float newSize)
 {
+    const auto lock = lockTerminal();
     const auto clamped = std::clamp(newSize, minFontSize, maxFontSize);
 
     if (clamped == fontSize)
@@ -431,6 +479,7 @@ void TerminalView::drawCursorLayer(GPU::RenderPass& pass,
 
 void TerminalView::render(GPU::Frame& frame)
 {
+    const auto lock = lockTerminal();
     auto pass = frame.beginPass({toColor(theme.background)});
 
     if (!sprites)
@@ -578,6 +627,7 @@ bool TerminalView::handleTypedKey(const KeyEvent& event)
 
 void TerminalView::keyDown(const KeyEvent& event)
 {
+    const auto lock = lockTerminal();
     using KeyHandler = bool (TerminalView::*)(const KeyEvent&);
     static constexpr auto keyHandlersInOrder =
         std::array<KeyHandler, 7> {&TerminalView::handleInterceptedKey,
@@ -627,6 +677,7 @@ bool TerminalView::handleKittyKey(const KeyEvent& event)
 
 void TerminalView::keyUp(const KeyEvent& event)
 {
+    const auto lock = lockTerminal();
     const auto pressed =
         std::find(keysPressedForProgram.begin(), keysPressedForProgram.end(), event.keyCode);
 
@@ -643,6 +694,7 @@ void TerminalView::keyUp(const KeyEvent& event)
 
 void TerminalView::paste()
 {
+    const auto lock = lockTerminal();
     const auto text = Clipboard::getText();
 
     if (text.empty())
@@ -708,6 +760,7 @@ void TerminalView::beginDragSelection(CellRef cell)
 
 void TerminalView::enterCopyMode()
 {
+    const auto lock = lockTerminal();
     if (copyMode)
         return;
 
@@ -890,6 +943,7 @@ bool TerminalView::openHyperlinkUnderPointer(const MouseEvent& event)
 
 void TerminalView::mouseDown(const MouseEvent& event)
 {
+    const auto lock = lockTerminal();
     onFocused();
 
     if (openHyperlinkUnderPointer(event))
@@ -916,6 +970,7 @@ void TerminalView::mouseDown(const MouseEvent& event)
 
 void TerminalView::mouseDragged(const MouseEvent& event)
 {
+    const auto lock = lockTerminal();
     if (isReportingMouseFor(event))
     {
         if (screen.modes.mouseDrag || screen.modes.mouseMotion)
@@ -934,6 +989,7 @@ void TerminalView::mouseDragged(const MouseEvent& event)
 
 void TerminalView::mouseUp(const MouseEvent& event)
 {
+    const auto lock = lockTerminal();
     if (isReportingMouseFor(event))
     {
         sendMouseReport(event, (int) event.button, false, false);
@@ -967,6 +1023,7 @@ void TerminalView::sendWheelAsArrowKeys(int lines)
 
 void TerminalView::mouseWheel(const MouseEvent& event)
 {
+    const auto lock = lockTerminal();
     if (isReportingMouseFor(event))
     {
         const auto button = event.delta.y > 0 ? wheelUpMouseButton : wheelDownMouseButton;
