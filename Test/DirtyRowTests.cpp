@@ -140,3 +140,14 @@ auto tClearDirtyRows = test("DirtyRows/clearingLeavesNoDirtyRow") = []
     s.screen.clearDirtyRows();
     check(s.findDirtyRows().empty());
 };
+
+auto tRestoreMarksAll = test("DirtyRows/restoringStateMarksEveryRowOfTheRestoredSize") = []
+{
+    auto taller = DirtyRowScreen {};
+    taller.screen.resize(screenColumns, screenRows + 1);
+    const auto saved = taller.screen.saveState();
+
+    auto s = DirtyRowScreen {};
+    s.screen.restoreState(saved);
+    check(s.findDirtyRows() == Rows {0, 1, 2, 3, 4, 5});
+};
