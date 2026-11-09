@@ -830,3 +830,43 @@ auto tCustomSchemesAreNotOpened = test("View/linkWithACustomSchemeIsNotOpened") 
 
     check(linked.opened.empty());
 };
+
+namespace
+{
+// An arrow as macOS delivers it: the key code plus a Private Use Area
+// character (U+F700 up, U+F701 down, U+F702 left, U+F703 right).
+Graphics::KeyEvent macArrow(std::uint16_t keyCode, std::string puaCharacter)
+{
+    auto event = keyWithCode(keyCode);
+    event.characters = puaCharacter;
+    event.charactersIgnoringModifiers = std::move(puaCharacter);
+    return event;
+}
+
+const auto macUp = std::string {"\xef\x9c\x80"};
+const auto macLeft = std::string {"\xef\x9c\x82"};
+} // namespace
+
+auto tMacArrowsLegacy = test("View/macArrowsWithTheirCharactersSendCsi") = []
+{
+    auto pane = TestPane {};
+    check(pane.writtenForKey(macArrow(Graphics::KeyCode::UpArrow, macUp)) == "\033[A");
+    check(pane.writtenForKey(macArrow(Graphics::KeyCode::LeftArrow, macLeft)) == "\033[D");
+};
+
+auto tMacArrowsApplicationMode = test("View/macArrowsInApplicationCursorModeSendSs3") = []
+{
+    auto pane = TestPane {};
+    pane.showOutput("\033[?1h");
+    check(pane.writtenForKey(macArrow(Graphics::KeyCode::UpArrow, macUp)) == "\033OA");
+    check(pane.writtenForKey(macArrow(Graphics::KeyCode::LeftArrow, macLeft)) == "\033OD");
+};
+
+auto tMacArrowsKitty = test("View/macArrowsUnderKittyFlagsSendCsi") = []
+{
+    auto pane = TestPane {};
+    pane.showOutput("\033[>5u");
+    check(pane.writtenForKey(macArrow(Graphics::KeyCode::UpArrow, macUp)) == "\033[A");
+    pane.showOutput("\033[?1h");
+    check(pane.writtenForKey(macArrow(Graphics::KeyCode::UpArrow, macUp)) == "\033[A");
+};
