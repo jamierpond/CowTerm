@@ -55,6 +55,9 @@ public:
     // Every leaf, in tree order (left/top first).
     std::vector<TerminalView*> panes() const;
 
+    // Panes skip frames while off screen; call when the tree is shown again.
+    void repaintAllPanes();
+
     // Leaves whose foreground process or title says a Claude Code
     // conversation runs there — the Claude HUD's row source.
     std::vector<TerminalView*> claudePanes() const;

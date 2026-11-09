@@ -265,6 +265,12 @@ std::vector<TerminalView*> SessionView::panes() const
     return views;
 }
 
+void SessionView::repaintAllPanes()
+{
+    for (auto* pane: panes())
+        pane->repaint();
+}
+
 std::vector<TerminalView*> SessionView::claudePanes() const
 {
     auto leaves = std::vector<Node*> {};

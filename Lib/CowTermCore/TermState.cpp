@@ -424,6 +424,7 @@ void TermScreen::restoreState(const ScreenState& state)
     }
 
     clampCursor();
+    dirtyRows.assign((std::size_t) rowCount, true);
     markDirty();
 }
 

@@ -35,6 +35,7 @@ nano_add_executable(CowTermScreenTests
             TerminalModeTests.cpp
             ReflowTests.cpp
             TerminalStateTests.cpp
+            DirtyRowTests.cpp
         TARGETS CowTerm::Core)
 
 # Replays every recording in Fuzz/Corpus (the fuzzer's seeds and every input
@@ -134,6 +135,7 @@ nano_add_executable(CowTermViewTests
             KittyKeyEncodingTests.cpp
             OutputParserThreadTests.cpp
             GraphemeTests.cpp
+            RowDrawingCacheTests.cpp
         TARGETS CowTerm::Terminal)
 
 # The leader-key letters and digits AppShell turns into pane and session moves.

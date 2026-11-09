@@ -57,6 +57,30 @@ std::vector<BackgroundRun> findBackgroundRuns(const PaintedRow& row,
                                               const SelectionRange& selection,
                                               const Theme& theme);
 
+struct RectFill
+{
+    eacp::Graphics::Rect rect;
+    eacp::Graphics::Color colour;
+};
+
+struct GlyphQuad
+{
+    eacp::Graphics::Rect destination;
+    eacp::Graphics::Rect source;
+    eacp::Graphics::Color tint;
+    bool colored = false;
+};
+
+// One row's draws, kept between frames so an unchanged row is not rebuilt.
+// Atlas source rects stay valid until the atlas generation changes.
+struct RowDrawing
+{
+    std::vector<RectFill> backgrounds;
+    std::vector<RectFill> decorations;
+    std::vector<GlyphQuad> glyphs;
+    bool hasBlinkingText = false;
+};
+
 // What the painter draws with, borrowed for one frame.
 struct PaintTools
 {
@@ -78,11 +102,14 @@ public:
                 bool blinkingTextVisible);
 
     // Rasterize ahead of the first draw so the atlas uploads once a frame.
-    void rasterizeRowGlyphs(const PaintedRow& row);
     void rasterizeTextGlyphs(const std::string& text);
 
-    void drawRowBackgrounds(const PaintedRow& row);
-    void drawRowGlyphs(const PaintedRow& row);
+    // Rasterizes the row's glyphs as a side effect; commit the atlas before
+    // submitting.
+    RowDrawing buildRowDrawing(const PaintedRow& row);
+
+    // Every row's backgrounds, then every row's decorations, then the glyphs.
+    void submitRowDrawings(const std::vector<RowDrawing>& rows);
 
     void drawCursor(eacp::Graphics::Point cellOrigin,
                     CursorStyle style,
@@ -100,16 +127,26 @@ public:
 private:
     template <typename Visit>
     void forEachCellGlyph(const ResolvedCell& cell, Visit&& visit);
+    GlyphQuad placeGlyph(const GlyphSlot& slot,
+                         eacp::Graphics::Point penOnBaseline,
+                         const eacp::Graphics::Color& tint,
+                         bool colored);
     void queueGlyph(const GlyphSlot& slot,
                     eacp::Graphics::Point penOnBaseline,
                     const eacp::Graphics::Color& tint,
                     bool colored);
-    void drawCellGlyph(const ResolvedCell& cell,
-                       eacp::Graphics::Point cellOrigin,
-                       Rgb foreground);
-    void drawCellDecorations(const ResolvedCell& cell,
-                             eacp::Graphics::Point cellOrigin,
-                             Rgb foreground);
+    void fillRects(const std::vector<RectFill>& fills);
+    void addGlyphQuads(const std::vector<GlyphQuad>& quads);
+    void addRowBackgrounds(const PaintedRow& row, RowDrawing& drawing);
+    void addRowInk(const PaintedRow& row, RowDrawing& drawing);
+    void addCellGlyph(const ResolvedCell& cell,
+                      eacp::Graphics::Point cellOrigin,
+                      Rgb foreground,
+                      RowDrawing& drawing);
+    void addCellDecorations(const ResolvedCell& cell,
+                            eacp::Graphics::Point cellOrigin,
+                            Rgb foreground,
+                            RowDrawing& drawing);
     void drawGlyphOverCursor(eacp::Graphics::Point cellOrigin,
                              const PaintedLine& line,
                              int column);

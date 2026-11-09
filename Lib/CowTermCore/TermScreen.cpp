@@ -279,6 +279,7 @@ void TermScreen::writeCell(int x, int y, const Cell& cell)
 
     damageWidePair(x, y);
     row(y)[(std::size_t) x] = cell;
+    markRowDirty(y);
 }
 
 void TermScreen::newlineWithScroll()
@@ -374,6 +375,7 @@ void TermScreen::extendCluster(ClusterTarget target, char32_t codepoint)
         return;
 
     cell.content = (cell.content & ~Cell::valueMask) | id | CellFlag::Grapheme;
+    markRowDirty(target.y);
 
     if (codepoint == variationSelectorEmoji)
         widenForEmojiPresentation(target);
@@ -587,6 +589,8 @@ void TermScreen::clearCells(int y, int fromX, int toX, const Cell& blank)
 
     for (auto x = std::max(fromX, 0); x <= std::min(toX, cols - 1); ++x)
         line[(std::size_t) x] = blank;
+
+    markRowDirty(y);
 }
 
 void TermScreen::clearRows(int fromY, int toYExclusive, const Cell& blank)
@@ -677,6 +681,7 @@ void TermScreen::insertChars(int count)
     line.wrapped = false;
     line.insert(line.begin() + cursor.x, (std::size_t) n, blankCell());
     line.resize((std::size_t) cols);
+    markRowDirty(cursor.y);
     markDirty();
 }
 
@@ -687,6 +692,7 @@ void TermScreen::deleteChars(int count)
     line.wrapped = false;
     line.erase(line.begin() + cursor.x, line.begin() + cursor.x + n);
     line.resize((std::size_t) cols, blankCell());
+    markRowDirty(cursor.y);
     markDirty();
 }
 
@@ -703,6 +709,7 @@ void TermScreen::eraseChars(int count)
         line[(std::size_t) x] = blank;
     }
 
+    markRowDirty(cursor.y);
     markDirty();
 }
 
@@ -742,6 +749,7 @@ void TermScreen::scrollUpRegion(int count, int top, int bottom)
         lines.insert(lines.begin() + bottom, blankLine());
     }
 
+    markRowsDirty(top, bottom + 1);
     markDirty();
 }
 
@@ -756,6 +764,7 @@ void TermScreen::scrollDownRegion(int count, int top, int bottom)
         lines.insert(lines.begin() + top, blankLine());
     }
 
+    markRowsDirty(top, bottom + 1);
     markDirty();
 }
 
@@ -804,6 +813,7 @@ void TermScreen::useAltScreen(bool on, bool saveCursorAndClear)
     }
 
     wrapPending = false;
+    markAllRowsDirty();
     markDirty();
 }
 
@@ -830,6 +840,7 @@ void TermScreen::fullReset()
         std::fill(line.begin(), line.end(), blankCell());
 
     resizeTabStops({});
+    markAllRowsDirty();
     markDirty();
 }
 
@@ -964,7 +975,38 @@ void TermScreen::resize(int newCols, int newRows)
 
     resizeTabStops(std::vector<bool> {tabStops});
     clampCursor();
+    dirtyRows.assign((std::size_t) rowCount, true);
     markDirty();
+}
+
+bool TermScreen::isRowDirty(int visualRow) const
+{
+    if (visualRow < 0 || visualRow >= (int) dirtyRows.size())
+        return true;
+
+    return dirtyRows[(std::size_t) visualRow];
+}
+
+void TermScreen::clearDirtyRows()
+{
+    std::fill(dirtyRows.begin(), dirtyRows.end(), false);
+}
+
+void TermScreen::markRowDirty(int y)
+{
+    if (y >= 0 && y < (int) dirtyRows.size())
+        dirtyRows[(std::size_t) y] = true;
+}
+
+void TermScreen::markRowsDirty(int fromY, int toYExclusive)
+{
+    for (auto y = fromY; y < toYExclusive; ++y)
+        markRowDirty(y);
+}
+
+void TermScreen::markAllRowsDirty()
+{
+    std::fill(dirtyRows.begin(), dirtyRows.end(), true);
 }
 
 const Line& TermScreen::lineAt(int visualRow, int scrollOffset) const

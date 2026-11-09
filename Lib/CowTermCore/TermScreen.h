@@ -128,6 +128,11 @@ public:
     // Bumped on every visible change; the view repaints when it moves.
     std::uint64_t version() const { return changeVersion; }
 
+    // Rows of the active screen whose cells changed since clearDirtyRows; the
+    // renderer rebuilds only these. Cursor moves do not mark a row.
+    bool isRowDirty(int visualRow) const;
+    void clearDirtyRows();
+
     Modes modes;
     CursorPos cursor;
 
@@ -181,6 +186,9 @@ private:
     bool isScrollingIntoHistory(int top) const;
     bool isAlreadySize(int newCols, int newRows) const;
     void markDirty() { ++changeVersion; }
+    void markRowDirty(int y);
+    void markRowsDirty(int fromY, int toYExclusive);
+    void markAllRowsDirty();
     void clampCursor();
     void writeCell(int x, int y, const Cell& cell);
 
@@ -233,5 +241,6 @@ private:
     KittyKeyboardStack primaryKittyKeyboard;
     KittyKeyboardStack alternateKittyKeyboard;
     std::uint64_t changeVersion = 1;
+    std::vector<bool> dirtyRows;
 };
 } // namespace term

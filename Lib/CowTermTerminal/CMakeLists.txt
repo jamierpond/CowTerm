@@ -9,6 +9,7 @@ add_library(CowTermTerminal STATIC
         CellText.cpp
         CopyMode.cpp
         GridPainter.cpp
+        RowDrawingCache.cpp
         KeyEncoding.cpp
         KittyKeyEncoding.cpp
         OutputParserThread.cpp)
