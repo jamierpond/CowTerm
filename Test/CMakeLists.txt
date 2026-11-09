@@ -129,6 +129,7 @@ nano_add_executable(CowTermViewTests
             TerminalViewBehaviourTests.cpp
             TerminalViewLogicTests.cpp
             KittyKeyEncodingTests.cpp
+            OutputParserThreadTests.cpp
         TARGETS CowTerm::Terminal)
 
 # The leader-key letters and digits AppShell turns into pane and session moves.
@@ -154,3 +155,9 @@ nano_add_executable(CowTermFuzzyMatchTests
             ../Terminal/FuzzyMatch.cpp)
 
 target_include_directories(CowTermFuzzyMatchTests PRIVATE ../Terminal)
+
+# Not a test: `cat` of a large file through a real pane, timing the output and
+# the UI thread's responsiveness meanwhile. Run it by hand before and after a
+# change to the output path.
+add_executable(CowTermCatThroughputBench ../Bench/CatThroughputBench.cpp)
+target_link_libraries(CowTermCatThroughputBench PRIVATE CowTerm::Terminal)
