@@ -17,6 +17,7 @@ if (COWTERM_ENABLE_FUZZING)
             ../Lib/CowTermCore/CsiParameters.cpp
             ../Lib/CowTermCore/HyperlinkTable.cpp
             ../Lib/CowTermCore/KittyKeyboardFlags.cpp
+            ../Lib/CowTermCore/Reflow.cpp
             ../Lib/CowTermCore/SelectGraphicRendition.cpp
             ../Lib/CowTermCore/TermParser.cpp
             ../Lib/CowTermCore/TermScreen.cpp)
