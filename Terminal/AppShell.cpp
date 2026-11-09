@@ -394,6 +394,21 @@ void AppShell::raiseOverlay()
         showOverlay(claudeHud);
     else if (permissions.isShown())
         showOverlay(permissions);
+
+    if (popup.isShown())
+        raisePopup();
+}
+
+// The popup is a sibling of the session view, not an overlay; a session
+// attached under it (a notification click, the active session exiting) lands
+// on top and would hide lazygit while it keeps running, and Ctrl+A i then
+// does nothing because the popup counts as shown.
+void AppShell::raisePopup()
+{
+    removeSubview(popup);
+    addSubview(popup);
+    popup.setBounds(getLocalBounds());
+    popup.focusTerminal();
 }
 
 void AppShell::showPalette()

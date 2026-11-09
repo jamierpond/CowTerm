@@ -29,6 +29,8 @@ public:
 
     bool isShown() const { return terminal != nullptr; }
 
+    void focusTerminal();
+
     // Fired once the popup is gone; the app shell removes the overlay and
     // restores pane focus.
     eacp::Callback onClosed = [] {};
