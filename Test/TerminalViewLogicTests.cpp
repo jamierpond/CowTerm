@@ -151,6 +151,22 @@ auto tBracketedPaste = test("ViewLogic/bracketedPasteWrapsTheText") = []
     check(preparePastedText("ls\n", true) == "\033[200~ls\r\033[201~");
 };
 
+auto tPasteStripsControls = test("ViewLogic/pasteTurnsControlBytesIntoSpaces") = []
+{
+    check(preparePastedText("a\033[201~b", true) == "\033[200~a [201~b\033[201~");
+    check(preparePastedText("x\x03y\x15z\tw", false) == "x y z\tw");
+};
+
+auto tPasteSafety = test("ViewLogic/pasteIsUnsafeWhenItCouldRunACommand") = []
+{
+    check(isPasteSafe("echo hi", false));
+    check(isPasteSafe("tab\tseparated", false));
+    check(!isPasteSafe("rm -rf ~\n", false));
+    check(!isPasteSafe("a\rb", false));
+    check(isPasteSafe("two\nlines", true), "bracketed paste reaches the program as one block");
+    check(!isPasteSafe("x\033[201~rm -rf ~\n", true), "an end marker escapes the bracket");
+};
+
 auto tSgrEncoding = test("ViewLogic/sgrMouseReportEncoding") = []
 {
     check(encodeSgrMouseReport({0, true, false, 3, 2}) == "\033[<0;3;2M");

@@ -708,12 +708,35 @@ void TerminalView::keyUp(const KeyEvent& event)
 
 void TerminalView::paste()
 {
-    const auto lock = lockTerminal();
     const auto text = Clipboard::getText();
 
     if (text.empty())
         return;
 
+    const auto isSafe = [&]
+    {
+        const auto lock = lockTerminal();
+        return isPasteSafe(text, screen.modes.bracketedPaste);
+    }();
+
+    if (isSafe)
+    {
+        pasteText(text);
+        return;
+    }
+
+    auto guard = std::weak_ptr<bool> {alive};
+    confirmUnsafePaste(text,
+                       [this, guard, text]
+                       {
+                           if (!guard.expired())
+                               pasteText(text);
+                       });
+}
+
+void TerminalView::pasteText(const std::string& text)
+{
+    const auto lock = lockTerminal();
     sendAndScrollToBottom(preparePastedText(text, screen.modes.bracketedPaste));
 }
 

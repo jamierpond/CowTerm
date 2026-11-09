@@ -55,6 +55,9 @@ void AppShell::wireSessionManager()
         pane.interceptKey = [this](const KeyEvent& event)
         { return interceptKey(event); };
 
+        pane.confirmUnsafePaste = [this](const std::string& text, const Callback& paste)
+        { pasteConfirmation.ask(text, paste); };
+
         pane.onTitleChanged = [this, raw](const std::string&)
         {
             if (manager.active() == raw)

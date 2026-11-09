@@ -39,6 +39,7 @@ add_executable(${COWTERM_EXECUTABLE_TARGET}
         NotifyUserServer.cpp
         OverlayPanel.cpp
         Palette.cpp
+        PasteConfirmation.cpp
         Permissions.cpp
         PermissionsPanel.cpp
         PrDashboard.cpp

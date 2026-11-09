@@ -230,6 +230,22 @@ std::optional<EditingShortcut> findClipboardShortcutForLetter(const std::string&
     return std::nullopt;
 }
 
+// Ghostty's strip list: bytes the terminal's line discipline or a shell
+// reads as commands, not text.
+constexpr auto pasteStrippedBytes = std::string_view {
+    "\x00\x08\x05\x04\x1b\x7f\x03\x1c\x15\x1a\x11\x13\x17\x16\x12\x0f", 16};
+
+char replaceStrippedPasteByte(char byte)
+{
+    if (pasteStrippedBytes.find(byte) != std::string_view::npos)
+        return ' ';
+
+    if (byte == '\n')
+        return '\r';
+
+    return byte;
+}
+
 bool isLineFeedAt(std::string_view text, std::size_t index)
 {
     return index < text.size() && text[index] == '\n';
@@ -318,7 +334,7 @@ std::string preparePastedText(std::string_view clipboardText, bool bracketedPast
         if (clipboardText[i] == '\r' && isLineFeedAt(clipboardText, i + 1))
             continue;
 
-        normalized.push_back(clipboardText[i] == '\n' ? '\r' : clipboardText[i]);
+        normalized.push_back(replaceStrippedPasteByte(clipboardText[i]));
     }
 
     if (bracketedPaste)
@@ -326,6 +342,14 @@ std::string preparePastedText(std::string_view clipboardText, bool bracketedPast
                + std::string {bracketedPasteEnd};
 
     return normalized;
+}
+
+bool isPasteSafe(std::string_view clipboardText, bool bracketedPaste)
+{
+    if (clipboardText.find(bracketedPasteEnd) != std::string_view::npos)
+        return false;
+
+    return bracketedPaste || clipboardText.find_first_of("\r\n") == std::string_view::npos;
 }
 
 std::string encodeSgrMouseReport(const SgrMouseReport& report)
