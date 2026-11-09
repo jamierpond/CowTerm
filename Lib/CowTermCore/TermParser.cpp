@@ -542,6 +542,12 @@ void TermParser::dispatchEscape(std::uint8_t byte)
 
 void TermParser::dispatchCsi(std::uint8_t finalByte)
 {
+    if (!params.hasTooManyNumbers())
+        runCsi(finalByte);
+}
+
+void TermParser::runCsi(std::uint8_t finalByte)
+{
     const auto isModeChange = finalByte == 'h' || finalByte == 'l';
 
     if (privateMarker == '?' && isModeChange)

@@ -26,9 +26,16 @@ public:
     // As value(), but a missing, empty or zero count means one.
     int count(std::size_t index) const;
 
+    // True once the sequence held more numbers than any real one uses
+    // (Ghostty's limit); the caller drops such a sequence.
+    bool hasTooManyNumbers() const { return tooManyNumbers; }
+
 private:
     Group& lastGroupWithAValue();
+    bool canAddNumber();
 
     std::vector<Group> groups;
+    std::size_t numberCount = 1;
+    bool tooManyNumbers = false;
 };
 } // namespace term

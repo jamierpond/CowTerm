@@ -9,6 +9,7 @@ namespace
 constexpr auto largestParameterValue = 65535;
 constexpr auto decimalBase = 10;
 constexpr auto typicalGroupCount = std::size_t {8};
+constexpr auto largestNumberCount = std::size_t {24};
 } // namespace
 
 void CsiParameters::clear()
@@ -16,6 +17,18 @@ void CsiParameters::clear()
     groups.reserve(typicalGroupCount);
     groups.clear();
     groups.emplace_back();
+    numberCount = 1;
+    tooManyNumbers = false;
+}
+
+bool CsiParameters::canAddNumber()
+{
+    if (numberCount >= largestNumberCount)
+        tooManyNumbers = true;
+    else
+        ++numberCount;
+
+    return !tooManyNumbers;
 }
 
 CsiParameters::Group& CsiParameters::lastGroupWithAValue()
@@ -30,17 +43,24 @@ CsiParameters::Group& CsiParameters::lastGroupWithAValue()
 
 void CsiParameters::appendDigit(int digit)
 {
+    if (tooManyNumbers)
+        return;
+
     auto& value = lastGroupWithAValue().back();
     value = std::min(value * decimalBase + digit, largestParameterValue);
 }
 
 void CsiParameters::startGroup()
 {
-    groups.emplace_back();
+    if (canAddNumber())
+        groups.emplace_back();
 }
 
 void CsiParameters::startSubParameter()
 {
+    if (!canAddNumber())
+        return;
+
     lastGroupWithAValue().push_back(0);
 }
 

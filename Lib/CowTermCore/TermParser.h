@@ -64,6 +64,7 @@ private:
     void startSequence(State next);
     void dispatchEscape(std::uint8_t byte);
     void dispatchCsi(std::uint8_t finalByte);
+    void runCsi(std::uint8_t finalByte);
     void dispatchOsc();
     void setPrivateMode(int mode, bool on);
     void reportDeviceStatus();
