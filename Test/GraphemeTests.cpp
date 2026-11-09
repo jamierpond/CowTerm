@@ -41,7 +41,7 @@ auto tCombiningMarkJoins = test("Graphemes/aCombiningMarkJoinsItsLetter") = []
 {
     const auto fed = GraphemeScreen {"e\xcc\x81x"};
 
-    check(fed.cell(0).text == U"é");
+    check(fed.cell(0).text == std::u32string {char32_t {0x65}, char32_t {0x301}});
     check(fed.cell(1).ch == U'x');
     check(fed.screen.cursor.x == 2);
     check(fed.rowText() == "e\xcc\x81x");
@@ -51,7 +51,7 @@ auto tZwjFamilyIsOneCell = test("Graphemes/aZwjFamilyIsOneWideCell") = []
 {
     const auto fed = GraphemeScreen {"\xf0\x9f\x91\xa8\xe2\x80\x8d\xf0\x9f\x91\xa9\xe2\x80\x8d\xf0\x9f\x91\xa7!"};
 
-    check(fed.cell(0).text == U"\U0001F468‍\U0001F469‍\U0001F467");
+    check(fed.cell(0).text == std::u32string {char32_t {0x1f468}, char32_t {0x200d}, char32_t {0x1f469}, char32_t {0x200d}, char32_t {0x1f467}});
     check(isWide(fed.cell(0)));
     check(fed.cell(2).ch == U'!');
     check(fed.screen.cursor.x == 3);
@@ -61,7 +61,7 @@ auto tSkinToneJoins = test("Graphemes/aSkinToneModifierJoins") = []
 {
     const auto fed = GraphemeScreen {"\xf0\x9f\x91\x8d\xf0\x9f\x8f\xbd."};
 
-    check(fed.cell(0).text == U"\U0001F44D\U0001F3FD");
+    check(fed.cell(0).text == std::u32string {char32_t {0x1f44d}, char32_t {0x1f3fd}});
     check(fed.cell(2).ch == U'.');
 };
 
@@ -69,7 +69,7 @@ auto tFlagIsOneCluster = test("Graphemes/twoRegionalIndicatorsMakeOneFlag") = []
 {
     const auto fed = GraphemeScreen {"\xf0\x9f\x87\xba\xf0\x9f\x87\xb8\xf0\x9f\x87\xac\xf0\x9f\x87\xa7"};
 
-    check(fed.cell(0).text == U"\U0001F1FA\U0001F1F8");
+    check(fed.cell(0).text == std::u32string {char32_t {0x1f1fa}, char32_t {0x1f1f8}});
     check(fed.cell(1).text == U"\U0001F1EC\U0001F1E7");
 };
 
