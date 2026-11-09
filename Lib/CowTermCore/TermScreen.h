@@ -10,7 +10,14 @@
 
 namespace term
 {
-using Line = std::vector<Cell>;
+// One row of cells. wrapped marks a row the text ran off the end of, so it
+// continues on the next row; resizing rejoins and rewraps such rows.
+struct Line : std::vector<Cell>
+{
+    using std::vector<Cell>::vector;
+
+    bool wrapped = false;
+};
 
 struct CursorPos
 {
@@ -143,6 +150,7 @@ private:
     void shrinkPrimaryGrid(int newRows);
     void growPrimaryGrid(int newRows);
     void resizeAlternateGrid(int newRows);
+    void reflowPrimaryScreen(int newRows);
     void resizeLines(std::vector<Line>& lines);
     void resizeTabStops(const std::vector<bool>& oldStops);
     void scrollUpRegion(int count, int top, int bottom);

@@ -1,4 +1,5 @@
 #include "TermScreen.h"
+#include "Reflow.h"
 
 #include <algorithm>
 #include <limits>
@@ -166,6 +167,7 @@ void TermScreen::wrapIfPending()
     if (!wrapPending || !modes.autowrap)
         return;
 
+    row(cursor.y).wrapped = true;
     newlineWithScroll();
     wrapPending = false;
 }
@@ -177,7 +179,13 @@ void TermScreen::makeRoomForWideCharacter()
         return;
 
     if (modes.autowrap)
+    {
+        auto spacer = blankCell();
+        spacer.attrs |= Attr::WrapSpacer;
+        writeCell(cursor.x, cursor.y, spacer);
+        row(cursor.y).wrapped = true;
         newlineWithScroll();
+    }
     else
         cursor.x = std::max(cols - wideCharacterWidth, 0);
 }
@@ -387,7 +395,10 @@ void TermScreen::clearCells(int y, int fromX, int toX, const Cell& blank)
 void TermScreen::clearRows(int fromY, int toYExclusive, const Cell& blank)
 {
     for (auto y = fromY; y < toYExclusive; ++y)
+    {
         clearCells(y, 0, cols - 1, blank);
+        row(y).wrapped = false;
+    }
 }
 
 void TermScreen::eraseInDisplay(int mode)
@@ -427,6 +438,11 @@ void TermScreen::eraseInLine(int mode)
     const auto from = mode == eraseToLineEnd ? cursor.x : 0;
     const auto to = mode == eraseToLineStart ? cursor.x : cols - 1;
     clearCells(cursor.y, from, to, blankCell());
+
+    // Erasing to the end means the row no longer runs on (Ghostty, EL 0/2).
+    if (mode != eraseToLineStart)
+        row(cursor.y).wrapped = false;
+
     markDirty();
 }
 
@@ -461,6 +477,7 @@ void TermScreen::insertChars(int count)
 {
     const auto n = beginCharacterEditAtCursor(count);
     auto& line = row(cursor.y);
+    line.wrapped = false;
     line.insert(line.begin() + cursor.x, (std::size_t) n, blankCell());
     line.resize((std::size_t) cols);
     markDirty();
@@ -470,6 +487,7 @@ void TermScreen::deleteChars(int count)
 {
     const auto n = beginCharacterEditAtCursor(count);
     auto& line = row(cursor.y);
+    line.wrapped = false;
     line.erase(line.begin() + cursor.x, line.begin() + cursor.x + n);
     line.resize((std::size_t) cols, blankCell());
     markDirty();
@@ -658,6 +676,36 @@ void TermScreen::growPrimaryGrid(int newRows)
     }
 }
 
+// Rewraps the scrollback and screen at the new width. The cursor's row stays
+// on screen; rows above the new screen become history.
+void TermScreen::reflowPrimaryScreen(int newRows)
+{
+    auto rows = std::vector<Line>(std::make_move_iterator(scrollback.begin()),
+                                  std::make_move_iterator(scrollback.end()));
+    const auto cursorRow = (long) rows.size() + cursor.y;
+    std::move(grid.begin(), grid.end(), std::back_inserter(rows));
+    scrollback.clear();
+    grid.clear();
+
+    const auto blank = blankCell();
+    auto reflowed = reflowLines({rows, cursorRow, cursor.x, cols, blank});
+    auto& lines = reflowed.lines;
+
+    while ((long) lines.size() < reflowed.cursorRow + 1 || (int) lines.size() < newRows)
+        lines.emplace_back((std::size_t) cols, blank);
+
+    const auto lastStart = (long) lines.size() - newRows;
+    const auto gridStart = std::min(lastStart, reflowed.cursorRow);
+    const auto historyStart = std::max(gridStart - maxScrollback, 0L);
+
+    scrollback.assign(std::make_move_iterator(lines.begin() + historyStart),
+                      std::make_move_iterator(lines.begin() + gridStart));
+    grid.assign(std::make_move_iterator(lines.begin() + gridStart),
+                std::make_move_iterator(lines.begin() + gridStart + newRows));
+    cursor.y = (int) (reflowed.cursorRow - gridStart);
+    cursor.x = reflowed.cursorColumn;
+}
+
 void TermScreen::resizeAlternateGrid(int newRows)
 {
     altGrid.resize((std::size_t) newRows);
@@ -695,9 +743,18 @@ void TermScreen::resize(int newCols, int newRows)
     if (isAlreadySize(newCols, newRows))
         return;
 
-    cols = newCols;
-    shrinkPrimaryGrid(newRows);
-    growPrimaryGrid(newRows);
+    if (newCols != cols && !grid.empty())
+    {
+        cols = newCols;
+        reflowPrimaryScreen(newRows);
+    }
+    else
+    {
+        cols = newCols;
+        shrinkPrimaryGrid(newRows);
+        growPrimaryGrid(newRows);
+    }
+
     resizeLines(grid);
     resizeAlternateGrid(newRows);
     resizeLines(altGrid);

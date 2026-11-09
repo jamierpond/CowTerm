@@ -26,6 +26,10 @@ constexpr std::uint16_t Wide = 1 << 8;
 constexpr std::uint16_t WideCont = 1 << 9;
 constexpr std::uint16_t DefaultFg = 1 << 10;
 constexpr std::uint16_t DefaultBg = 1 << 11;
+
+// The blank left in a row's last column when a wide character didn't fit
+// and wrapped early; rewrapping drops it.
+constexpr std::uint16_t WrapSpacer = 1 << 12;
 } // namespace Attr
 
 struct Cell

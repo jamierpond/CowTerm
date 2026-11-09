@@ -33,6 +33,7 @@ nano_add_executable(CowTermScreenTests
             ScreenColorTests.cpp
             ParserFuzzRegressionTests.cpp
             TerminalModeTests.cpp
+            ReflowTests.cpp
         TARGETS CowTerm::Core)
 
 # Replays every recording in Fuzz/Corpus (the fuzzer's seeds and every input
