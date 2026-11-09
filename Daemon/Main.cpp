@@ -2,14 +2,20 @@
 // quit, crash or update the app and the processes keep running here. The
 // app dials in over eacp IPC (one Messenger conversation), spawns or adopts
 // shells by stable id, and streams input/output through this process.
+// Each pane's output also runs through a TermScreen here, so an attaching
+// app gets the whole terminal state, and that state is saved to disk so a
+// pane comes back with its screen and history after the daemon restarts.
 
 #include "Protocol.h"
 #include "Signals.h"
 #include "CowTermCore/Pty.h"
+#include "CowTermCore/TerminalModel.h"
 
 #include <eacp/Core/App/App.h>
 #include <eacp/Core/Core.h>
+#include <eacp/Core/Utils/Files.h>
 #include <eacp/Network/IPC/Messenger.h>
+#include <emberstore/AppDatabase.h>
 
 #include <algorithm>
 #include <array>
@@ -22,17 +28,40 @@ using namespace eacp;
 
 namespace
 {
-constexpr std::size_t replayBufferCap = 256 * 1024;
 constexpr int idleExitSeconds = 60;
+constexpr int saveIntervalMilliseconds = 5000;
+
+// Default-coloured cells are re-coloured by the app's theme on restore; the
+// daemon has no config, so it resolves everything else with the built-in one.
+const term::Theme daemonTheme {};
 
 struct DaemonPane
 {
+    explicit DaemonPane(const term::PtySize& sizeToUse)
+        : size(sizeToUse)
+        , terminal(size.cols, size.rows, daemonTheme)
+    {
+    }
+
+    void restoreState(const term::TerminalState& state)
+    {
+        terminal.restoreState(state);
+        terminal.screen.resize(size.cols, size.rows);
+    }
+
     term::Pty pty;
-    std::string replay;
     term::PtySize size;
-    std::string startDir;
+    term::TerminalModel terminal;
     bool alive = false;
+    bool hasUnsavedChanges = false;
 };
+
+// A named instance keeps its panes apart from the user's live ones.
+std::string paneStoreName()
+{
+    const auto suffix = term::proto::instanceSuffix();
+    return suffix.empty() ? std::string {"cowterm-panes"} : "cowterm-panes-" + suffix;
+}
 
 struct Daemon
 {
@@ -133,6 +162,8 @@ struct Daemon
         Apps::quit();
     }
 
+    ~Daemon() { saveAllPanes(); }
+
     void spawn(const std::string& id, int cols, int rows, const std::string& cwd)
     {
         if (auto found = panes.find(id); found != panes.end())
@@ -146,9 +177,8 @@ struct Daemon
             panes.erase(found);
         }
 
-        auto& pane = *(panes[id] = std::make_unique<DaemonPane>());
-        pane.size = {cols, rows};
-        pane.startDir = cwd;
+        auto& pane = *(panes[id] = std::make_unique<DaemonPane>(term::PtySize {cols, rows}));
+        restoreSavedPane(id, pane);
 
         const auto started = pane.pty.start(
             {{cols, rows}, cwd, {}, {{term::proto::paneEnvironmentVariable, id}}},
@@ -168,11 +198,36 @@ struct Daemon
         }
     }
 
-    // Reattach a shell that kept running while no GUI was around: replay
-    // what it printed, then nudge the winsize so full-screen apps repaint.
+    // A pane whose shell died with an earlier daemon: show what it had on
+    // screen, with the new shell's prompt below it.
+    void restoreSavedPane(const std::string& id, DaemonPane& pane)
+    {
+        auto document = paneDocument(id);
+
+        if (!eacp::Files::exists(document.filePath()))
+            return;
+
+        const auto saved = term::parseTerminalState(eacp::Files::readFile(document.filePath()));
+
+        if (!saved)
+            return;
+
+        pane.restoreState(*saved);
+        term::startFreshShellBelow(pane.terminal.screen, pane.terminal.parser);
+        sendState(id, pane);
+    }
+
+    void sendState(const std::string& id, const DaemonPane& pane)
+    {
+        send(term::proto::make(
+            "state", {id}, term::serializeTerminalState(pane.terminal.captureState())));
+    }
+
+    // Reattach a shell that kept running while no GUI was around: send its
+    // terminal state, then nudge the winsize so full-screen apps repaint.
     void adopt(const std::string& id, DaemonPane& pane)
     {
-        send(term::proto::make("output", {id}, pane.replay));
+        sendState(id, pane);
 
         pane.pty.resize({pane.size.cols, pane.size.rows + 1});
         pane.pty.resize(pane.size);
@@ -185,19 +240,18 @@ struct Daemon
         if (found == panes.end())
             return;
 
-        auto& replay = found->second->replay;
-        replay += data;
-
-        if (replay.size() > replayBufferCap)
-            replay.erase(0, replay.size() - replayBufferCap);
-
+        found->second->terminal.feed(data);
+        found->second->hasUnsavedChanges = true;
         send(term::proto::make("output", {id}, data));
     }
 
     void shellExited(const std::string& id)
     {
         if (panes.erase(id) > 0)
+        {
+            forgetSavedPane(id);
             send(term::proto::make("exit", {id}));
+        }
     }
 
     void write(const std::string& id, const std::string& data)
@@ -211,11 +265,47 @@ struct Daemon
         if (auto found = panes.find(id); found != panes.end())
         {
             found->second->size = {cols, rows};
+            found->second->terminal.screen.resize(cols, rows);
+            found->second->hasUnsavedChanges = true;
             found->second->pty.resize({cols, rows});
         }
     }
 
-    void kill(const std::string& id) { panes.erase(id); }
+    void kill(const std::string& id)
+    {
+        panes.erase(id);
+        forgetSavedPane(id);
+    }
+
+    emberstore::Document<term::TerminalState> paneDocument(const std::string& id) const
+    {
+        return paneStore.document<term::TerminalState>("pane-" + id);
+    }
+
+    void forgetSavedPane(const std::string& id)
+    {
+        eacp::Files::removeFile(paneDocument(id).filePath());
+    }
+
+    void saveChangedPanes()
+    {
+        for (auto& [id, pane]: panes)
+        {
+            if (pane->hasUnsavedChanges)
+            {
+                paneDocument(id).write(pane->terminal.captureState());
+                pane->hasUnsavedChanges = false;
+            }
+        }
+    }
+
+    void saveAllPanes()
+    {
+        for (auto& [id, pane]: panes)
+            pane->hasUnsavedChanges = true;
+
+        saveChangedPanes();
+    }
 
     void sendInfo()
     {
@@ -247,9 +337,12 @@ struct Daemon
     std::map<std::string, std::unique_ptr<DaemonPane>> panes;
     IPC::Messenger* client = nullptr;
     int idleTicks = 0;
+    emberstore::Database paneStore = emberstore::databaseForApp(
+        "tamber", paneStoreName(), emberstore::Durability::Atomic);
 
     IPC::MessageServer server {term::proto::serverName()};
     Threads::Timer idleTimer {[this] { checkIdle(); }, 10};
+    Threads::Timer saveTimer {[this] { saveChangedPanes(); }, Time::MS {saveIntervalMilliseconds}};
 };
 } // namespace
 

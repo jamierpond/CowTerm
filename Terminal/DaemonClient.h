@@ -25,7 +25,7 @@ TerminalConfig terminalConfig(const AppConfig& config);
 
 // The app's end of the session daemon: one Messenger conversation carrying
 // every pane. Shells are keyed by stable id — spawn adopts a still-running
-// shell (replaying its recent output) or starts a fresh one; release stops
+// shell (sending its serialized terminal state) or starts a fresh one; release stops
 // listening without killing, which is how shells outlive the GUI.
 //
 // Main-thread object, like the Messenger it rides on.
@@ -35,6 +35,7 @@ public:
     struct Routes
     {
         std::function<void(std::string)> onOutput = [](const std::string&) {};
+        std::function<void(const std::string&)> onState = [](const std::string&) {};
         eacp::Callback onExit = [] {};
     };
 
@@ -80,6 +81,7 @@ private:
 
     void handleMessage(const std::string& body);
     void handleOutput(const std::string& id, std::string payload);
+    void handleState(const std::string& id, const std::string& payload);
     void handleExit(const std::string& id);
     void handleInfo(const std::string& payload);
     void readInfoLine(const std::string& line);

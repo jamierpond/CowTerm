@@ -59,8 +59,7 @@ TerminalView::TerminalView(const TerminalConfig& config,
                            const std::string& commandToRun)
     : theme(config.theme)
     , fontName(config.font)
-    , screen(80, 24, theme)
-    , parser(screen, theme)
+    , terminal(80, 24, theme)
     , fontSize(config.fontSize)
     , paneShellId(shellIdToUse.empty() ? generateShellId() : shellIdToUse)
     , commandTerminal(!commandToRun.empty())
@@ -83,7 +82,20 @@ TerminalView::TerminalView(const TerminalConfig& config,
     connectParserToUiThread();
     startOutputParserThread();
 
+    startShell(config, workingDirectory, commandToRun);
+}
+
+void TerminalView::startShell(const TerminalConfig& config,
+                              const std::string& workingDirectory,
+                              const std::string& commandToRun)
+{
     auto guard = std::weak_ptr<bool> {alive};
+
+    shell->onRestoreState = [this, guard](const std::string& serialized)
+    {
+        if (!guard.expired())
+            restoreTerminalState(serialized);
+    };
 
     shell->start(
         {{screen.columns(), screen.rows()},
@@ -123,7 +135,7 @@ void TerminalView::connectParserToUiThread()
     // everything the host sees is handed to the UI thread.
     parser.respond = [this](std::string_view bytes) { send(bytes); };
 
-    parser.onTitleChanged = [this](const std::string& newTitle)
+    terminal.onTitleChanged = [this](const std::string& newTitle)
     {
         runOnUiThread(
             [this, newTitle]
@@ -133,7 +145,7 @@ void TerminalView::connectParserToUiThread()
             });
     };
 
-    parser.onCwdChanged = [this](const std::string& newCwd)
+    terminal.onCwdChanged = [this](const std::string& newCwd)
     {
         runOnUiThread(
             [this, newCwd]
@@ -156,7 +168,7 @@ void TerminalView::startOutputParserThread()
         [this](std::string_view bytes)
         {
             const auto lock = lockTerminal();
-            parser.feed(bytes);
+            terminal.feed(bytes);
         },
         [this] { requestShowParsedOutput(); });
 }
@@ -329,6 +341,28 @@ void TerminalView::applyGridSize()
     screen.resize(cols, rows);
     shell->resize({cols, rows});
     scrollOffset = std::min(scrollOffset, screen.scrollbackSize());
+}
+
+void TerminalView::restoreTerminalState(const std::string& serialized)
+{
+    const auto state = parseTerminalState(serialized);
+
+    if (!state)
+        return;
+
+    const auto lock = lockTerminal();
+    terminal.restoreState(*state);
+    scrollOffset = 0;
+    title = terminal.getTitle();
+    cwd = terminal.getWorkingDirectory();
+
+    if (screen.modes.synchronizedOutput)
+        startSynchronizedOutputTimeout();
+
+    onTitleChanged(title);
+    onCwdChanged(cwd);
+    applyGridSize();
+    repaint();
 }
 
 void TerminalView::setFontSize(float newSize)

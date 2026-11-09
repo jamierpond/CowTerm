@@ -32,6 +32,12 @@ public:
 
     virtual void terminate() = 0;
     virtual void detach() = 0;
+
+    // Set before start(). A shell held by the session daemon hands back the
+    // serialized TerminalState it kept, before any output; local shells
+    // never call it.
+    std::function<void(const std::string&)> onRestoreState =
+        [](const std::string&) {};
 };
 
 // In-process shell: the pane owns the PTY directly. detach() still kills —

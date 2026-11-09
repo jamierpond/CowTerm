@@ -143,6 +143,8 @@ void DaemonClient::handleMessage(const std::string& body)
 
     if (message.verb == "output")
         handleOutput(message.args[0], std::move(message.payload));
+    else if (message.verb == "state")
+        handleState(message.args[0], message.payload);
     else if (message.verb == "exit")
         handleExit(message.args[0]);
 }
@@ -151,6 +153,12 @@ void DaemonClient::handleOutput(const std::string& id, std::string payload)
 {
     if (auto found = routes.find(id); found != routes.end())
         found->second.onOutput(std::move(payload));
+}
+
+void DaemonClient::handleState(const std::string& id, const std::string& payload)
+{
+    if (auto found = routes.find(id); found != routes.end())
+        found->second.onState(payload);
 }
 
 void DaemonClient::handleExit(const std::string& id)

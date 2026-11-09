@@ -43,6 +43,9 @@ public:
     // DECSCUSR shape: 0/1 blinking block, 2 block, 3/4 underline, 5/6 bar.
     int cursorShape() const { return cursorStyle; }
 
+    ParserState saveState() const;
+    void restoreState(const ParserState& saved);
+
 private:
     friend struct TermParserActions;
 
@@ -98,4 +101,9 @@ private:
 
     int cursorStyle = 0;
 };
+
+// After restoring a pane whose program is gone: back to the primary screen
+// with default modes and pen, cursor at the start of a fresh line, so a new
+// shell's prompt starts below the old output.
+void startFreshShellBelow(TermScreen& screen, TermParser& parser);
 } // namespace term

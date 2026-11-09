@@ -64,6 +64,13 @@ void CsiParameters::startSubParameter()
     lastGroupWithAValue().push_back(0);
 }
 
+void CsiParameters::restoreCollected(Collected saved)
+{
+    groups = std::move(saved.groups);
+    numberCount = std::clamp(saved.numberCount, std::size_t {1}, largestNumberCount);
+    tooManyNumbers = saved.tooManyNumbers;
+}
+
 int CsiParameters::value(std::size_t index, int fallback) const
 {
     if (index >= groups.size() || groups[index].empty())

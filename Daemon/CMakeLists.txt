@@ -10,6 +10,6 @@ else ()
 endif ()
 
 target_include_directories(CowTermDaemon PRIVATE ../Terminal)
-target_link_libraries(CowTermDaemon PRIVATE CowTerm::Core eacp-network)
+target_link_libraries(CowTermDaemon PRIVATE CowTerm::Core eacp-network emberstore)
 
 set_default_target_setting(CowTermDaemon)

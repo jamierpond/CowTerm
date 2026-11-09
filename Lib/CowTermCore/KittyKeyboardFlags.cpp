@@ -41,6 +41,14 @@ void KittyKeyboardStack::change(std::uint8_t flags, KittyFlagsChange how)
     }
 }
 
+void KittyKeyboardStack::restore(const Entries& savedEntries, std::size_t savedTop)
+{
+    for (std::size_t index = 0; index < depth; ++index)
+        entries[index] = savedEntries[index] & KittyKeyboard::allFlags;
+
+    top = savedTop < depth ? savedTop : 0;
+}
+
 void KittyKeyboardStack::clear()
 {
     entries = {};

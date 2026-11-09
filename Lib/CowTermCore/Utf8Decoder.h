@@ -23,6 +23,21 @@ public:
 
     void reset() { remainingContinuationBytes = 0; }
 
+    // A codepoint cut off mid-sequence, for saving and restoring the decoder.
+    struct PartialSequence
+    {
+        char32_t codepoint = 0;
+        int remainingContinuationBytes = 0;
+    };
+
+    PartialSequence getPartialSequence() const { return {codepoint, remainingContinuationBytes}; }
+
+    void restorePartialSequence(const PartialSequence& partial)
+    {
+        codepoint = partial.codepoint;
+        remainingContinuationBytes = partial.remainingContinuationBytes;
+    }
+
 private:
     struct LeadByteShape
     {
