@@ -116,6 +116,15 @@ nano_add_executable(CowTermPanelTests
 
 target_include_directories(CowTermPanelTests PRIVATE ../Terminal)
 
+# The cached Visual Studio developer environment; pure, so it builds everywhere
+# though only Windows panes use it.
+nano_add_executable(CowTermDevShellCacheTests
+        SOURCES
+            DevShellEnvironmentCacheTests.cpp
+        TARGETS CowTerm::Core)
+
+target_include_directories(CowTermDevShellCacheTests PRIVATE ../Lib/CowTermCore)
+
 # forkpty/openpty live in libutil on Linux; on Apple they are in libSystem.
 if (LINUX)
     target_link_libraries(CowTermTests PRIVATE util)
@@ -167,3 +176,11 @@ target_link_libraries(CowTermCatThroughputBench PRIVATE CowTerm::Terminal)
 # Not a test: one pane's memory with 10,000 lines of scrollback.
 add_executable(CowTermScreenMemoryBench ../Bench/ScreenMemoryBench.cpp)
 target_link_libraries(CowTermScreenMemoryBench PRIVATE CowTerm::Core)
+
+# Not a test: times a new pane's PowerShell to its first prompt, for
+# Scripts/measure-shell-start.ps1.
+if (WIN32)
+    add_executable(CowTermShellStartTimer ShellStartTimer-Windows.cpp)
+    target_link_libraries(CowTermShellStartTimer PRIVATE CowTerm::Core)
+    target_include_directories(CowTermShellStartTimer PRIVATE ../Lib/CowTermCore)
+endif ()

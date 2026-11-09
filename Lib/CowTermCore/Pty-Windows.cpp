@@ -1,15 +1,21 @@
 #include "Pty.h"
 
+#include "DevShellEnvironmentCache.h"
+
 #include <eacp/Core/Utils/WinInclude.h>
 #include <eacp/Core/Utils/FilePath.h>
 #include <eacp/Core/Utils/Strings.h>
 
 #include <tlhelp32.h>
+#include <userenv.h>
 #include <winternl.h>
 
 #include <algorithm>
 #include <cctype>
 #include <cwchar>
+#include <filesystem>
+#include <fstream>
+#include <iterator>
 #include <mutex>
 #include <optional>
 #include <thread>
@@ -199,34 +205,268 @@ std::wstring encodePowerShell(const std::string& script)
     return base64(utf16le);
 }
 
-// -EncodedCommand payload that brings up the Visual Studio Developer
-// PowerShell environment (Enter-VsDevShell) so the MSVC toolchain — cl, link,
-// cmake, ninja — lands on PATH before the interactive prompt appears. It
-// locates VS via vswhere; when nothing is found (or COWTERM_NO_DEVSHELL is
-// set) the script is a no-op and -NoExit just leaves an ordinary shell.
-std::wstring devShellCommand()
+// The environment a fresh login gives this user (the machine and user
+// variables from the registry), without whatever this process inherited.
+std::wstring getLoginEnvironmentBlock()
 {
-    static const char* script =
-        "try {"
-        "  if ($env:COWTERM_NO_DEVSHELL) { return };"
-        "  $vswhere = Join-Path ${env:ProgramFiles(x86)} "
-        "'Microsoft Visual Studio\\Installer\\vswhere.exe';"
-        "  if (Test-Path $vswhere) {"
-        "    $p = & $vswhere -latest -prerelease -products * "
-        "-property installationPath 2>$null | Select-Object -First 1;"
-        "    $dll = if ($p) { Join-Path $p "
-        "'Common7\\Tools\\Microsoft.VisualStudio.DevShell.dll' } else { $null };"
-        "    if ($dll -and (Test-Path $dll)) {"
-        "      Import-Module $dll;"
-        "      $arch = if ($env:PROCESSOR_ARCHITECTURE -eq 'ARM64') {'arm64'} "
-        "elseif ($env:PROCESSOR_ARCHITECTURE -eq 'x86') {'x86'} else {'x64'};"
-        "      Enter-VsDevShell -VsInstallPath $p -SkipAutomaticLocation "
-        "-DevCmdArguments \"-arch=$arch -host_arch=$arch\" | Out-Null;"
-        "    }"
-        "  }"
-        "} catch {}";
+    auto token = HANDLE {};
 
-    return encodePowerShell(script);
+    if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY | TOKEN_DUPLICATE, &token))
+        return {};
+
+    auto* environment = (void*) nullptr;
+    auto block = std::wstring {};
+
+    if (CreateEnvironmentBlock(&environment, token, FALSE))
+    {
+        const auto* entries = (const wchar_t*) environment;
+        auto* end = entries;
+
+        while (*end != L'\0')
+            end += wcslen(end) + 1;
+
+        block.assign(entries, end + 1);
+        DestroyEnvironmentBlock(environment);
+    }
+
+    CloseHandle(token);
+    return block;
+}
+
+// Runs a console program with no window and returns what it wrote to stdout.
+// An empty `environment` means this process's own.
+std::string readOutputOf(const std::wstring& executable,
+                         std::wstring commandLine,
+                         std::wstring environment = {})
+{
+    auto inheritable = SECURITY_ATTRIBUTES {sizeof(SECURITY_ATTRIBUTES), nullptr, TRUE};
+    auto readEnd = HANDLE {};
+    auto writeEnd = HANDLE {};
+
+    if (!CreatePipe(&readEnd, &writeEnd, &inheritable, 0))
+        return {};
+
+    SetHandleInformation(readEnd, HANDLE_FLAG_INHERIT, 0);
+
+    auto startup = STARTUPINFOW {};
+    startup.cb = sizeof startup;
+    startup.dwFlags = STARTF_USESTDHANDLES;
+    startup.hStdOutput = writeEnd;
+
+    auto info = PROCESS_INFORMATION {};
+    const auto launched = CreateProcessW(executable.c_str(),
+                                         commandLine.data(),
+                                         nullptr,
+                                         nullptr,
+                                         TRUE,
+                                         CREATE_NO_WINDOW | CREATE_UNICODE_ENVIRONMENT,
+                                         environment.empty() ? nullptr : environment.data(),
+                                         nullptr,
+                                         &startup,
+                                         &info);
+    CloseHandle(writeEnd);
+
+    auto output = std::string {};
+
+    if (launched)
+    {
+        char buffer[4096];
+        auto bytesRead = DWORD {0};
+
+        while (ReadFile(readEnd, buffer, sizeof buffer, &bytesRead, nullptr)
+               && bytesRead > 0)
+        {
+            output.append(buffer, bytesRead);
+        }
+
+        WaitForSingleObject(info.hProcess, INFINITE);
+        CloseHandle(info.hProcess);
+        CloseHandle(info.hThread);
+    }
+
+    CloseHandle(readEnd);
+    return output;
+}
+
+// The architecture name Enter-VsDevShell's -arch takes, for this machine.
+std::string getDevShellArchitecture()
+{
+    const auto processor = narrow(envVariable(L"PROCESSOR_ARCHITECTURE"));
+
+    if (processor == "ARM64")
+        return "arm64";
+
+    if (processor == "x86")
+        return "x86";
+
+    return "x64";
+}
+
+std::optional<VisualStudioInstall> findVisualStudioInstall()
+{
+    const auto vswhere = envVariable(L"ProgramFiles(x86)")
+                         + L"\\Microsoft Visual Studio\\Installer\\vswhere.exe";
+
+    if (GetFileAttributesW(vswhere.c_str()) == INVALID_FILE_ATTRIBUTES)
+        return std::nullopt;
+
+    const auto output = readOutputOf(
+        vswhere, L"\"" + vswhere + L"\" -latest -prerelease -products * -nologo");
+
+    return parseVswhereOutput(output, getDevShellArchitecture());
+}
+
+std::string quotedForPowerShell(const std::string& text)
+{
+    auto quoted = std::string {"'"};
+
+    for (const auto c: text)
+    {
+        quoted += c;
+
+        if (c == '\'')
+            quoted += c;
+    }
+
+    return quoted + "'";
+}
+
+// Runs Enter-VsDevShell in a throwaway PowerShell started with the login
+// environment, and returns the variables it added or changed. Starting clean
+// keeps the capture whole when CowTerm itself runs inside a developer shell.
+// Empty when the install has no DevShell module or it fails.
+std::vector<EnvironmentVariable> captureDevShellVariables(const std::wstring& shell,
+                                                          const VisualStudioInstall& install)
+{
+    const auto path = quotedForPowerShell(install.installationPath);
+    const auto arch = install.architecture;
+
+    const auto script =
+        "$ErrorActionPreference = 'Stop';"
+        "[Console]::OutputEncoding = [Text.Encoding]::UTF8;"
+        "$before = @{};"
+        "Get-ChildItem env: | ForEach-Object { $before[$_.Name] = $_.Value };"
+        "Import-Module (Join-Path " + path
+        + " 'Common7\\Tools\\Microsoft.VisualStudio.DevShell.dll');"
+          "Enter-VsDevShell -VsInstallPath " + path
+        + " -SkipAutomaticLocation -DevCmdArguments '-arch=" + arch + " -host_arch="
+        + arch + "' | Out-Null;"
+                 "Get-ChildItem env: | Where-Object { $before[$_.Name] -cne $_.Value } |"
+                 " ForEach-Object { [Console]::Out.Write($_.Name + '=' + $_.Value + \"`n\") }";
+
+    const auto output =
+        readOutputOf(shell,
+                     L"\"" + shell + L"\" -NoLogo -NoProfile -NonInteractive -EncodedCommand "
+                         + encodePowerShell(script),
+                     getLoginEnvironmentBlock());
+
+    return parseEnvironmentVariableLines(output);
+}
+
+std::filesystem::path getDevShellCacheFile()
+{
+    return std::filesystem::path {envVariable(L"LOCALAPPDATA")} / L"CowTerm"
+           / L"devshell-environment.txt";
+}
+
+std::string readTextFile(const std::filesystem::path& file)
+{
+    auto stream = std::ifstream {file, std::ios::binary};
+    return {std::istreambuf_iterator<char> {stream}, {}};
+}
+
+// Written aside and renamed over, so a pane starting meanwhile reads either
+// the old cache or the new one, never half of one.
+void writeTextFileWhole(const std::filesystem::path& file, const std::string& text)
+{
+    auto error = std::error_code {};
+    std::filesystem::create_directories(file.parent_path(), error);
+
+    auto temporary = file;
+    temporary += L"." + std::to_wstring(GetCurrentProcessId()) + L".tmp";
+
+    {
+        auto stream = std::ofstream {temporary, std::ios::binary};
+        stream << text;
+    }
+
+    std::filesystem::rename(temporary, file, error);
+}
+
+// The Visual Studio developer environment for an interactive PowerShell: read
+// from the cache when it was captured from the same install, otherwise
+// captured now (about 1.5 s) and cached. COWTERM_NO_DEVSHELL turns it off.
+std::vector<EnvironmentVariable> loadDevShellVariables(const std::wstring& shell)
+{
+    if (!envVariable(L"COWTERM_NO_DEVSHELL").empty())
+        return {};
+
+    const auto install = findVisualStudioInstall();
+
+    if (!install)
+        return {};
+
+    const auto cacheFile = getDevShellCacheFile();
+    const auto cached = parseDevShellEnvironmentCache(readTextFile(cacheFile));
+
+    if (cached && isDevShellEnvironmentCacheFor(*cached, *install))
+        return cached->variables;
+
+    const auto captured =
+        DevShellEnvironmentCache {*install, captureDevShellVariables(shell, *install)};
+
+    if (!captured.variables.empty())
+        writeTextFileWhole(cacheFile, serialiseDevShellEnvironmentCache(captured));
+
+    return captured.variables;
+}
+
+// `base` without the variables `overrides` sets, then `overrides`.
+std::vector<EnvironmentVariable>
+    withOverrides(std::vector<EnvironmentVariable> base,
+                  const std::vector<EnvironmentVariable>& overrides)
+{
+    const auto isOverridden = [&](const EnvironmentVariable& variable)
+    {
+        return std::any_of(overrides.begin(),
+                           overrides.end(),
+                           [&](const EnvironmentVariable& overriding)
+                           { return _stricmp(overriding.name.c_str(), variable.name.c_str()) == 0; });
+    };
+
+    base.erase(std::remove_if(base.begin(), base.end(), isOverridden), base.end());
+    base.insert(base.end(), overrides.begin(), overrides.end());
+    return base;
+}
+
+struct ShellLaunch
+{
+    std::wstring commandLine;
+    std::vector<EnvironmentVariable> variables;
+};
+
+// The shell's command line and the variables set over the inherited ones: a
+// command runs through the shell; an interactive PowerShell starts with the
+// Visual Studio developer environment already set, then loads its profile.
+ShellLaunch prepareShellLaunch(const std::wstring& shell, const PtyOptions& options)
+{
+    const auto isCmd = shell.find(L"cmd.exe") != std::wstring::npos;
+    auto launch = ShellLaunch {L"\"" + shell + L"\"", options.environment};
+
+    if (!options.command.empty())
+    {
+        const auto wide = widen(options.command);
+        launch.commandLine +=
+            isCmd ? L" /c " + wide : L" -NoLogo -Command \"" + wide + L"\"";
+    }
+    else if (!isCmd)
+    {
+        launch.commandLine += L" -NoLogo";
+        launch.variables =
+            withOverrides(loadDevShellVariables(shell), options.environment);
+    }
+
+    return launch;
 }
 
 std::string baseName(const std::wstring& exeFile)
@@ -246,30 +486,6 @@ std::string baseName(const std::wstring& exeFile)
     }
 
     return name;
-}
-
-std::wstring buildCommandLine(const std::wstring& shell, const std::string& command)
-{
-    const auto isCmd = shell.find(L"cmd.exe") != std::wstring::npos;
-    auto commandLine = L"\"" + shell + L"\"";
-
-    if (!command.empty())
-    {
-        const auto wide = widen(command);
-
-        if (isCmd)
-            commandLine += L" /c " + wide;
-        else
-            commandLine += L" -NoLogo -Command \"" + wide + L"\"";
-    }
-    else if (!isCmd)
-    {
-        // Default interactive PowerShell comes up as the VS Developer
-        // PowerShell; -NoExit keeps the prompt after the env is set up.
-        commandLine += L" -NoLogo -NoExit -EncodedCommand " + devShellCommand();
-    }
-
-    return commandLine;
 }
 
 void closeHandles(std::initializer_list<HANDLE> handles)
@@ -341,9 +557,10 @@ bool createProcessOnConsole(HPCON console,
     startup.lpAttributeList = attributes;
 
     const auto shell = findShell();
-    auto commandLine = buildCommandLine(shell, options.command);
+    const auto launch = prepareShellLaunch(shell, options);
+    auto commandLine = launch.commandLine;
     const auto directory = startDirectory(options.workingDirectory);
-    auto environment = environmentBlockWith(options.environment);
+    auto environment = environmentBlockWith(launch.variables);
     const auto* directoryOrNull = directory.empty() ? nullptr : directory.c_str();
 
     const auto launched =
