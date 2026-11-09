@@ -1,5 +1,6 @@
 #include "Pty.h"
 
+#include <cerrno>
 #include <csignal>
 #include <cstdlib>
 #include <string>
@@ -25,6 +26,54 @@ namespace
 // hung up within shutdownKillGraceMs it escalates from SIGHUP to SIGKILL.
 constexpr int shutdownPollMs = 10;
 constexpr int shutdownKillGraceMs = 250;
+constexpr int microsecondsPerMillisecond = 1000;
+constexpr int execFailedExitCode = 127;
+constexpr std::size_t readBufferSize = 65536;
+
+bool isNonEmpty(const char* text)
+{
+    return text != nullptr && text[0] != '\0';
+}
+
+// A read or write that was interrupted or would block is tried again.
+bool isRetryableFailure(long result)
+{
+    return result < 0 && (errno == EINTR || errno == EAGAIN);
+}
+
+void setChildEnvironment(const std::vector<EnvironmentVariable>& environment)
+{
+    setenv("TERM", "xterm-256color", 1);
+    setenv("COLORTERM", "truecolor", 1);
+    unsetenv("TERM_PROGRAM");
+
+    for (const auto& variable: environment)
+        setenv(variable.name.c_str(), variable.value.c_str(), 1);
+
+    if (getenv("LANG") == nullptr)
+        setenv("LANG", "en_US.UTF-8", 1);
+}
+
+void changeToWorkingDirectory(const std::string& workingDirectory)
+{
+    if (!workingDirectory.empty() && chdir(workingDirectory.c_str()) == 0)
+        return;
+
+    if (const auto* home = getenv("HOME"))
+        chdir(home);
+}
+
+// A leading dash asks the shell to start as a login shell, so the user's
+// usual profile and prompt come up.
+std::string loginArgumentName(const std::string& shell)
+{
+    const auto slash = shell.find_last_of('/');
+
+    if (slash == std::string::npos)
+        return "-" + shell;
+
+    return "-" + shell.substr(slash + 1);
+}
 
 // The shell arrives resolved rather than being looked up here: this runs in the
 // forked child of a threaded process, where getpwuid -- which takes a lock and
@@ -41,30 +90,15 @@ constexpr int shutdownKillGraceMs = 250;
     for (auto sig: {SIGHUP, SIGINT, SIGQUIT, SIGTSTP, SIGPIPE, SIGCHLD})
         signal(sig, SIG_DFL);
 
-    setenv("TERM", "xterm-256color", 1);
-    setenv("COLORTERM", "truecolor", 1);
-    unsetenv("TERM_PROGRAM");
-
-    for (const auto& variable: environment)
-        setenv(variable.name.c_str(), variable.value.c_str(), 1);
-
-    if (getenv("LANG") == nullptr)
-        setenv("LANG", "en_US.UTF-8", 1);
-
-    if (workingDirectory.empty() || chdir(workingDirectory.c_str()) != 0)
-        if (const auto* home = getenv("HOME"))
-            chdir(home);
+    setChildEnvironment(environment);
+    changeToWorkingDirectory(workingDirectory);
 
     // So anything the shell starts agrees with the shell actually running,
     // even when the app was launched without SHELL set. Never overwrites a
     // value the session already chose.
     setenv("SHELL", shell.c_str(), 0);
 
-    // A leading dash asks the shell to start as a login shell, so the user's
-    // usual profile and prompt come up.
-    const auto slash = shell.find_last_of('/');
-    const auto loginName =
-        "-" + (slash == std::string::npos ? shell : shell.substr(slash + 1));
+    const auto loginName = loginArgumentName(shell);
 
     if (command.empty())
         execl(shell.c_str(), loginName.c_str(), (char*) nullptr);
@@ -75,7 +109,7 @@ constexpr int shutdownKillGraceMs = 250;
               command.c_str(),
               (char*) nullptr);
 
-    _exit(127);
+    _exit(execFailedExitCode);
 }
 
 // Which shell a session runs. SHELL is what a login session sets and what the
@@ -84,11 +118,10 @@ constexpr int shutdownKillGraceMs = 250;
 // own shell from the passwd database is the next best answer.
 std::string loginShell()
 {
-    if (const auto* shell = getenv("SHELL"); shell != nullptr && shell[0] != '\0')
+    if (const auto* shell = getenv("SHELL"); isNonEmpty(shell))
         return shell;
 
-    if (const auto* pw = getpwuid(getuid());
-        pw != nullptr && pw->pw_shell != nullptr && pw->pw_shell[0] != '\0')
+    if (const auto* pw = getpwuid(getuid()); pw != nullptr && isNonEmpty(pw->pw_shell))
         return pw->pw_shell;
 
     // Last resort, and the reason this function exists: zsh is the default
@@ -110,6 +143,46 @@ winsize toWinsize(const PtySize& size)
     ws.ws_row = (unsigned short) size.rows;
     return ws;
 }
+
+void readUntilHangup(int fd, const std::function<void(std::string)>& output)
+{
+    char buffer[readBufferSize];
+
+    while (true)
+    {
+        const auto count = read(fd, buffer, sizeof(buffer));
+
+        if (count > 0)
+            output(std::string {buffer, (std::size_t) count});
+        else if (!isRetryableFailure(count))
+            return;
+    }
+}
+
+#if !defined(__APPLE__)
+std::string readFirstLine(const std::string& path)
+{
+    constexpr auto lineCapacity = 256;
+    auto* file = fopen(path.c_str(), "r");
+
+    if (file == nullptr)
+        return {};
+
+    char line[lineCapacity] = {};
+    const auto* result = fgets(line, sizeof(line), file);
+    fclose(file);
+
+    if (result == nullptr)
+        return {};
+
+    auto text = std::string {line};
+
+    if (!text.empty() && text.back() == '\n')
+        text.pop_back();
+
+    return text;
+}
+#endif
 } // namespace
 
 struct Pty::Native
@@ -156,24 +229,7 @@ bool Pty::start(const PtyOptions& options,
     native->reader = std::thread(
         [masterFd, output = std::move(onOutput), exit = std::move(onExit)]
         {
-            char buffer[65536];
-
-            while (true)
-            {
-                const auto count = read(masterFd, buffer, sizeof(buffer));
-
-                if (count > 0)
-                {
-                    output(std::string {buffer, (std::size_t) count});
-                    continue;
-                }
-
-                if (count < 0 && (errno == EINTR || errno == EAGAIN))
-                    continue;
-
-                break;
-            }
-
+            readUntilHangup(masterFd, output);
             exit();
         });
 
@@ -189,15 +245,9 @@ void Pty::write(std::string_view data)
         const auto written = ::write(native->fd, remaining.data(), remaining.size());
 
         if (written > 0)
-        {
             remaining.remove_prefix((std::size_t) written);
-            continue;
-        }
-
-        if (written < 0 && (errno == EINTR || errno == EAGAIN))
-            continue;
-
-        break;
+        else if (!isRetryableFailure(written))
+            break;
     }
 }
 
@@ -228,26 +278,7 @@ std::string Pty::foregroundProcess() const
 
     return {};
 #else
-    auto comm = std::string {"/proc/"} + std::to_string(pgid) + "/comm";
-
-    if (auto* file = fopen(comm.c_str(), "r"))
-    {
-        char name[256] = {};
-        const auto* result = fgets(name, sizeof(name), file);
-        fclose(file);
-
-        if (result != nullptr)
-        {
-            auto text = std::string {name};
-
-            if (!text.empty() && text.back() == '\n')
-                text.pop_back();
-
-            return text;
-        }
-    }
-
-    return {};
+    return readFirstLine("/proc/" + std::to_string(pgid) + "/comm");
 #endif
 }
 
@@ -308,7 +339,7 @@ void Pty::shutdown()
             if (elapsedMs == shutdownKillGraceMs)
                 ::kill((pid_t) -native->pid, SIGKILL);
 
-            usleep(shutdownPollMs * 1000);
+            usleep(shutdownPollMs * microsecondsPerMillisecond);
         }
 
         native->pid = -1;

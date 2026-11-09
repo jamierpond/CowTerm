@@ -126,6 +126,7 @@ private:
     void clearCells(int y, int fromX, int toX, const Cell& blank);
     void clearRows(int fromY, int toYExclusive, const Cell& blank);
     int beginCharacterEditAtCursor(int count);
+    int findTabStop(int from, int step, int limit) const;
     void shrinkPrimaryGrid(int newRows);
     void growPrimaryGrid(int newRows);
     void resizeAlternateGrid(int newRows);
