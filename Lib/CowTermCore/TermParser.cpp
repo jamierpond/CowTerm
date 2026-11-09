@@ -161,6 +161,18 @@ struct TermParserActions
         void (*run)(TermScreen&, bool on);
     };
 
+    struct KittyFlagsChangeEntry
+    {
+        int key;
+        KittyFlagsChange how;
+    };
+
+    static constexpr std::array<KittyFlagsChangeEntry, 3> kittyFlagsChanges = {{
+        {1, KittyFlagsChange::Replace},
+        {2, KittyFlagsChange::Add},
+        {3, KittyFlagsChange::Remove},
+    }};
+
     struct ModeFlagEntry
     {
         int key;
@@ -561,10 +573,47 @@ void TermParser::dispatchCsi(std::uint8_t finalByte)
 
 void TermParser::runCsi(std::uint8_t finalByte)
 {
-    if (privateMarker == '?')
-        runPrivateCsi(finalByte);
-    else if (privateMarker == 0 || finalByte == 'c')
+    if (privateMarker == 0 || finalByte == 'c')
         runCsiAction(finalByte);
+    else if (finalByte == 'u')
+        runKittyKeyboardCsi();
+    else if (privateMarker == '?')
+        runPrivateCsi(finalByte);
+}
+
+// CSI ? u queries the flags, CSI > flags u pushes, CSI < count u pops and
+// CSI = flags ; how u changes the top entry.
+void TermParser::runKittyKeyboardCsi()
+{
+    auto& stack = screen.kittyKeyboard();
+    const auto flags = (std::uint8_t) (params.value(0, 0) & KittyKeyboard::allFlags);
+
+    switch (privateMarker)
+    {
+        case '?':
+            respond("\033[?" + std::to_string(stack.current()) + "u");
+            return;
+        case '>':
+            stack.push(flags);
+            return;
+        case '<':
+            stack.pop(params.count(0));
+            return;
+        case '=':
+            changeKittyKeyboardFlags(stack, flags);
+            return;
+        default:
+            return;
+    }
+}
+
+void TermParser::changeKittyKeyboardFlags(KittyKeyboardStack& stack, std::uint8_t flags)
+{
+    constexpr auto replaceByDefault = 1;
+    const auto requested = params.value(1, replaceByDefault);
+
+    if (const auto entry = findEntry(TermParserActions::kittyFlagsChanges, requested))
+        stack.change(flags, entry->how);
 }
 
 void TermParser::runPrivateCsi(std::uint8_t finalByte)

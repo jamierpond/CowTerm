@@ -128,6 +128,7 @@ nano_add_executable(CowTermViewTests
         SOURCES
             TerminalViewBehaviourTests.cpp
             TerminalViewLogicTests.cpp
+            KittyKeyEncodingTests.cpp
         TARGETS CowTerm::Terminal)
 
 # The leader-key letters and digits AppShell turns into pane and session moves.

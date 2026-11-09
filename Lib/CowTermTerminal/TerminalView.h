@@ -5,6 +5,7 @@
 #include "GridPainter.h"
 #include "GridSelection.h"
 #include "KeyEncoding.h"
+#include "KittyKeyEncoding.h"
 
 #include "CowTermCore/FocusReports.h"
 #include "CowTermCore/Shell.h"
@@ -140,6 +141,7 @@ public:
     void resized() override;
 
     void keyDown(const eacp::Graphics::KeyEvent& event) override;
+    void keyUp(const eacp::Graphics::KeyEvent& event) override;
     void mouseDown(const eacp::Graphics::MouseEvent& event) override;
     void mouseDragged(const eacp::Graphics::MouseEvent& event) override;
     void mouseUp(const eacp::Graphics::MouseEvent& event) override;
@@ -163,6 +165,10 @@ private:
     void performEditingShortcut(EditingShortcut shortcut);
     void clearScreenAndScrollback();
     bool handleSpecialKey(const eacp::Graphics::KeyEvent& event);
+    bool handleKittyKey(const eacp::Graphics::KeyEvent& event);
+    bool handleInterceptedKey(const eacp::Graphics::KeyEvent& event);
+    bool handleKeyInCopyMode(const eacp::Graphics::KeyEvent& event);
+    bool handleTypedKey(const eacp::Graphics::KeyEvent& event);
     int calculateScrollLinesForJump(ViewportJump jump) const;
     void copySelection();
     void applyGridSize();
@@ -255,6 +261,10 @@ private:
     std::uint64_t renderedVersion = 0;
     std::uint64_t synchronizedOutputGeneration = 0;
     bool windowFocused = true;
+
+    // Keys whose press went to the program under the kitty protocol, so only
+    // their releases are reported (not a release of a leader-key press).
+    std::vector<std::uint16_t> keysPressedForProgram;
     FocusReports focusReports;
 };
 } // namespace term

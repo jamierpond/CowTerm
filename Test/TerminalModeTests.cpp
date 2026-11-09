@@ -152,3 +152,57 @@ auto tFocusReportsNeedTheMode = test("Modes/focusReportsNeedMode1004") = []
     check(reports.update(true, false).empty());
     check(reports.update(false, true) == "\033[O");
 };
+
+auto tKittyPushPopQuery = test("KittyKeyboard/pushQueryAndPop") = []
+{
+    auto fed = ModeParser {};
+
+    fed.parser.feed("\033[>1u\033[?u");
+    check(fed.responses == "\033[?1u");
+    fed.responses.clear();
+
+    fed.parser.feed("\033[>31u\033[?u\033[<u\033[?u\033[<u\033[?u");
+    check(fed.responses == "\033[?31u\033[?1u\033[?0u");
+};
+
+auto tKittySetModes = test("KittyKeyboard/setAddAndRemoveFlags") = []
+{
+    auto fed = ModeParser {};
+
+    fed.parser.feed("\033[=1u\033[=4;2u\033[?u");
+    check(fed.responses == "\033[?5u");
+    fed.responses.clear();
+
+    fed.parser.feed("\033[=1;3u\033[?u");
+    check(fed.responses == "\033[?4u");
+};
+
+auto tKittyFlagsPerScreen = test("KittyKeyboard/eachScreenKeepsItsOwnFlags") = []
+{
+    auto fed = ModeParser {};
+
+    fed.parser.feed("\033[>1u\033[?1049h");
+    check(fed.screen.kittyKeyboard().current() == 0);
+
+    fed.parser.feed("\033[>3u\033[?1049l");
+    check(fed.screen.kittyKeyboard().current() == 1);
+};
+
+auto tKittyPopPastTheBottom = test("KittyKeyboard/poppingEverythingClearsTheStack") = []
+{
+    auto fed = ModeParser {};
+
+    fed.parser.feed("\033[>1u\033[>2u\033[<100u");
+
+    check(fed.screen.kittyKeyboard().current() == 0);
+};
+
+auto tCsiUStillRestoresTheCursor = test("KittyKeyboard/plainCsiUStillRestoresTheCursor") = []
+{
+    auto fed = ModeParser {};
+
+    fed.parser.feed("\033[2;3H\033[s\033[H\033[u");
+
+    check(fed.screen.cursor.x == 2);
+    check(fed.screen.cursor.y == 1);
+};

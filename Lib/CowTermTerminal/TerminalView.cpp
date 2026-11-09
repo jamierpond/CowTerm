@@ -555,25 +555,90 @@ bool TerminalView::handleSpecialKey(const KeyEvent& event)
     return true;
 }
 
+bool TerminalView::handleInterceptedKey(const KeyEvent& event)
+{
+    return interceptKey(event);
+}
+
+bool TerminalView::handleKeyInCopyMode(const KeyEvent& event)
+{
+    return copyMode && handleCopyModeKey(event);
+}
+
+bool TerminalView::handleTypedKey(const KeyEvent& event)
+{
+    const auto bytes = encodeTypedKey(event);
+
+    if (!bytes)
+        return false;
+
+    sendAndScrollToBottom(*bytes);
+    return true;
+}
+
 void TerminalView::keyDown(const KeyEvent& event)
 {
-    if (interceptKey(event))
+    using KeyHandler = bool (TerminalView::*)(const KeyEvent&);
+    static constexpr auto keyHandlersInOrder =
+        std::array<KeyHandler, 7> {&TerminalView::handleInterceptedKey,
+                                   &TerminalView::handleKeyInCopyMode,
+                                   &TerminalView::handleClipboardShortcut,
+                                   &TerminalView::handleCommandShortcut,
+                                   &TerminalView::handleKittyKey,
+                                   &TerminalView::handleSpecialKey,
+                                   &TerminalView::handleTypedKey};
+
+    for (const auto handler: keyHandlersInOrder)
+    {
+        if ((this->*handler)(event))
+            return;
+    }
+}
+
+bool TerminalView::handleKittyKey(const KeyEvent& event)
+{
+    const auto flags = screen.kittyKeyboard().current();
+
+    if (flags == 0)
+        return false;
+
+    if (const auto jump = findViewportJump(event))
+    {
+        scrollBy(calculateScrollLinesForJump(*jump));
+        return true;
+    }
+
+    const auto action = event.isRepeat ? KeyAction::Repeat : KeyAction::Press;
+    const auto bytes = encodeKittyKey(event, action, flags);
+
+    if (!bytes.empty())
+        sendAndScrollToBottom(bytes);
+
+    const auto alreadyHeld = std::find(keysPressedForProgram.begin(),
+                                       keysPressedForProgram.end(),
+                                       event.keyCode)
+                             != keysPressedForProgram.end();
+
+    if (!alreadyHeld)
+        keysPressedForProgram.push_back(event.keyCode);
+
+    return true;
+}
+
+void TerminalView::keyUp(const KeyEvent& event)
+{
+    const auto pressed =
+        std::find(keysPressedForProgram.begin(), keysPressedForProgram.end(), event.keyCode);
+
+    if (pressed == keysPressedForProgram.end())
         return;
 
-    if (copyMode && handleCopyModeKey(event))
-        return;
+    keysPressedForProgram.erase(pressed);
+    const auto bytes =
+        encodeKittyKey(event, KeyAction::Release, screen.kittyKeyboard().current());
 
-    if (handleClipboardShortcut(event))
-        return;
-
-    if (handleCommandShortcut(event))
-        return;
-
-    if (handleSpecialKey(event))
-        return;
-
-    if (const auto bytes = encodeTypedKey(event))
-        sendAndScrollToBottom(*bytes);
+    if (!bytes.empty())
+        send(bytes);
 }
 
 void TerminalView::paste()

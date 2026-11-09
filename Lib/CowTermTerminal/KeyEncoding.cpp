@@ -201,17 +201,6 @@ constexpr auto keyEncoders = std::array<KeyEncoder, 6> {encodeFixedKey,
                                                         encodeArrowKey,
                                                         encodeHomeEndKey};
 
-std::optional<ViewportJump> findShiftScrollJump(const KeyEvent& event)
-{
-    if (!event.modifiers.shift)
-        return std::nullopt;
-
-    if (const auto key = findKeyEntry(shiftScrollKeys, event.keyCode))
-        return key->jump;
-
-    return std::nullopt;
-}
-
 bool hasControlAndShift(const ModifierKeys& mods)
 {
     return mods.control && mods.shift;
@@ -247,10 +236,21 @@ bool isLineFeedAt(std::string_view text, std::size_t index)
 }
 } // namespace
 
+std::optional<ViewportJump> findViewportJump(const KeyEvent& event)
+{
+    if (!event.modifiers.shift)
+        return std::nullopt;
+
+    if (const auto key = findKeyEntry(shiftScrollKeys, event.keyCode))
+        return key->jump;
+
+    return std::nullopt;
+}
+
 std::optional<SpecialKeyResponse> encodeSpecialKey(const KeyEvent& event,
                                                    bool applicationCursorKeys)
 {
-    if (const auto jump = findShiftScrollJump(event))
+    if (const auto jump = findViewportJump(event))
         return *jump;
 
     const auto applicationCursor =
