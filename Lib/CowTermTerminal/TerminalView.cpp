@@ -143,7 +143,22 @@ void TerminalView::terminateShell()
 void TerminalView::refreshCursor()
 {
     blinkOn = true;
+    reportFocusIfChanged();
     repaint();
+}
+
+void TerminalView::setWindowFocused(bool focused)
+{
+    windowFocused = focused;
+    refreshCursor();
+}
+
+void TerminalView::reportFocusIfChanged()
+{
+    const auto report = focusReports.update(windowFocused && hasFocus(), screen.modes.focusEvents);
+
+    if (!report.empty())
+        send(report);
 }
 
 void TerminalView::flushOutput()
@@ -789,9 +804,31 @@ void TerminalView::sendMouseReport(const MouseEvent& event,
     send(encodeSgrMouseReport({button, pressed, motion, cell.column + 1, cell.visualRow + 1}));
 }
 
+bool TerminalView::openHyperlinkUnderPointer(const MouseEvent& event)
+{
+    const auto isLinkClick = Platform::isMac() ? event.modifiers.command
+                                               : event.modifiers.control;
+
+    if (!isLinkClick || event.button != Graphics::MouseButton::Left)
+        return false;
+
+    const auto cell = findCellUnderPointer(event.pos);
+    const auto& line = screen.lineAt(cell.visualRow, scrollOffset);
+    const auto uri = screen.findHyperlinkUri(line[(std::size_t) cell.column].hyperlink);
+
+    if (!hasOpenableScheme(uri))
+        return false;
+
+    onOpenHyperlink(std::string {uri});
+    return true;
+}
+
 void TerminalView::mouseDown(const MouseEvent& event)
 {
     onFocused();
+
+    if (openHyperlinkUnderPointer(event))
+        return;
 
     if (isReportingMouseFor(event))
     {

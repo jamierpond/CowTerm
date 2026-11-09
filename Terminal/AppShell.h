@@ -34,7 +34,7 @@ public:
     // Wire to WindowEvents::onActivationChanged: notifications for the
     // active session are suppressed only while the user is actually looking
     // at it, which needs the window's key state.
-    void setWindowFocused(bool focused) { windowFocused = focused; }
+    void setWindowFocused(bool focused);
 
     std::function<void(const std::string&)> onWindowTitleChanged =
         [](const std::string&) {};

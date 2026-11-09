@@ -6,6 +6,7 @@
 #include "GridSelection.h"
 #include "KeyEncoding.h"
 
+#include "CowTermCore/FocusReports.h"
 #include "CowTermCore/Shell.h"
 #include "CowTermCore/TermParser.h"
 #include "CowTermCore/TermScreen.h"
@@ -86,6 +87,10 @@ public:
     // state now instead of waiting for the next blink tick.
     void refreshCursor();
 
+    // The window gained or lost key focus. With refreshCursor's pane changes,
+    // this drives mode 1004's focus reports (CSI I / CSI O).
+    void setWindowFocused(bool focused);
+
     // Zoom is app-wide, not per pane: the shell owns the shortcut, persists
     // the size in the config and pushes it into every live pane through here.
     void setFontSize(float newSize);
@@ -103,6 +108,9 @@ public:
     std::function<void(const std::string&)> onCwdChanged = [](const std::string&) {};
     std::function<void(const std::string&)> onNotify = [](const std::string&) {};
     eacp::Callback onShellExit = [] {};
+
+    // Cmd-click (Ctrl-click off macOS) on an OSC 8 hyperlink; the host opens it.
+    std::function<void(const std::string&)> onOpenHyperlink = [](const std::string&) {};
 
     // Fired when the user clicks into this pane; the session view moves its
     // active-pane marker here.
@@ -139,6 +147,8 @@ public:
 
 private:
     void flushOutput();
+    void reportFocusIfChanged();
+    bool openHyperlinkUnderPointer(const eacp::Graphics::MouseEvent& event);
     void repaintUnlessSynchronized();
     void startSynchronizedOutputTimeout();
     void send(std::string_view bytes);
@@ -244,5 +254,7 @@ private:
     float marginY = 4.0f;
     std::uint64_t renderedVersion = 0;
     std::uint64_t synchronizedOutputGeneration = 0;
+    bool windowFocused = true;
+    FocusReports focusReports;
 };
 } // namespace term

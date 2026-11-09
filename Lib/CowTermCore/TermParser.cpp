@@ -314,7 +314,7 @@ struct TermParserActions
         {0x0f, [](TermParser& p) { p.activeCharset = 0; }},
     }};
 
-    static constexpr std::array<ModeFlagEntry, 10> privateModeFlags = {{
+    static constexpr std::array<ModeFlagEntry, 11> privateModeFlags = {{
         {1, &Modes::appCursorKeys},
         {7, &Modes::autowrap},
         {12, &Modes::cursorBlink},
@@ -322,6 +322,7 @@ struct TermParserActions
         {1000, &Modes::mouseButtons},
         {1002, &Modes::mouseDrag},
         {1003, &Modes::mouseMotion},
+        {1004, &Modes::focusEvents},
         {1006, &Modes::mouseSgr},
         {2004, &Modes::bracketedPaste},
         {2026, &Modes::synchronizedOutput},
@@ -343,6 +344,16 @@ struct TermParserActions
             p.onCwdChanged(path);
     }
 
+    // OSC 8 ; params ; uri: the params (an id) are ignored, as the URI alone
+    // is what a click opens.
+    static void setHyperlink(TermParser& p, const std::string& payload)
+    {
+        const auto separator = payload.find(';');
+
+        if (separator != std::string::npos)
+            p.screen.setHyperlink(std::string_view {payload}.substr(separator + 1));
+    }
+
     static void reportNotification(TermParser& p, const std::string& payload)
     {
         if (const auto text = notificationFromOsc777(payload))
@@ -356,10 +367,11 @@ struct TermParserActions
             p.respond(formatColorQueryReply(code, rgb));
     }
 
-    static constexpr std::array<OscEntry, 7> oscActions = {{
+    static constexpr std::array<OscEntry, 8> oscActions = {{
         {"0", reportTitle},
         {"2", reportTitle},
         {"7", reportCwd},
+        {"8", setHyperlink},
         {"9", [](TermParser& p, const std::string& payload) { p.onNotify(payload); }},
         {"777", reportNotification},
         {"10",

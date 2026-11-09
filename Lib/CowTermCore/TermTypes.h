@@ -34,6 +34,10 @@ struct Cell
     Rgb fg = 0;
     Rgb bg = 0;
     std::uint16_t attrs = Attr::DefaultFg | Attr::DefaultBg;
+
+    // An id in the screen's HyperlinkTable; 0 for none. Sits in what was
+    // padding, so a cell stays 16 bytes.
+    std::uint16_t hyperlink = 0;
 };
 
 inline eacp::Graphics::Color toColor(Rgb rgb, float alpha = 1.0f)
