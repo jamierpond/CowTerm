@@ -1,5 +1,6 @@
 #pragma once
 
+#include "HyperlinkTable.h"
 #include "TermTypes.h"
 
 #include <cstdint>
@@ -23,6 +24,7 @@ struct Pen
     std::uint16_t attrs = 0;
     bool defaultFg = true;
     bool defaultBg = true;
+    HyperlinkId hyperlink = noHyperlink;
 };
 
 struct Modes
@@ -40,6 +42,7 @@ struct Modes
     bool mouseMotion = false;
     bool mouseSgr = false;
     bool synchronizedOutput = false;
+    bool focusEvents = false;
 };
 
 // The terminal's cell grid: primary + alternate buffers, scrollback, cursor,
@@ -91,6 +94,10 @@ public:
     int scrollbackSize() const { return (int) scrollback.size(); }
     const Line& lineAt(int visualRow, int scrollOffset) const;
 
+    // OSC 8: cells printed from here on link to uri; an empty uri ends the link.
+    void setHyperlink(std::string_view uri);
+    std::string_view findHyperlinkUri(HyperlinkId id) const { return hyperlinks.findUri(id); }
+
     // Bumped on every visible change; the view repaints when it moves.
     std::uint64_t version() const { return changeVersion; }
 
@@ -136,6 +143,9 @@ private:
     void scrollUpRegion(int count, int top, int bottom);
     void scrollDownRegion(int count, int top, int bottom);
     void newlineWithScroll();
+    void dropUnusedHyperlinks();
+    template <typename Visit>
+    void forEveryCell(Visit&& visit);
 
     const Theme& theme;
     int cols = 0;
@@ -150,6 +160,7 @@ private:
     bool wrapPending = false;
     char32_t lastPrinted = 0;
     std::vector<bool> tabStops;
+    HyperlinkTable hyperlinks;
     std::uint64_t changeVersion = 1;
 };
 } // namespace term

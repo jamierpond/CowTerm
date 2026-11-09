@@ -1,6 +1,7 @@
 #include "TermScreen.h"
 
 #include <algorithm>
+#include <limits>
 
 namespace term
 {
@@ -55,7 +56,46 @@ Cell TermScreen::penCell(char32_t codepoint) const
     auto cell = blankCell();
     cell.ch = codepoint;
     cell.attrs = (std::uint16_t) (pen.attrs | defaultColorAttributes());
+    cell.hyperlink = pen.hyperlink;
     return cell;
+}
+
+void TermScreen::setHyperlink(std::string_view uri)
+{
+    if (uri.empty())
+    {
+        pen.hyperlink = noHyperlink;
+        return;
+    }
+
+    if (hyperlinks.isFull())
+        dropUnusedHyperlinks();
+
+    pen.hyperlink = hyperlinks.intern(uri);
+}
+
+template <typename Visit>
+void TermScreen::forEveryCell(Visit&& visit)
+{
+    auto visitLine = [&](Line& line) { std::for_each(line.begin(), line.end(), visit); };
+
+    std::for_each(grid.begin(), grid.end(), visitLine);
+    std::for_each(altGrid.begin(), altGrid.end(), visitLine);
+    std::for_each(scrollback.begin(), scrollback.end(), visitLine);
+}
+
+void TermScreen::dropUnusedHyperlinks()
+{
+    constexpr auto idCount = std::numeric_limits<HyperlinkId>::max() + std::size_t {1};
+    auto isUsed = std::vector<bool>(idCount);
+
+    forEveryCell([&](const Cell& cell) { isUsed[cell.hyperlink] = true; });
+    isUsed[savedPen.hyperlink] = true;
+
+    const auto newIds = hyperlinks.keepOnly(isUsed);
+
+    forEveryCell([&](Cell& cell) { cell.hyperlink = newIds[cell.hyperlink]; });
+    savedPen.hyperlink = newIds[savedPen.hyperlink];
 }
 
 Line TermScreen::blankLine() const

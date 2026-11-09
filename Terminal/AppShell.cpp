@@ -268,6 +268,15 @@ bool AppShell::anyOverlayShown() const
            || claudeHud.isShown() || popup.isShown() || permissions.isShown();
 }
 
+void AppShell::setWindowFocused(bool focused)
+{
+    windowFocused = focused;
+
+    for (const auto& session: manager.all())
+        for (auto* pane: session->view.panes())
+            pane->setWindowFocused(focused);
+}
+
 void AppShell::resized()
 {
     const auto bounds = getLocalBounds();

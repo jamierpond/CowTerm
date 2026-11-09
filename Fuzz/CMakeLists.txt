@@ -15,6 +15,7 @@ if (COWTERM_ENABLE_FUZZING)
             ParserFuzzer.cpp
             ../Lib/CowTermCore/CharWidth.cpp
             ../Lib/CowTermCore/CsiParameters.cpp
+            ../Lib/CowTermCore/HyperlinkTable.cpp
             ../Lib/CowTermCore/SelectGraphicRendition.cpp
             ../Lib/CowTermCore/TermParser.cpp
             ../Lib/CowTermCore/TermScreen.cpp)

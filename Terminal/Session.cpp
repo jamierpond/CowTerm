@@ -1,4 +1,5 @@
 #include "Session.h"
+#include "Command.h"
 #include "Projects.h"
 #include "Protocol.h"
 
@@ -127,6 +128,8 @@ void SessionManager::wireSession(TermSession& session)
             raw->notifyUnseen = activeSession != raw;
             onNotify(*raw, text);
         };
+
+        pane.onOpenHyperlink = [](const std::string& uri) { openInBrowser(uri); };
 
         pane.onCwdChanged = [this](const std::string&)
         {

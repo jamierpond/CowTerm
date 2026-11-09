@@ -4,6 +4,8 @@
 add_library(CowTermCore STATIC
         CharWidth.cpp
         CsiParameters.cpp
+        FocusReports.cpp
+        HyperlinkTable.cpp
         SelectGraphicRendition.cpp
         TermScreen.cpp
         TermParser.cpp)

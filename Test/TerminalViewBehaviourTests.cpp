@@ -770,3 +770,62 @@ auto tUnfocusedCursorIsHollow = test("View/anUnfocusedCursorIsAnOutline") = []
     check(matches(image.at((int) centre.x, (int) centre.y), defaultTheme.background),
           "an unfocused pane draws an outline, not a block");
 };
+
+namespace
+{
+Graphics::MouseEvent linkClickAtCell(int col, int row)
+{
+    auto event = mouseAtCell(col, row);
+
+    if constexpr (Platform::isMac())
+        event.modifiers.command = true;
+    else
+        event.modifiers.control = true;
+
+    return event;
+}
+
+struct LinkPane
+{
+    LinkPane()
+    {
+        pane.view->onOpenHyperlink = [this](const std::string& uri) { opened = uri; };
+    }
+
+    TestPane pane;
+    std::string opened;
+};
+} // namespace
+
+auto tLinkClickOpensTheHyperlink = test("View/linkClickOpensTheHyperlink") = []
+{
+    auto linked = LinkPane {};
+    linked.pane.showOutput("\033]8;;https://example.com\033\\link\033]8;;\033\\ plain");
+
+    linked.pane.view->mouseDown(linkClickAtCell(1, 0));
+    check(linked.opened == "https://example.com");
+
+    linked.opened.clear();
+    linked.pane.view->mouseDown(linkClickAtCell(6, 0));
+    check(linked.opened.empty(), "text after the link's end opens nothing");
+};
+
+auto tPlainClickOnALinkSelects = test("View/aPlainClickOnALinkOpensNothing") = []
+{
+    auto linked = LinkPane {};
+    linked.pane.showOutput("\033]8;;https://example.com\033\\link\033]8;;\033\\");
+
+    linked.pane.view->mouseDown(mouseAtCell(1, 0));
+
+    check(linked.opened.empty());
+};
+
+auto tCustomSchemesAreNotOpened = test("View/linkWithACustomSchemeIsNotOpened") = []
+{
+    auto linked = LinkPane {};
+    linked.pane.showOutput("\033]8;;x-app://run\033\\link\033]8;;\033\\");
+
+    linked.pane.view->mouseDown(linkClickAtCell(1, 0));
+
+    check(linked.opened.empty());
+};
