@@ -5,7 +5,11 @@
 # CowTerm config file and no session daemon.
 add_library(CowTermTerminal STATIC
         GlyphAtlas.cpp
-        TerminalView.cpp)
+        TerminalView.cpp
+        CellText.cpp
+        CopyMode.cpp
+        GridPainter.cpp
+        KeyEncoding.cpp)
 
 if (MSVC)
     # Unicode literals (copy-mode indicators) — same reason as CowTermCore.
