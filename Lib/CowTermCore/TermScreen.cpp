@@ -216,19 +216,24 @@ void TermScreen::backspace()
     markDirty();
 }
 
+// Steps from `from` towards `limit` until a tab stop or the limit itself.
+int TermScreen::findTabStop(int from, int step, int limit) const
+{
+    auto x = from;
+
+    while (x != limit && !tabStops[(std::size_t) x])
+        x += step;
+
+    return x;
+}
+
 void TermScreen::horizontalTab(int count)
 {
     wrapPending = false;
+    const auto lastColumn = cols - 1;
 
     for (auto i = 0; i < count; ++i)
-    {
-        auto x = cursor.x + 1;
-
-        while (x < cols - 1 && !tabStops[(std::size_t) x])
-            ++x;
-
-        cursor.x = std::min(x, cols - 1);
-    }
+        cursor.x = findTabStop(std::min(cursor.x + 1, lastColumn), 1, lastColumn);
 
     markDirty();
 }
@@ -238,14 +243,7 @@ void TermScreen::backTab(int count)
     wrapPending = false;
 
     for (auto i = 0; i < count; ++i)
-    {
-        auto x = cursor.x - 1;
-
-        while (x > 0 && !tabStops[(std::size_t) x])
-            --x;
-
-        cursor.x = std::max(x, 0);
-    }
+        cursor.x = findTabStop(std::max(cursor.x - 1, 0), -1, 0);
 
     markDirty();
 }

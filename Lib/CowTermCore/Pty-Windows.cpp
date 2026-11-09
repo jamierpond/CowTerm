@@ -11,6 +11,7 @@
 #include <cctype>
 #include <cwchar>
 #include <mutex>
+#include <optional>
 #include <thread>
 #include <vector>
 
@@ -142,20 +143,40 @@ std::wstring base64(const std::vector<unsigned char>& bytes)
     static const char table[] =
         "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
-    std::wstring out;
-    out.reserve((bytes.size() + 2) / 3 * 4);
+    constexpr auto bytesPerGroup = std::size_t {3};
+    constexpr auto charactersPerGroup = std::size_t {4};
+    constexpr auto padding = L'=';
 
-    for (std::size_t i = 0; i < bytes.size(); i += 3)
+    const auto getByteOrZero = [&](std::size_t index) -> unsigned char
+    {
+        if (index < bytes.size())
+            return bytes[index];
+
+        return 0;
+    };
+
+    const auto getCharacterOrPadding = [&](std::size_t byteIndex, unsigned sextet)
+    {
+        if (byteIndex < bytes.size())
+            return (wchar_t) table[sextet];
+
+        return padding;
+    };
+
+    std::wstring out;
+    out.reserve((bytes.size() + bytesPerGroup - 1) / bytesPerGroup
+                * charactersPerGroup);
+
+    for (std::size_t i = 0; i < bytes.size(); i += bytesPerGroup)
     {
         const auto b0 = bytes[i];
-        const auto b1 = i + 1 < bytes.size() ? bytes[i + 1] : (unsigned char) 0;
-        const auto b2 = i + 2 < bytes.size() ? bytes[i + 2] : (unsigned char) 0;
+        const auto b1 = getByteOrZero(i + 1);
+        const auto b2 = getByteOrZero(i + 2);
 
         out.push_back(table[b0 >> 2]);
         out.push_back(table[((b0 & 0x03) << 4) | (b1 >> 4)]);
-        out.push_back(i + 1 < bytes.size() ? table[((b1 & 0x0f) << 2) | (b2 >> 6)]
-                                           : L'=');
-        out.push_back(i + 2 < bytes.size() ? table[b2 & 0x3f] : L'=');
+        out.push_back(getCharacterOrPadding(i + 1, ((b1 & 0x0f) << 2) | (b2 >> 6)));
+        out.push_back(getCharacterOrPadding(i + 2, b2 & 0x3f));
     }
 
     return out;
@@ -226,6 +247,171 @@ std::string baseName(const std::wstring& exeFile)
 
     return name;
 }
+
+std::wstring buildCommandLine(const std::wstring& shell, const std::string& command)
+{
+    const auto isCmd = shell.find(L"cmd.exe") != std::wstring::npos;
+    auto commandLine = L"\"" + shell + L"\"";
+
+    if (!command.empty())
+    {
+        const auto wide = widen(command);
+
+        if (isCmd)
+            commandLine += L" /c " + wide;
+        else
+            commandLine += L" -NoLogo -Command \"" + wide + L"\"";
+    }
+    else if (!isCmd)
+    {
+        // Default interactive PowerShell comes up as the VS Developer
+        // PowerShell; -NoExit keeps the prompt after the env is set up.
+        commandLine += L" -NoLogo -NoExit -EncodedCommand " + devShellCommand();
+    }
+
+    return commandLine;
+}
+
+void closeHandles(std::initializer_list<HANDLE> handles)
+{
+    for (auto* handle: handles)
+        CloseHandle(handle);
+}
+
+// Both pipe pairs plus the pseudoconsole on them. The console-side ends are
+// still open here; launchShellProcess closes them once the child has started.
+struct ConsolePipes
+{
+    HANDLE consoleInputRead = nullptr;
+    HANDLE inputWrite = nullptr;
+    HANDLE outputRead = nullptr;
+    HANDLE consoleOutputWrite = nullptr;
+    HPCON console = nullptr;
+};
+
+std::optional<ConsolePipes> createConsolePipes(const PtySize& size)
+{
+    auto pipes = ConsolePipes {};
+
+    if (!CreatePipe(&pipes.consoleInputRead, &pipes.inputWrite, nullptr, 0))
+        return std::nullopt;
+
+    if (!CreatePipe(&pipes.outputRead, &pipes.consoleOutputWrite, nullptr, 0))
+    {
+        closeHandles({pipes.consoleInputRead, pipes.inputWrite});
+        return std::nullopt;
+    }
+
+    if (FAILED(CreatePseudoConsole(toCoord(size),
+                                   pipes.consoleInputRead,
+                                   pipes.consoleOutputWrite,
+                                   0,
+                                   &pipes.console)))
+    {
+        closeHandles({pipes.consoleInputRead,
+                      pipes.inputWrite,
+                      pipes.outputRead,
+                      pipes.consoleOutputWrite});
+        return std::nullopt;
+    }
+
+    return pipes;
+}
+
+bool createProcessOnConsole(HPCON console,
+                            const PtyOptions& options,
+                            PROCESS_INFORMATION& info)
+{
+    constexpr auto attributeCount = DWORD {1};
+
+    auto listSize = SIZE_T {0};
+    InitializeProcThreadAttributeList(nullptr, attributeCount, 0, &listSize);
+
+    auto listStorage = std::vector<std::byte>(listSize);
+    auto* attributes = (LPPROC_THREAD_ATTRIBUTE_LIST) listStorage.data();
+
+    auto startup = STARTUPINFOEXW {};
+    startup.StartupInfo.cb = sizeof startup;
+
+    // Null standard handles, explicitly. Left unset, a child inherits ours
+    // whenever they are pipes or files rather than a console -- CowTerm started
+    // with its output redirected, or under ctest -- and the shell then writes
+    // there instead of into the pseudoconsole, leaving the pane blank.
+    startup.StartupInfo.dwFlags = STARTF_USESTDHANDLES;
+    startup.lpAttributeList = attributes;
+
+    const auto shell = findShell();
+    auto commandLine = buildCommandLine(shell, options.command);
+    const auto directory = startDirectory(options.workingDirectory);
+    auto environment = environmentBlockWith(options.environment);
+    const auto* directoryOrNull = directory.empty() ? nullptr : directory.c_str();
+
+    const auto launched =
+        InitializeProcThreadAttributeList(attributes, attributeCount, 0, &listSize)
+        && UpdateProcThreadAttribute(attributes,
+                                     0,
+                                     PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE,
+                                     console,
+                                     sizeof console,
+                                     nullptr,
+                                     nullptr)
+        && CreateProcessW(shell.c_str(),
+                          commandLine.data(),
+                          nullptr,
+                          nullptr,
+                          FALSE,
+                          EXTENDED_STARTUPINFO_PRESENT | CREATE_UNICODE_ENVIRONMENT,
+                          environment.data(),
+                          directoryOrNull,
+                          &startup.StartupInfo,
+                          &info);
+
+    DeleteProcThreadAttributeList(attributes);
+    return launched;
+}
+
+std::optional<PROCESS_INFORMATION> launchShellProcess(const ConsolePipes& pipes,
+                                                      const PtyOptions& options)
+{
+    auto info = PROCESS_INFORMATION {};
+    const auto launched = createProcessOnConsole(pipes.console, options, info);
+
+    // The pseudoconsole duplicated its ends of both pipes; ours can go.
+    closeHandles({pipes.consoleInputRead, pipes.consoleOutputWrite});
+
+    if (!launched)
+    {
+        ClosePseudoConsole(pipes.console);
+        closeHandles({pipes.inputWrite, pipes.outputRead});
+        return std::nullopt;
+    }
+
+    CloseHandle(info.hThread);
+    return info;
+}
+
+void readOutputUntilClosed(HANDLE readHandle,
+                           const std::function<void(std::string)>& output,
+                           const std::function<void()>& exit)
+{
+    constexpr auto readBufferSize = DWORD {65536};
+    char buffer[readBufferSize];
+
+    while (true)
+    {
+        auto count = DWORD {0};
+
+        if (!ReadFile(readHandle, buffer, readBufferSize, &count, nullptr))
+            break;
+
+        if (count == 0)
+            break;
+
+        output(std::string {buffer, count});
+    }
+
+    exit();
+}
 } // namespace
 
 // ConPTY state. The pseudoconsole is guarded by consoleLock: the waiter thread
@@ -270,136 +456,32 @@ bool Pty::start(const PtyOptions& options,
     if (native->process != nullptr)
         return false;
 
-    auto inputRead = HANDLE {};
-    auto outputWrite = HANDLE {};
-    auto inWrite = HANDLE {};
-    auto outRead = HANDLE {};
+    const auto pipes = createConsolePipes(options.size);
 
-    if (!CreatePipe(&inputRead, &inWrite, nullptr, 0))
+    if (!pipes)
         return false;
 
-    if (!CreatePipe(&outRead, &outputWrite, nullptr, 0))
-    {
-        CloseHandle(inputRead);
-        CloseHandle(inWrite);
+    const auto info = launchShellProcess(*pipes, options);
+
+    if (!info)
         return false;
-    }
 
-    auto pseudoConsole = HPCON {};
-
-    if (FAILED(CreatePseudoConsole(
-            toCoord(options.size), inputRead, outputWrite, 0, &pseudoConsole)))
-    {
-        for (auto* handle: {inputRead, inWrite, outRead, outputWrite})
-            CloseHandle(handle);
-
-        return false;
-    }
-
-    auto listSize = SIZE_T {0};
-    InitializeProcThreadAttributeList(nullptr, 1, 0, &listSize);
-
-    auto listStorage = std::vector<std::byte>(listSize);
-    auto* attributes = (LPPROC_THREAD_ATTRIBUTE_LIST) listStorage.data();
-
-    auto startup = STARTUPINFOEXW {};
-    startup.StartupInfo.cb = sizeof startup;
-
-    // Null standard handles, explicitly. Left unset, a child inherits ours
-    // whenever they are pipes or files rather than a console -- CowTerm started
-    // with its output redirected, or under ctest -- and the shell then writes
-    // there instead of into the pseudoconsole, leaving the pane blank.
-    startup.StartupInfo.dwFlags = STARTF_USESTDHANDLES;
-    startup.lpAttributeList = attributes;
-
-    auto info = PROCESS_INFORMATION {};
-    const auto shell = findShell();
-    const auto isCmd = shell.find(L"cmd.exe") != std::wstring::npos;
-    auto commandLine = L"\"" + shell + L"\"";
-
-    if (!options.command.empty())
-    {
-        const auto wide = widen(options.command);
-        commandLine +=
-            isCmd ? L" /c " + wide : L" -NoLogo -Command \"" + wide + L"\"";
-    }
-    else if (!isCmd)
-    {
-        // Default interactive PowerShell comes up as the VS Developer
-        // PowerShell; -NoExit keeps the prompt after the env is set up.
-        commandLine += L" -NoLogo -NoExit -EncodedCommand " + devShellCommand();
-    }
-    const auto directory = startDirectory(options.workingDirectory);
-    auto environment = environmentBlockWith(options.environment);
-
-    const auto launched =
-        InitializeProcThreadAttributeList(attributes, 1, 0, &listSize)
-        && UpdateProcThreadAttribute(attributes,
-                                     0,
-                                     PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE,
-                                     pseudoConsole,
-                                     sizeof pseudoConsole,
-                                     nullptr,
-                                     nullptr)
-        && CreateProcessW(shell.c_str(),
-                          commandLine.data(),
-                          nullptr,
-                          nullptr,
-                          FALSE,
-                          EXTENDED_STARTUPINFO_PRESENT | CREATE_UNICODE_ENVIRONMENT,
-                          environment.data(),
-                          directory.empty() ? nullptr : directory.c_str(),
-                          &startup.StartupInfo,
-                          &info);
-
-    DeleteProcThreadAttributeList(attributes);
-
-    // The pseudoconsole duplicated its ends of both pipes; ours can go.
-    CloseHandle(inputRead);
-    CloseHandle(outputWrite);
-
-    if (!launched)
-    {
-        ClosePseudoConsole(pseudoConsole);
-        CloseHandle(inWrite);
-        CloseHandle(outRead);
-        return false;
-    }
-
-    CloseHandle(info.hThread);
-
-    native->console = pseudoConsole;
-    native->process = info.hProcess;
-    native->inputWrite = inWrite;
-    native->outputRead = outRead;
+    native->console = pipes->console;
+    native->process = info->hProcess;
+    native->inputWrite = pipes->inputWrite;
+    native->outputRead = pipes->outputRead;
 
     native->reader = std::thread(
-        [readHandle = outRead,
+        [readHandle = pipes->outputRead,
          output = std::move(onOutput),
-         exit = std::move(onExit)]
-        {
-            char buffer[65536];
-
-            while (true)
-            {
-                auto count = DWORD {0};
-
-                if (!ReadFile(readHandle, buffer, sizeof buffer, &count, nullptr)
-                    || count == 0)
-                    break;
-
-                output(std::string {buffer, count});
-            }
-
-            exit();
-        });
+         exit = std::move(onExit)] { readOutputUntilClosed(readHandle, output, exit); });
 
     // ConPTY keeps the output pipe open until the pseudoconsole is closed, so
     // the reader would never see the shell exit on its own. Waiting on the
     // process and closing the console is what breaks the pipe and lets the
     // reader finish (delivering onExit).
     native->waiter = std::thread(
-        [state = native.get(), processHandle = info.hProcess]
+        [state = native.get(), processHandle = info->hProcess]
         {
             WaitForSingleObject(processHandle, INFINITE);
             state->closeConsole();
@@ -444,66 +526,180 @@ struct TreeInfo
     std::wstring rootName;
 };
 
-// What the user sees running is the youngest process in the shell's
-// descendant tree; the shell itself is the fallback.
-TreeInfo inspectProcessTree(DWORD rootPid)
+struct ProcessCandidate
 {
-    auto info = TreeInfo {};
+    DWORD pid;
+    DWORD parent;
+    std::wstring name;
+};
+
+struct ProcessSnapshot
+{
+    std::wstring rootName;
+    std::vector<ProcessCandidate> others;
+};
+
+ProcessSnapshot takeProcessSnapshot(DWORD rootPid)
+{
+    auto result = ProcessSnapshot {};
     auto* snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
 
     if (snapshot == INVALID_HANDLE_VALUE)
-        return info;
-
-    struct Candidate
-    {
-        DWORD pid;
-        DWORD parent;
-        std::wstring name;
-    };
-
-    auto candidates = std::vector<Candidate> {};
+        return result;
 
     auto entry = PROCESSENTRY32W {};
     entry.dwSize = sizeof entry;
 
-    if (Process32FirstW(snapshot, &entry))
+    for (auto hasEntry = Process32FirstW(snapshot, &entry) != 0; hasEntry;
+         hasEntry = Process32NextW(snapshot, &entry) != 0)
     {
-        do
-        {
-            if (entry.th32ProcessID == rootPid)
-                info.rootName = entry.szExeFile;
-            else
-                candidates.push_back({entry.th32ProcessID,
-                                      entry.th32ParentProcessID,
-                                      entry.szExeFile});
-        } while (Process32NextW(snapshot, &entry));
+        if (entry.th32ProcessID == rootPid)
+            result.rootName = entry.szExeFile;
+        else
+            result.others.push_back(
+                {entry.th32ProcessID, entry.th32ParentProcessID, entry.szExeFile});
     }
 
     CloseHandle(snapshot);
+    return result;
+}
+
+bool isNewChildOf(const ProcessCandidate& candidate,
+                  DWORD parent,
+                  const std::vector<DWORD>& tree)
+{
+    return candidate.parent == parent
+           && std::find(tree.begin(), tree.end(), candidate.pid) == tree.end();
+}
+
+// What the user sees running is the youngest process in the shell's
+// descendant tree; the shell itself is the fallback.
+TreeInfo inspectProcessTree(DWORD rootPid)
+{
+    auto snapshot = takeProcessSnapshot(rootPid);
+    auto info = TreeInfo {};
+    info.rootName = snapshot.rootName;
 
     auto tree = std::vector<DWORD> {rootPid};
     auto bestTime = ULONGLONG {0};
 
+    const auto considerCandidate = [&](const ProcessCandidate& candidate)
+    {
+        tree.push_back(candidate.pid);
+
+        if (const auto time = creationTime(candidate.pid); time >= bestTime)
+        {
+            bestTime = time;
+            info.youngestPid = candidate.pid;
+            info.youngestName = candidate.name;
+        }
+    };
+
     for (auto index = std::size_t {0}; index < tree.size(); ++index)
     {
-        for (const auto& candidate: candidates)
+        for (const auto& candidate: snapshot.others)
         {
-            if (candidate.parent != tree[index]
-                || std::find(tree.begin(), tree.end(), candidate.pid) != tree.end())
-                continue;
-
-            tree.push_back(candidate.pid);
-
-            if (const auto time = creationTime(candidate.pid); time >= bestTime)
-            {
-                bestTime = time;
-                info.youngestPid = candidate.pid;
-                info.youngestName = candidate.name;
-            }
+            if (isNewChildOf(candidate, tree[index], tree))
+                considerCandidate(candidate);
         }
     }
 
     return info;
+}
+
+using NtQueryInformationProcessFn =
+    NTSTATUS(NTAPI*)(HANDLE, PROCESSINFOCLASS, PVOID, ULONG, PULONG);
+
+NtQueryInformationProcessFn findNtQueryInformationProcess()
+{
+    static const auto query = (NtQueryInformationProcessFn) (void*) GetProcAddress(
+        GetModuleHandleW(L"ntdll.dll"), "NtQueryInformationProcess");
+
+    return query;
+}
+
+struct Curdir
+{
+    UNICODE_STRING DosPath;
+    HANDLE Handle;
+};
+
+struct ParametersPrefix
+{
+    ULONG MaximumLength;
+    ULONG Length;
+    ULONG Flags;
+    ULONG DebugFlags;
+    HANDLE ConsoleHandle;
+    ULONG ConsoleFlags;
+    HANDLE StandardInput;
+    HANDLE StandardOutput;
+    HANDLE StandardError;
+    Curdir CurrentDirectory;
+};
+
+bool readProcessMemoryExactly(HANDLE process,
+                              const void* address,
+                              void* into,
+                              std::size_t bytes)
+{
+    auto copied = SIZE_T {0};
+    return ReadProcessMemory(process, address, into, bytes, &copied) != 0
+           && copied == bytes;
+}
+
+bool hasCurrentDirectory(const ParametersPrefix& parameters)
+{
+    const auto& dosPath = parameters.CurrentDirectory.DosPath;
+    return dosPath.Buffer != nullptr && dosPath.Length > 0;
+}
+
+std::optional<ParametersPrefix> readProcessParameters(HANDLE process)
+{
+    auto info = PROCESS_BASIC_INFORMATION {};
+    auto peb = PEB {};
+    auto parameters = ParametersPrefix {};
+    const auto query = findNtQueryInformationProcess();
+
+    if (query(process, ProcessBasicInformation, &info, sizeof info, nullptr) != 0)
+        return std::nullopt;
+
+    if (!readProcessMemoryExactly(process, info.PebBaseAddress, &peb, sizeof peb))
+        return std::nullopt;
+
+    if (!readProcessMemoryExactly(
+            process, peb.ProcessParameters, &parameters, sizeof parameters))
+        return std::nullopt;
+
+    return parameters;
+}
+
+std::string toForwardSlashDirectory(std::wstring path)
+{
+    constexpr auto driveRootLength = std::size_t {3};
+
+    while (path.size() > driveRootLength && path.back() == L'\\')
+        path.pop_back();
+
+    // With '/' separators, as eacp's FilePath writes them (and so
+    // FilePath::homeDirectory(), which the cwd is compared against).
+    return eacp::FilePath::fromWide(path).str();
+}
+
+std::string readCurrentDirectory(HANDLE process)
+{
+    const auto parameters = readProcessParameters(process);
+
+    if (!parameters || !hasCurrentDirectory(*parameters))
+        return {};
+
+    const auto& dosPath = parameters->CurrentDirectory.DosPath;
+    auto path = std::wstring(dosPath.Length / sizeof(wchar_t), L'\0');
+
+    if (!readProcessMemoryExactly(process, dosPath.Buffer, path.data(), dosPath.Length))
+        return {};
+
+    return toForwardSlashDirectory(std::move(path));
 }
 
 // The live working directory of another process, read from its PEB. The
@@ -511,13 +707,7 @@ TreeInfo inspectProcessTree(DWORD rootPid)
 // keeps CurrentDirectory right after the standard handles.
 std::string processWorkingDirectory(DWORD pid)
 {
-    using NtQueryInformationProcessFn =
-        NTSTATUS(NTAPI*)(HANDLE, PROCESSINFOCLASS, PVOID, ULONG, PULONG);
-
-    static const auto query = (NtQueryInformationProcessFn) (void*) GetProcAddress(
-        GetModuleHandleW(L"ntdll.dll"), "NtQueryInformationProcess");
-
-    if (query == nullptr)
+    if (findNtQueryInformationProcess() == nullptr)
         return {};
 
     auto* handle =
@@ -526,61 +716,7 @@ std::string processWorkingDirectory(DWORD pid)
     if (handle == nullptr)
         return {};
 
-    auto result = std::string {};
-    auto info = PROCESS_BASIC_INFORMATION {};
-    auto peb = PEB {};
-
-    struct Curdir
-    {
-        UNICODE_STRING DosPath;
-        HANDLE Handle;
-    };
-
-    struct ParametersPrefix
-    {
-        ULONG MaximumLength;
-        ULONG Length;
-        ULONG Flags;
-        ULONG DebugFlags;
-        HANDLE ConsoleHandle;
-        ULONG ConsoleFlags;
-        HANDLE StandardInput;
-        HANDLE StandardOutput;
-        HANDLE StandardError;
-        Curdir CurrentDirectory;
-    };
-
-    auto parameters = ParametersPrefix {};
-
-    const auto read = [&](const void* address, void* into, std::size_t bytes)
-    {
-        auto copied = SIZE_T {0};
-        return ReadProcessMemory(handle, address, into, bytes, &copied) != 0
-               && copied == bytes;
-    };
-
-    if (query(handle, ProcessBasicInformation, &info, sizeof info, nullptr) == 0
-        && read(info.PebBaseAddress, &peb, sizeof peb)
-        && read(peb.ProcessParameters, &parameters, sizeof parameters)
-        && parameters.CurrentDirectory.DosPath.Buffer != nullptr
-        && parameters.CurrentDirectory.DosPath.Length > 0)
-    {
-        auto path = std::wstring(
-            parameters.CurrentDirectory.DosPath.Length / sizeof(wchar_t), L'\0');
-
-        if (read(parameters.CurrentDirectory.DosPath.Buffer,
-                 path.data(),
-                 parameters.CurrentDirectory.DosPath.Length))
-        {
-            while (path.size() > 3 && path.back() == L'\\')
-                path.pop_back();
-
-            // With '/' separators, as eacp's FilePath writes them (and so
-            // FilePath::homeDirectory(), which the cwd is compared against).
-            result = eacp::FilePath::fromWide(path).str();
-        }
-    }
-
+    auto result = readCurrentDirectory(handle);
     CloseHandle(handle);
     return result;
 }

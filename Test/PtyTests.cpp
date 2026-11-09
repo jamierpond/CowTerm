@@ -16,6 +16,7 @@
 #include <NanoTest/NanoTest.h>
 
 #include <chrono>
+#include <filesystem>
 #include <future>
 #include <memory>
 #include <string>
@@ -97,5 +98,33 @@ auto doubleShutdown = test("Pty shutdown is safe to call twice") = []
 {
     auto pty = startShell(idleCommand);
     pty->shutdown();
+    check(shutsDownWithin(std::move(pty), budget));
+};
+
+// The pane title and `ct` read these from the kernel; the shell has to be found
+// in the directory it was started in, under some process name.
+auto liveProcessInfo = test("Pty reports the shell's working directory and process") = []
+{
+    constexpr auto pollInterval = 50ms;
+    const auto directory = std::filesystem::canonical(std::filesystem::temp_directory_path());
+
+    auto pty = std::make_unique<term::Pty>();
+    check(pty->start({{80, 24}, directory.string(), idleCommand}, [](std::string) {}, [] {}),
+          "pty.start");
+
+    const auto isInStartDirectory = [&]
+    {
+        const auto reported = pty->currentWorkingDirectory();
+        auto error = std::error_code {};
+        return !reported.empty() && std::filesystem::equivalent(reported, directory, error);
+    };
+
+    const auto deadline = std::chrono::steady_clock::now() + budget;
+
+    while (!isInStartDirectory() && std::chrono::steady_clock::now() < deadline)
+        std::this_thread::sleep_for(pollInterval);
+
+    check(isInStartDirectory(), "currentWorkingDirectory is the start directory");
+    check(!pty->foregroundProcess().empty(), "foregroundProcess names a process");
     check(shutsDownWithin(std::move(pty), budget));
 };
