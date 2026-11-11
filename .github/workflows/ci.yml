@@ -25,7 +25,8 @@ jobs:
 
       # lockstep's cache holds the package sources and the library cache, so a
       # run with an unchanged lock compiles none of the packages again.
-      - uses: actions/cache@v4
+      - uses: actions/cache/restore@v4
+        id: lockstep-cache
         with:
           path: .lockstep-cache
           key: lockstep-${{ matrix.os }}-${{ hashFiles('lockstep.lock', 'cmake/lockstep.cmake') }}
@@ -49,3 +50,11 @@ jobs:
 
       - run: just build
       - run: just test
+
+      # Saved even when a test fails, so the next run still finds the packages
+      # and libraries this one built.
+      - uses: actions/cache/save@v4
+        if: always() && steps.lockstep-cache.outputs.cache-hit != 'true'
+        with:
+          path: .lockstep-cache
+          key: ${{ steps.lockstep-cache.outputs.cache-primary-key }}
