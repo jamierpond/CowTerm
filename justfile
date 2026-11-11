@@ -144,11 +144,12 @@ install: build
     -gtk-update-icon-cache -f -t "$HOME/.local/share/icons/hicolor" 2>/dev/null
     @echo "Installed to ~/.local/bin, with a desktop entry and icon"
 
-# LOCKSTEP_MODE is cached, so configure sets it back to locked afterwards.
+# LOCKSTEP_MODE is cached, so the second configure puts the build tree back in
+# locked mode.
 [doc("Move every dependency to its branch or tag's current commit and rewrite lockstep.lock")]
 update-deps:
     {{deps}} cmake -S . -B {{build_dir}} -G "{{generator}}" -DCMAKE_BUILD_TYPE={{build_type}} -DLOCKSTEP_MODE=update
-    just build_dir={{build_dir}} build_type={{build_type}} configure
+    {{deps}} cmake -S . -B {{build_dir}} -G "{{generator}}" -DCMAKE_BUILD_TYPE={{build_type}} -DLOCKSTEP_MODE=locked
 
 [doc('Delete the build tree')]
 clean:
@@ -158,7 +159,7 @@ clean:
 # dependency's files don't match it.
 [doc('Configure the CMake build tree; safe to run again')]
 configure:
-    {{deps}} cmake -S . -B {{build_dir}} -G "{{generator}}" -DCMAKE_BUILD_TYPE={{build_type}} -DLOCKSTEP_MODE=locked
+    {{deps}} cmake -S . -B {{build_dir}} -G "{{generator}}" -DCMAKE_BUILD_TYPE={{build_type}}
 
 [doc('Clean rebuild')]
 rebuild: clean build
