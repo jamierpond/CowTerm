@@ -3,8 +3,7 @@
 lockstep_add_package(
         NAME NanoTest
         GITHUB_REPOSITORY eyalamirmusic/NanoTest
-        GIT_TAG main
-)
+        GIT_TAG main)
 
 # The PTY teardown, with each platform's own cases beside the shared ones.
 # Pty-Posix.cpp has no eacp dependencies, so it compiles straight into the test

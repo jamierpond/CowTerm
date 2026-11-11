@@ -4,8 +4,7 @@
 lockstep_add_package(
         NAME emberstore
         GITHUB_REPOSITORY tamber-inc/emberstore
-        GIT_TAG main
-)
+        GIT_TAG main)
 
 # On macOS the CowTermApp build target is an always-run packaging target: it
 # refreshes the bundled daemon and signs the completed app even when only the

@@ -1,8 +1,10 @@
 cmake_minimum_required(VERSION 3.31)
+
 set(CMAKE_OSX_DEPLOYMENT_TARGET "11.0" CACHE STRING "")
 set(LOCKSTEP_LIBRARY_CACHE ON CACHE BOOL
         "Link each locked package's static libraries from lockstep's shared library cache when an earlier build compiled them from the same inputs, instead of compiling them again")
 set(CMAKE_PROJECT_TOP_LEVEL_INCLUDES ${CMAKE_CURRENT_LIST_DIR}/cmake/lockstep.cmake)
+
 project(CowTerm VERSION 0.1.0 LANGUAGES C CXX)
 
 # CowTerm was extracted from the eacp monorepo (Apps/Terminal) into a
@@ -73,8 +75,7 @@ lockstep_add_package(
         NAME Rudder
         GITHUB_REPOSITORY jamierpond/Rudder
         GIT_TAG main
-        OPTIONS "RUDDER_CLIENT_ONLY ON"
-)
+        OPTIONS "RUDDER_CLIENT_ONLY ON")
 
 # eacp runs eacp_default_setup() only when it is the root project. We are the
 # root now, so point its target helper at CowTerm's own plist (the deployment
