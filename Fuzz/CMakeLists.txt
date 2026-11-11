@@ -1,5 +1,5 @@
 # Writes Snapshots.txt: the screen each corpus recording replays to, which
-# Test/FuzzCorpusReplayTests.cpp checks. Run by scripts/update-fuzz-snapshots.sh.
+# Tests/FuzzCorpusReplayTests.cpp checks. Run by scripts/update-fuzz-snapshots.sh.
 add_executable(CowTermWriteFuzzSnapshots WriteSnapshots.cpp)
 target_link_libraries(CowTermWriteFuzzSnapshots PRIVATE CowTerm::Core)
 
