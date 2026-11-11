@@ -42,9 +42,9 @@ build: configure
 build: configure
     {{deps}} cmake --build {{build_dir}} --target CowTerm
 
-[doc('Build and run the unit tests')]
+[doc('Build everything, then run every test')]
 test: configure
-    {{deps}} cmake --build {{build_dir}} --target CowTermTests CowTermScreenTests CowTermFuzzCorpusTests CowTermViewTests CowTermRenderTests CowTermSessionViewTests CowTermPermissionsTests CowTermRudderTests CowTermNotifyUserTests CowTermLeaderKeysTests CowTermCliTests CowTermFuzzyMatchTests CowTermPanelTests CowTermDaemonRestoreTests
+    {{deps}} cmake --build {{build_dir}}
     {{deps}} ctest --test-dir {{build_dir}} --output-on-failure
 
 # Every rebuild is a new ad-hoc identity to macOS, so it keeps the
