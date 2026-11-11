@@ -1,19 +1,12 @@
-# CowTerm — cross-platform build / run / install.
-# Requires: just, cmake, ninja (+ a C++20 toolchain). See README.md.
-#
-#   just build            configure + build the app (and its bundled daemon)
-#   just run              build, then launch the app
-#   just install          build, then install it to the usual place for this OS
-#   just build_type=Debug build      override the build type
-#   just clean            delete the build tree
-#   just update-deps      move every dependency to its branch/tag's current commit and rewrite lockstep.lock
+# CowTerm dev commands. Recipes are a line or two of cmake; the Linux and
+# Windows ones run under the dependency wrapper in `deps` below.
 
 # On Windows, run recipe bodies through PowerShell (the OS-specific recipes
 # below use PowerShell syntax); macOS/Linux use the default sh. Bypass, because
 # a stock Windows install runs no scripts at all, scripts/with-msvc.ps1 included.
 set windows-shell := ["powershell.exe", "-NoLogo", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command"]
 
-# --- Config (override on the command line, e.g. `just build_type=Debug build`) ---
+# Override on the command line, e.g. `just build_type=Debug build`.
 build_dir  := "build"
 generator  := "Ninja"
 build_type := "Release"
@@ -28,65 +21,45 @@ build_type := "Release"
 # scripts/with-msvc.ps1 brings it in from a plain shell. macOS needs neither.
 deps := if os() == "linux" { "scripts/with-linux-deps.sh" } else if os() == "windows" { "scripts/with-msvc.ps1" } else { "" }
 
-# Default: show the recipe list.
+# Show the recipe list by default.
 default:
     @just --list
 
-# Configure the CMake build tree (idempotent). lockstep fetches exactly the
-# commits in lockstep.lock and stops if a dependency's files don't match it.
-configure:
-    {{deps}} cmake -S . -B {{build_dir}} -G "{{generator}}" -DCMAKE_BUILD_TYPE={{build_type}} -DLOCKSTEP_MODE=locked
-
-# LOCKSTEP_MODE is cached, so configure sets it back to locked afterwards.
-update-deps:
-    {{deps}} cmake -S . -B {{build_dir}} -G "{{generator}}" -DCMAKE_BUILD_TYPE={{build_type}} -DLOCKSTEP_MODE=update
-    just build_dir={{build_dir}} build_type={{build_type}} configure
-
-# Build the app; CowTermDaemon builds as a dependency and is bundled alongside
-# it. CowTermApp (the always-run target that refreshes the bundled daemon) exists only on
-# macOS; elsewhere the executable target copies the daemon via POST_BUILD.
+# CowTermApp, the always-run target that refreshes the bundled daemon, exists
+# only on macOS; elsewhere the executable target copies the daemon in POST_BUILD.
+[doc('Configure + build the app; CowTermDaemon builds with it and is bundled alongside')]
 [macos]
 build: configure
     {{deps}} cmake --build {{build_dir}} --target CowTermApp
 
+[doc('Configure + build the app; CowTermDaemon builds with it and is bundled alongside')]
 [windows]
 build: configure
     {{deps}} cmake --build {{build_dir}} --target CowTerm
 
+[doc('Configure + build the app; CowTermDaemon builds with it and is bundled alongside')]
 [linux]
 build: configure
     {{deps}} cmake --build {{build_dir}} --target CowTerm
 
-# Build and run the unit tests (regression coverage, incl. the quit-hang fix).
+[doc('Build and run the unit tests')]
 test: configure
     {{deps}} cmake --build {{build_dir}} --target CowTermTests CowTermScreenTests CowTermFuzzCorpusTests CowTermViewTests CowTermRenderTests CowTermSessionViewTests CowTermPermissionsTests CowTermRudderTests CowTermNotifyUserTests CowTermLeaderKeysTests CowTermCliTests CowTermFuzzyMatchTests CowTermPanelTests CowTermDaemonRestoreTests
     {{deps}} ctest --test-dir {{build_dir}} --output-on-failure
 
-# Remove the build tree.
-[unix]
-clean:
-    rm -rf {{build_dir}}
-
-[windows]
-clean:
-    if (Test-Path "{{build_dir}}") { Remove-Item -Recurse -Force "{{build_dir}}" }
-
-# Clean rebuild.
-rebuild: clean build
-
-# Build, then launch the app.
-#
 # Every rebuild is a new ad-hoc identity to macOS, so it keeps the
 # old privacy grant switched on in System Settings while refusing it to the
 # new binary. Resetting before launch makes the app ask again for real. The
 # app does the reset itself (`CowTerm --reset-permissions [service]`, the same
 # code as CowTerm > Reset all permissions…), reading its own bundle id.
+[doc('Build, then launch the app')]
 [macos]
 run: build
     @echo "[run] resetting Accessibility for CowTerm"
     -@"{{build_dir}}/Terminal/CowTerm.app/Contents/MacOS/CowTerm" --reset-permissions Accessibility
     open "{{build_dir}}/Terminal/CowTerm.app"
 
+[doc('Build, then launch the app')]
 [windows]
 run: build
     & "{{build_dir}}\Terminal\CowTerm.exe"
@@ -104,27 +77,20 @@ run: build
 # every view falls back to rendering off-screen, and the window opens empty.
 # When the deps are installed system-wide instead, with-linux-deps.sh execs
 # straight through and this costs nothing.
+[doc('Build, then launch the app')]
 [linux]
 run: build
     {{deps}} "$(pwd)/{{build_dir}}/Terminal/CowTerm"
 
-# Build and run with popup tracing on. Reproduce the lazygit popup (Ctrl+A i),
-# then read /tmp/cowterm-popup.log — it records the popup's grid size, what the
-# command drew, and whether/why it closed. Quit the normal instance first so
-# they don't share a daemon.
-[macos]
-debug-popup: build
-    open -n --env COWTERM_POPUP_DEBUG=1 "{{build_dir}}/Terminal/CowTerm.app"
-
-# Build, then install the app to the usual place for this OS. On Windows a
-# running CowTerm locks its exe against overwrite but not rename, so the copy
-# falls back to renaming the live exe aside (*.old, cleaned up next run); a
-# running CowTerm and its daemon keep going, shells intact, until you switch
-# with Kill everything & quit (scripts/install-windows.ps1 says so).
+# On Windows a running CowTerm locks its exe against overwrite but not rename,
+# so the copy falls back to renaming the live exe aside (*.old, cleaned up next
+# run); a running CowTerm and its daemon keep going, shells intact, until you
+# switch with Kill everything & quit (scripts/install-windows.ps1 says so).
 # On macOS the bundle goes to ~/.local/libexec/cowterm. Also links `ct` (the
 # CowTerm executable's CLI mode) into ~/.local/bin. On Windows `ct` is a ct.cmd
 # there instead: CowTerm.exe is a GUI executable, which a shell would not wait
 # for, and a batch file makes it.
+[doc('Build, then install the app to the usual place for this OS')]
 [macos]
 install: build
     mkdir -p "$HOME/.local/bin" "$HOME/.local/libexec/cowterm"
@@ -133,6 +99,7 @@ install: build
     ln -sf "$HOME/.local/libexec/cowterm/CowTerm.app/Contents/MacOS/CowTerm" "$HOME/.local/bin/ct"
     @echo "Installed CowTerm.app to ~/.local/libexec/cowterm (ct -> ~/.local/bin/ct)"
 
+[doc('Build, then install the app to the usual place for this OS')]
 [windows]
 install: build
     scripts/install-windows.ps1 "{{build_dir}}" "$env:LOCALAPPDATA\Programs\CowTerm"
@@ -154,6 +121,7 @@ install: build
 # directory either way: DaemonClient.cpp finds CowTermDaemon next to
 # /proc/self/exe, so separating them is what leaves the app falling back to
 # in-process shells that die with the window.
+[doc('Build, then install the app to the usual place for this OS')]
 [linux]
 install: build
     mkdir -p "$HOME/.local/bin" "$HOME/.local/libexec/cowterm" "$HOME/.local/share/applications" "$HOME/.local/share/icons/hicolor/scalable/apps"
@@ -175,3 +143,30 @@ install: build
     -update-desktop-database "$HOME/.local/share/applications" 2>/dev/null
     -gtk-update-icon-cache -f -t "$HOME/.local/share/icons/hicolor" 2>/dev/null
     @echo "Installed to ~/.local/bin, with a desktop entry and icon"
+
+# LOCKSTEP_MODE is cached, so configure sets it back to locked afterwards.
+[doc("Move every dependency to its branch or tag's current commit and rewrite lockstep.lock")]
+update-deps:
+    {{deps}} cmake -S . -B {{build_dir}} -G "{{generator}}" -DCMAKE_BUILD_TYPE={{build_type}} -DLOCKSTEP_MODE=update
+    just build_dir={{build_dir}} build_type={{build_type}} configure
+
+[doc('Delete the build tree')]
+clean:
+    cmake -E rm -rf {{build_dir}}
+
+# lockstep fetches exactly the commits in lockstep.lock and stops if a
+# dependency's files don't match it.
+[doc('Configure the CMake build tree; safe to run again')]
+configure:
+    {{deps}} cmake -S . -B {{build_dir}} -G "{{generator}}" -DCMAKE_BUILD_TYPE={{build_type}} -DLOCKSTEP_MODE=locked
+
+[doc('Clean rebuild')]
+rebuild: clean build
+
+# Reproduce the lazygit popup (Ctrl+A i), then read /tmp/cowterm-popup.log: it
+# records the popup's grid size, what the command drew, and whether/why it
+# closed. Quit the normal instance first so they don't share a daemon.
+[doc('Build and run with popup tracing on')]
+[macos]
+debug-popup: build
+    open -n --env COWTERM_POPUP_DEBUG=1 "{{build_dir}}/Terminal/CowTerm.app"
