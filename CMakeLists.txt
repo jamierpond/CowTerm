@@ -95,7 +95,7 @@ add_subdirectory(Fuzz)
 
 # Unit tests, including the PTY teardown regressions (the quit-hang fix) for
 # both the POSIX PTY and ConPTY.
-option(COWTERM_ENABLE_TESTS "Build CowTerm unit tests" ON)
+option(COWTERM_ENABLE_TESTS "Build CowTerm unit tests" ${PROJECT_IS_TOP_LEVEL})
 if (COWTERM_ENABLE_TESTS)
     enable_testing()
     add_subdirectory(Tests)
