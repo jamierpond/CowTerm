@@ -3,14 +3,14 @@
 # It downloads the pinned lockstep binary and includes the CMake module it writes.
 cmake_minimum_required(VERSION 3.25)
 
-set(LOCKSTEP_VERSION 0.5.0)
+set(LOCKSTEP_VERSION 0.6.0)
 set(LOCKSTEP_RELEASE_URL https://github.com/jamierpond/lockstep/releases/download)
-set(LOCKSTEP_SHA256_macos-arm64 "b21c5f9e1ba14bd545b70a48da9989df97cef330b6936fecde538aa9fa57d160")
-set(LOCKSTEP_SHA256_macos-x64 "b21c5f9e1ba14bd545b70a48da9989df97cef330b6936fecde538aa9fa57d160")
-set(LOCKSTEP_SHA256_windows-x64 "3e48a8335130bbeca2f2baaaa3e12ebf47302c2df9423e549e2c04865857421d")
-set(LOCKSTEP_SHA256_windows-arm64 "4d67ed9287bc82359b8fda4007dac4010c0d37020c8873ec3c6654771f68ed90")
-set(LOCKSTEP_SHA256_linux-x64 "fc582fa9afcc585030c9fe16ee758abc66f2ad61a8131ebcd9fb349a1f376867")
-set(LOCKSTEP_SHA256_linux-arm64 "a39ece1e220c7b616b95fc7129f0f416d95d37aeabf232ff94698f2ea9e8ecce")
+set(LOCKSTEP_SHA256_macos-arm64 "18aa39ab7881871fb5b9b2c283c18b373d09a49dea8f234c51c8d7187c2d642d")
+set(LOCKSTEP_SHA256_macos-x64 "18aa39ab7881871fb5b9b2c283c18b373d09a49dea8f234c51c8d7187c2d642d")
+set(LOCKSTEP_SHA256_windows-x64 "80a6a37215d42331b7db814cb602f03805ceb7d03948d38fa338d8e6e24551d5")
+set(LOCKSTEP_SHA256_windows-arm64 "6b4ba029b73f63baa1a2655e421257f54dd10fa90d93e053264c224a4623f5b3")
+set(LOCKSTEP_SHA256_linux-x64 "88d8e06ec8763e45f512c5e35c25cecf0939a27d27f1cf3fd9d1618f34cb16d1")
+set(LOCKSTEP_SHA256_linux-arm64 "782dd3b53b5a7cd6efe27ccefeb6159d2e38e350efce82dae38b098b5349407a")
 
 set(LOCKSTEP_BOOTSTRAP "${CMAKE_CURRENT_LIST_FILE}")
 set(LOCKSTEP_CACHE "$ENV{LOCKSTEP_CACHE}" CACHE PATH "The shared lockstep cache")
