@@ -1,4 +1,5 @@
 cmake_minimum_required(VERSION 3.31)
+set(CMAKE_OSX_DEPLOYMENT_TARGET "11.0" CACHE STRING "")
 set(LOCKSTEP_LIBRARY_CACHE ON CACHE BOOL
         "Link each locked package's static libraries from lockstep's shared library cache when an earlier build compiled them from the same inputs, instead of compiling them again")
 set(CMAKE_PROJECT_TOP_LEVEL_INCLUDES ${CMAKE_CURRENT_LIST_DIR}/cmake/lockstep.cmake)
@@ -38,6 +39,10 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 # helpers (res_embed_add, eacp_set_gui_subsystem, eacp_set_app_icon, ...) that
 # the app's CMakeLists call. Examples/tests are top-level-only in eacp, so they
 # stay off here. Point lockstep at a local checkout with -DLOCKSTEP_eacp_SOURCE=/path.
+# eacp's C++20 modules are precompiled; skip module scanning as eacp does. Set
+# before eacp is added, so its libraries are built the same way in every pond app.
+set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
+
 # eacp develop, which carries PR #141 since it merged: Windows keys reach the
 # focused view, KeyEvent::charactersIgnoringModifiers is filled in (the Ctrl+A
 # leader matches on it), and removing a hovered nested subtree no longer leaves
@@ -48,6 +53,7 @@ lockstep_add_package(
         NAME eacp
         GITHUB_REPOSITORY eyalamirmusic/eacp
         GIT_TAG develop
+        SYSTEM YES
         OPTIONS
             "EACP_ENABLE_EXAMPLES OFF"
             "EACP_ENABLE_TESTS OFF")
@@ -71,18 +77,14 @@ lockstep_add_package(
 )
 
 # eacp runs eacp_default_setup() only when it is the root project. We are the
-# root now, so reproduce the deployment target and point its target helper at
-# CowTerm's own plist. A terminal is the responsible application for many
+# root now, so point its target helper at CowTerm's own plist (the deployment
+# target eacp would set is at the top: it only takes effect before project()). A terminal is the responsible application for many
 # privacy requests made by its child commands, so the generic eacp plist is not
 # sufficient here.
 if (APPLE)
-    set(CMAKE_OSX_DEPLOYMENT_TARGET "11.0" CACHE STRING "")
     set(EACP_MACOS_PLIST "${CMAKE_CURRENT_SOURCE_DIR}/Terminal/Info.plist.in"
             CACHE INTERNAL "CowTerm macOS bundle Info.plist template" FORCE)
 endif ()
-
-# eacp's C++20 modules are precompiled; skip module scanning as eacp does.
-set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
 
 # The libraries (see Lib/CMakeLists.txt), then the product built on them.
 add_subdirectory(Lib)
