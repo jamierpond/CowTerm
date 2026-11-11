@@ -11,7 +11,7 @@
 # running and how to switch over (a new CowTerm attaches to whichever daemon
 # is up, so the old one keeps serving until it is told to go).
 #
-#   Scripts/install-windows.ps1 <build dir> <install dir>
+#   scripts/install-windows.ps1 <build dir> <install dir>
 param(
     [Parameter(Mandatory)] [string] $BuildDir,
     [Parameter(Mandatory)] [string] $InstallDir

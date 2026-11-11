@@ -4,7 +4,7 @@
 # committed corpus. New interesting inputs go to build-fuzz/corpus, crashes to
 # build-fuzz/crashes. Copy a fixed crash into Fuzz/Corpus to keep it covered.
 #
-#   Scripts/run-parser-fuzzer [SECONDS] [extra libFuzzer flags...]
+#   scripts/run-parser-fuzzer.sh [SECONDS] [extra libFuzzer flags...]
 set -eu
 cd "$(dirname "$0")/.."
 seconds="${1:-300}"

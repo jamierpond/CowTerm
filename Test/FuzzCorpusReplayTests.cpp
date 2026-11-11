@@ -24,7 +24,7 @@ auto tCorpusReplaysToRecordedScreens = test("FuzzCorpus/everyRecordingReplaysToI
         const auto screen = term::fuzz::runParserFuzzInput(term::fuzz::readWholeFile(file));
         const auto snapshot = snapshots.find(name);
 
-        check(snapshot != snapshots.end(), name + " has no snapshot; run Scripts/update-fuzz-snapshots");
+        check(snapshot != snapshots.end(), name + " has no snapshot; run scripts/update-fuzz-snapshots.sh");
 
         if (snapshot != snapshots.end())
             check(snapshot->second == term::fuzz::hashText(screen), name + " no longer replays to its snapshot");

@@ -1,11 +1,11 @@
 # Writes Snapshots.txt: the screen each corpus recording replays to, which
-# Test/FuzzCorpusReplayTests.cpp checks. Run by Scripts/update-fuzz-snapshots.
+# Test/FuzzCorpusReplayTests.cpp checks. Run by scripts/update-fuzz-snapshots.sh.
 add_executable(CowTermWriteFuzzSnapshots WriteSnapshots.cpp)
 target_link_libraries(CowTermWriteFuzzSnapshots PRIVATE CowTerm::Core)
 
 # libFuzzer target for TermParser::feed and the screen it drives, under
 # AddressSanitizer and UndefinedBehaviorSanitizer. Needs a Clang that ships
-# libFuzzer (Apple's does not); Scripts/run-parser-fuzzer configures it.
+# libFuzzer (Apple's does not); scripts/run-parser-fuzzer.sh configures it.
 option(COWTERM_ENABLE_FUZZING "Build the TermParser libFuzzer target" OFF)
 
 if (COWTERM_ENABLE_FUZZING)

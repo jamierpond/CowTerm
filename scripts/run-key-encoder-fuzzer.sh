@@ -1,9 +1,9 @@
 #!/bin/sh
-# Builds the kitty key encoder's libFuzzer target the way run-parser-fuzzer
+# Builds the kitty key encoder's libFuzzer target the way run-parser-fuzzer.sh
 # builds the parser's, and fuzzes it for SECONDS (default 120) from an empty
 # corpus. Crashes go to build-fuzz/key-crashes.
 #
-#   Scripts/run-key-encoder-fuzzer [SECONDS] [extra libFuzzer flags...]
+#   scripts/run-key-encoder-fuzzer.sh [SECONDS] [extra libFuzzer flags...]
 set -eu
 cd "$(dirname "$0")/.."
 seconds="${1:-120}"

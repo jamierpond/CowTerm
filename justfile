@@ -10,7 +10,7 @@
 
 # On Windows, run recipe bodies through PowerShell (the OS-specific recipes
 # below use PowerShell syntax); macOS/Linux use the default sh. Bypass, because
-# a stock Windows install runs no scripts at all, Scripts/with-msvc.ps1 included.
+# a stock Windows install runs no scripts at all, scripts/with-msvc.ps1 included.
 set windows-shell := ["powershell.exe", "-NoLogo", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command"]
 
 # --- Config (override on the command line, e.g. `just build_type=Debug build`) ---
@@ -19,14 +19,14 @@ generator  := "Ninja"
 build_type := "Release"
 
 # A Linux build needs the Wayland, text and libcurl development packages that
-# eacp looks for with pkg-config, plus a compiler and ninja. Scripts/with-linux-deps
+# eacp looks for with pkg-config, plus a compiler and ninja. scripts/with-linux-deps.sh
 # uses the system's own if they are installed and otherwise borrows them from the
 # pinned dev shell in flake.nix, so the recipes below work either way.
 #
 # A Windows build needs the MSVC environment (cl, link, the SDK paths) that a
 # Developer PowerShell sets up, because Ninja runs the compiler directly;
-# Scripts/with-msvc.ps1 brings it in from a plain shell. macOS needs neither.
-deps := if os() == "linux" { "Scripts/with-linux-deps" } else if os() == "windows" { "Scripts/with-msvc.ps1" } else { "" }
+# scripts/with-msvc.ps1 brings it in from a plain shell. macOS needs neither.
+deps := if os() == "linux" { "scripts/with-linux-deps.sh" } else if os() == "windows" { "scripts/with-msvc.ps1" } else { "" }
 
 # Default: show the recipe list.
 default:
@@ -102,7 +102,7 @@ run: build
 # GPUView is created, and a binary the dev shell built cannot see a
 # /usr/lib one -- so without the shell around it the loader is simply absent,
 # every view falls back to rendering off-screen, and the window opens empty.
-# When the deps are installed system-wide instead, with-linux-deps execs
+# When the deps are installed system-wide instead, with-linux-deps.sh execs
 # straight through and this costs nothing.
 [linux]
 run: build
@@ -120,7 +120,7 @@ debug-popup: build
 # running CowTerm locks its exe against overwrite but not rename, so the copy
 # falls back to renaming the live exe aside (*.old, cleaned up next run); a
 # running CowTerm and its daemon keep going, shells intact, until you switch
-# with Kill everything & quit (Scripts/install-windows.ps1 says so).
+# with Kill everything & quit (scripts/install-windows.ps1 says so).
 # On macOS the bundle goes to ~/.local/libexec/cowterm. Also links `ct` (the
 # CowTerm executable's CLI mode) into ~/.local/bin. On Windows `ct` is a ct.cmd
 # there instead: CowTerm.exe is a GUI executable, which a shell would not wait
@@ -135,7 +135,7 @@ install: build
 
 [windows]
 install: build
-    Scripts/install-windows.ps1 "{{build_dir}}" "$env:LOCALAPPDATA\Programs\CowTerm"
+    scripts/install-windows.ps1 "{{build_dir}}" "$env:LOCALAPPDATA\Programs\CowTerm"
     $exe = "$env:LOCALAPPDATA\Programs\CowTerm\CowTerm.exe"; $ws = New-Object -ComObject WScript.Shell; @([Environment]::GetFolderPath('Desktop'), [Environment]::GetFolderPath('Programs')) | ForEach-Object { $s = $ws.CreateShortcut((Join-Path $_ 'CowTerm.lnk')); $s.TargetPath = $exe; $s.WorkingDirectory = (Split-Path $exe); $s.IconLocation = $exe; $s.Description = 'CowTerm'; $s.Save() }; Write-Host "Added Desktop and Start Menu shortcuts"
     ie4uinit.exe -show
     $exe = "$env:LOCALAPPDATA\Programs\CowTerm\CowTerm.exe"; $bin = "$HOME\.local\bin"; New-Item -ItemType Directory -Force -Path $bin | Out-Null; Set-Content -Encoding ascii "$bin\ct.cmd" "@if `"%~1`"==`"`" (`"$exe`" help) else (`"$exe`" %*)"; Write-Host "Added ct ($bin\ct.cmd)"
@@ -150,7 +150,7 @@ install: build
 # file is named for that id and repeats it in StartupWMClass.
 # The executables go in libexec rather than on PATH, with a generated launcher
 # in front of them, because on this OS the app needs its build dependencies at
-# run time too -- see Scripts/write-launcher. They have to sit together in one
+# run time too -- see scripts/write-launcher.sh. They have to sit together in one
 # directory either way: DaemonClient.cpp finds CowTermDaemon next to
 # /proc/self/exe, so separating them is what leaves the app falling back to
 # in-process shells that die with the window.
@@ -159,7 +159,7 @@ install: build
     mkdir -p "$HOME/.local/bin" "$HOME/.local/libexec/cowterm" "$HOME/.local/share/applications" "$HOME/.local/share/icons/hicolor/scalable/apps"
     cp "{{build_dir}}/Terminal/CowTerm" "$HOME/.local/libexec/cowterm/CowTerm"
     cp "{{build_dir}}/Terminal/CowTermDaemon" "$HOME/.local/libexec/cowterm/CowTermDaemon"
-    {{deps}} Scripts/write-launcher "$HOME/.local/libexec/cowterm/CowTerm" "$HOME/.local/bin/cowterm"
+    {{deps}} scripts/write-launcher.sh "$HOME/.local/libexec/cowterm/CowTerm" "$HOME/.local/bin/cowterm"
     # Earlier installs put both executables directly on PATH; leaving the old
     # daemon there would shadow nothing but would still confuse a `which`.
     rm -f "$HOME/.local/bin/CowTermDaemon"

@@ -4,7 +4,7 @@
 # tree, replays every input in CORPUS_DIR (default build-fuzz/corpus, the
 # fuzzer's generated corpus) through both, and diffs the screen hashes.
 #
-#   Scripts/compare-parser-snapshots [BASE] [CORPUS_DIR]
+#   scripts/compare-parser-snapshots.sh [BASE] [CORPUS_DIR]
 set -eu
 cd "$(dirname "$0")/.."
 base="${1:-jp/parser-fuzzer}"

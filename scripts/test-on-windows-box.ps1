@@ -1,4 +1,4 @@
-# The Windows half of Scripts/test-on-windows: brings ~/projects/CowTerm-remote
+# The Windows half of scripts/test-on-windows.sh: brings ~/projects/CowTerm-remote
 # to origin/<Branch>, lays ~/cowterm-overlay over it, then runs `just test`
 # and `just build`.
 param([string]$Branch)

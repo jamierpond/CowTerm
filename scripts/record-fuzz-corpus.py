@@ -4,8 +4,8 @@
 # keys into the pty's input after the given delays, and saves every byte the
 # program wrote, prefixed with the four-byte header Fuzz/ParserFuzzInput.h reads.
 #
-#   Scripts/record-fuzz-corpus OUT COLS ROWS 'command' [delaySeconds keys]...
-#   Scripts/record-fuzz-corpus Fuzz/Corpus/vim.bin 80 24 'vim -u NONE' 1 ':q\r'
+#   scripts/record-fuzz-corpus.py OUT COLS ROWS 'command' [delaySeconds keys]...
+#   scripts/record-fuzz-corpus.py Fuzz/Corpus/vim.bin 80 24 'vim -u NONE' 1 ':q\r'
 import os, pty, select, signal, struct, sys, termios, fcntl, time
 
 def readAvailable(fd, until):

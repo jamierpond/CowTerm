@@ -3,7 +3,7 @@
 # over ssh and runs `just test` and `just build` there, so uncommitted platform code gets run on
 # Linux too. HOST defaults to ubuntu-vm; the copy lives in ~/projects/CowTerm-remote.
 #
-#   Scripts/test-on-linux [HOST]
+#   scripts/test-on-linux.sh [HOST]
 set -eu
 cd "$(dirname "$0")/.."
 host="${1:-ubuntu-vm}"
