@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS arm64
+            os: macos-latest
+          - name: Ubuntu x64
+            os: ubuntu-24.04
+          - name: Windows x64
+            os: windows-latest
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    env:
+      LOCKSTEP_CACHE: ${{ github.workspace }}/.lockstep-cache
+    steps:
+      - uses: actions/checkout@v4
+
+      # lockstep's cache holds the package sources and the library cache, so a
+      # run with an unchanged lock compiles none of the packages again.
+      - uses: actions/cache@v4
+        with:
+          path: .lockstep-cache
+          key: lockstep-${{ matrix.os }}-${{ hashFiles('lockstep.lock', 'cmake/lockstep.cmake') }}
+
+      - uses: extractions/setup-just@v2
+
+      - name: Install ninja for the build
+        if: runner.os == 'macOS'
+        run: brew install ninja
+
+      # With these installed, scripts/with-linux-deps.sh finds them through
+      # pkg-config and runs each command directly, without nix.
+      - name: Install ninja and the Wayland, text and libcurl development packages eacp needs on Linux
+        if: runner.os == 'Linux'
+        run: >-
+          sudo apt-get update && sudo apt-get install -y ninja-build pkg-config
+          libwayland-dev wayland-protocols libwayland-bin libxkbcommon-dev libdecor-0-dev
+          libfreetype-dev libharfbuzz-dev libfontconfig-dev libcurl4-openssl-dev
+
+      - run: just build
+      - run: just test
