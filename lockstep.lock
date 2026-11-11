@@ -66,8 +66,8 @@
       "usesGitLfs": false
     },
     {
-      "commit": "8cfcbfa7bdf2214c8939502a349b7d4fb4ac73bb",
-      "hash": "1fb0ce608fe41c1ed15b0800fce2932c7ce63c4ad08e09d53e32a3c265fb231c",
+      "commit": "aabb5df2113db0c4a0eebf2142252f339e99cc62",
+      "hash": "e85af08b593d7f2509f73e0ee25494482d6a36df1d665c4e390145cb244f9fec",
       "kind": "git",
       "name": "ResEmbed",
       "patches": [],
@@ -130,12 +130,12 @@
       "usesGitLfs": false
     },
     {
-      "commit": "9a124ea146fa48e406eeb2120dd4cd8888d961a4",
-      "hash": "74ffff42245d21c6ff0c0ad5edec6b91ff62a4cf074c453d3833f26a4b2655b3",
+      "commit": "257563bee87e69bae41ecf29934c37f3eaec7e49",
+      "hash": "18142ae63e1d5485fefa46703415d6b204ff85f45db7d391c79aee146b1d1537",
       "kind": "git",
       "name": "eacp",
       "patches": [],
-      "requestedRef": "9a124ea146fa48e406eeb2120dd4cd8888d961a4",
+      "requestedRef": "develop",
       "submoduleSelection": {
         "isRecursive": true,
         "isRestricted": false,
@@ -194,6 +194,6 @@
       "usesGitLfs": false
     }
   ],
-  "root": "8c819e6cd3afbd1d52be72f58f3f33ce79f88985947e107504be0abc29305cd7",
+  "root": "622bbdfef073b390938509f359854f0c178c44519fdad85b0c493262ee2da54d",
   "version": 1
 }

@@ -1,4 +1,6 @@
 cmake_minimum_required(VERSION 3.31)
+set(LOCKSTEP_LIBRARY_CACHE ON CACHE BOOL
+        "Link each locked package's static libraries from lockstep's shared library cache when an earlier build compiled them from the same inputs, instead of compiling them again")
 set(CMAKE_PROJECT_TOP_LEVEL_INCLUDES ${CMAKE_CURRENT_LIST_DIR}/cmake/lockstep.cmake)
 project(CowTerm VERSION 0.1.0 LANGUAGES C CXX)
 
@@ -36,22 +38,16 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 # helpers (res_embed_add, eacp_set_gui_subsystem, eacp_set_app_icon, ...) that
 # the app's CMakeLists call. Examples/tests are top-level-only in eacp, so they
 # stay off here. Point lockstep at a local checkout with -DLOCKSTEP_eacp_SOURCE=/path.
-# Pinned to 9a124ea: upstream eacp develop (52313a8) plus PR #141
-# (eyalamirmusic/eacp branch jp/windows-key-focus). The PR carries three fixes
-# CowTerm depends on. Two are the Windows keyboard: keys reach the focused view
-# rather than only the window's content view, and
-# KeyEvent::charactersIgnoringModifiers is filled in, which the Ctrl+A leader
-# matches on. The third is the stale-mouse-target fix (once PR #38): without it
-# View::removeSubview clears hoveredView/mouseDownTarget for direct children
-# only, so removing a nested subtree while hovered leaves the root pointing at
-# a destroyed view and the next mouseExited is a use-after-free. Move back to
-# `develop` (not `main`, which lags it) once #141 lands.
+# eacp develop, which carries PR #141 since it merged: Windows keys reach the
+# focused view, KeyEvent::charactersIgnoringModifiers is filled in (the Ctrl+A
+# leader matches on it), and removing a hovered nested subtree no longer leaves
+# a dangling hoveredView. Not `main`, which lags develop.
 # Provides eacp-text (GlyphAtlas.h) and the IPC::Messenger layer the session
 # daemon and DaemonClient ride on.
 lockstep_add_package(
         NAME eacp
         GITHUB_REPOSITORY eyalamirmusic/eacp
-        GIT_TAG 9a124ea146fa48e406eeb2120dd4cd8888d961a4
+        GIT_TAG develop
         OPTIONS
             "EACP_ENABLE_EXAMPLES OFF"
             "EACP_ENABLE_TESTS OFF")
