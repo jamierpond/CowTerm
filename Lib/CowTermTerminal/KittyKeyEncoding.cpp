@@ -15,7 +15,6 @@ namespace KeyCode = eacp::Graphics::KeyCode;
 
 namespace
 {
-constexpr auto escapeCode = char32_t {27};
 constexpr auto deleteCode = char32_t {0x7f};
 constexpr auto firstPrintableCode = char32_t {0x20};
 constexpr auto firstAppleFunctionKeyCode = char32_t {0xF700};

@@ -85,6 +85,9 @@ if (APPLE)
             CACHE INTERNAL "CowTerm macOS bundle Info.plist template" FORCE)
 endif ()
 
+# Set after the packages, so only CowTerm's own targets build with -Werror.
+set(CMAKE_COMPILE_WARNING_AS_ERROR ON)
+
 # The libraries (see Lib/CMakeLists.txt), then the product built on them.
 add_subdirectory(Lib)
 add_subdirectory(Daemon)

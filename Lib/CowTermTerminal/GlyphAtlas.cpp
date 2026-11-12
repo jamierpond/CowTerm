@@ -29,7 +29,8 @@ void registerEmbeddedFonts()
             if (resource.size() == 0)
                 continue;
 
-            Text::registerMemoryFont(resource.data(), resource.size());
+            const auto resourceSize = static_cast<int>(resource.size());
+            Text::registerMemoryFont(resource.data(), resourceSize);
         }
 
         return true;
