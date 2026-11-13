@@ -2,6 +2,7 @@
 #include <CowTermTerminal/CopyMode.h>
 #include <CowTermTerminal/GridPainter.h>
 #include <CowTermTerminal/KeyEncoding.h>
+#include <CowTermTerminal/LinkDetection.h>
 #include <CowTermTerminal/MacKeyCodes.h>
 
 #include <CowTermCore/TermParser.h>
@@ -269,6 +270,98 @@ auto tTextBetweenWide = test("ViewLogic/wideCharactersAppearOnce") = []
 {
     const auto parsed = ParsedScreen {"\xe4\xb8\xad!"};
     check(extractTextBetween(parsed.screen, {0, 0}, {0, 5}) == "\xe4\xb8\xad!");
+};
+
+auto tTextAcrossSoftWrap = test("ViewLogic/copyJoinsSoftWrappedRowsWithoutANewline") = []
+{
+    const auto parsed = ParsedScreen {"0123456789abcdefghij klmn\r\nnext"};
+
+    check(parsed.screen.lineAt(0, 0).wrapped);
+    check(extractTextBetween(parsed.screen, {0, 0}, {2, 3}) == "0123456789abcdefghij klmn\nnext");
+};
+
+auto tSpaceAtTheWrapIsKept = test("ViewLogic/copyKeepsASpaceThatEndsAWrappedRow") = []
+{
+    const auto parsed = ParsedScreen {"0123456789abcdefghi word"};
+
+    check(extractTextBetween(parsed.screen, {0, 0}, {1, 3}) == "0123456789abcdefghi word");
+};
+
+// ---- links --------------------------------------------------------------------
+
+namespace
+{
+std::string findUrlTextAround(std::string_view text, std::size_t byteIndex)
+{
+    const auto range = findUrlAround(text, byteIndex);
+
+    if (!range)
+        return {};
+
+    return std::string {text.substr(range->begin, range->end - range->begin)};
+}
+} // namespace
+
+auto tUrlInText = test("Links/findsAUrlAroundTheIndex") = []
+{
+    constexpr auto text = std::string_view {"see https://a.test/x?q=1 now"};
+    constexpr auto insideUrl = 10;
+    constexpr auto onSee = 1;
+
+    check(findUrlTextAround(text, insideUrl) == "https://a.test/x?q=1");
+    check(findUrlTextAround(text, onSee).empty());
+};
+
+auto tUrlTrimsPunctuation = test("Links/urlLeavesOffTrailingPunctuationAndUnmatchedBrackets") = []
+{
+    constexpr auto insideUrl = 8;
+
+    check(findUrlTextAround("(https://a.test/x).", insideUrl) == "https://a.test/x");
+    check(findUrlTextAround("https://w.test/Rust_(game), ok", insideUrl)
+          == "https://w.test/Rust_(game)");
+    check(findUrlTextAround("'https://a.test/'", insideUrl) == "https://a.test/");
+    check(findUrlTextAround("x-app://run", insideUrl).empty(), "only openable schemes");
+    check(findUrlTextAround("https://", insideUrl - 1).empty(), "a bare scheme is no link");
+};
+
+auto tUrlAcrossSoftWrap = test("Links/urlRunsAcrossSoftWrappedRows") = []
+{
+    const auto parsed = ParsedScreen {"go https://a.test/long/path ok"};
+    constexpr auto secondRow = 1L;
+    constexpr auto lastUrlColumn = 6;
+
+    const auto fromFirstRow = findLinkAt(parsed.screen, {0, 5});
+    const auto fromSecondRow = findLinkAt(parsed.screen, {secondRow, 2});
+
+    check(fromFirstRow && fromFirstRow->uri == "https://a.test/long/path");
+    check(fromSecondRow && fromSecondRow->uri == "https://a.test/long/path");
+    check(fromFirstRow->span.start == CellRef {0, 3});
+    check(fromFirstRow->span.end == CellRef {secondRow, lastUrlColumn});
+    check(!findLinkAt(parsed.screen, {secondRow, lastUrlColumn + 2}), "the word after it");
+};
+
+auto tUrlStopsAtHardNewline = test("Links/urlStopsAtARealNewline") = []
+{
+    const auto parsed = ParsedScreen {"https://a.test/\r\nmore"};
+    const auto link = findLinkAt(parsed.screen, {0, 2});
+
+    check(link && link->uri == "https://a.test/");
+    check(!findLinkAt(parsed.screen, {1, 1}));
+};
+
+auto tOsc8AcrossSoftWrap = test("Links/osc8LinkSpansItsCellsAcrossTheWrap") = []
+{
+    const auto parsed = ParsedScreen {
+        "0123456789abcdef\033]8;;https://x.test\033\\label text\033]8;;\033\\ after"};
+    constexpr auto secondRow = 1L;
+    constexpr auto labelStart = CellRef {0, 16};
+    constexpr auto labelEnd = CellRef {secondRow, 5};
+
+    const auto link = findLinkAt(parsed.screen, {secondRow, 1});
+
+    check(link && link->uri == "https://x.test");
+    check(link->span.start == labelStart && link->span.end == labelEnd);
+    check(!findLinkAt(parsed.screen, {secondRow, 7}));
 };
 
 auto tVisibleRowText = test("ViewLogic/visibleRowTextStopsAtTheColumns") = []

@@ -2,6 +2,7 @@
 
 #include "GlyphAtlas.h"
 #include "GridSelection.h"
+#include "LinkDetection.h"
 
 #include "CowTermCore/TermScreen.h"
 
@@ -99,6 +100,7 @@ class GridPainter
 public:
     GridPainter(const PaintTools& toolsToUse,
                 const SelectionRange& selectionToShow,
+                const std::optional<LinkSpan>& hoveredLinkToUnderline,
                 bool blinkingTextVisible);
 
     // Rasterize ahead of the first draw so the atlas uploads once a frame.
@@ -143,10 +145,16 @@ private:
                       eacp::Graphics::Point cellOrigin,
                       Rgb foreground,
                       RowDrawing& drawing);
-    void addCellDecorations(const ResolvedCell& cell,
-                            eacp::Graphics::Point cellOrigin,
-                            Rgb foreground,
-                            RowDrawing& drawing);
+    float measureCellWidth(const ResolvedCell& cell) const;
+    void addCellUnderline(const ResolvedCell& cell,
+                          eacp::Graphics::Point cellOrigin,
+                          Rgb foreground,
+                          RowDrawing& drawing);
+    void addCellStrikethrough(const ResolvedCell& cell,
+                              eacp::Graphics::Point cellOrigin,
+                              Rgb foreground,
+                              RowDrawing& drawing);
+    bool isInHoveredLink(CellRef cell) const;
     void drawGlyphOverCursor(eacp::Graphics::Point cellOrigin,
                              const PaintedLine& line,
                              int column);
@@ -154,6 +162,7 @@ private:
 
     PaintTools tools;
     const SelectionRange& selection;
+    const std::optional<LinkSpan>& hoveredLink;
     bool blinkVisible;
 };
 } // namespace term

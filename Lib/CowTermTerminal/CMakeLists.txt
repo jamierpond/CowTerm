@@ -12,6 +12,7 @@ add_library(CowTermTerminal STATIC
         RowDrawingCache.cpp
         KeyEncoding.cpp
         KittyKeyEncoding.cpp
+        LinkDetection.cpp
         OutputParserThread.cpp)
 
 if (MSVC)

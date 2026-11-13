@@ -122,7 +122,8 @@ public:
     std::function<void(const std::string&)> onNotify = [](const std::string&) {};
     eacp::Callback onShellExit = [] {};
 
-    // Cmd-click (Ctrl-click off macOS) on an OSC 8 hyperlink; the host opens it.
+    // Cmd-click (Ctrl-click off macOS) on an OSC 8 hyperlink or a URL in the
+    // text; the host opens it.
     std::function<void(const std::string&)> onOpenHyperlink = [](const std::string&) {};
 
     // Fired when the user clicks into this pane; the session view moves its
@@ -162,6 +163,8 @@ public:
     void mouseDown(const eacp::Graphics::MouseEvent& event) override;
     void mouseDragged(const eacp::Graphics::MouseEvent& event) override;
     void mouseUp(const eacp::Graphics::MouseEvent& event) override;
+    void mouseMoved(const eacp::Graphics::MouseEvent& event) override;
+    void mouseExited(const eacp::Graphics::MouseEvent& event) override;
     void mouseWheel(const eacp::Graphics::MouseEvent& event) override;
 
 private:
@@ -174,6 +177,8 @@ private:
     void showParsedOutput();
     void reportFocusIfChanged();
     bool openHyperlinkUnderPointer(const eacp::Graphics::MouseEvent& event);
+    std::optional<DetectedLink> findLinkUnderPointer(const eacp::Graphics::MouseEvent& event) const;
+    void setHoveredLink(std::optional<LinkSpan> link);
     void repaintUnlessSynchronized();
     void repaintIfShown();
     void startSynchronizedOutputTimeout();
@@ -276,6 +281,7 @@ private:
     bool selecting = false;
     CellRef selectionAnchor;
     SelectionRange selection;
+    std::optional<LinkSpan> hoveredLink;
     RowDrawingCache rowDrawings;
 
     bool copyMode = false;

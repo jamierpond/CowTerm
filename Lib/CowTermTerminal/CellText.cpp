@@ -22,6 +22,31 @@ void removeTrailingSpaces(std::string& text)
         text.pop_back();
 }
 
+std::string extractRowText(const TermScreen& screen, const Line& line, int fromCol, int toCol)
+{
+    auto text = std::string {};
+    const auto lastCol = std::min(toCol, (int) line.size() - 1);
+
+    for (auto col = fromCol; col <= lastCol; ++col)
+    {
+        const auto& cell = line[(std::size_t) col];
+
+        if (!cell.hasFlag(CellFlag::WideCont))
+            appendCellText(text, screen, cell);
+    }
+
+    return text;
+}
+
+bool isWordCharacterAt(const Line& line, int column)
+{
+    if (column < 0 || column >= (int) line.size())
+        return false;
+
+    return !line[(std::size_t) column].isSpace();
+}
+} // namespace
+
 void appendCellText(std::string& out, const TermScreen& screen, const Cell& cell)
 {
     const auto resolved = screen.resolveCell(cell);
@@ -36,23 +61,6 @@ void appendCellText(std::string& out, const TermScreen& screen, const Cell& cell
         appendUtf8(out, codepoint);
 }
 
-std::string extractRowText(const TermScreen& screen, const Line& line, int fromCol, int toCol)
-{
-    auto text = std::string {};
-    const auto lastCol = std::min(toCol, (int) line.size() - 1);
-
-    for (auto col = fromCol; col <= lastCol; ++col)
-    {
-        const auto& cell = line[(std::size_t) col];
-
-        if (!cell.hasFlag(CellFlag::WideCont))
-            appendCellText(text, screen, cell);
-    }
-
-    removeTrailingSpaces(text);
-    return text;
-}
-
 // Grid rows sit past the scrollback and resolve to negative offsets, down to
 // -(rows - 1) for the bottom line.
 bool isAbsoluteRowStored(const TermScreen& screen, long row)
@@ -61,12 +69,29 @@ bool isAbsoluteRowStored(const TermScreen& screen, long row)
     return offset > -screen.rows() && offset <= screen.scrollbackSize();
 }
 
-bool isWordCharacterAt(const Line& line, int column)
+namespace
 {
-    if (column < 0 || column >= (int) line.size())
-        return false;
+// A soft-wrapped row runs straight on, keeping a space that ended it.
+void appendSelectedRowText(const TermScreen& screen,
+                           long row,
+                           const SelectionRange& selected,
+                           std::string& result)
+{
+    const auto& line = findLineAtAbsoluteRow(screen, row);
+    const auto isLastRow = row == selected.end.row;
+    const auto fromCol = row == selected.start.row ? selected.start.col : 0;
+    const auto toCol = isLastRow ? selected.end.col : (int) line.size() - 1;
+    const auto runsOnToNextRow = line.wrapped && !isLastRow;
 
-    return !line[(std::size_t) column].isSpace();
+    auto rowText = extractRowText(screen, line, fromCol, toCol);
+
+    if (!runsOnToNextRow)
+        removeTrailingSpaces(rowText);
+
+    result += rowText;
+
+    if (!isLastRow && !runsOnToNextRow)
+        result.push_back('\n');
 }
 } // namespace
 
@@ -108,17 +133,8 @@ std::string extractTextBetween(const TermScreen& screen, CellRef start, CellRef 
 
     for (auto row = start.row; row <= end.row; ++row)
     {
-        if (!isAbsoluteRowStored(screen, row))
-            continue;
-
-        const auto& line = findLineAtAbsoluteRow(screen, row);
-        const auto fromCol = row == start.row ? start.col : 0;
-        const auto toCol = row == end.row ? end.col : (int) line.size() - 1;
-
-        result += extractRowText(screen, line, fromCol, toCol);
-
-        if (row != end.row)
-            result.push_back('\n');
+        if (isAbsoluteRowStored(screen, row))
+            appendSelectedRowText(screen, row, {start, end, true}, result);
     }
 
     return result;

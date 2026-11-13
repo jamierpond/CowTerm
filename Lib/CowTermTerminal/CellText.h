@@ -15,14 +15,20 @@ const Line& findLineAtAbsoluteRow(const TermScreen& screen, long row);
 
 long findLastAbsoluteRow(const TermScreen& screen);
 
+bool isAbsoluteRowStored(const TermScreen& screen, long row);
+
+// The cell's character, or its whole grapheme cluster, as UTF-8.
+void appendCellText(std::string& out, const TermScreen& screen, const Cell& cell);
+
 // Columns up to the last non-blank cell.
 int measureInkLength(const Line& line);
 
 // Every cell's character up to `columns`, trailing blanks trimmed.
 std::string extractVisibleRowText(const TermScreen& screen, const Line& line, int columns);
 
-// The text from `start` to `end` inclusive, one line per row, each trimmed of
-// trailing blanks. Rows outside the buffer are skipped.
+// The text from `start` to `end` inclusive. A soft-wrapped row runs straight
+// on into the next; other rows end in a newline, trimmed of trailing blanks.
+// Rows outside the buffer are skipped.
 std::string extractTextBetween(const TermScreen& screen, CellRef start, CellRef end);
 
 struct WordSpan

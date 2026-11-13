@@ -132,9 +132,11 @@ std::vector<BackgroundRun> findBackgroundRuns(const PaintedRow& row,
 
 GridPainter::GridPainter(const PaintTools& toolsToUse,
                          const SelectionRange& selectionToShow,
+                         const std::optional<LinkSpan>& hoveredLinkToUnderline,
                          bool blinkingTextVisible)
     : tools(toolsToUse)
     , selection(selectionToShow)
+    , hoveredLink(hoveredLinkToUnderline)
     , blinkVisible(blinkingTextVisible)
 {
 }
@@ -206,12 +208,18 @@ void GridPainter::addRowInk(const PaintedRow& row, RowDrawing& drawing)
         if (!isCellInkShown(cell))
             continue;
 
-        const auto selected = selection.contains({row.absoluteRow, col});
+        const auto ref = CellRef {row.absoluteRow, col};
+        const auto selected = selection.contains(ref);
         const auto foreground = findCellColours(cell, selected, tools.theme).foreground;
         const auto origin = Point {tools.margins.x + (float) col * cellW, row.y};
+        const auto isUnderlined = hasAttribute(cell, Attr::Underline) || isInHoveredLink(ref);
 
         addCellGlyph(cell, origin, foreground, drawing);
-        addCellDecorations(cell, origin, foreground, drawing);
+
+        if (isUnderlined)
+            addCellUnderline(cell, origin, foreground, drawing);
+
+        addCellStrikethrough(cell, origin, foreground, drawing);
     }
 }
 
@@ -356,28 +364,38 @@ void GridPainter::addCellGlyph(const ResolvedCell& cell,
                      });
 }
 
-void GridPainter::addCellDecorations(const ResolvedCell& cell,
-                                     Point cellOrigin,
-                                     Rgb foreground,
-                                     RowDrawing& drawing)
+float GridPainter::measureCellWidth(const ResolvedCell& cell) const
 {
     const auto cellW = tools.atlas.cellWidth();
-    const auto width = hasAttribute(cell, Attr::Wide) ? cellW * doubleCellWidth : cellW;
+    return hasAttribute(cell, Attr::Wide) ? cellW * doubleCellWidth : cellW;
+}
 
-    if (hasAttribute(cell, Attr::Underline))
-    {
-        const auto y = cellOrigin.y + tools.atlas.baseline() + underlineGapBelowBaseline;
-        drawing.decorations.push_back({{cellOrigin.x, y, width, decorationThickness},
-                                       toColor(foreground)});
-    }
+void GridPainter::addCellUnderline(const ResolvedCell& cell,
+                                   Point cellOrigin,
+                                   Rgb foreground,
+                                   RowDrawing& drawing)
+{
+    const auto y = cellOrigin.y + tools.atlas.baseline() + underlineGapBelowBaseline;
+    drawing.decorations.push_back(
+        {{cellOrigin.x, y, measureCellWidth(cell), decorationThickness}, toColor(foreground)});
+}
 
-    if (hasAttribute(cell, Attr::Strike))
-    {
-        const auto y =
-            cellOrigin.y + tools.atlas.cellHeight() * strikethroughHeightFraction;
-        drawing.decorations.push_back({{cellOrigin.x, y, width, decorationThickness},
-                                       toColor(foreground)});
-    }
+void GridPainter::addCellStrikethrough(const ResolvedCell& cell,
+                                       Point cellOrigin,
+                                       Rgb foreground,
+                                       RowDrawing& drawing)
+{
+    if (!hasAttribute(cell, Attr::Strike))
+        return;
+
+    const auto y = cellOrigin.y + tools.atlas.cellHeight() * strikethroughHeightFraction;
+    drawing.decorations.push_back(
+        {{cellOrigin.x, y, measureCellWidth(cell), decorationThickness}, toColor(foreground)});
+}
+
+bool GridPainter::isInHoveredLink(CellRef cell) const
+{
+    return hoveredLink && hoveredLink->contains(cell);
 }
 
 void GridPainter::drawGlyphOverCursor(Point cellOrigin, const PaintedLine& line, int column)

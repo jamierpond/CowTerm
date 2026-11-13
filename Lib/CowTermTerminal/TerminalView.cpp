@@ -463,7 +463,7 @@ PaintedRow TerminalView::describeVisibleRow(int visualRow) const
 
 GridPainter TerminalView::makePainter()
 {
-    return {{*atlas, *sprites, *glyphs, theme, {marginX, marginY}}, selection, blinkOn};
+    return {{*atlas, *sprites, *glyphs, theme, {marginX, marginY}}, selection, hoveredLink, blinkOn};
 }
 
 std::string TerminalView::describeCopyModePosition() const
@@ -1034,23 +1034,60 @@ void TerminalView::sendMouseReport(const MouseEvent& event,
     send(encodeSgrMouseReport({button, pressed, motion, cell.column + 1, cell.visualRow + 1}));
 }
 
+std::optional<DetectedLink>
+    TerminalView::findLinkUnderPointer(const MouseEvent& event) const
+{
+    const auto isLinkModifierHeld = Platform::isMac() ? event.modifiers.command
+                                                      : event.modifiers.control;
+
+    if (!isLinkModifierHeld)
+        return std::nullopt;
+
+    return findLinkAt(screen, cellRefAt(event.pos));
+}
+
 bool TerminalView::openHyperlinkUnderPointer(const MouseEvent& event)
 {
-    const auto isLinkClick = Platform::isMac() ? event.modifiers.command
-                                               : event.modifiers.control;
-
-    if (!isLinkClick || event.button != Graphics::MouseButton::Left)
+    if (event.button != Graphics::MouseButton::Left)
         return false;
 
-    const auto cell = findCellUnderPointer(event.pos);
-    const auto& line = screen.lineAt(cell.visualRow, scrollOffset);
-    const auto uri = screen.findHyperlinkUri(line[(std::size_t) cell.column].hyperlink);
+    const auto link = findLinkUnderPointer(event);
 
-    if (!hasOpenableScheme(uri))
+    if (!link)
         return false;
 
-    onOpenHyperlink(std::string {uri});
+    onOpenHyperlink(link->uri);
     return true;
+}
+
+void TerminalView::setHoveredLink(std::optional<LinkSpan> link)
+{
+    if (!hoveredLink && !link)
+        return;
+
+    hoveredLink = link;
+    rowDrawings.invalidateAllRows();
+    repaintIfShown();
+}
+
+void TerminalView::mouseMoved(const MouseEvent& event)
+{
+    const auto lock = lockTerminal();
+    const auto link = findLinkUnderPointer(event);
+
+    if (!link)
+    {
+        setHoveredLink(std::nullopt);
+        return;
+    }
+
+    setHoveredLink(link->span);
+}
+
+void TerminalView::mouseExited(const MouseEvent&)
+{
+    const auto lock = lockTerminal();
+    setHoveredLink(std::nullopt);
 }
 
 void TerminalView::mouseDown(const MouseEvent& event)

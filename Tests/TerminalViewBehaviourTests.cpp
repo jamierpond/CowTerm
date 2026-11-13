@@ -813,6 +813,61 @@ auto tLinkClickOpensTheHyperlink = test("View/linkClickOpensTheHyperlink") = []
     check(linked.opened.empty(), "text after the link's end opens nothing");
 };
 
+auto tLinkClickOpensAPlainTextUrl = test("View/linkClickOpensAUrlWrittenAsText") = []
+{
+    auto linked = LinkPane {};
+    linked.pane.showOutput("see https://example.com/a. done");
+
+    linked.pane.view->mouseDown(linkClickAtCell(6, 0));
+    check(linked.opened == "https://example.com/a");
+};
+
+namespace
+{
+constexpr auto underlineSearchRows = 4;
+
+// Whether any pixel in the strip under a cell's baseline, where an underline
+// sits and lowercase letters leave background, has the colour.
+bool isUnderlinePainted(const Graphics::Image& image, int col, int row, Rgb expected)
+{
+    const auto& atlas = referenceAtlas();
+    const auto x = marginX + ((float) col + 0.5f) * atlas.cellWidth();
+    const auto baselineY = marginY + (float) row * atlas.cellHeight() + atlas.baseline();
+    const auto firstY = (int) std::floor(baselineY) + 1;
+
+    for (auto y = firstY; y < firstY + underlineSearchRows; ++y)
+    {
+        if (matches(image.at((int) x, y), expected))
+            return true;
+    }
+
+    return false;
+}
+} // namespace
+
+auto tHoverUnderlinesTheLink = test("View/linkModifierHoverUnderlinesTheWholeLink") = []
+{
+    auto pane = TestPane {};
+    pane.showOutput("x https://example.com/a y");
+    constexpr auto hoveredColumn = 5;
+    constexpr auto otherLinkColumn = 15;
+    constexpr auto plainColumn = 24;
+
+    pane.view->mouseMoved(linkClickAtCell(hoveredColumn, 0));
+    const auto image = pane.view->renderToImage(1.f);
+
+    if (image.width() == 0)
+        return;
+
+    check(isUnderlinePainted(image, otherLinkColumn, 0, defaultTheme.foreground));
+    check(!isUnderlinePainted(image, plainColumn, 0, defaultTheme.foreground));
+
+    pane.view->mouseMoved(mouseAtCell(hoveredColumn, 0));
+    const auto released = pane.view->renderToImage(1.f);
+    check(!isUnderlinePainted(released, otherLinkColumn, 0, defaultTheme.foreground),
+          "without the modifier the underline goes");
+};
+
 auto tPlainClickOnALinkSelects = test("View/aPlainClickOnALinkOpensNothing") = []
 {
     auto linked = LinkPane {};
