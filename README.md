@@ -1,3 +1,5 @@
+> This is a vibe-coded app for my personal productivity, it is not intended for other people or to represent great engineering work. Use at your own risk!
+
 <div align="center">
 
 <img src="Terminal/Icon.png" alt="CowTerm" width="180" />
