@@ -73,7 +73,8 @@ nano_add_executable(CowTermSessionViewTests
             ../Terminal/SessionView.cpp
             ../Terminal/Config.cpp
             ../Terminal/UsageLog.cpp
-        TARGETS CowTerm::Terminal eacp-ui SessionLog)
+            ../Terminal/DataDirectories.cpp
+        TARGETS CowTerm::Terminal eacp-ui SessionLog PondApp)
 
 target_include_directories(CowTermSessionViewTests PRIVATE ../Terminal)
 
@@ -118,7 +119,8 @@ nano_add_executable(CowTermPanelTests
             ../Terminal/TextLayout.cpp
             ../Terminal/Config.cpp
             ../Terminal/UsageLog.cpp
-        TARGETS CowTerm::Terminal eacp-ui emberstore FrecencySearch SearchKeys SessionLog)
+            ../Terminal/DataDirectories.cpp
+        TARGETS CowTerm::Terminal eacp-ui emberstore FrecencySearch SearchKeys SessionLog PondApp)
 
 target_include_directories(CowTermPanelTests PRIVATE ../Terminal)
 
