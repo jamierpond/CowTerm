@@ -34,8 +34,8 @@ struct AppConfig
 
     // Config bindings run before the built-in leader table, so a binding
     // here can also re-purpose a built-in key.
-    std::vector<KeyBinding> bindings = {{.key = "u", .send = "cd ..\n"},
-                                        {.key = "n", .send = "nvim .\n"}};
+    std::vector<KeyBinding> bindings = {{.key = "u", .send = "cd ..\n", .popup = ""},
+                                        {.key = "n", .send = "nvim .\n", .popup = ""}};
 
     MIRO_REFLECT(searchDirs, font, fontSize, theme, bindings)
 };

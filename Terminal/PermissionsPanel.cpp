@@ -275,15 +275,15 @@ void PermissionsPanel::resetAll()
 
 PermissionsPanel::Layout PermissionsPanel::layout() const
 {
-    const auto bounds = getLocalBounds();
+    const auto localBounds = getLocalBounds();
     const auto count = (float) permissions::all().size();
-    const auto width = std::min(cardWidth, bounds.w - 40.0f);
+    const auto width = std::min(cardWidth, localBounds.w - 40.0f);
     const auto height = headerHeight + count * rowHeight + 8.0f + detailHeight
                         + (bannerShown() ? bannerHeight + 8.0f : 0.0f) + footerHeight;
 
     auto at = Layout {};
-    at.card = {(bounds.w - width) / 2.0f,
-               std::max((bounds.h - height) / 2.0f, 12.0f),
+    at.card = {(localBounds.w - width) / 2.0f,
+               std::max((localBounds.h - height) / 2.0f, 12.0f),
                width,
                height};
 
@@ -449,8 +449,8 @@ void PermissionsPanel::mouseDown(const MouseEvent& event)
     // Starting the drag opens the pane, so the list is there to drop on.
     if (isDragTileActive() && at.tile.contains(pos))
     {
-        if (auto* host = getHost())
-            platform::startAppDrag(*host);
+        if (auto* panelHost = getHost())
+            platform::startAppDrag(*panelHost);
 
         platform::openSettings(selectedInfo().kind);
     }
@@ -553,13 +553,13 @@ void PermissionsPanel::paintRow(UI::Graphics& g, const Layout& at, int i)
 
 void PermissionsPanel::loadAppIconOnce()
 {
-    auto* host = getHost();
+    auto* panelHost = getHost();
 
-    if (icon != nullptr || host == nullptr)
+    if (icon != nullptr || panelHost == nullptr)
         return;
 
     if (auto image = platform::appIcon())
-        icon = host->getImageCache().get(image);
+        icon = panelHost->getImageCache().get(image);
 }
 
 // Rudder's tile: the app's icon in a green-edged card, dragged from.

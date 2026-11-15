@@ -414,42 +414,42 @@ void SessionView::removeLeaf(Node* leaf)
     if (closingActive)
         active = nullptr;
 
-    auto* parent = leaf->parent;
-    collapseIntoSurvivingSibling(*parent, *leaf);
+    auto* parentSplit = leaf->parent;
+    collapseIntoSurvivingSibling(*parentSplit, *leaf);
 
     layout();
 
     if (closingActive)
-        setActive(findFirstLeafUnder(parent));
+        setActive(findFirstLeafUnder(parentSplit));
     else
         onActivePaneChanged();
 }
 
 // The parent split collapses into the surviving subtree. The old children
 // (including `closing`) are destroyed by the reassignments.
-void SessionView::collapseIntoSurvivingSibling(Node& parent, const Node& closing)
+void SessionView::collapseIntoSurvivingSibling(Node& collapsingSplit, const Node& closing)
 {
-    auto sibling =
-        std::move(parent.first.get() == &closing ? parent.second : parent.first);
+    auto sibling = std::move(collapsingSplit.first.get() == &closing ? collapsingSplit.second
+                                                                     : collapsingSplit.first);
 
-    // The sibling's contents move up into the parent and the sibling node
+    // The sibling's contents move up into the parent split and the sibling node
     // dies with this scope. If the sibling was the active leaf, the parent is
     // now that leaf; left alone, `active` would point at a node whose view
     // has just been moved out.
     if (active == sibling.get())
-        active = &parent;
+        active = &collapsingSplit;
 
-    parent.view = std::move(sibling->view);
-    parent.horizontal = sibling->horizontal;
-    parent.ratio = sibling->ratio;
-    parent.first = std::move(sibling->first);
-    parent.second = std::move(sibling->second);
+    collapsingSplit.view = std::move(sibling->view);
+    collapsingSplit.horizontal = sibling->horizontal;
+    collapsingSplit.ratio = sibling->ratio;
+    collapsingSplit.first = std::move(sibling->first);
+    collapsingSplit.second = std::move(sibling->second);
 
-    if (parent.first != nullptr)
-        parent.first->parent = &parent;
+    if (collapsingSplit.first != nullptr)
+        collapsingSplit.first->parent = &collapsingSplit;
 
-    if (parent.second != nullptr)
-        parent.second->parent = &parent;
+    if (collapsingSplit.second != nullptr)
+        collapsingSplit.second->parent = &collapsingSplit;
 }
 
 SessionView::Node* SessionView::findFirstLeafUnder(Node* node) const

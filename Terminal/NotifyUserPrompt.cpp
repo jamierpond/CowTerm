@@ -99,8 +99,8 @@ std::string NotifyUserPrompt::truncateTextToWidth(const std::string& source,
 
 float NotifyUserPrompt::calculateLineHeight(const UI::Font& font) const
 {
-    if (auto* host = getHost())
-        return host->getLineHeight(font);
+    if (auto* promptHost = getHost())
+        return promptHost->getLineHeight(font);
 
     return font.pointSize * contentLineSpacing;
 }

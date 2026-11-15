@@ -203,22 +203,22 @@ void Switcher::mouseMove(const MouseEvent& event)
 
 float Switcher::cardWidth() const
 {
-    const auto bounds = getLocalBounds();
+    const auto localBounds = getLocalBounds();
     const auto n = std::max((int) order.size(), 1);
-    const auto avail = std::max(bounds.w - windowSideMargin, minimumAvailableWidth) - pad * 2.0f;
+    const auto avail = std::max(localBounds.w - windowSideMargin, minimumAvailableWidth) - pad * 2.0f;
 
     return std::clamp((avail - gap * (float) (n - 1)) / (float) n, minCard, maxCard);
 }
 
 Rect Switcher::calculatePanelBounds() const
 {
-    const auto bounds = getLocalBounds();
+    const auto localBounds = getLocalBounds();
     const auto n = std::max((int) order.size(), 1);
     const auto cardW = cardWidth();
     const auto width = pad * 2.0f + cardW * (float) n + gap * (float) (n - 1);
 
-    return {(bounds.w - width) / 2.0f,
-            (bounds.h - panelHeight) / 2.0f,
+    return {(localBounds.w - width) / 2.0f,
+            (localBounds.h - panelHeight) / 2.0f,
             width,
             panelHeight};
 }
