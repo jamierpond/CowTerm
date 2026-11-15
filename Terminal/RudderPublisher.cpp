@@ -12,13 +12,25 @@ namespace
 // A directory under ~/projects being created is often a clone or an unpack:
 // a burst of events. Rescan once it settles.
 constexpr auto placesRescanDelay = eacp::Time::MS {500};
+
+// Rudder's client is a silent stub on Linux and its protocol library defines no
+// endpoint there, so CowTerm passes an empty one rather than link a missing symbol.
+std::string findRudderEndpoint()
+{
+#if defined(__linux__)
+    return {};
+#else
+    return rudder::protocol::endpoint();
+#endif
+}
 } // namespace
 
 RudderPublisher::RudderPublisher(const AppConfig& configToUse,
                                  SessionManager& managerToUse)
     : config(configToUse)
     , manager(managerToUse)
-    , client(rudder::protocol::Hello {"CowTerm", "com.eacp.cowterm", 0, true})
+    , client(rudder::protocol::Hello {"CowTerm", "com.eacp.cowterm", 0, true},
+             findRudderEndpoint())
 {
     client.onActivate = [this](const std::string& contextId) { activate(contextId, true); };
 
