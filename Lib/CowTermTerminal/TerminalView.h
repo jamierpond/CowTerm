@@ -179,6 +179,7 @@ private:
     bool openHyperlinkUnderPointer(const eacp::Graphics::MouseEvent& event);
     std::optional<DetectedLink> findLinkUnderPointer(const eacp::Graphics::MouseEvent& event) const;
     void setHoveredLink(std::optional<LinkSpan> link);
+    eacp::Graphics::MouseCursor getCursorForHoveredLink() const;
     void repaintUnlessSynchronized();
     void repaintIfShown();
     void startSynchronizedOutputTimeout();

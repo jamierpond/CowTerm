@@ -1060,12 +1060,21 @@ bool TerminalView::openHyperlinkUnderPointer(const MouseEvent& event)
     return true;
 }
 
+eacp::Graphics::MouseCursor TerminalView::getCursorForHoveredLink() const
+{
+    if (hoveredLink)
+        return eacp::Graphics::MouseCursor::PointingHand;
+
+    return eacp::Graphics::MouseCursor::Default;
+}
+
 void TerminalView::setHoveredLink(std::optional<LinkSpan> link)
 {
     if (!hoveredLink && !link)
         return;
 
     hoveredLink = link;
+    setMouseCursor(getCursorForHoveredLink());
     rowDrawings.invalidateAllRows();
     repaintIfShown();
 }
