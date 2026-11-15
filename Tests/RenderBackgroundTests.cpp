@@ -70,8 +70,9 @@ Graphics::Image renderAfter(const std::string& command)
     auto config = TerminalConfig {};
     auto view = TerminalView {config, "/tmp", {}, command + "; sleep 30"};
 
-    // Also what builds the renderers -- they are made in resized().
+    // Off-screen, setBounds alone never calls resized(), which builds the renderers.
     view.setBounds({0.f, 0.f, viewWidth, viewHeight});
+    view.resized();
 
     Threads::runEventLoopUntil(
         [&view] { return view.debugScreenText().find("HELLO") != std::string::npos; },
