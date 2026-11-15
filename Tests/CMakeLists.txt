@@ -207,7 +207,6 @@ target_include_directories(CowTermRemoteAppTests PRIVATE ../Terminal)
 add_executable(CowTermRenderPicker
         ../Bench/RenderPicker.cpp
         ../Terminal/Command.cpp
-        ../Terminal/Command-Posix.cpp
         ../Terminal/Config.cpp
         ../Terminal/DaemonClient.cpp
         ../Terminal/DataDirectories.cpp
@@ -225,6 +224,12 @@ add_executable(CowTermRenderPicker
         ../Terminal/SshBridgeLink.cpp
         ../Terminal/TextLayout.cpp
         ../Terminal/UsageLog.cpp)
+if (WIN32)
+    target_sources(CowTermRenderPicker PRIVATE ../Terminal/Command-Windows.cpp)
+    target_compile_options(CowTermRenderPicker PRIVATE /utf-8)
+else ()
+    target_sources(CowTermRenderPicker PRIVATE ../Terminal/Command-Posix.cpp)
+endif ()
 target_include_directories(CowTermRenderPicker PRIVATE ../Terminal)
 target_link_libraries(CowTermRenderPicker PRIVATE
         CowTerm::Terminal CowTermRemote eacp-ui eacp-text emberstore FrecencySearch SearchKeys SessionLog PondApp)
