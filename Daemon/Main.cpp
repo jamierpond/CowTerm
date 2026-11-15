@@ -6,6 +6,7 @@
 // app gets the whole terminal state, and that state is saved to disk so a
 // pane comes back with its screen and history after the daemon restarts.
 
+#include "DataDirectories.h"
 #include "Protocol.h"
 #include "Signals.h"
 #include "CowTermCore/Pty.h"
@@ -16,6 +17,7 @@
 #include <eacp/Core/Utils/Files.h>
 #include <eacp/Network/IPC/Messenger.h>
 #include <emberstore/AppDatabase.h>
+#include <SessionLog/EventLine.h>
 
 #include <algorithm>
 #include <array>
@@ -56,11 +58,16 @@ struct DaemonPane
     bool hasUnsavedChanges = false;
 };
 
-// A named instance keeps its panes apart from the user's live ones.
-std::string paneStoreName()
+// Moves the panes from where an older daemon kept them, before opening them.
+emberstore::Database openPaneStore()
 {
-    const auto suffix = term::proto::instanceSuffix();
-    return suffix.empty() ? std::string {"cowterm-panes"} : "cowterm-panes-" + suffix;
+    if (auto move = term::moveOldPaneStore())
+        LOG(sessionlog::formatEventLine(
+            "daemon.migrate",
+            {{"from", move->from.string()}, {"to", move->to.string()}, {"error", move->error}}));
+
+    return emberstore::Database {eacp::FilePath {term::getPaneStoreDirectory().string()},
+                                 emberstore::Durability::Atomic};
 }
 
 struct Daemon
@@ -338,8 +345,7 @@ struct Daemon
     std::map<std::string, std::unique_ptr<DaemonPane>> panes;
     IPC::Messenger* client = nullptr;
     int idleTicks = 0;
-    emberstore::Database paneStore = emberstore::databaseForApp(
-        "tamber", paneStoreName(), emberstore::Durability::Atomic);
+    emberstore::Database paneStore = openPaneStore();
 
     IPC::MessageServer server {term::proto::serverName()};
     Threads::Timer idleTimer {[this] { checkIdle(); }, 10};

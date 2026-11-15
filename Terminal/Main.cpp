@@ -2,11 +2,13 @@
 #include "Cli.h"
 #include "CowTermVersion.h"
 #include "DaemonClient.h"
+#include "Protocol.h"
 #include "UsageLog.h"
 
 #include <eacp/Core/App/App.h>
 #include <eacp/Core/Platform/Platform.h>
 #include <eacp/Graphics/Menu/Menu.h>
+#include <PondApp/SingleInstance.h>
 
 #include <cstdio>
 #include <utility>
@@ -15,6 +17,15 @@ using namespace eacp;
 
 namespace
 {
+// A named instance ($COWTERM_INSTANCE) runs beside the user's own CowTerm.
+pondapp::SingleInstance& getRunningInstanceClaim()
+{
+    const auto suffix = term::proto::instanceSuffix();
+    static auto claim = pondapp::SingleInstance {
+        suffix.empty() ? std::string {"com.pond.cowterm"} : "com.pond.cowterm." + suffix};
+    return claim;
+}
+
 Graphics::WindowOptions windowOptions()
 {
     auto options = Graphics::WindowOptions {};
@@ -60,6 +71,14 @@ struct TerminalApp
         Apps::setReopenHandler(
             [this]
             {
+                window.setVisible(true);
+                window.toFront();
+            });
+
+        getRunningInstanceClaim().setSecondLaunchHandler(
+            [this](const std::vector<std::string>&)
+            {
+                term::logUsage("app.second-launch");
                 window.setVisible(true);
                 window.toFront();
             });
@@ -123,6 +142,12 @@ int main(int argc, char** argv)
 {
     if (term::isCliInvocation(argc, argv))
         return term::runCli(argc, argv);
+
+    auto& claim = getRunningInstanceClaim();
+
+    if (!claim.isTheRunningInstance()
+        && claim.handOverToRunningInstance(pondapp::getLaunchArguments(argc, argv)))
+        return pondapp::exitCodeAnotherInstanceIsRunning;
 
     std::fprintf(stderr,
                  "CowTerm %s (%s)\n",

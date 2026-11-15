@@ -180,7 +180,7 @@ target_link_libraries(CowTermScreenMemoryBench PRIVATE CowTerm::Core)
 nano_add_executable(CowTermDaemonRestoreTests
         SOURCES
             DaemonRestoreTests.cpp
-        TARGETS CowTerm::Core eacp-network)
+        TARGETS CowTerm::Core eacp-network PondApp)
 
 target_include_directories(CowTermDaemonRestoreTests PRIVATE ../Terminal)
 target_compile_definitions(CowTermDaemonRestoreTests

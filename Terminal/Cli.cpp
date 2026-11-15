@@ -11,6 +11,7 @@
 #include "CliParsing.h"
 #include "CliPlatform.h"
 #include "CowTermVersion.h"
+#include "DataDirectories.h"
 #include "NotifyUserClient.h"
 #include "Permissions.h"
 #include "Protocol.h"
@@ -206,7 +207,7 @@ fs::path stateFile()
     const auto name = instance != nullptr && instance[0] != '\0'
                           ? "screen-cap." + std::string {instance} + ".json"
                           : std::string {"screen-cap.json"};
-    return eacp::toStdPath(eacp::FilePath::appDataDirectory()) / "CowTerm" / name;
+    return term::getDataDirectory() / name;
 }
 
 std::optional<Recording> readState()

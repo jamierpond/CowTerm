@@ -1,10 +1,9 @@
 #include "UsageLog.h"
+#include "DataDirectories.h"
 
 #include <SessionLog/SessionLog.h>
 
-#include <eacp/Core/Utils/FilePath.h>
 #include <eacp/Core/Utils/Logging.h>
-#include <eacp/Core/Utils/StdPath.h>
 
 #include <chrono>
 
@@ -23,10 +22,14 @@ std::int64_t getNowEpochMs()
 
 void startUsageLog()
 {
-    const auto logsDirectory =
-        (eacp::toStdPath(eacp::FilePath::appDataDirectory()) / "CowTerm" / "logs").string();
+    const auto moves = moveOldAppData();
+    const auto logsDirectory = getLogsDirectory().string();
     eacp::setLogFile(sessionlog::getSessionLogPath(logsDirectory, getNowEpochMs()));
     sessionlog::deleteOldSessionLogs(logsDirectory, sessionLogsToKeep);
+
+    for (const auto& move: moves)
+        logUsage("app.migrate",
+                 {{"from", move.from.string()}, {"to", move.to.string()}, {"error", move.error}});
 }
 
 void logUsage(std::string_view event, std::initializer_list<sessionlog::Field> fields)

@@ -7,8 +7,9 @@
 
 namespace term
 {
-// Sends this launch's usage lines to <app data>/CowTerm/logs/<startEpochMs>.log
-// and deletes all but the newest session logs. Call once, at launch.
+// Moves CowTerm's old data into pond/CowTerm (logged as app.migrate), sends
+// this launch's usage lines to pond/CowTerm/logs/<startEpochMs>.log and deletes
+// all but the newest session logs. Call once, at launch.
 void startUsageLog();
 
 // One `<event> key=value ...` line about what the user did. Never pass pane

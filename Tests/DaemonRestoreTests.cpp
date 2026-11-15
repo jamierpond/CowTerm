@@ -1,11 +1,13 @@
 #include <CowTermCore/TermState.h>
 #include <Protocol.h>
+#include <PondApp/DataDirectory.h>
 
 #include <NanoTest/NanoTest.h>
 #include <eacp/Core/Core.h>
 #include <eacp/Core/Utils/Files.h>
 #include <eacp/Network/IPC/Messenger.h>
 
+#include <filesystem>
 #include <optional>
 #include <string>
 #include <chrono>
@@ -168,5 +170,6 @@ auto tPaneComesBackAfterDaemonRestart = test("DaemonRestore/paneComesBackAfterDa
         second.quitDaemon();
     }
 
-    Files::removeAll(FilePath::appDataDirectory() / "tamber" / ("cowterm-panes-" + instance));
+    std::filesystem::remove_all(pondapp::getPondAppDataDirectory("CowTerm")
+                                / ("panes-" + instance));
 };
