@@ -1,5 +1,5 @@
 #include "SessionView.h"
-#include "DaemonClient.h"
+#include "PaneTerminalConfig.h"
 #include "HostColours.h"
 #include "UsageLog.h"
 

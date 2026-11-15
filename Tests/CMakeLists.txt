@@ -209,6 +209,7 @@ add_executable(CowTermRenderPicker
         ../Terminal/Command.cpp
         ../Terminal/Config.cpp
         ../Terminal/DaemonClient.cpp
+        ../Terminal/PaneTerminalConfig.cpp
         ../Terminal/DataDirectories.cpp
         ../Terminal/HostColours.cpp
         ../Terminal/MruStore.cpp
@@ -240,6 +241,7 @@ add_executable(CowTermRunRemotePopup
         ../Bench/RunRemotePopup.cpp
         ../Terminal/Config.cpp
         ../Terminal/DaemonClient.cpp
+        ../Terminal/PaneTerminalConfig.cpp
         ../Terminal/DataDirectories.cpp
         ../Terminal/Popup.cpp
         ../Terminal/Projects.cpp

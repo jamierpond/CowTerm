@@ -1,7 +1,7 @@
 #include "Popup.h"
 
 #include "CowTermVersion.h"
-#include "DaemonClient.h"
+#include "PaneTerminalConfig.h"
 
 #include "Emulator/Debug.h"
 

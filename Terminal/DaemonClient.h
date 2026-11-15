@@ -1,10 +1,8 @@
 #pragma once
 
-#include "Config.h"
 #include "DaemonLink.h"
 
-#include "Shell/Pty.h"
-#include "TerminalView/TerminalView.h"
+#include "Shell/Shell.h"
 
 #include <eacp/Core/Threads/Timer.h>
 
@@ -15,12 +13,14 @@
 
 namespace term
 {
-// The widget's slice of the user's config, wired to the daemon of the
-// machine the panes live on: this one when host is empty, otherwise the
-// remote host's (see RemoteHosts.h). How the app builds every TerminalView.
-TerminalConfig terminalConfig(const AppConfig& config,
-                              const std::string& host = {},
-                              const std::string& sessionName = {});
+// A pane's shell in this machine's daemon, or in-process when the daemon
+// is unreachable.
+std::unique_ptr<Shell> makeLocalShell(const std::string& shellId);
+
+// A pane's shell in host's daemon, in that daemon's session sessionName.
+std::unique_ptr<Shell> makeRemoteShell(const std::string& shellId,
+                                       const std::string& host,
+                                       const std::string& sessionName);
 
 // The app's end of a session daemon: one conversation carrying every pane.
 // Shells are keyed by stable id — spawn adopts a still-running shell

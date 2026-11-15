@@ -46,7 +46,8 @@ add_executable(${COWTERM_EXECUTABLE_TARGET}
         TextLayout.cpp
         TrayController.cpp
         UsageLog.cpp
-        DaemonClient.cpp)
+        DaemonClient.cpp
+        PaneTerminalConfig.cpp)
 
 # Per-platform halves of ct, shell commands, the places watcher,
 # notifications and trash. Privacy grants come from Rudder's PermissionsPanel.
