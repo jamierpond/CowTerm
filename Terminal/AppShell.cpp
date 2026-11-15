@@ -453,12 +453,7 @@ bool AppShell::isLeaderPrefixKey(const KeyEvent& event)
 
 bool AppShell::doesKeyTogglePopup(const std::string& characters) const
 {
-    if (characters == "i")
-        return true;
-
-    return std::ranges::any_of(config.bindings,
-                               [&](const KeyBinding& binding)
-                               { return !binding.popup.empty() && characters == binding.key; });
+    return characters == "i";
 }
 
 bool AppShell::popupKey(const KeyEvent& event)
@@ -543,24 +538,6 @@ bool AppShell::runKeyAction(std::span<const KeyAction> actions,
         return false;
 
     (this->*found->action)();
-    return true;
-}
-
-bool AppShell::runConfigBinding(const std::string& characters)
-{
-    const auto found = std::ranges::find_if(
-        config.bindings,
-        [&](const KeyBinding& binding)
-        { return !binding.key.empty() && characters == binding.key; });
-
-    if (found == config.bindings.end())
-        return false;
-
-    if (!found->send.empty())
-        withActivePane([&](TerminalView& pane) { pane.sendText(found->send); });
-    else if (!found->popup.empty())
-        showPopup(found->popup);
-
     return true;
 }
 
@@ -686,8 +663,7 @@ bool AppShell::runPrefixedKey(const KeyEvent& event)
     if (event.modifiers.control && characters == "a")
         return false;
 
-    // Config bindings first, so ~/.config/cowterm.json can override built-ins.
-    if (runConfigBinding(characters) || runArrowKey(event))
+    if (runArrowKey(event))
         return true;
 
     if (runPaneDirectionKey(characters) || runKeyAction(leaderActions, characters))
