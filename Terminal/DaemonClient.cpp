@@ -282,11 +282,14 @@ public:
             return false;
 
         auto routes = DaemonClient::Routes {};
-        routes.onOutput = onOutput;
-        routes.onState = onRestoreState;
+        routes.onOutput = std::move(onOutput);
+        routes.onState = [restore = onRestoreState, status = onStatusChanged](const std::string& state)
+        {
+            status({});
+            restore(state);
+        };
         routes.onExit = std::move(onExit);
-        routes.onLinkLost = [onOutput](const std::string& reason)
-        { onOutput(describeLinkLost(reason)); };
+        routes.onLinkLost = onStatusChanged;
 
         client->spawn({id, options.size, options.workingDirectory, sessionName},
                       std::move(routes));
@@ -345,12 +348,6 @@ public:
     }
 
 private:
-    // Drawn into the pane; the redraw on re-attach replaces it.
-    static std::string describeLinkLost(const std::string& reason)
-    {
-        return "\r\n\x1b[7m cowterm: " + reason + " \x1b[0m\r\n";
-    }
-
     std::string id;
     std::string sessionName;
     FindDaemon findDaemon;

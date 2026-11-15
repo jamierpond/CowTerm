@@ -38,6 +38,12 @@ public:
     // never call it.
     std::function<void(const std::string&)> onRestoreState =
         [](const std::string&) {};
+
+    // Set before start(). A short note about the shell's connection for the
+    // pane to show over its text ("tamby: connection lost; reconnecting…"),
+    // or empty to clear it; local shells never call it.
+    std::function<void(const std::string&)> onStatusChanged =
+        [](const std::string&) {};
 };
 
 // In-process shell: the pane owns the PTY directly. detach() still kills —

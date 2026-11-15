@@ -29,10 +29,8 @@ constexpr auto labelSeparator = " · ";
 
 struct NotifyUserServer::OpenPrompt
 {
-    OpenPrompt(IPC::Messenger& messengerToUse,
-               const AppConfig& config,
-               NotifyUserPromptText text)
-        : messenger(messengerToUse)
+    OpenPrompt(Asker askerToUse, const AppConfig& config, NotifyUserPromptText text)
+        : asker(std::move(askerToUse))
         , prompt(config, std::move(text))
     {
         host.setBackgroundColour(toColor(themeByName(config.theme).background));
@@ -41,7 +39,7 @@ struct NotifyUserServer::OpenPrompt
 
     bool isAnswered() const { return answered; }
 
-    IPC::Messenger& messenger;
+    Asker asker;
     NotifyUserPrompt prompt;
     UI::ComponentHost host;
     std::unique_ptr<Graphics::Window> window;
@@ -75,11 +73,14 @@ void NotifyUserServer::adoptClient(IPC::Messenger& messenger)
 {
     messenger.onMessage = [this, &messenger](const std::string& body)
     {
+        auto asker = Asker {&messenger,
+                            [&messenger](const std::string& reply) { messenger.send(reply); }};
+
         if (const auto request = decodeNotifyUserRequest(body))
-            showPromptWindowForRequest(messenger, *request);
+            showPromptForRequest(asker, *request);
     };
 
-    messenger.onDisconnected = [this, &messenger] { closePromptLater(messenger); };
+    messenger.onDisconnected = [this, &messenger] { closePromptLater(&messenger); };
 }
 
 NotifyUserPaneLabel
@@ -101,10 +102,14 @@ NotifyUserPaneLabel
     return {request.title, subtitle};
 }
 
-void NotifyUserServer::showPromptWindowForRequest(IPC::Messenger& messenger,
-                                                  const NotifyUserRequest& request)
+void NotifyUserServer::closePromptFor(const void* identity)
 {
-    closePromptNow(messenger);
+    closePromptLater(identity);
+}
+
+void NotifyUserServer::showPromptForRequest(const Asker& asker, const NotifyUserRequest& request)
+{
+    closePromptNow(asker.identity);
 
     const auto label = labelPaneForRequest(request);
 
@@ -116,7 +121,7 @@ void NotifyUserServer::showPromptWindowForRequest(IPC::Messenger& messenger,
     text.allowsTypedResponse = request.allowsTypedResponse;
 
     auto& prompt = *openPrompts.emplace_back(
-        std::make_unique<OpenPrompt>(messenger, config, std::move(text)));
+        std::make_unique<OpenPrompt>(asker, config, std::move(text)));
 
     const auto paneId = request.paneId;
     prompt.prompt.onShowPane = [this, paneId] { onShowPane(paneId); };
@@ -163,31 +168,31 @@ void NotifyUserServer::answerPrompt(OpenPrompt& prompt, const NotifyUserReply& r
         return;
 
     prompt.answered = true;
-    prompt.messenger.send(encodeNotifyUserReply(reply));
-    closePromptLater(prompt.messenger);
+    prompt.asker.sendReply(encodeNotifyUserReply(reply));
+    closePromptLater(prompt.asker.identity);
 }
 
 // Deferred: the request to close arrives inside the prompt's own event handler
 // or the window's close, neither of which may destroy itself mid-call.
-void NotifyUserServer::closePromptLater(const IPC::Messenger& messenger)
+void NotifyUserServer::closePromptLater(const void* identity)
 {
     for (auto& prompt: openPrompts)
-        if (&prompt->messenger == &messenger && prompt->window != nullptr)
+        if (prompt->asker.identity == identity && prompt->window != nullptr)
             prompt->window->setVisible(false);
 
     Threads::callAsync(
-        [this, &messenger, guard = std::weak_ptr<bool> {alive}]
+        [this, identity, guard = std::weak_ptr<bool> {alive}]
         {
             if (!guard.expired())
-                closePromptNow(messenger);
+                closePromptNow(identity);
         });
 }
 
-void NotifyUserServer::closePromptNow(const IPC::Messenger& messenger)
+void NotifyUserServer::closePromptNow(const void* identity)
 {
     std::erase_if(openPrompts,
                   [&](const std::unique_ptr<OpenPrompt>& prompt)
-                  { return &prompt->messenger == &messenger; });
+                  { return prompt->asker.identity == identity; });
 
     if (openPrompts.empty())
         promptsOpenedSinceAllClosed = 0;

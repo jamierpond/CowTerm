@@ -51,6 +51,16 @@ public:
     std::function<void(RemoteHost& host, const std::string& name, const std::string& layout)>
         onLayout = [](RemoteHost&, const std::string&, const std::string&) {};
 
+    // `ct notify-user` ran in one of this host's panes: the encoded request,
+    // and its id to answer with sendNotifyUserReply. Cancelled when that ct
+    // goes away.
+    std::function<void(RemoteHost& host, const std::string& requestId, const std::string& request)>
+        onNotifyUserRequest = [](RemoteHost&, const std::string&, const std::string&) {};
+    std::function<void(RemoteHost& host, const std::string& requestId)> onNotifyUserCancelled =
+        [](RemoteHost&, const std::string&) {};
+
+    void sendNotifyUserReply(const std::string& requestId, const std::string& reply);
+
 private:
     void connect();
     void handleConnected();

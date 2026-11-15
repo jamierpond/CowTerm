@@ -217,7 +217,34 @@ void AppShell::wireRemoteHosts()
 
         remote->onLayout = [this](RemoteHost&, const std::string&, const std::string& layout)
         { manager.adoptRemoteSession(layout); };
+
+        remote->onNotifyUserRequest = [this](RemoteHost& host, const std::string& id, const std::string& body)
+        { showRemoteNotifyUserPrompt(host, id, body); };
+
+        remote->onNotifyUserCancelled = [this](RemoteHost& host, const std::string& id)
+        { notifyUserServer.closePromptFor(findRemoteAskerIdentity(host, id)); };
     }
+}
+
+// A remote request's identity: one token per host and request id, kept until
+// the app quits (a handful of small strings per prompt ever shown).
+const void* AppShell::findRemoteAskerIdentity(RemoteHost& host, const std::string& id)
+{
+    return &*remoteAskerIdentities.insert(host.getHost() + "/" + id).first;
+}
+
+void AppShell::showRemoteNotifyUserPrompt(RemoteHost& host, const std::string& id, const std::string& body)
+{
+    const auto request = decodeNotifyUserRequest(body);
+
+    if (!request)
+        return;
+
+    auto asker = NotifyUserServer::Asker {
+        findRemoteAskerIdentity(host, id),
+        [&host, id](const std::string& reply) { host.sendNotifyUserReply(id, reply); }};
+
+    notifyUserServer.showPromptForRequest(asker, *request);
 }
 
 void AppShell::rudderChanged()

@@ -23,7 +23,12 @@ target_include_directories(CowTermRemote
 target_link_libraries(CowTermRemote PUBLIC eacp-network)
 set_default_target_setting(CowTermRemote)
 
-add_executable(CowTermCli CtMain.cpp ../Terminal/Config.cpp)
+add_executable(CowTermCli
+        CtMain.cpp
+        ../Terminal/CliParsing.cpp
+        ../Terminal/Config.cpp
+        ../Terminal/NotifyUserClient.cpp
+        ../Terminal/NotifyUserProtocol.cpp)
 target_link_libraries(CowTermCli PRIVATE CowTermRemote CowTerm::Core)
 add_dependencies(CowTermCli CowTermVersion)
 target_include_directories(CowTermCli PRIVATE ${PROJECT_BINARY_DIR}/generated)

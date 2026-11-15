@@ -254,6 +254,8 @@ private:
     void drawCursor(GridPainter& painter);
     bool isCursorBlinkingNow() const;
     void drawCopyMode(GridPainter& painter, const std::string& indicator);
+    void showShellStatus(const std::string& status);
+    bool isCursorLayerVisible() const;
 
     Theme theme;
     std::string fontName;
@@ -271,6 +273,7 @@ private:
     // as opaque red, and batching turns a screen of cells into one draw call.
     std::optional<eacp::Text::GlyphRenderer> glyphs;
     std::string paneShellId;
+    std::string shellStatus;
     bool commandTerminal = false;
     std::unique_ptr<Shell> shell;
 

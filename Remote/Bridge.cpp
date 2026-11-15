@@ -9,6 +9,7 @@
 #include <eacp/Core/Threads/Timer.h>
 
 #include <array>
+#include <map>
 #include <csignal>
 #include <cstdlib>
 #include <thread>
@@ -74,6 +75,9 @@ struct BridgeApp
 
         relay.sendToDaemon = [this](const std::string& message)
         {
+            if (deliverNotifyUserReply(message))
+                return;
+
             if (daemon != nullptr)
                 daemon->send(message);
         };
@@ -153,7 +157,51 @@ struct BridgeApp
         helloTimer.reset();
         ready = true;
         relay.announceReady(ctVersion);
+        serveNotifyUser();
         startReadingStandardInput();
+    }
+
+    // `ct notify-user` in a remote pane dials the app's name on this machine;
+    // the bridge answers in its place and relays to CowTerm on the Mac. A
+    // second bridge (another Mac) finds the name taken and leaves it.
+    void serveNotifyUser()
+    {
+        try
+        {
+            notifyUserServer = std::make_unique<IPC::MessageServer>(proto::appServerName());
+            notifyUserServer->onClient = [this](IPC::Messenger& asker) { adoptAsker(asker); };
+        }
+        catch (const std::exception&)
+        {
+        }
+    }
+
+    void adoptAsker(IPC::Messenger& asker)
+    {
+        const auto id = std::to_string(++lastAskerId);
+        askers[id] = &asker;
+
+        asker.onMessage = [this, id](const std::string& request)
+        { relay.receiveFromDaemon(proto::make("nu-request", {id}, request)); };
+
+        asker.onDisconnected = [this, id]
+        {
+            askers.erase(id);
+            relay.receiveFromDaemon(proto::make("nu-cancel", {id}));
+        };
+    }
+
+    bool deliverNotifyUserReply(const std::string& message)
+    {
+        const auto parsed = proto::parse(message);
+
+        if (parsed.verb != "nu-reply" || parsed.args.empty())
+            return false;
+
+        if (auto found = askers.find(parsed.args[0]); found != askers.end())
+            found->second->send(parsed.payload);
+
+        return true;
     }
 
     void startReadingStandardInput()
@@ -200,6 +248,9 @@ struct BridgeApp
     BridgeRelay relay;
     std::unique_ptr<IPC::Messenger> daemon;
     std::unique_ptr<Threads::Timer> helloTimer;
+    std::unique_ptr<IPC::MessageServer> notifyUserServer;
+    std::map<std::string, IPC::Messenger*> askers;
+    int lastAskerId = 0;
     bool ready = false;
     bool restartedDaemon = false;
     bool restartingDaemon = false;

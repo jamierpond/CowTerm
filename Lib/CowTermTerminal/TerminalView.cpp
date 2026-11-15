@@ -98,6 +98,12 @@ void TerminalView::startShell(const TerminalConfig& config,
             restoreTerminalState(serialized);
     };
 
+    shell->onStatusChanged = [this, guard](const std::string& status)
+    {
+        if (!guard.expired())
+            showShellStatus(status);
+    };
+
     shell->start(
         {{screen.columns(), screen.rows()},
          workingDirectory,
@@ -475,10 +481,25 @@ GridPainter TerminalView::makePainter()
     return {{*atlas, *sprites, *glyphs, theme, {marginX, marginY}}, selection, hoveredLink, blinkOn};
 }
 
+bool TerminalView::isCursorLayerVisible() const
+{
+    return copyMode || scrollOffset == 0 || !shellStatus.empty();
+}
+
+void TerminalView::showShellStatus(const std::string& status)
+{
+    {
+        const auto lock = lockTerminal();
+        shellStatus = status;
+    }
+
+    repaintIfShown();
+}
+
 std::string TerminalView::describeCopyModePosition() const
 {
     if (!copyMode)
-        return {};
+        return shellStatus;
 
     return "[" + std::to_string(scrollOffset) + "/"
            + std::to_string(screen.scrollbackSize()) + "]";
@@ -560,9 +581,16 @@ void TerminalView::drawCursorLayer(GPU::RenderPass& pass,
     glyphs->begin();
 
     if (copyMode)
+    {
         drawCopyMode(painter, copyIndicator);
+    }
     else
+    {
         drawCursor(painter);
+
+        if (!shellStatus.empty())
+            painter.drawCopyModeBadge(shellStatus, getLocalBounds().w);
+    }
 
     sprites->flush();
     glyphs->flush(pass, atlas->atlas());
@@ -597,7 +625,7 @@ void TerminalView::render(GPU::Frame& frame)
     // instanced draw rather than one call per character.
     glyphs->flush(pass, atlas->atlas());
 
-    if (copyMode || scrollOffset == 0)
+    if (isCursorLayerVisible())
         drawCursorLayer(pass, painter, copyIndicator);
 
     renderedVersion = screen.version();

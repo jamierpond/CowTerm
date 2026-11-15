@@ -14,11 +14,14 @@
 #include <eacp/UI/UI.h>
 
 #include <functional>
+#include <set>
 #include <span>
 #include <string_view>
 
 namespace term
 {
+class RemoteHost;
+
 // Root content view: hosts the active session's terminal, the palette
 // overlay, the Ctrl+A leader-key table and notification routing.
 class AppShell final : public eacp::Graphics::View
@@ -95,6 +98,8 @@ private:
     bool isSessionInFrontOfUser(TermSession& session);
     void wireSessionManager();
     void wireRemoteHosts();
+    const void* findRemoteAskerIdentity(RemoteHost& host, const std::string& id);
+    void showRemoteNotifyUserPrompt(RemoteHost& host, const std::string& id, const std::string& body);
     void wireTray();
     void wireOverlays();
     void wireNotifications();
@@ -127,6 +132,7 @@ private:
     TrayController tray {manager};
     NotifyUserServer notifyUserServer {config};
     PasteConfirmation pasteConfirmation {config};
+    std::set<std::string> remoteAskerIdentities;
     TermSession* attached = nullptr;
     bool prefixArmed = false;
     bool popupPrefixArmed = false;

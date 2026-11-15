@@ -22,7 +22,7 @@ ones:
 
 ```json
 {
-    "searchDirs": ["~/projects", "tamby:~/projects", "ubuntu-vm:~/projects"],
+    "searchDirs": ["~/projects", "tamby:~/projects", "macprorack:~/projects"],
     "hosts": { "tamby": { "color": "#eb6f92" } }
 }
 ```

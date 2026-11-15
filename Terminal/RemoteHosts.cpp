@@ -135,6 +135,15 @@ void RemoteHost::handleOtherMessage(const std::string& verb, const std::string& 
         readScanResult(message.payload);
     else if (verb == "layouts")
         readLayouts(message.payload);
+    else if (verb == "nu-request" && !message.args.empty())
+        onNotifyUserRequest(*this, message.args[0], message.payload);
+    else if (verb == "nu-cancel" && !message.args.empty())
+        onNotifyUserCancelled(*this, message.args[0]);
+}
+
+void RemoteHost::sendNotifyUserReply(const std::string& requestId, const std::string& reply)
+{
+    daemon->send(proto::make("nu-reply", {requestId}, reply));
 }
 
 void RemoteHost::readScanResult(const std::string& payload)

@@ -45,15 +45,29 @@ public:
     std::function<void(const NotifyUserRequest& request, const std::string& title)>
         onPromptOpened = [](const NotifyUserRequest&, const std::string&) {};
 
+    // Whoever asked, identified by an address that stays unique while the
+    // request is open (a local ct's Messenger, a remote request's token),
+    // and how to send it the encoded reply.
+    struct Asker
+    {
+        const void* identity = nullptr;
+        std::function<void(const std::string& encodedReply)> sendReply;
+    };
+
+    // A request that came another way than this machine's IPC: a `ct
+    // notify-user` in a remote pane, relayed by that host's ct bridge.
+    void showPromptForRequest(const Asker& asker, const NotifyUserRequest& request);
+
+    // The asker went away (Ctrl-C, link lost): its window goes too.
+    void closePromptFor(const void* identity);
+
 private:
     struct OpenPrompt;
 
     void adoptClient(eacp::IPC::Messenger& messenger);
-    void showPromptWindowForRequest(eacp::IPC::Messenger& messenger,
-                                    const NotifyUserRequest& request);
     void answerPrompt(OpenPrompt& prompt, const NotifyUserReply& reply);
-    void closePromptLater(const eacp::IPC::Messenger& messenger);
-    void closePromptNow(const eacp::IPC::Messenger& messenger);
+    void closePromptLater(const void* identity);
+    void closePromptNow(const void* identity);
     NotifyUserPaneLabel labelPaneForRequest(const NotifyUserRequest& request) const;
 
     const AppConfig& config;
