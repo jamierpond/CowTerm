@@ -78,15 +78,6 @@ nano_add_executable(CowTermSessionViewTests
 
 target_include_directories(CowTermSessionViewTests PRIVATE ../Terminal)
 
-# The privacy-grants model behind the permissions panel: pure, so it builds
-# everywhere even though only macOS ships the panel.
-nano_add_executable(CowTermPermissionsTests
-        SOURCES
-            PermissionsTests.cpp
-            ../Terminal/Permissions.cpp)
-
-target_include_directories(CowTermPermissionsTests PRIVATE ../Terminal)
-
 # The context list CowTerm publishes to Rudder and the branch it reads from
 # each pane's repo; pure, so only the protocol types come along.
 nano_add_executable(CowTermRudderTests

@@ -39,8 +39,7 @@ add_executable(${COWTERM_EXECUTABLE_TARGET}
         PaletteRanking.cpp
         PaletteUsageStore.cpp
         PasteConfirmation.cpp
-        Permissions.cpp
-        PermissionsPanel.cpp
+        CowTermPermissions.cpp
         Popup.cpp
         Projects.cpp
         RudderContexts.cpp
@@ -55,16 +54,12 @@ add_executable(${COWTERM_EXECUTABLE_TARGET}
         DaemonClient.cpp)
 
 # Per-platform halves of ct, shell commands, the places watcher,
-# notifications, privacy grants and trash. Windows and Linux have no privacy
-# grants (no TCC), so they share Permissions-Default.cpp, which reports every
-# grant in force.
+# notifications and trash. Privacy grants come from Rudder's PermissionsPanel.
 if (APPLE)
     target_sources(${COWTERM_EXECUTABLE_TARGET} PRIVATE
-            MacProcesses.mm
             Command-Posix.cpp
             DirWatcher-macOS.mm
-            Notifier-macOS.mm
-            Permissions-macOS.mm)
+            Notifier-macOS.mm)
 
     target_link_libraries(${COWTERM_EXECUTABLE_TARGET} PRIVATE
             "-framework UserNotifications"
@@ -77,8 +72,7 @@ elseif (WIN32)
             Cli-Windows.cpp
             Command-Windows.cpp
             DirWatcher-Windows.cpp
-            Notifier-Windows.cpp
-            Permissions-Default.cpp)
+            Notifier-Windows.cpp)
 
     # The dashboard and switcher sources hold Unicode literals (powerline
     # glyphs); MSVC assumes the ANSI codepage without this.
@@ -98,8 +92,7 @@ elseif (LINUX)
     target_sources(${COWTERM_EXECUTABLE_TARGET} PRIVATE
             Command-Posix.cpp
             DirWatcher-Linux.cpp
-            Notifier-Linux.cpp
-            Permissions-Default.cpp)
+            Notifier-Linux.cpp)
 endif ()
 
 # eacp-ui is the portable component/painter tier: one ComponentHost (a GPUView)
@@ -107,7 +100,7 @@ endif ()
 # per-platform branches. The overlays use it rather than Graphics::Context,
 # which is the native 2D tier and exists only on macOS and Windows.
 target_link_libraries(${COWTERM_EXECUTABLE_TARGET} PRIVATE
-        CowTerm::Terminal eacp-sprites eacp-text eacp-ui eacp-network emberstore
+        CowTerm::Terminal eacp-sprites eacp-text eacp-ui eacp-network emberstore PermissionsPanel
         PondApp RudderClient FrecencySearch SearchKeys SessionLog)
 
 # Stamp the git SHA into a generated header on every build so the running app

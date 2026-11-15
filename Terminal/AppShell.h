@@ -4,7 +4,7 @@
 #include "NotifyUserServer.h"
 #include "PasteConfirmation.h"
 #include "Palette.h"
-#include "PermissionsPanel.h"
+#include "CowTermPermissions.h"
 #include "Popup.h"
 #include "RudderPublisher.h"
 #include "Session.h"
@@ -120,7 +120,7 @@ private:
     Palette palette {config, manager};
     Switcher switcher {config, manager};
     Popup popup {config};
-    PermissionsPanel permissions {config};
+    pond::PermissionsPanel permissions {permissions::makePermissionsPanelSettings(config)};
     eacp::UI::ComponentHost overlayHost;
     TrayController tray {manager};
     NotifyUserServer notifyUserServer {config};

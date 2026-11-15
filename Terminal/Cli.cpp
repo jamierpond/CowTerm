@@ -6,7 +6,7 @@
 #include "CliPlatform.h"
 #include "CowTermVersion.h"
 #include "NotifyUserClient.h"
-#include "Permissions.h"
+#include <PermissionsPanel/Permissions.h>
 #include "Protocol.h"
 
 #include <eacp/Core/Platform/ScopedAutoReleasePool.h>
@@ -119,12 +119,12 @@ int resetPermissions(const Arguments& args)
     const auto service = args.size() > 1 ? args[1] : std::string {"All"};
     auto error = std::string {};
 
-    if (!permissions::platform::reset(service, error))
+    if (!pond::permissions::platform::reset(service, error))
         return fail("reset failed: " + error);
 
     std::printf("reset %s for %s\n",
                 service.c_str(),
-                permissions::platform::bundleIdentifier().c_str());
+                pond::permissions::platform::bundleIdentifier().c_str());
     return exitOk;
 }
 

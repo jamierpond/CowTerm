@@ -116,6 +116,7 @@ void AppShell::wireOverlays()
     switcher.onClosed = [this] { hideOverlayAndRefocus(); };
 
     permissions.onClosed = [this] { hideOverlayAndRefocus(); };
+    permissions.onRelaunch = [] { permissions::relaunchCowTerm(); };
 
     popup.onClosed = [this]
     {
