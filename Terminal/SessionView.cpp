@@ -1,5 +1,6 @@
 #include "SessionView.h"
 #include "DaemonClient.h"
+#include "HostColours.h"
 #include "UsageLog.h"
 
 #include <algorithm>
@@ -101,16 +102,34 @@ bool isGrowingDirection(char direction)
     return direction == 'l' || direction == 'j';
 }
 
+// A remote session's gutters and active-pane ring take its host's colour.
+Theme themeForShellHome(const AppConfig& config, const std::string& host)
+{
+    constexpr auto gutterTintAmount = 0.35f;
+    auto theme = themeByName(config.theme);
+
+    if (host.empty())
+        return theme;
+
+    const auto hostColour = getHostColour(config, host);
+    theme.paneBorder = blendColours(theme.paneBorder, hostColour, gutterTintAmount);
+    theme.paneBorderActive = hostColour;
+    return theme;
+}
+
 bool isValidSavedIndex(const std::vector<SavedPane>& saved, int index)
 {
     return index >= 0 && index < (int) saved.size();
 }
 } // namespace
 
-SessionView::SessionView(const AppConfig& configToUse, std::string fallbackDirToUse)
+SessionView::SessionView(const AppConfig& configToUse,
+                         std::string fallbackDirToUse,
+                         ShellHome homeToUse)
     : config(configToUse)
     , fallbackDir(std::move(fallbackDirToUse))
-    , theme(themeByName(configToUse.theme))
+    , home(std::move(homeToUse))
+    , theme(themeForShellHome(configToUse, home.host))
 {
     setHandlesMouseEvents(true);
 
@@ -132,7 +151,9 @@ std::unique_ptr<SessionView::Node> SessionView::makeLeaf(const std::string& dir,
 {
     auto node = std::make_unique<Node>();
     node->view = std::make_unique<TerminalView>(
-        terminalConfig(config), dir.empty() ? fallbackDir : dir, shellId);
+        terminalConfig(config, home.host, home.sessionName),
+        dir.empty() ? fallbackDir : dir,
+        shellId);
 
     // Tree surgery (split, sibling promotion) moves views between nodes, so
     // the callbacks resolve their node by view at fire time, never by a

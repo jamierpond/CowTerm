@@ -71,6 +71,7 @@ nano_add_executable(CowTermSessionViewTests
         SOURCES
             SessionViewTests.cpp
             ../Terminal/SessionView.cpp
+            ../Terminal/HostColours.cpp
             ../Terminal/Config.cpp
             ../Terminal/UsageLog.cpp
             ../Terminal/DataDirectories.cpp
@@ -188,3 +189,15 @@ nano_add_executable(CowTermRemoteTests
             BridgeFramingTests.cpp
             BridgeRelayTests.cpp
         TARGETS CowTermRemote)
+
+# Host colours and what an ssh or ct bridge failure means for the user.
+nano_add_executable(CowTermRemoteAppTests
+        SOURCES
+            HostColoursTests.cpp
+            SshBridgeLinkTests.cpp
+            ../Terminal/HostColours.cpp
+            ../Terminal/SshBridgeLink.cpp
+            ../Terminal/Config.cpp
+        TARGETS CowTermRemote CowTerm::Core)
+
+target_include_directories(CowTermRemoteAppTests PRIVATE ../Terminal)

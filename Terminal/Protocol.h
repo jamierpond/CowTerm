@@ -81,6 +81,47 @@ inline Message parse(const std::string& raw)
     return message;
 }
 
+// Arguments are split on spaces, so one that may hold spaces (a session
+// name) travels with ' ' and '%' percent-encoded.
+inline std::string encodeArgument(std::string_view text)
+{
+    auto encoded = std::string {};
+
+    for (const auto character: text)
+    {
+        if (character == ' ')
+            encoded += "%20";
+        else if (character == '%')
+            encoded += "%25";
+        else
+            encoded += character;
+    }
+
+    return encoded;
+}
+
+inline std::string decodeArgument(std::string_view text)
+{
+    auto decoded = std::string {};
+
+    for (auto index = std::size_t {0}; index < text.size(); ++index)
+    {
+        const auto escape = text.substr(index, 3);
+
+        if (escape == "%20" || escape == "%25")
+        {
+            decoded += escape == "%20" ? ' ' : '%';
+            index += 2;
+        }
+        else
+        {
+            decoded += text[index];
+        }
+    }
+
+    return decoded;
+}
+
 inline std::string make(std::string_view verb,
                         std::initializer_list<std::string_view> args = {},
                         std::string_view payload = {})

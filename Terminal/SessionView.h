@@ -39,7 +39,14 @@ struct SavedPane
 class SessionView final : public eacp::Graphics::View
 {
 public:
-    SessionView(const AppConfig& configToUse, std::string fallbackDirToUse);
+    // Where this session's shells live: host empty for this machine.
+    struct ShellHome
+    {
+        std::string host;
+        std::string sessionName;
+    };
+
+    SessionView(const AppConfig& configToUse, std::string fallbackDirToUse, ShellHome homeToUse = {});
     ~SessionView() override;
 
     // Builds leaves from a snapshot; empty or malformed input yields a
@@ -154,6 +161,7 @@ private:
 
     const AppConfig& config;
     std::string fallbackDir;
+    ShellHome home;
     Theme theme;
     std::unique_ptr<Node> root;
     Node* active = nullptr;

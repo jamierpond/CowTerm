@@ -12,6 +12,7 @@ add_library(CowTermRemote STATIC
         BridgeFraming.cpp
         BridgeRelay.cpp
         DaemonDialer.cpp
+        ProjectScan.cpp
         RemoteCommands.cpp
         RemoteInstall.cpp
         RemoteLocation.cpp)

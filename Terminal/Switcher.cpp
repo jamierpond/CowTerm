@@ -1,5 +1,7 @@
 #include "Switcher.h"
 
+#include "HostColours.h"
+
 #include "TextLayout.h"
 #include "UsageLog.h"
 
@@ -277,8 +279,7 @@ void Switcher::paintCard(UI::Graphics& g, int index, Rect card)
     g.fillRoundedRect(card, cardCornerRadius);
 
     const auto icon = claude ? "✳" : "●";
-    const auto iconColour = claude ? theme.ansi[5] : theme.ansi[2];
-    g.setColour(toColor(iconColour));
+    g.setColour(toColor(getCardIconColour(session)));
     drawCentered(g, icon, {cx, card.y + iconBaseline}, headerFont);
 
     const auto maxChars = (std::size_t) std::max(
@@ -287,6 +288,18 @@ void Switcher::paintCard(UI::Graphics& g, int index, Rect card)
     g.setColour(toColor(theme.foreground, nameAlpha));
     drawCentered(
         g, truncateWithEllipsis(session.name, maxChars), {cx, card.y + nameBaseline}, rowFont);
+}
+
+// Claude's colour, the host's for a remote session, green otherwise.
+Rgb Switcher::getCardIconColour(const TermSession& session) const
+{
+    if (session.isClaude())
+        return theme.ansi[5];
+
+    if (session.isRemote())
+        return getHostColour(config, session.host);
+
+    return theme.ansi[2];
 }
 
 // The highlight's conversation title (Claude) or cwd.

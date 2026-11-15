@@ -9,6 +9,8 @@
 
 namespace term
 {
+class RemoteHost;
+
 // The switcher: one overlay that fuzzy-searches everything — open sessions
 // (Claude sessions surfaced with their conversation title and last notify),
 // then known project dirs that aren't open yet. Empty query lists by
@@ -20,6 +22,9 @@ public:
     Palette(const AppConfig& configToUse, SessionManager& sessionsToUse);
 
     void show();
+
+    // A remote host answered (or failed): rebuild the rows if shown.
+    void refreshRemoteRows();
     bool isShown() const { return shown; }
 
     // Fired for both dismissal and selection; the shell removes the overlay
@@ -38,6 +43,8 @@ private:
     void rebuild();
     PaletteItem makeSessionItem(TermSession& session) const;
     PaletteItem makeProjectItem(const std::string& name, const std::string& path) const;
+    void addRemoteItems();
+    PaletteItem makeUnreachableItem(const RemoteHost& remote) const;
     void applyQuery();
     void chooseSelected() override;
     void dismiss() override;

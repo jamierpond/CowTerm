@@ -13,9 +13,10 @@ struct ProjectDir
     std::string name;
 };
 
-// Depth-1 directories under each configured search dir (the sessionizer
-// scan), deduped. Hidden dirs are included so dotfile repos like ~/.config
-// are reachable; the search dirs themselves are listed too.
+// Depth-1 directories under each local search dir (the sessionizer scan),
+// deduped. Hidden dirs are included so dotfile repos like ~/.config are
+// reachable; the search dirs themselves are listed too. Remote entries
+// (host:path) are scanned by their host (RemoteHosts.h).
 std::vector<ProjectDir> scanProjects(const AppConfig& config);
 
 // Session name for a project path: basename with dots swapped for

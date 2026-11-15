@@ -6,8 +6,8 @@
 
 namespace term::remote
 {
-// A searchDirs entry on another machine: `user@host:path` or `host:path`.
-// host is handed to ssh exactly as written, so ~/.ssh/config aliases work.
+// A searchDirs entry on another machine: `alias:path`, alias an ssh
+// alias from ~/.ssh/config, handed to ssh exactly as written.
 struct RemoteSearchDir
 {
     std::string host;

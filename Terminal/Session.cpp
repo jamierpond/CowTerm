@@ -3,7 +3,10 @@
 #include "Command.h"
 #include "DataDirectories.h"
 #include "Projects.h"
+#include "HostColours.h"
 #include "Protocol.h"
+#include "RemoteHosts.h"
+#include "RemoteLocation.h"
 
 #include <eacp/Core/Threads/Async.h>
 #include <emberstore/AppDatabase.h>
@@ -15,6 +18,36 @@ namespace term
 namespace
 {
 constexpr auto persistDelay = eacp::Time::MS {500};
+
+std::string getProjectHost(const std::string& projectDir)
+{
+    const auto remote = remote::parseRemoteSearchDir(projectDir);
+    return remote ? remote->host : std::string {};
+}
+
+// The directory a session's first pane starts in: a remote project's path
+// on its host, or the project itself.
+std::string getStartDirectory(const std::string& projectDir, const std::string& startCwd)
+{
+    if (!startCwd.empty())
+        return startCwd;
+
+    if (const auto remote = remote::parseRemoteSearchDir(projectDir))
+        return remote->path;
+
+    return projectDir;
+}
+
+// "Grazer", or "tamby/Grazer" for a project on tamby.
+std::string getSessionNameForProject(const std::string& projectDir)
+{
+    const auto remote = remote::parseRemoteSearchDir(projectDir);
+
+    if (!remote)
+        return sessionNameFor(projectDir);
+
+    return getHostLabel(remote->host) + "/" + sessionNameFor(remote->path);
+}
 
 std::string normalizedDir(const std::string& dir)
 {
@@ -33,7 +66,8 @@ TermSession::TermSession(const AppConfig& config,
                          const std::string& startCwd)
     : name(std::move(nameToUse))
     , projectDir(std::move(projectDirToUse))
-    , view(config, startCwd.empty() ? projectDir : startCwd)
+    , host(getProjectHost(projectDir))
+    , view(config, getStartDirectory(projectDir, startCwd), {host, name})
 {
 }
 
@@ -170,7 +204,7 @@ TermSession& SessionManager::openProject(const std::string& dir)
         return *existing;
     }
 
-    auto& session = createSession(sessionNameFor(path), path, {}, {});
+    auto& session = createSession(getSessionNameForProject(path), path, {}, {});
     logUsage("session.open", {{"name", session.name}, {"via", "project"}});
     switchTo(session);
     return session;
@@ -179,10 +213,29 @@ TermSession& SessionManager::openProject(const std::string& dir)
 TermSession& SessionManager::newSession(const std::string& dir)
 {
     const auto path = normalizedDir(dir);
-    auto& session = createSession(sessionNameFor(path), path, {}, {});
+    auto& session = createSession(getSessionNameForProject(path), path, {}, {});
     logUsage("session.open", {{"name", session.name}, {"via", "new"}});
     switchTo(session);
     return session;
+}
+
+void SessionManager::adoptRemoteSession(const std::string& layout)
+{
+    auto session = SavedSession {};
+    Miro::fromJSONString(session, layout);
+
+    if (session.name.empty() || find(normalizedDir(session.projectDir)) != nullptr)
+        return;
+
+    for (const auto& existing: sessions)
+    {
+        if (existing->name == session.name)
+            return;
+    }
+
+    createSession(session.name, session.projectDir, session.cwd, session.panes);
+    logUsage("session.open", {{"name", session.name}, {"via", "remote"}});
+    persist();
 }
 
 void SessionManager::switchTo(TermSession& session)
@@ -414,5 +467,23 @@ void SessionManager::writeState()
                 if (sessions[i].get() == activeSession)
                     state.activeIndex = (int) i;
         });
+
+    publishRemoteLayouts(saved.peek());
+}
+
+// The daemon on each remote host keeps its sessions' layouts, so another
+// Mac attaching there opens the same panes.
+void SessionManager::publishRemoteLayouts(const SavedState& state) const
+{
+    for (const auto& session: state.sessions)
+    {
+        const auto host = getProjectHost(session.projectDir);
+
+        if (auto* daemon = RemoteHosts::findDaemon(host))
+        {
+            daemon->send(proto::make(
+                "layout", {proto::encodeArgument(session.name)}, Miro::toJSONString(session)));
+        }
+    }
 }
 } // namespace term

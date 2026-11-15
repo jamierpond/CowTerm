@@ -1,5 +1,6 @@
 #include "DaemonClient.h"
 #include "Protocol.h"
+#include "RemoteHosts.h"
 
 #include "DaemonDialer.h"
 
@@ -13,6 +14,11 @@ namespace
 {
 std::unique_ptr<DaemonClient> instance;
 
+bool isPaneMessage(const std::string& verb)
+{
+    return verb == "output" || verb == "state" || verb == "exit";
+}
+
 std::string toString(int value)
 {
     return std::to_string(value);
@@ -25,7 +31,10 @@ void DaemonClient::initialize(const Callback& whenReady)
         [whenReady](std::unique_ptr<IPC::Messenger> messenger)
         {
             if (messenger != nullptr)
-                instance.reset(new DaemonClient {std::move(messenger)});
+            {
+                instance = std::make_unique<DaemonClient>(
+                    std::make_unique<MessengerDaemonLink>(std::move(messenger)), false);
+            }
 
             whenReady();
         });
@@ -41,28 +50,65 @@ void DaemonClient::teardown()
     instance.reset();
 }
 
-DaemonClient::DaemonClient(std::unique_ptr<IPC::Messenger> messengerToUse)
-    : messenger(std::move(messengerToUse))
+DaemonClient::DaemonClient(std::unique_ptr<DaemonLink> linkToUse, bool keepsPanes)
+    : link(std::move(linkToUse))
+    , keepsPanesWhenLinkDrops(keepsPanes)
 {
-    messenger->onMessage = [this](const std::string& body) { handleMessage(body); };
-
-    messenger->onDisconnected = [this]
-    {
-        // The daemon vanished mid-flight; every remote pane's shell is
-        // gone from our point of view.
-        auto pending = std::move(routes);
-        routes.clear();
-
-        for (auto& [id, route]: pending)
-            route.onExit();
-    };
-
+    wireLink();
     infoTimer = std::make_unique<Threads::Timer>([this] { requestInfo(); }, 1);
+}
+
+void DaemonClient::wireLink()
+{
+    if (link == nullptr)
+        return;
+
+    link->onMessage = [this](const std::string& body) { handleMessage(body); };
+    link->onDisconnected = [this] { handleLinkDropped(); };
+}
+
+void DaemonClient::handleLinkDropped()
+{
+    // A remote host reports the drop itself, with the reason (RemoteHosts).
+    if (keepsPanesWhenLinkDrops)
+        return;
+
+    // The local daemon vanished mid-flight; every pane's shell is gone from
+    // our point of view.
+    auto pending = std::move(routes);
+    routes.clear();
+
+    for (auto& [id, route]: pending)
+        route.routes.onExit();
+}
+
+void DaemonClient::reportLinkLost(const std::string& reason)
+{
+    for (auto& [id, route]: routes)
+        route.routes.onLinkLost(reason);
+}
+
+void DaemonClient::replaceLink(std::unique_ptr<DaemonLink> linkToUse)
+{
+    link = std::move(linkToUse);
+    wireLink();
+}
+
+void DaemonClient::reattachPanes()
+{
+    for (const auto& [id, route]: routes)
+        sendSpawn(route.request);
 }
 
 bool DaemonClient::isConnected() const
 {
-    return messenger != nullptr && messenger->isConnected();
+    return link != nullptr && link->isConnected();
+}
+
+void DaemonClient::send(const std::string& message)
+{
+    if (isConnected())
+        link->send(message);
 }
 
 void DaemonClient::handleMessage(const std::string& body)
@@ -70,10 +116,10 @@ void DaemonClient::handleMessage(const std::string& body)
     auto message = proto::parse(body);
 
     if (message.verb == "info")
-    {
-        handleInfo(message.payload);
-        return;
-    }
+        return handleInfo(message.payload);
+
+    if (!isPaneMessage(message.verb))
+        return onOtherMessage(message.verb, body);
 
     if (message.args.empty())
         return;
@@ -82,20 +128,20 @@ void DaemonClient::handleMessage(const std::string& body)
         handleOutput(message.args[0], std::move(message.payload));
     else if (message.verb == "state")
         handleState(message.args[0], message.payload);
-    else if (message.verb == "exit")
+    else
         handleExit(message.args[0]);
 }
 
 void DaemonClient::handleOutput(const std::string& id, std::string payload)
 {
     if (auto found = routes.find(id); found != routes.end())
-        found->second.onOutput(std::move(payload));
+        found->second.routes.onOutput(std::move(payload));
 }
 
 void DaemonClient::handleState(const std::string& id, const std::string& payload)
 {
     if (auto found = routes.find(id); found != routes.end())
-        found->second.onState(payload);
+        found->second.routes.onState(payload);
 }
 
 void DaemonClient::handleExit(const std::string& id)
@@ -104,11 +150,11 @@ void DaemonClient::handleExit(const std::string& id)
     {
         auto route = std::move(found->second);
         routes.erase(found);
-        route.onExit();
+        route.routes.onExit();
     }
 }
 
-// One "<id>\t<foreground process>\t<working directory>" line per shell.
+// One "<id>\t<foreground process>\t<working directory>[\t<session>]" line per shell.
 void DaemonClient::handleInfo(const std::string& payload)
 {
     auto previous = std::move(info);
@@ -134,48 +180,61 @@ void DaemonClient::readInfoLine(const std::string& line)
     if (firstTab == std::string::npos || secondTab == std::string::npos)
         return;
 
+    const auto thirdTab = line.find('\t', secondTab + 1);
     auto& entry = info[line.substr(0, firstTab)];
     entry.foregroundProcess = line.substr(firstTab + 1, secondTab - firstTab - 1);
-    entry.workingDirectory = line.substr(secondTab + 1);
+    entry.workingDirectory = line.substr(secondTab + 1, thirdTab - secondTab - 1);
+
+    if (thirdTab != std::string::npos)
+        entry.sessionName = line.substr(thirdTab + 1);
 }
 
 void DaemonClient::requestInfo()
 {
-    if (isConnected() && !routes.empty())
-        messenger->send(proto::make("info"));
+    if (!routes.empty())
+        send(proto::make("info"));
 }
 
-void DaemonClient::spawn(const std::string& id,
-                         const PtySize& size,
-                         const std::string& cwd,
-                         Routes routesToUse)
+void DaemonClient::sendSpawn(const SpawnRequest& request)
 {
-    routes[id] = std::move(routesToUse);
-    messenger->send(
-        proto::make("spawn", {id, toString(size.cols), toString(size.rows)}, cwd));
+    send(proto::make("spawn",
+                     {request.id,
+                      toString(request.size.cols),
+                      toString(request.size.rows),
+                      proto::encodeArgument(request.sessionName)},
+                     request.workingDirectory));
+}
+
+void DaemonClient::spawn(const SpawnRequest& request, Routes routesToUse)
+{
+    routes[request.id] = {std::move(routesToUse), request};
+    sendSpawn(request);
 }
 
 void DaemonClient::write(const std::string& id, std::string_view data)
 {
-    messenger->send(proto::make("write", {id}, data));
+    if (isConnected())
+        link->send(proto::make("write", {id}, data));
 }
 
 void DaemonClient::resize(const std::string& id, const PtySize& size)
 {
-    messenger->send(
-        proto::make("resize", {id, toString(size.cols), toString(size.rows)}));
+    if (auto found = routes.find(id); found != routes.end())
+        found->second.request.size = size;
+
+    send(proto::make("resize", {id, toString(size.cols), toString(size.rows)}));
 }
 
 void DaemonClient::kill(const std::string& id)
 {
     routes.erase(id);
-    messenger->send(proto::make("kill", {id}));
+    send(proto::make("kill", {id}));
 }
 
 void DaemonClient::release(const std::string& id)
 {
     routes.erase(id);
-    messenger->send(proto::make("release", {id}));
+    send(proto::make("release", {id}));
 }
 
 DaemonClient::ShellInfo DaemonClient::infoFor(const std::string& id) const
@@ -189,58 +248,67 @@ DaemonClient::ShellInfo DaemonClient::infoFor(const std::string& id) const
 void DaemonClient::killServer()
 {
     routes.clear();
-    messenger->send(proto::make("quit-server"));
+    send(proto::make("quit-server"));
 }
 
-// ---- RemoteShell -----------------------------------------------------------
+// ---- DaemonShell -----------------------------------------------------------
 
 namespace
 {
-// A pane's shell living in the daemon. The pane talks to it exactly like a
-// local PTY; detach() leaves the process running for the next attach.
-class RemoteShell final : public Shell
+using FindDaemon = std::function<DaemonClient*()>;
+
+// A pane's shell living in a daemon, here or on another machine. The pane
+// talks to it exactly like a local PTY; detach() leaves the process running
+// for the next attach.
+class DaemonShell final : public Shell
 {
 public:
-    explicit RemoteShell(std::string idToUse)
+    DaemonShell(std::string idToUse, std::string sessionNameToUse, FindDaemon findDaemonToUse)
         : id(std::move(idToUse))
+        , sessionName(std::move(sessionNameToUse))
+        , findDaemon(std::move(findDaemonToUse))
     {
     }
 
-    ~RemoteShell() override { detach(); }
+    ~DaemonShell() override { detach(); }
 
     bool start(const PtyOptions& options,
                std::function<void(std::string)> onOutput,
                std::function<void()> onExit) override
     {
-        auto* client = DaemonClient::get();
+        auto* client = findDaemon();
 
-        if (client == nullptr || !client->isConnected())
+        if (client == nullptr)
             return false;
 
         auto routes = DaemonClient::Routes {};
-        routes.onOutput = std::move(onOutput);
+        routes.onOutput = onOutput;
+        routes.onState = onRestoreState;
         routes.onExit = std::move(onExit);
+        routes.onLinkLost = [onOutput](const std::string& reason)
+        { onOutput(describeLinkLost(reason)); };
 
-        client->spawn(id, options.size, options.workingDirectory, std::move(routes));
+        client->spawn({id, options.size, options.workingDirectory, sessionName},
+                      std::move(routes));
         attached = true;
         return true;
     }
 
     void write(std::string_view data) override
     {
-        if (auto* client = DaemonClient::get())
+        if (auto* client = findDaemon())
             client->write(id, data);
     }
 
     void resize(const PtySize& size) override
     {
-        if (auto* client = DaemonClient::get())
+        if (auto* client = findDaemon())
             client->resize(id, size);
     }
 
     std::string foregroundProcess() const override
     {
-        if (auto* client = DaemonClient::get())
+        if (auto* client = findDaemon())
             return client->infoFor(id).foregroundProcess;
 
         return {};
@@ -248,7 +316,7 @@ public:
 
     std::string currentWorkingDirectory() const override
     {
-        if (auto* client = DaemonClient::get())
+        if (auto* client = findDaemon())
             return client->infoFor(id).workingDirectory;
 
         return {};
@@ -260,7 +328,7 @@ public:
         {
             attached = false;
 
-            if (auto* client = DaemonClient::get())
+            if (auto* client = findDaemon())
                 client->kill(id);
         }
     }
@@ -271,34 +339,60 @@ public:
         {
             attached = false;
 
-            if (auto* client = DaemonClient::get())
+            if (auto* client = findDaemon())
                 client->release(id);
         }
     }
 
 private:
+    // Drawn into the pane; the redraw on re-attach replaces it.
+    static std::string describeLinkLost(const std::string& reason)
+    {
+        return "\r\n\x1b[7m cowterm: " + reason + " \x1b[0m\r\n";
+    }
+
     std::string id;
+    std::string sessionName;
+    FindDaemon findDaemon;
     bool attached = false;
 };
-} // namespace
 
-std::unique_ptr<Shell> makeShell(const std::string& shellId)
+std::unique_ptr<Shell> makeLocalShell(const std::string& shellId)
 {
     auto* client = DaemonClient::get();
 
     if (client != nullptr && client->isConnected())
-        return std::make_unique<RemoteShell>(shellId);
+        return std::make_unique<DaemonShell>(shellId, std::string {}, [] { return DaemonClient::get(); });
 
     return std::make_unique<LocalShell>();
 }
 
-TerminalConfig terminalConfig(const AppConfig& config)
+std::unique_ptr<Shell> makeRemoteShell(const std::string& shellId,
+                                       const std::string& host,
+                                       const std::string& sessionName)
+{
+    return std::make_unique<DaemonShell>(
+        shellId, sessionName, [host] { return RemoteHosts::findDaemon(host); });
+}
+} // namespace
+
+TerminalConfig terminalConfig(const AppConfig& config,
+                              const std::string& host,
+                              const std::string& sessionName)
 {
     auto result = TerminalConfig {};
     result.font = config.font;
     result.fontSize = config.fontSize;
     result.theme = themeByName(config.theme);
-    result.makeShell = [](const std::string& shellId) { return makeShell(shellId); };
+
+    result.makeShell = [host, sessionName](const std::string& shellId)
+    {
+        if (host.empty())
+            return makeLocalShell(shellId);
+
+        return makeRemoteShell(shellId, host, sessionName);
+    };
+
     result.environmentForShell = [](const std::string& shellId)
     {
         return std::vector<EnvironmentVariable> {

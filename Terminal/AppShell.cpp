@@ -3,6 +3,7 @@
 #include "CowTermCore/Debug.h"
 #include "CowTermVersion.h"
 #include "DaemonClient.h"
+#include "RemoteHosts.h"
 #include "LeaderKeys.h"
 #include "Notifier.h"
 #include "TextLayout.h"
@@ -196,7 +197,27 @@ void AppShell::start()
     if (auto* daemon = DaemonClient::get())
         daemon->onInfoChanged = [this] { rudderChanged(); };
 
+    RemoteHosts::configure(config);
+    wireRemoteHosts();
     manager.restoreOrCreateInitial();
+}
+
+AppShell::~AppShell()
+{
+    RemoteHosts::teardown();
+}
+
+// Remote sessions other Macs opened show up here too; the picker refreshes
+// as each host's project scan comes back.
+void AppShell::wireRemoteHosts()
+{
+    for (auto* remote: RemoteHosts::all())
+    {
+        remote->onChanged = [this] { palette.refreshRemoteRows(); };
+
+        remote->onLayout = [this](RemoteHost&, const std::string&, const std::string& layout)
+        { manager.adoptRemoteSession(layout); };
+    }
 }
 
 void AppShell::rudderChanged()

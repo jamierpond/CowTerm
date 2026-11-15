@@ -1,7 +1,10 @@
 #include "Palette.h"
 
 #include "PaletteRanking.h"
+#include "HostColours.h"
 #include "Projects.h"
+#include "RemoteHosts.h"
+#include "RemoteLocation.h"
 #include "TextLayout.h"
 #include "MruStore.h"
 #include "UsageLog.h"
@@ -62,6 +65,9 @@ std::string getItemIcon(const PaletteItem& item)
 
 Rgb getItemIconColour(const PaletteItem& item, const Theme& theme)
 {
+    if (item.unavailable)
+        return theme.ansi[8];
+
     if (item.claude)
         return theme.ansi[5];
 
@@ -104,10 +110,23 @@ void Palette::show()
     applyQuery();
     logUsage("palette.open", {{"rows", visible.size()}});
 
+    for (auto* remote: RemoteHosts::all())
+        remote->requestScan();
+
     // Snapshot where we came from. We deliberately don't peek row 0 here —
     // merely opening the switcher shouldn't move you; the terminal only
     // changes once you start navigating.
     sessions.beginPeek();
+    repaint();
+}
+
+void Palette::refreshRemoteRows()
+{
+    if (!shown)
+        return;
+
+    rebuild();
+    applyQuery();
     repaint();
 }
 
@@ -118,6 +137,7 @@ PaletteItem Palette::makeSessionItem(TermSession& session) const
     item.session = &session;
     item.key = session.key();
     item.label = session.name;
+    item.host = session.host;
     item.claude = session.isClaude();
     item.lastUsed = sessions.lastUsed(item.key);
 
@@ -144,7 +164,44 @@ PaletteItem Palette::makeProjectItem(const std::string& name, const std::string&
     item.label = name;
     item.detail = compactHomePath(path);
     item.lastUsed = sessions.lastUsed(path);
+
+    if (const auto remote = remote::parseRemoteSearchDir(path))
+    {
+        item.host = remote->host;
+        item.detail = remote->path;
+    }
+
     return item;
+}
+
+PaletteItem Palette::makeUnreachableItem(const RemoteHost& remote) const
+{
+    auto item = PaletteItem {};
+    item.kind = PaletteItem::Kind::Project;
+    item.label = getHostLabel(remote.getHost()) + " — unreachable";
+    item.detail = remote.getFailureReason();
+    item.unavailable = true;
+    return item;
+}
+
+// Each host's last good scan shows at once; one that can't be reached is a
+// single grey row saying why.
+void Palette::addRemoteItems()
+{
+    for (auto* remote: RemoteHosts::all())
+    {
+        if (remote->getStatus() == RemoteHost::Status::Unreachable && remote->getLastScan().empty())
+        {
+            allItems.push_back(makeUnreachableItem(*remote));
+            continue;
+        }
+
+        for (const auto& project: remote->getLastScan())
+        {
+            if (sessions.find(project.path) == nullptr)
+                allItems.push_back(makeProjectItem(project.name, project.path));
+        }
+    }
 }
 
 void Palette::rebuild()
@@ -159,6 +216,8 @@ void Palette::rebuild()
         if (sessions.find(project.path) == nullptr)
             allItems.push_back(makeProjectItem(project.name, project.path));
     }
+
+    addRemoteItems();
 }
 
 void Palette::applyQuery()
@@ -183,6 +242,9 @@ void Palette::applyQuery()
 
 void Palette::chooseSelected()
 {
+    if (selected < (int) visible.size() && visible[(std::size_t) selected].unavailable)
+        return;
+
     if (selected < (int) visible.size())
     {
         const auto item = visible[(std::size_t) selected];
@@ -344,9 +406,19 @@ void Palette::paintRow(UI::Graphics& g, const PaletteItem& item, Rect rowArea)
     x += labelAfterIcon;
 
     const auto label = truncateWithEllipsis(item.label, labelLength);
-    g.setColour(toColor(theme.foreground));
+    g.setColour(toColor(item.unavailable ? theme.ansi[8] : theme.foreground));
     drawTextInFont(g, label, {x, baseline}, rowFont);
-    x += measureTextInFont(g, label, rowFont) + labelToDetailGap;
+    x += measureTextInFont(g, label, rowFont);
+
+    if (!item.host.empty() && !item.unavailable)
+    {
+        const auto hostSuffix = " · " + getHostLabel(item.host);
+        g.setColour(toColor(getHostColour(config, item.host)));
+        drawTextInFont(g, hostSuffix, {x, baseline}, detailFont);
+        x += measureTextInFont(g, hostSuffix, detailFont);
+    }
+
+    x += labelToDetailGap;
 
     g.setColour(toColor(theme.ansi[8]));
     drawTextInFont(g, describeItem(item), {x, baseline}, detailFont);

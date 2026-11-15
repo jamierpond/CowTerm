@@ -4,22 +4,34 @@
 
 #include <Miro/Reflect.h>
 
+#include <map>
 #include <string>
 #include <vector>
 
 namespace term
 {
+// Per-machine settings for remote searchDirs hosts, keyed by host as
+// written there.
+struct HostSettings
+{
+    std::string color;
+
+    MIRO_REFLECT(color)
+};
+
 // User configuration, read from ~/.config/cowterm.json. Unknown keys are
 // ignored and missing keys keep their defaults, so the file can be shared
 // with other tools and grown over time.
 struct AppConfig
 {
+    // Local paths, or alias:path for another machine (an ~/.ssh/config alias).
     std::vector<std::string> searchDirs = {"~/projects", "~"};
     std::string font = "JetBrains Mono";
     float fontSize = 13.0f;
     std::string theme = "rosepine";
+    std::map<std::string, HostSettings> hosts;
 
-    MIRO_REFLECT(searchDirs, font, fontSize, theme)
+    MIRO_REFLECT(searchDirs, font, fontSize, theme, hosts)
 };
 
 AppConfig loadConfig();

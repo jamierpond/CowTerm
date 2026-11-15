@@ -20,6 +20,7 @@ add_executable(${COWTERM_EXECUTABLE_TARGET}
         Config.cpp
         DataDirectories.cpp
         GitBranch.cpp
+        HostColours.cpp
         LeaderKeys.cpp
         MruStore.cpp
         NotifyUserClient.cpp
@@ -34,11 +35,13 @@ add_executable(${COWTERM_EXECUTABLE_TARGET}
         CowTermPermissions.cpp
         Popup.cpp
         Projects.cpp
+        RemoteHosts.cpp
         RudderContexts.cpp
         RudderPublisher.cpp
         SearchField.cpp
         Session.cpp
         SessionView.cpp
+        SshBridgeLink.cpp
         Switcher.cpp
         TextLayout.cpp
         TrayController.cpp

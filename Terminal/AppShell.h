@@ -25,6 +25,7 @@ class AppShell final : public eacp::Graphics::View
 {
 public:
     AppShell();
+    ~AppShell() override;
 
     // Call once the window is up: restores the saved workspace (or creates
     // the first session) and focuses it.
@@ -93,6 +94,7 @@ private:
     bool isSwitcherBlocked() const;
     bool isSessionInFrontOfUser(TermSession& session);
     void wireSessionManager();
+    void wireRemoteHosts();
     void wireTray();
     void wireOverlays();
     void wireNotifications();

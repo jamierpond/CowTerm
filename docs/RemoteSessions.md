@@ -22,13 +22,15 @@ ones:
 
 ```json
 {
-    "searchDirs": ["~/projects", "tamby:~/projects", "parallels@ubuntu-vm:~/projects"],
+    "searchDirs": ["~/projects", "tamby:~/projects", "ubuntu-vm:~/projects"],
     "hosts": { "tamby": { "color": "#eb6f92" } }
 }
 ```
 
-The host part goes to the system `ssh` exactly as written, so `~/.ssh/config`
-aliases, keys and ProxyJump all work. Key auth only: CowTerm runs ssh with
+Use bare ssh aliases (`tamby:~/projects`): the user, real host name, keys
+and ProxyJump live in `~/.ssh/config`, not in `cowterm.json` (which may sit
+in a public dotfiles repo). The host part goes to the system `ssh` exactly as
+written. Key auth only: CowTerm runs ssh with
 `BatchMode=yes`, never asks for a passphrase, and shows an auth failure as an
 error.
 

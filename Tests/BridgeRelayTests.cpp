@@ -2,6 +2,8 @@
 
 #include <NanoTest/NanoTest.h>
 
+#include <filesystem>
+
 using namespace nano;
 using namespace term::bridge;
 
@@ -55,4 +57,28 @@ auto garbageFromTheAppStopsTheRelay = test("BridgeRelay/garbageFromTheAppStopsTh
     check(!recording.relay.receiveFromApp("not a frame\n"));
     check(!recording.relay.receiveFromApp(encodeFrame("info")));
     check(recording.toDaemon.empty());
+};
+
+auto scanIsAnsweredByTheBridgeItself = test("BridgeRelay/scanIsAnsweredByTheBridgeItself") = []
+{
+    namespace fs = std::filesystem;
+    const auto home = fs::temp_directory_path() / "cowterm-bridge-scan";
+    fs::remove_all(home);
+    fs::create_directories(home / "projects" / "Grazer");
+    fs::create_directories(home / "projects" / ".config");
+
+    auto recording = RecordingRelay {};
+    recording.relay.homeDirectory = home.generic_string();
+    recording.relay.receiveFromApp(encodeFrame("scan\n~/projects\n/does/not/exist\n"));
+
+    auto decoder = FrameDecoder {};
+    const auto messages = decoder.append(recording.toApp);
+    const auto root = (home / "projects").generic_string();
+
+    check(recording.toDaemon.empty());
+    check(messages.size() == 1);
+    check(messages[0].starts_with("scan-result\n" + root + "\n"));
+    check(messages[0].find(root + "/Grazer\n") != std::string::npos);
+    check(messages[0].find(root + "/.config\n") != std::string::npos);
+    fs::remove_all(home);
 };

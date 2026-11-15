@@ -18,7 +18,7 @@ namespace term
 {
 // The app's version (DaemonClient.cpp) wires the daemon-backed shell factory.
 // Tests run in-process shells instead, so they never touch a live daemon.
-TerminalConfig terminalConfig(const AppConfig&)
+TerminalConfig terminalConfig(const AppConfig&, const std::string&, const std::string&)
 {
     return {};
 }

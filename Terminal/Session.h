@@ -48,6 +48,9 @@ public:
     // True when a Claude Code conversation owns any pane of this session.
     bool isClaude() const { return view.isClaudeAnywhere(); }
 
+    // The machine the shells run on; empty for this one.
+    bool isRemote() const { return !host.empty(); }
+
     // The active pane's title / directory; empty when the session has no
     // panes (mid-teardown).
     std::string activeTitle() const;
@@ -55,6 +58,7 @@ public:
 
     std::string name;
     std::string projectDir;
+    std::string host;
     std::string lastNotify;
 
     SessionView view;
@@ -82,6 +86,10 @@ public:
 
     // Always creates a fresh session (openProject dedupes by directory).
     TermSession& newSession(const std::string& dir);
+
+    // A session another Mac opened on a remote host (its layout, as the
+    // daemon there keeps it): opened here too, without switching to it.
+    void adoptRemoteSession(const std::string& layout);
     void switchTo(TermSession& session);
     void switchToIndex(int index);
     void switchToLast();
@@ -134,6 +142,7 @@ private:
     // the write itself.
     void persist();
     void writeState();
+    void publishRemoteLayouts(const SavedState& state) const;
 
     const AppConfig& config;
     emberstore::Database db;

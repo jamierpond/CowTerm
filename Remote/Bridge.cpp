@@ -10,6 +10,7 @@
 
 #include <array>
 #include <csignal>
+#include <cstdlib>
 #include <thread>
 #include <unistd.h>
 
@@ -67,6 +68,9 @@ struct BridgeApp
             if (!writeAllToStandardOutput(bytes))
                 Apps::quit(exitFail);
         };
+
+        if (const auto* home = std::getenv("HOME"))
+            relay.homeDirectory = home;
 
         relay.sendToDaemon = [this](const std::string& message)
         {
