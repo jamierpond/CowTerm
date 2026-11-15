@@ -186,6 +186,14 @@ Graphics::MouseEvent wheelBy(float lines)
     return event;
 }
 
+Graphics::MouseEvent trackpadScrollBy(float lines)
+{
+    auto event = mouseAtCell(0, 0);
+    event.delta = {0.f, lines * referenceAtlas().cellHeight()};
+    event.preciseScrolling = true;
+    return event;
+}
+
 bool matches(const Graphics::Color& colour, Rgb expected)
 {
     const auto target = toColor(expected);
@@ -374,6 +382,27 @@ auto tSgrWheel = test("View/sgrMouseReportsTheWheel") = []
 
     pane.view->mouseWheel(wheelBy(-1.f));
     check(pane.takeWritten() == "\033[<65;1;1M");
+};
+
+auto tTrackpadWheelReports = test("View/trackpadSendsOneWheelReportPerLine") = []
+{
+    auto pane = TestPane {};
+    pane.showOutput("\033[?1000h\033[?1006h");
+    pane.takeWritten();
+
+    constexpr auto fractionOfALine = 0.25f;
+    constexpr auto tinyEventsInOneLine = 4;
+
+    for (auto i = 0; i < tinyEventsInOneLine - 1; ++i)
+        pane.view->mouseWheel(trackpadScrollBy(fractionOfALine));
+
+    check(pane.takeWritten().empty(), "a part line of finger travel sends nothing");
+
+    pane.view->mouseWheel(trackpadScrollBy(fractionOfALine));
+    check(pane.takeWritten() == "\033[<64;1;1M", "the event completing the line sends one");
+
+    pane.view->mouseWheel(trackpadScrollBy(-2.f));
+    check(pane.takeWritten() == "\033[<65;1;1M\033[<65;1;1M");
 };
 
 auto tShiftBypassesReporting = test("View/shiftClickSelectsEvenWithMouseReporting") = []

@@ -20,7 +20,7 @@ constexpr int shiftModifierBit = 1;
 constexpr int altModifierBit = 2;
 constexpr int controlModifierBit = 4;
 constexpr int sgrMotionFlag = 32;
-constexpr int maximumWheelArrowKeys = 40;
+constexpr int maximumWheelLinesPerEvent = 40;
 constexpr auto bracketedPasteStart = std::string_view {"\033[200~"};
 constexpr auto bracketedPasteEnd = std::string_view {"\033[201~"};
 
@@ -367,11 +367,29 @@ std::string encodeSgrMouseReport(const SgrMouseReport& report)
 
 WheelArrowKeys encodeWheelAsArrowKeys(int lines, bool applicationCursorKeys)
 {
-    const auto count = std::min(std::abs(lines), maximumWheelArrowKeys);
+    const auto count = std::min(std::abs(lines), maximumWheelLinesPerEvent);
 
     if (lines > 0)
         return {applicationCursorKeys ? "\033OA" : "\033[A", count};
 
     return {applicationCursorKeys ? "\033OB" : "\033[B", count};
+}
+
+WheelMouseReports encodeWheelAsMouseReports(int lines)
+{
+    const auto count = std::min(std::abs(lines), maximumWheelLinesPerEvent);
+
+    if (lines > 0)
+        return {wheelUpMouseButton, count};
+
+    return {wheelDownMouseButton, count};
+}
+
+float convertWheelDeltaToLines(float delta, bool isPreciseScrolling, float pointsPerLine)
+{
+    if (!isPreciseScrolling || pointsPerLine <= 0.f)
+        return delta;
+
+    return delta / pointsPerLine;
 }
 } // namespace term

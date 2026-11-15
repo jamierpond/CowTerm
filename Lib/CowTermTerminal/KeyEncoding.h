@@ -89,4 +89,18 @@ struct WheelArrowKeys
 };
 
 WheelArrowKeys encodeWheelAsArrowKeys(int lines, bool applicationCursorKeys);
+
+// The wheel button an app that asked for mouse reports gets for each wheel
+// line, and how many reports one wheel event may send.
+struct WheelMouseReports
+{
+    int button = wheelUpMouseButton;
+    int count = 0;
+};
+
+WheelMouseReports encodeWheelAsMouseReports(int lines);
+
+// A wheel delta in lines: a trackpad reports points, so it is divided by the
+// line height; a notched wheel already reports lines.
+float convertWheelDeltaToLines(float delta, bool isPreciseScrolling, float pointsPerLine);
 } // namespace term

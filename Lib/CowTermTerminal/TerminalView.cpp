@@ -1220,22 +1220,35 @@ void TerminalView::sendWheelAsArrowKeys(int lines)
         send(arrows.key);
 }
 
+float TerminalView::getPointsPerWheelLine() const
+{
+    if (!atlas)
+        return 0.f;
+
+    return atlas->cellHeight();
+}
+
+void TerminalView::sendWheelAsMouseReports(const MouseEvent& event, int lines)
+{
+    const auto reports = encodeWheelAsMouseReports(lines);
+
+    for (auto i = 0; i < reports.count; ++i)
+        sendMouseReport(event, reports.button, true, false);
+}
+
 void TerminalView::mouseWheel(const MouseEvent& event)
 {
     const auto lock = lockTerminal();
-    if (isReportingMouseFor(event))
-    {
-        const auto button = event.delta.y > 0 ? wheelUpMouseButton : wheelDownMouseButton;
-        sendMouseReport(event, button, true, false);
-        return;
-    }
-
-    const auto lines = takeWholeWheelLines(event.delta.y);
+    const auto wheelLines =
+        convertWheelDeltaToLines(event.delta.y, event.preciseScrolling, getPointsPerWheelLine());
+    const auto lines = takeWholeWheelLines(wheelLines);
 
     if (lines == 0)
         return;
 
-    if (screen.modes.altScreen)
+    if (isReportingMouseFor(event))
+        sendWheelAsMouseReports(event, lines);
+    else if (screen.modes.altScreen)
         sendWheelAsArrowKeys(lines);
     else
         scrollBy(lines);

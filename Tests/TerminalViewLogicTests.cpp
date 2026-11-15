@@ -184,6 +184,25 @@ auto tWheelArrows = test("ViewLogic/wheelArrowKeysAreCapped") = []
     check(down.key == "\033OB" && down.count == 40);
 };
 
+auto tWheelReports = test("ViewLogic/wheelMouseReportsAreCapped") = []
+{
+    const auto up = encodeWheelAsMouseReports(2);
+    check(up.button == wheelUpMouseButton && up.count == 2);
+
+    const auto down = encodeWheelAsMouseReports(-500);
+    check(down.button == wheelDownMouseButton && down.count == 40);
+};
+
+auto tWheelDeltaToLines = test("ViewLogic/trackpadPointsBecomeLinesAndWheelLinesStay") = []
+{
+    constexpr auto pointsPerLine = 16.f;
+    constexpr auto trackpadPoints = 40.f;
+    constexpr auto wheelLines = 3.f;
+
+    check(convertWheelDeltaToLines(trackpadPoints, true, pointsPerLine) == 2.5f);
+    check(convertWheelDeltaToLines(wheelLines, false, pointsPerLine) == wheelLines);
+};
+
 // ---- copy mode ----------------------------------------------------------------
 
 auto tCopyModeKeysMapToCommands = test("ViewLogic/copyModeKeyBindings") = []

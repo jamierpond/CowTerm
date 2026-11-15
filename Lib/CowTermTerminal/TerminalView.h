@@ -237,6 +237,8 @@ private:
                          bool motion);
     int takeWholeWheelLines(float wheelDelta);
     void sendWheelAsArrowKeys(int lines);
+    float getPointsPerWheelLine() const;
+    void sendWheelAsMouseReports(const eacp::Graphics::MouseEvent& event, int lines);
 
     // The cell under a point, clamped to the grid.
     VisibleCell findCellUnderPointer(eacp::Graphics::Point pos) const;
