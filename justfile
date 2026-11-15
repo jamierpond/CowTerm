@@ -146,6 +146,15 @@ install: build
     -gtk-update-icon-cache -f -t "$HOME/.local/share/icons/hicolor" 2>/dev/null
     @echo "Installed to ~/.local/bin, with a desktop entry and icon"
 
+[doc('Build and install ct + cowtermd (headless) on a remote host over ssh, for remote sessions')]
+install-remote host:
+    scripts/install-remote.sh "{{host}}"
+
+[doc('Build and install the headless ct + cowtermd on this machine (what a remote host runs)')]
+[unix]
+install-headless:
+    scripts/install-headless.sh
+
 # LOCKSTEP_MODE is cached, so the second configure puts the build tree back in
 # locked mode.
 [doc("Move every dependency to its branch or tag's current commit and rewrite lockstep.lock")]

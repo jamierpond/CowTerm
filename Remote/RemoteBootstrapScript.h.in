@@ -1,0 +1,7 @@
+#pragma once
+
+// Generated at configure time from scripts/remote-bootstrap.sh.
+namespace term::remote
+{
+inline constexpr auto remoteBootstrapScript = R"cowterm_script(@REMOTE_BOOTSTRAP_SCRIPT@)cowterm_script";
+} // namespace term::remote

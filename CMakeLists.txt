@@ -96,6 +96,7 @@ endif ()
 # The libraries (see Lib/CMakeLists.txt), then the product built on them.
 add_subdirectory(Lib)
 add_subdirectory(Daemon)
+add_subdirectory(Remote)
 add_subdirectory(Terminal)
 add_subdirectory(Fuzz)
 

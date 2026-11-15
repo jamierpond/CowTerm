@@ -8,6 +8,9 @@
 #include "NotifyUserClient.h"
 #include <PermissionsPanel/Permissions.h>
 #include "Protocol.h"
+#include "Config.h"
+#include "RemoteCommands.h"
+#include "RemoteLocation.h"
 
 #include <eacp/Core/Platform/ScopedAutoReleasePool.h>
 
@@ -42,6 +45,10 @@ constexpr auto usage = R"(usage: ct <command>
               [--allow-type-response] [--title <text>] [--pane <id>]
                                   ask the user in a window over everything;
                                   prints the chosen option or typed answer
+
+  install-remote <host>           build and install ct + cowtermd on host
+                                  over ssh, for remote sessions
+  update-remotes                  install-remote for every host in searchDirs
 
   version
   --reset-permissions [service]   tccutil reset <service> (default All) for
@@ -135,6 +142,16 @@ int notifyUserCommand(const Arguments& args)
     return notifyUser(dropFirst(args));
 }
 
+int installRemote(const Arguments& args)
+{
+    return remote::runInstallRemoteCommand(dropFirst(args));
+}
+
+int updateRemotes(const Arguments&)
+{
+    return remote::runUpdateRemotesCommand(remote::collectRemoteHosts(loadConfig().searchDirs));
+}
+
 struct Command
 {
     std::string_view verb;
@@ -149,6 +166,8 @@ constexpr auto commandsRunAnywhere = std::array {
     Command {"--version", printVersion},
     Command {"--reset-permissions", resetPermissions},
     Command {"notify-user", notifyUserCommand},
+    Command {"install-remote", installRemote},
+    Command {"update-remotes", updateRemotes},
 };
 
 int dispatch(const Arguments& args)
@@ -184,7 +203,9 @@ bool isCliInvocation(int argc, char** argv)
                              "-h",
                              "version",
                              "--version",
-                             "--reset-permissions"})
+                             "--reset-permissions",
+                             "install-remote",
+                             "update-remotes"})
         if (verb == known)
             return true;
 

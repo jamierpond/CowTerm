@@ -179,3 +179,11 @@ target_include_directories(CowTermDaemonRestoreTests PRIVATE ../Terminal)
 target_compile_definitions(CowTermDaemonRestoreTests
         PRIVATE COWTERM_DAEMON_PATH="$<TARGET_FILE:CowTermDaemon>")
 add_dependencies(CowTermDaemonRestoreTests CowTermDaemon)
+
+# Remote sessions: searchDirs host entries and the framing `ct bridge` speaks
+# over ssh.
+nano_add_executable(CowTermRemoteTests
+        SOURCES
+            RemoteLocationTests.cpp
+            BridgeFramingTests.cpp
+        TARGETS CowTermRemote)

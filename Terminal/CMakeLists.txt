@@ -100,7 +100,7 @@ endif ()
 # per-platform branches. The overlays use it rather than Graphics::Context,
 # which is the native 2D tier and exists only on macOS and Windows.
 target_link_libraries(${COWTERM_EXECUTABLE_TARGET} PRIVATE
-        CowTerm::Terminal eacp-sprites eacp-text eacp-ui eacp-network emberstore PermissionsPanel
+        CowTerm::Terminal CowTermRemote eacp-sprites eacp-text eacp-ui eacp-network emberstore PermissionsPanel
         PondApp RudderClient FrecencySearch SearchKeys SessionLog)
 
 # Stamp the git SHA into a generated header on every build so the running app
