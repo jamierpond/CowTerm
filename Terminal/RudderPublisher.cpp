@@ -1,4 +1,5 @@
 #include "RudderPublisher.h"
+#include "UsageLog.h"
 
 #include "Projects.h"
 
@@ -147,7 +148,11 @@ void RudderPublisher::activate(const std::string& contextId, bool raise)
     if (!target)
         return;
 
-    if (target->kind == RudderTarget::Kind::Place)
+    const auto isPlace = target->kind == RudderTarget::Kind::Place;
+    logUsage("rudder.switch",
+             {{"kind", isPlace ? "place" : "pane"}, {"raise", raise ? "yes" : "no"}});
+
+    if (isPlace)
     {
         // Rudder never previews a place (it isn't open yet); opening one is
         // Enter's alone.

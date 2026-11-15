@@ -52,6 +52,7 @@ add_executable(${COWTERM_EXECUTABLE_TARGET}
         Switcher.cpp
         TextLayout.cpp
         TrayController.cpp
+        UsageLog.cpp
         DaemonClient.cpp)
 
 # Per-platform halves of ct, shell commands, the places watcher,
@@ -113,7 +114,7 @@ endif ()
 # which is the native 2D tier and exists only on macOS and Windows.
 target_link_libraries(${COWTERM_EXECUTABLE_TARGET} PRIVATE
         CowTerm::Terminal eacp-sprites eacp-text eacp-ui eacp-network emberstore
-        RudderClient FrecencySearch SearchKeys)
+        RudderClient FrecencySearch SearchKeys SessionLog)
 
 # Stamp the git SHA into a generated header on every build so the running app
 # can report exactly which commit it came from (window title + startup log).

@@ -4,6 +4,8 @@
 #include "PaletteRanking.h"
 #include "Projects.h"
 #include "TextLayout.h"
+#include "MruStore.h"
+#include "UsageLog.h"
 
 #include <algorithm>
 
@@ -117,8 +119,11 @@ void Palette::show()
     worktreeError.clear();
     confirmDeleteMode = false;
     deleteError.clear();
+    keysSinceOpen = 0;
+    openedAtMs = MruStore::nowMs();
     rebuild();
     applyQuery();
+    logUsage("palette.open", {{"rows", visible.size()}});
 
     // Snapshot where we came from. We deliberately don't peek row 0 here —
     // merely opening the switcher shouldn't move you; the terminal only
@@ -203,6 +208,7 @@ void Palette::chooseSelected()
     {
         const auto item = visible[(std::size_t) selected];
         sessions.recordPalettePick(searchField.getText(), item.key);
+        logPick(item);
 
         if (isOpenSession(item))
         {
@@ -222,6 +228,7 @@ void Palette::chooseSelected()
     }
     else
     {
+        logCancel();
         sessions.endPeek(false);
     }
 
@@ -233,9 +240,35 @@ void Palette::dismiss()
 {
     // Escape / click-away: the peek was only a preview, so put the terminal
     // back where it was.
+    logCancel();
     sessions.endPeek(false);
     shown = false;
     onClosed();
+}
+
+std::int64_t Palette::measureMsSinceOpen() const
+{
+    return MruStore::nowMs() - openedAtMs;
+}
+
+void Palette::logPick(const PaletteItem& item) const
+{
+    const auto kind = isOpenSession(item) ? "session" : "project";
+    logUsage("palette.pick",
+             {{"kind", kind},
+              {"name", item.label},
+              {"row", selected},
+              {"query_length", searchField.getText().size()},
+              {"keys", keysSinceOpen},
+              {"ms", measureMsSinceOpen()}});
+}
+
+void Palette::logCancel() const
+{
+    logUsage("palette.cancel",
+             {{"query_length", searchField.getText().size()},
+              {"keys", keysSinceOpen},
+              {"ms", measureMsSinceOpen()}});
 }
 
 void Palette::peekSelected()
@@ -263,12 +296,18 @@ void Palette::moveSelection(int delta)
 
 bool Palette::keyDown(const KeyEvent& event)
 {
+    ++keysSinceOpen;
+    const auto wasNormalMode = searchField.isNormalMode();
+
     if (worktreeMode)
         worktreeKeyDown(event);
     else if (confirmDeleteMode)
         confirmDeleteKeyDown(event);
     else if (!handleListKey(event))
         editQuery(event);
+
+    if (shown && searchField.isNormalMode() != wasNormalMode)
+        logUsage("palette.mode", {{"mode", searchField.isNormalMode() ? "normal" : "insert"}});
 
     return true;
 }
@@ -327,6 +366,8 @@ void Palette::editQuery(const KeyEvent& event)
 void Palette::searchTextChanged()
 {
     applyQuery();
+    logUsage("palette.query",
+             {{"query_length", searchField.getText().size()}, {"rows", visible.size()}});
     peekSelected();
 }
 

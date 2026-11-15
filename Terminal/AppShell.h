@@ -56,6 +56,8 @@ private:
 
     bool interceptKey(const eacp::Graphics::KeyEvent& event);
     bool handlePrefixed(const eacp::Graphics::KeyEvent& event);
+    bool runPrefixedKey(const eacp::Graphics::KeyEvent& event);
+    static void logCommandKey(std::string_view event, const eacp::Graphics::KeyEvent& key);
     bool handleCommand(const eacp::Graphics::KeyEvent& event);
     bool popupKey(const eacp::Graphics::KeyEvent& event);
     static bool isLeaderPrefixKey(const eacp::Graphics::KeyEvent& event);

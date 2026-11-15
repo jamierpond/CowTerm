@@ -1,6 +1,7 @@
 #include "Switcher.h"
 
 #include "TextLayout.h"
+#include "UsageLog.h"
 
 #include <eacp/Core/Threads/EventLoop.h>
 #include <eacp/Graphics/Graphics/Keyboard.h>
@@ -122,6 +123,7 @@ void Switcher::chooseSelected()
     // The peek already put us on the highlight; commit it as a real switch so
     // it floats to the top of the MRU for next time.
     peekSelected();
+    logUsage("switcher.pick", {{"row", selected}});
     sessions.endPeek(true);
     shown = false;
     stopPolling();
@@ -133,6 +135,7 @@ void Switcher::dismiss()
     if (!shown)
         return;
 
+    logUsage("switcher.cancel");
     sessions.endPeek(false);
     shown = false;
     stopPolling();

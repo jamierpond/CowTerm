@@ -1,4 +1,5 @@
 #include "Session.h"
+#include "UsageLog.h"
 #include "Command.h"
 #include "Projects.h"
 #include "Protocol.h"
@@ -180,6 +181,7 @@ TermSession& SessionManager::openProject(const std::string& dir)
     }
 
     auto& session = createSession(sessionNameFor(path), path, {}, {});
+    logUsage("session.open", {{"name", session.name}, {"via", "project"}});
     switchTo(session);
     return session;
 }
@@ -188,6 +190,7 @@ TermSession& SessionManager::newSession(const std::string& dir)
 {
     const auto path = normalizedDir(dir);
     auto& session = createSession(sessionNameFor(path), path, {}, {});
+    logUsage("session.open", {{"name", session.name}, {"via", "new"}});
     switchTo(session);
     return session;
 }
@@ -195,7 +198,10 @@ TermSession& SessionManager::newSession(const std::string& dir)
 void SessionManager::switchTo(TermSession& session)
 {
     if (activeSession != &session)
+    {
         previousSession = activeSession;
+        logUsage("session.switch", {{"name", session.name}, {"sessions", sessions.size()}});
+    }
 
     activeSession = &session;
     session.notifyUnseen = false;
@@ -272,6 +278,8 @@ void SessionManager::endPeek(bool commit)
         // now record it as a real switch away from where we started.
         if (activeSession != nullptr && activeSession != origin)
         {
+            logUsage("session.switch",
+                     {{"name", activeSession->name}, {"sessions", sessions.size()}});
             previousSession = origin;
             mru.touch(activeSession->key());
             persist();
@@ -310,6 +318,7 @@ void SessionManager::close(TermSession& session)
     // An explicit session close kills its shells; app teardown, which
     // never comes through here, only detaches so they survive in the
     // daemon.
+    logUsage("session.close", {{"name", session.name}, {"sessions", sessions.size() - 1}});
     session.view.terminateAll();
 
     auto closing = std::move(*index);
@@ -351,6 +360,13 @@ void SessionManager::restoreOrCreateInitial()
                       savedSession.projectDir,
                       savedSession.cwd,
                       savedSession.panes);
+
+    auto panes = 0;
+
+    for (const auto& session: sessions)
+        panes += session->view.paneCount();
+
+    logUsage("session.restore", {{"sessions", sessions.size()}, {"panes", panes}});
 
     if (sessions.empty())
         createSession("home", eacp::FilePath::homeDirectory().str(), {}, {});

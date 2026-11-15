@@ -2,6 +2,7 @@
 #include "Cli.h"
 #include "CowTermVersion.h"
 #include "DaemonClient.h"
+#include "UsageLog.h"
 
 #include <eacp/Core/App/App.h>
 #include <eacp/Core/Platform/Platform.h>
@@ -51,6 +52,7 @@ struct TerminalApp
 
         shell.onBringToFront = [this]
         {
+            term::logUsage("window.show");
             window.setVisible(true);
             window.toFront();
         };
@@ -64,6 +66,8 @@ struct TerminalApp
 
         window.events.onActivationChanged = [this](bool isKey)
         { shell.setWindowFocused(isKey); };
+
+        window.events.onHidden = [] { term::logUsage("window.close"); };
 
         window.setContentView(shell);
 
@@ -125,6 +129,8 @@ int main(int argc, char** argv)
                  term::appVersion,
                  term::versionTag().c_str());
 
+    term::startUsageLog();
+    term::logUsage("app.launch", {{"version", term::versionTag()}});
     term::registerEmbeddedFonts();
     return Apps::run<TerminalApp>();
 }

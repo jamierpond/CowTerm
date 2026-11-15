@@ -1,5 +1,6 @@
 #include "SessionView.h"
 #include "DaemonClient.h"
+#include "UsageLog.h"
 
 #include <algorithm>
 #include <optional>
@@ -141,7 +142,10 @@ std::unique_ptr<SessionView::Node> SessionView::makeLeaf(const std::string& dir,
     node->view->onFocused = [this, viewPtr]
     {
         if (auto* leaf = leafFor(viewPtr); leaf != nullptr && active != leaf)
+        {
+            logUsage("pane.focus", {{"via", "click"}});
             setActive(leaf);
+        }
     };
 
     node->view->onShellExit = [this, viewPtr, guard = std::weak_ptr<bool> {alive}]
@@ -303,7 +307,10 @@ std::vector<TerminalView*> SessionView::claudePanes() const
 void SessionView::focusPane(TerminalView* pane)
 {
     if (auto* leaf = leafFor(pane))
+    {
+        logUsage("pane.focus", {{"via", "show"}});
         setActive(leaf);
+    }
 }
 
 void SessionView::collectLeaves(Node* node, std::vector<Node*>& out) const
@@ -391,6 +398,8 @@ void SessionView::splitActive(bool horizontal)
 
     layout();
     setActive(splitting->second.get());
+    logUsage("pane.split",
+             {{"direction", horizontal ? "beside" : "below"}, {"panes", paneCount()}});
 }
 
 void SessionView::removeLeaf(Node* leaf)
@@ -400,6 +409,7 @@ void SessionView::removeLeaf(Node* leaf)
 
     zoomed = nullptr;
     removeSubview(*leaf->view);
+    logUsage("pane.close", {{"panes", paneCount() - 1}});
 
     if (leaf == root.get())
     {
@@ -521,6 +531,7 @@ void SessionView::focusDirection(char direction)
 
     if (auto* best = findNearestLeafInDirection(direction))
     {
+        logUsage("pane.focus", {{"via", "direction"}, {"direction", std::string(1, direction)}});
         setActive(best);
         layout();
     }
@@ -571,6 +582,7 @@ void SessionView::resizeActive(char direction, float cells)
     const auto delta = growsFirstSide ? step : -step;
 
     split.ratio = std::clamp(split.ratio + delta, minimumRatio, maximumRatio);
+    logUsage("pane.resize", {{"direction", std::string(1, direction)}, {"ratio", std::to_string(split.ratio)}});
     layout();
 }
 
@@ -586,6 +598,7 @@ void SessionView::setFontSize(float size)
 void SessionView::toggleZoom()
 {
     zoomed = zoomed != nullptr ? nullptr : active;
+    logUsage("pane.zoom", {{"zoomed", zoomed != nullptr ? "on" : "off"}});
     layout();
 }
 
@@ -600,6 +613,7 @@ void SessionView::cycleFocus()
     zoomed = nullptr;
     const auto current =
         std::find(leaves.begin(), leaves.end(), active) - leaves.begin();
+    logUsage("pane.focus", {{"via", "cycle"}});
     setActive(leaves[(std::size_t) ((current + 1) % (long) leaves.size())]);
     layout();
 }

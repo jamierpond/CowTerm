@@ -6,6 +6,8 @@
 #include "GitWorktree.h"
 #include "LeaderKeys.h"
 #include "Notifier.h"
+#include "TextLayout.h"
+#include "UsageLog.h"
 
 #include <eacp/Core/App/App.h>
 #include <eacp/Core/Platform/Platform.h>
@@ -72,6 +74,7 @@ void AppShell::wireSessionManager()
     manager.onAllClosed = []
     {
         noteQuit("last session closed");
+        logUsage("app.quit", {{"via", "last-session-closed"}});
         Apps::quit();
     };
 
@@ -84,10 +87,15 @@ void AppShell::wireSessionManager()
 
 void AppShell::wireTray()
 {
-    tray.onShowWindow = [this] { onBringToFront(); };
+    tray.onShowWindow = [this]
+    {
+        logUsage("window.show", {{"via", "tray"}});
+        onBringToFront();
+    };
 
     tray.onPickSession = [this](TermSession& session)
     {
+        logUsage("tray.pick", {{"name", session.name}});
         manager.switchTo(session);
         onBringToFront();
     };
@@ -113,7 +121,11 @@ void AppShell::wireOverlays()
 
     permissions.onClosed = [this] { hideOverlayAndRefocus(); };
 
-    popup.onClosed = [this] { hidePopup(); };
+    popup.onClosed = [this]
+    {
+        logUsage("popup.close");
+        hidePopup();
+    };
 
     popup.interceptKey = [this](const KeyEvent& event) { return popupKey(event); };
 }
@@ -272,6 +284,7 @@ bool AppShell::anyOverlayShown() const
 
 void AppShell::setWindowFocused(bool focused)
 {
+    logUsage(focused ? "window.focus" : "window.blur");
     windowFocused = focused;
 
     for (const auto& session: manager.all())
@@ -468,6 +481,7 @@ void AppShell::showPopup(const std::string& command)
         active != nullptr ? active->activeWorkingDirectory() : std::string {};
 
     popupPrefixArmed = false;
+    logUsage("popup.open", {{"command", command}});
     addSubview(popup);
     popup.setBounds(getLocalBounds());
     popup.show(command, dir);
@@ -529,6 +543,7 @@ bool AppShell::interceptKey(const KeyEvent& event)
     // the switcher itself handles the rest (further taps, release-to-commit).
     if (isSwitcherKey(event))
     {
+        logUsage("switcher.open", {{"reverse", event.modifiers.shift ? "yes" : "no"}});
         showSwitcher(event.modifiers.shift);
         return true;
     }
@@ -678,7 +693,23 @@ bool AppShell::runSessionDigitKey(const std::string& characters)
     return true;
 }
 
+void AppShell::logCommandKey(std::string_view event, const KeyEvent& key)
+{
+    const auto& characters = key.charactersIgnoringModifiers;
+
+    if (isPrintableTypedText(characters))
+        logUsage(event, {{"key", characters}});
+    else
+        logUsage(event, {{"code", key.keyCode}});
+}
+
 bool AppShell::handlePrefixed(const KeyEvent& event)
+{
+    logCommandKey("leader.key", event);
+    return runPrefixedKey(event);
+}
+
+bool AppShell::runPrefixedKey(const KeyEvent& event)
 {
     // f/w palette, a Claude HUD, i lazygit popup, " and %
     // split below and beside, [ ] copy mode and paste, x kills the pane.
@@ -733,7 +764,13 @@ bool AppShell::handleCommand(const KeyEvent& event)
     };
 
     const auto& characters = event.charactersIgnoringModifiers;
-    return runKeyAction(commandActions, characters) || runSessionDigitKey(characters);
+    const auto handled =
+        runKeyAction(commandActions, characters) || runSessionDigitKey(characters);
+
+    if (handled)
+        logCommandKey("command.key", event);
+
+    return handled;
 }
 
 // Lazygit over the active pane's directory, tmux display-popup style;
@@ -793,6 +830,7 @@ void AppShell::switchToLastSession()
 void AppShell::quitFromLeader()
 {
     noteQuit("leader q");
+    logUsage("app.quit", {{"via", "command-q"}});
     Apps::quit();
 }
 

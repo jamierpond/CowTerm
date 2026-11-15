@@ -3,6 +3,7 @@
 #include "OverlayPanel.h"
 #include "PaletteItem.h"
 
+#include <cstdint>
 #include <functional>
 #include <optional>
 #include <string>
@@ -63,6 +64,10 @@ private:
         eacp::UI::Color borderColour;
     };
 
+    void logPick(const PaletteItem& item) const;
+    void logCancel() const;
+    std::int64_t measureMsSinceOpen() const;
+
     void rebuild();
     PaletteItem makeSessionItem(TermSession& session) const;
     PaletteItem makeProjectItem(const std::string& name, const std::string& path) const;
@@ -101,6 +106,8 @@ private:
     std::vector<PaletteItem> allItems;
     std::vector<PaletteItem> visible;
     bool shown = false;
+    int keysSinceOpen = 0;
+    std::int64_t openedAtMs = 0;
 
     // Worktree sub-prompt: when active the list is replaced by a single
     // branch-name field bound to the repo we entered from.

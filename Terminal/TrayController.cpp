@@ -1,6 +1,7 @@
 #include "TrayController.h"
 
 #include "CowTermCore/Debug.h"
+#include "UsageLog.h"
 #include "DaemonClient.h"
 
 #include <eacp/Core/App/App.h>
@@ -95,7 +96,12 @@ void TrayController::refresh()
         DaemonClient::get() != nullptr && DaemonClient::get()->isConnected();
 
     menu.add(MenuItem::withAction(haveDaemon ? "Quit (shells keep running)" : "Quit",
-                                  [] { noteQuit("tray quit"); Apps::quit(); }));
+                                  []
+                                  {
+                                      noteQuit("tray quit");
+                                      logUsage("app.quit", {{"via", "tray"}});
+                                      Apps::quit();
+                                  }));
 
     if (haveDaemon)
         menu.add(MenuItem::withAction("Kill everything & quit",
@@ -105,6 +111,7 @@ void TrayController::refresh()
                                               client->killServer();
 
                                           noteQuit("tray kill everything");
+                                          logUsage("app.quit", {{"via", "tray-kill-everything"}});
                                           Apps::quit();
                                       }));
 
