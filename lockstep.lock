@@ -194,8 +194,8 @@
       "usesGitLfs": false
     },
     {
-      "commit": "e9cef4840677b4be9a83e325d5c2c0be94a7b984",
-      "hash": "9684b6eeb44ae45b22393fe7f8a006e63d164f9f84c546890f01a9c8531fa8f3",
+      "commit": "b753d9b510c381a3f8507686447432eb76bc01b9",
+      "hash": "1a36d3299636b8b0121a30a82fb404e94ffa6a5dec6444447ff53c01bb076faf",
       "kind": "git",
       "name": "text-buffer",
       "patches": [],
@@ -226,6 +226,6 @@
       "usesGitLfs": false
     }
   ],
-  "root": "912b9ed4412ad46b4cdb57256b5b0c5163656a503713f904173bacb356a2232b",
+  "root": "2f8e70322ea5189065db3d337b781236f452f64a5b2c0d1719c67b3cebb1bc85",
   "version": 1
 }
