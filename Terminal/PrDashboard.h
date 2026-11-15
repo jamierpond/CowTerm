@@ -48,7 +48,7 @@ struct PrJumpResult
 // gh runs on a worker thread and the last fetch is cached on disk, so the
 // panel opens instantly with slightly-stale rows while fresh ones stream in.
 // Typing filters the list fuzzily, like the palette.
-class PrDashboard final : public OverlayPanel
+class PrDashboard final : public SearchablePanel
 {
 public:
     PrDashboard(const AppConfig& configToUse, SessionManager& sessionsToUse);
@@ -79,7 +79,9 @@ private:
     void switchToSession(const PrItem& item);
     void openInBrowser(const PrItem& item);
     void copyUrl(const PrItem& item);
-    void moveSelection(int delta);
+    int countRows() const override;
+    void moveSelection(int delta) override;
+    void searchTextChanged() override;
     bool handleNavigationKey(const eacp::UI::KeyEvent& event);
     void handleControlShortcut(const eacp::UI::KeyEvent& event);
     void editQuery(const eacp::UI::KeyEvent& event);
@@ -109,7 +111,6 @@ private:
     // derived from each open session's git remote on a worker thread.
     std::map<std::string, std::pair<std::string, std::string>> sessionsByRepo;
 
-    std::string query;
     bool shown = false;
     bool refreshing = false;
     std::string status;  // header-right state: row count, "refreshing…", or the error

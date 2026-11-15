@@ -47,6 +47,7 @@ add_executable(${COWTERM_EXECUTABLE_TARGET}
         Projects.cpp
         RudderContexts.cpp
         RudderPublisher.cpp
+        SearchField.cpp
         Session.cpp
         SessionView.cpp
         Switcher.cpp
@@ -113,7 +114,7 @@ endif ()
 # which is the native 2D tier and exists only on macOS and Windows.
 target_link_libraries(${COWTERM_EXECUTABLE_TARGET} PRIVATE
         CowTerm::Terminal eacp-sprites eacp-text eacp-ui eacp-network emberstore
-        RudderClient FrecencySearch)
+        RudderClient FrecencySearch SearchKeys)
 
 # Stamp the git SHA into a generated header on every build so the running app
 # can report exactly which commit it came from (window title + startup log).

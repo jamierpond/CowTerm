@@ -104,13 +104,13 @@ bool isOrderedForEmptyQuery(const PaletteItem& a, const PaletteItem& b)
 } // namespace
 
 Palette::Palette(const AppConfig& configToUse, SessionManager& sessionsToUse)
-    : OverlayPanel(configToUse, sessionsToUse, fontSizes)
+    : SearchablePanel(configToUse, sessionsToUse, fontSizes)
 {
 }
 
 void Palette::show()
 {
-    query.clear();
+    searchField.reset();
     selected = 0;
     shown = true;
     worktreeMode = false;
@@ -181,6 +181,8 @@ void Palette::applyQuery()
 {
     visible.clear();
 
+    const auto& query = searchField.getText();
+
     if (query.empty())
     {
         // Open sessions first, then projects, each most-recently-used first.
@@ -200,7 +202,7 @@ void Palette::chooseSelected()
     if (selected < (int) visible.size())
     {
         const auto item = visible[(std::size_t) selected];
-        sessions.recordPalettePick(query, item.key);
+        sessions.recordPalettePick(searchField.getText(), item.key);
 
         if (isOpenSession(item))
         {
@@ -265,19 +267,23 @@ bool Palette::keyDown(const KeyEvent& event)
         worktreeKeyDown(event);
     else if (confirmDeleteMode)
         confirmDeleteKeyDown(event);
-    else if (!handleNavigationKey(event) && !handleCommandKey(event))
+    else if (!handleListKey(event))
         editQuery(event);
 
     return true;
 }
 
+bool Palette::handleListKey(const KeyEvent& event)
+{
+    if (handleSearchFieldKey(event) || handleNavigationKey(event))
+        return true;
+
+    return handleCommandKey(event);
+}
+
 bool Palette::handleNavigationKey(const KeyEvent& event)
 {
-    const auto isCloseKey = event.keyCode == KeyCode::Escape
-                            || (event.modifiers.command
-                                && event.charactersIgnoringModifiers == "k");
-
-    if (isCloseKey)
+    if (event.modifiers.command && event.charactersIgnoringModifiers == "k")
         dismiss();
     else if (event.keyCode == KeyCode::Return)
         chooseSelected();
@@ -311,12 +317,28 @@ bool Palette::handleCommandKey(const KeyEvent& event)
 
 void Palette::editQuery(const KeyEvent& event)
 {
-    if (!editQueryText(query, event))
+    if (!editSearchFieldText(event))
         return;
 
+    searchTextChanged();
+    repaint();
+}
+
+void Palette::searchTextChanged()
+{
     applyQuery();
     peekSelected();
-    repaint();
+}
+
+int Palette::countRows() const
+{
+    return (int) visible.size();
+}
+
+// dd or x in normal mode: the palette's only removable rows are worktrees.
+void Palette::closeHighlighted()
+{
+    beginRemoveWorktree();
 }
 
 // A repo the user already has open shows up as a Session, so take its project
@@ -639,9 +661,7 @@ void Palette::paint(UI::Graphics& g)
 
     paintListBackdropAndCard(g, panel);
 
-    g.setColour(toColor(theme.foreground));
-    drawTextInFont(
-        g, "› " + query + "▏", {panel.x + textLeft, panel.y + headerBaseline}, headerFont);
+    paintSearchField(g, {panel.x + textLeft, panel.y + headerBaseline});
 
     paintHeaderDivider(g, panel, listMetrics.headerHeight);
 

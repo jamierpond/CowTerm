@@ -15,7 +15,7 @@ namespace term
 // then known project dirs that aren't open yet. Empty query lists by
 // recency, Grazer-style; Enter switches or spawns. CPU-painted chrome over the
 // GPU terminal.
-class Palette final : public OverlayPanel
+class Palette final : public SearchablePanel
 {
 public:
     Palette(const AppConfig& configToUse, SessionManager& sessionsToUse);
@@ -70,8 +70,12 @@ private:
     void chooseSelected() override;
     void dismiss() override;
     void peekSelected();
-    void moveSelection(int delta);
+    int countRows() const override;
+    void moveSelection(int delta) override;
+    void searchTextChanged() override;
+    void closeHighlighted() override;
     void editQuery(const eacp::UI::KeyEvent& event);
+    bool handleListKey(const eacp::UI::KeyEvent& event);
     bool handleNavigationKey(const eacp::UI::KeyEvent& event);
     bool handleCommandKey(const eacp::UI::KeyEvent& event);
     std::optional<SelectedRepository> findSelectedRepository() const;
@@ -96,7 +100,6 @@ private:
 
     std::vector<PaletteItem> allItems;
     std::vector<PaletteItem> visible;
-    std::string query;
     bool shown = false;
 
     // Worktree sub-prompt: when active the list is replaced by a single

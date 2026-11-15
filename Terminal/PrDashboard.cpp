@@ -556,7 +556,7 @@ Rgb getReviewColour(const PrItem& item, const Theme& theme)
 } // namespace
 
 PrDashboard::PrDashboard(const AppConfig& configToUse, SessionManager& sessionsToUse)
-    : OverlayPanel(configToUse, sessionsToUse, fontSizes)
+    : SearchablePanel(configToUse, sessionsToUse, fontSizes)
 {
 }
 
@@ -567,7 +567,7 @@ PrDashboard::~PrDashboard()
 
 void PrDashboard::show()
 {
-    query.clear();
+    searchField.reset();
     selected = 0;
     shown = true;
     busy.clear();
@@ -693,6 +693,8 @@ void PrDashboard::applySessionMap()
 void PrDashboard::applyQuery()
 {
     visible.clear();
+
+    const auto& query = searchField.getText();
 
     if (query.empty())
     {
@@ -866,7 +868,7 @@ void PrDashboard::moveSelection(int delta)
 
 bool PrDashboard::keyDown(const KeyEvent& event)
 {
-    if (handleNavigationKey(event))
+    if (handleSearchFieldKey(event) || handleNavigationKey(event))
         return true;
 
     if (event.modifiers.control)
@@ -879,9 +881,7 @@ bool PrDashboard::keyDown(const KeyEvent& event)
 
 bool PrDashboard::handleNavigationKey(const KeyEvent& event)
 {
-    if (event.keyCode == KeyCode::Escape)
-        dismiss();
-    else if (event.keyCode == KeyCode::Return)
+    if (event.keyCode == KeyCode::Return)
         chooseSelected();
     else if (isSelectPreviousKey(event))
         moveSelection(-1);
@@ -918,11 +918,21 @@ void PrDashboard::handleControlShortcut(const KeyEvent& event)
 
 void PrDashboard::editQuery(const KeyEvent& event)
 {
-    if (!editQueryText(query, event))
+    if (!editSearchFieldText(event))
         return;
 
-    applyQuery();
+    searchTextChanged();
     repaint();
+}
+
+void PrDashboard::searchTextChanged()
+{
+    applyQuery();
+}
+
+int PrDashboard::countRows() const
+{
+    return (int) visible.size();
 }
 
 Rect PrDashboard::calculatePanelBounds() const
@@ -952,8 +962,7 @@ void PrDashboard::paintHeader(UI::Graphics& g, Rect panel)
     g.setColour(toColor(theme.ansi[5]));
     drawTextInFont(g, "prs", {panel.x + textLeft, baseline}, headerFont);
 
-    g.setColour(toColor(theme.foreground));
-    drawTextInFont(g, "› " + query + "▏", {panel.x + queryLeft, baseline}, headerFont);
+    paintSearchField(g, {panel.x + queryLeft, baseline});
 
     if (!status.empty())
     {

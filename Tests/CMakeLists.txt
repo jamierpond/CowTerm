@@ -110,11 +110,13 @@ target_include_directories(CowTermNotifyUserTests PRIVATE ../Terminal)
 nano_add_executable(CowTermPanelTests
         SOURCES
             OverlayPanelTests.cpp
+            SearchFieldTests.cpp
             TextLayoutTests.cpp
             ../Terminal/OverlayPanel.cpp
+            ../Terminal/SearchField.cpp
             ../Terminal/TextLayout.cpp
             ../Terminal/Config.cpp
-        TARGETS CowTerm::Terminal eacp-ui emberstore FrecencySearch)
+        TARGETS CowTerm::Terminal eacp-ui emberstore FrecencySearch SearchKeys)
 
 target_include_directories(CowTermPanelTests PRIVATE ../Terminal)
 
