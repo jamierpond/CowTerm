@@ -34,7 +34,8 @@ add_executable(CowTermCli
         ../Terminal/CliParsing.cpp
         ../Terminal/Config.cpp
         ../Terminal/NotifyUserClient.cpp
-        ../Terminal/NotifyUserProtocol.cpp)
+        ../Terminal/NotifyUserProtocol.cpp
+        ../Terminal/TextLayout.cpp)
 target_link_libraries(CowTermCli PRIVATE CowTermRemote CowTerm::Core)
 add_dependencies(CowTermCli CowTermVersion)
 target_include_directories(CowTermCli PRIVATE ${PROJECT_BINARY_DIR}/generated)
