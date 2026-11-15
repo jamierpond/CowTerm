@@ -10,7 +10,9 @@
 // PtyTests-Windows.cpp) share.
 namespace term::tests
 {
-constexpr auto budget = std::chrono::milliseconds {2000};
+// Windows shutdown gives the shell 2 s to exit before terminating it, so the
+// budget sits above that, and below the 3 s HUP-ignoring shell on POSIX.
+constexpr auto budget = std::chrono::milliseconds {2500};
 
 // A command that does nothing, quietly, for a few seconds, in the shell the
 // platform's Pty runs commands through.
