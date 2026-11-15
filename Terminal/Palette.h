@@ -1,6 +1,7 @@
 #pragma once
 
 #include "OverlayPanel.h"
+#include "PaletteItem.h"
 
 #include <functional>
 #include <optional>
@@ -9,24 +10,6 @@
 
 namespace term
 {
-struct PaletteItem
-{
-    enum class Kind
-    {
-        Session,
-        Project
-    };
-
-    Kind kind = Kind::Project;
-    std::string key;
-    std::string label;
-    std::string detail;
-    std::string status;
-    bool claude = false;
-    std::int64_t lastUsed = 0;
-    TermSession* session = nullptr;
-};
-
 // The switcher: one overlay that fuzzy-searches everything — open sessions
 // (Claude sessions surfaced with their conversation title and last notify),
 // then known project dirs that aren't open yet. Empty query lists by

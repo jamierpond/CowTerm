@@ -1,7 +1,7 @@
 #include "Palette.h"
 
-#include "FuzzyMatch.h"
 #include "GitWorktree.h"
+#include "PaletteRanking.h"
 #include "Projects.h"
 #include "TextLayout.h"
 
@@ -189,29 +189,7 @@ void Palette::applyQuery()
     }
     else
     {
-        auto scored = std::vector<std::pair<int, const PaletteItem*>> {};
-
-        for (const auto& item: allItems)
-        {
-            const auto haystack = item.label + " " + item.detail + " " + item.status
-                                  + (item.claude ? " claude" : "");
-
-            if (auto score = fuzzyScore(query, haystack))
-                scored.emplace_back(*score, &item);
-        }
-
-        std::stable_sort(scored.begin(),
-                         scored.end(),
-                         [](const auto& a, const auto& b)
-                         {
-                             if (a.first != b.first)
-                                 return a.first > b.first;
-
-                             return a.second->lastUsed > b.second->lastUsed;
-                         });
-
-        for (auto& [score, item]: scored)
-            visible.push_back(*item);
+        visible = rankPaletteItems(allItems, query, sessions.getPaletteUsage(query));
     }
 
     selected = std::clamp(selected, 0, std::max((int) visible.size() - 1, 0));
@@ -222,6 +200,7 @@ void Palette::chooseSelected()
     if (selected < (int) visible.size())
     {
         const auto item = visible[(std::size_t) selected];
+        sessions.recordPalettePick(query, item.key);
 
         if (isOpenSession(item))
         {

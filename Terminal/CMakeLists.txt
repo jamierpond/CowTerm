@@ -27,7 +27,6 @@ add_executable(${COWTERM_EXECUTABLE_TARGET}
         CliParsing.cpp
         Command.cpp
         Config.cpp
-        FuzzyMatch.cpp
         GitBranch.cpp
         GitWorktree.cpp
         LeaderKeys.cpp
@@ -38,6 +37,8 @@ add_executable(${COWTERM_EXECUTABLE_TARGET}
         NotifyUserServer.cpp
         OverlayPanel.cpp
         Palette.cpp
+        PaletteRanking.cpp
+        PaletteUsageStore.cpp
         PasteConfirmation.cpp
         Permissions.cpp
         PermissionsPanel.cpp
@@ -112,7 +113,7 @@ endif ()
 # which is the native 2D tier and exists only on macOS and Windows.
 target_link_libraries(${COWTERM_EXECUTABLE_TARGET} PRIVATE
         CowTerm::Terminal eacp-sprites eacp-text eacp-ui eacp-network emberstore
-        RudderClient)
+        RudderClient FrecencySearch)
 
 # Stamp the git SHA into a generated header on every build so the running app
 # can report exactly which commit it came from (window title + startup log).

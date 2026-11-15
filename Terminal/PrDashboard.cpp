@@ -2,8 +2,9 @@
 #include "TextLayout.h"
 
 #include "Command.h"
-#include "FuzzyMatch.h"
 #include "Projects.h"
+
+#include <FrecencySearch/MatchLevel.h>
 
 #include <eacp/Core/App/Clipboard.h>
 #include <eacp/Core/Threads/EventLoop.h>
@@ -699,23 +700,23 @@ void PrDashboard::applyQuery()
     }
     else
     {
-        auto scored = std::vector<std::pair<int, const PrItem*>> {};
+        auto normalisedQuery = frecencysearch::normaliseQuery(query);
+        auto matched = std::vector<std::pair<frecencysearch::MatchLevel, const PrItem*>> {};
 
         for (const auto& item: allItems)
         {
-            const auto haystack = item.repo + " " + item.title + " " + item.branch
-                                  + " " + item.reviewers + " " + item.sessionName;
+            auto texts = frecencysearch::SearchableTexts {
+                {item.title, item.branch, item.repo, item.sessionName}, {item.reviewers}};
 
-            if (auto score = fuzzyScore(query, haystack))
-                scored.emplace_back(*score, &item);
+            if (auto level = frecencysearch::findMatchLevel(normalisedQuery, texts))
+                matched.emplace_back(*level, &item);
         }
 
-        std::stable_sort(scored.begin(),
-                         scored.end(),
-                         [](const auto& a, const auto& b)
-                         { return a.first > b.first; });
+        std::stable_sort(matched.begin(),
+                         matched.end(),
+                         [](const auto& first, const auto& second) { return first.first < second.first; });
 
-        for (auto& [score, item]: scored)
+        for (auto& [level, item]: matched)
             visible.push_back(*item);
     }
 

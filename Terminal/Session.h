@@ -2,6 +2,8 @@
 
 #include "Config.h"
 #include "MruStore.h"
+#include "PaletteRanking.h"
+#include "PaletteUsageStore.h"
 #include "SessionView.h"
 
 #include <Miro/Reflect.h>
@@ -105,6 +107,9 @@ public:
 
     std::int64_t lastUsed(const std::string& key) { return mru.lastUsed(key); }
 
+    PaletteUsage getPaletteUsage(const std::string& query);
+    void recordPalettePick(const std::string& query, const std::string& key);
+
     std::function<void(TermSession&)> onActiveChanged = [](TermSession&) {};
     std::function<void(TermSession&, const std::string&)> onNotify =
         [](TermSession&, const std::string&) {};
@@ -139,6 +144,7 @@ private:
     const AppConfig& config;
     emberstore::Database db;
     MruStore mru;
+    PaletteUsageStore paletteUsage;
     emberstore::Document<SavedState> saved;
     std::vector<std::unique_ptr<TermSession>> sessions;
     TermSession* activeSession = nullptr;

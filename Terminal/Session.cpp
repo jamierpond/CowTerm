@@ -64,6 +64,7 @@ SessionManager::SessionManager(const AppConfig& configToUse)
     , db(emberstore::databaseForApp(
           "tamber", storeName(), emberstore::Durability::Atomic))
     , mru(db)
+    , paletteUsage(db)
     , saved(db.document<SavedState>("sessions"))
 {
 }
@@ -199,8 +200,21 @@ void SessionManager::switchTo(TermSession& session)
     activeSession = &session;
     session.notifyUnseen = false;
     mru.touch(session.key());
+    paletteUsage.recordUse(session.key(), PaletteUsageStore::seenWeight, MruStore::nowMs());
     persist();
     onActiveChanged(session);
+}
+
+PaletteUsage SessionManager::getPaletteUsage(const std::string& query)
+{
+    auto nowMs = MruStore::nowMs();
+    auto usage = [this, nowMs](const std::string& key) { return paletteUsage.getUsage(key, nowMs); };
+    return {usage, paletteUsage.findPicksForQuery(query, nowMs)};
+}
+
+void SessionManager::recordPalettePick(const std::string& query, const std::string& key)
+{
+    paletteUsage.recordPalettePick(query, key, MruStore::nowMs());
 }
 
 void SessionManager::switchToIndex(int index)

@@ -114,7 +114,7 @@ nano_add_executable(CowTermPanelTests
             ../Terminal/OverlayPanel.cpp
             ../Terminal/TextLayout.cpp
             ../Terminal/Config.cpp
-        TARGETS CowTerm::Terminal eacp-ui emberstore)
+        TARGETS CowTerm::Terminal eacp-ui emberstore FrecencySearch)
 
 target_include_directories(CowTermPanelTests PRIVATE ../Terminal)
 
@@ -153,13 +153,14 @@ nano_add_executable(CowTermCliTests
 
 target_include_directories(CowTermCliTests PRIVATE ../Terminal)
 
-# The palette's fzf-style scorer.
-nano_add_executable(CowTermFuzzyMatchTests
+# The palette's order: match level, learned picks, usage.
+nano_add_executable(CowTermPaletteRankingTests
         SOURCES
-            FuzzyMatchTests.cpp
-            ../Terminal/FuzzyMatch.cpp)
+            PaletteRankingTests.cpp
+            ../Terminal/PaletteRanking.cpp
+        TARGETS FrecencySearch)
 
-target_include_directories(CowTermFuzzyMatchTests PRIVATE ../Terminal)
+target_include_directories(CowTermPaletteRankingTests PRIVATE ../Terminal)
 
 # Not a test: `cat` of a large file through a real pane, timing the output and
 # the UI thread's responsiveness meanwhile. Run it by hand before and after a
