@@ -35,14 +35,19 @@ bool existsInDirectory(const std::filesystem::path& directory, const std::string
 }
 } // namespace
 
-bool isCommandInstalled(const std::string& command)
+std::string findCommandSearchPath()
+{
+    return readEnvironment("PATH", "");
+}
+
+bool isCommandInstalled(const std::string& command, const std::string& searchPath)
 {
     const auto program = getProgramName(command);
 
     if (program.empty())
         return false;
 
-    auto directories = std::istringstream {readEnvironment("PATH", "")};
+    auto directories = std::istringstream {searchPath};
 
     for (auto directory = std::string {}; std::getline(directories, directory, pathSeparator);)
     {

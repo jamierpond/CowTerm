@@ -3,12 +3,21 @@
 #include <eacp/Core/Process/Process.h>
 
 #include <cstdlib>
+#include <sstream>
+#include <string_view>
+#include <unistd.h>
 
 namespace term
 {
 namespace
 {
 constexpr auto fallbackShell = "/bin/sh";
+
+std::string readPathOfThisProcess()
+{
+    const auto* path = std::getenv("PATH");
+    return path != nullptr ? path : "";
+}
 
 std::string getLoginShell()
 {
@@ -17,16 +26,37 @@ std::string getLoginShell()
 }
 } // namespace
 
-bool isCommandInstalled(const std::string& command)
+std::string findCommandSearchPath()
+{
+    constexpr auto pathMarker = "COWTERM_PATH=";
+    auto options = eacp::Processes::ProcessOptions {};
+    options.executable = getLoginShell();
+    options.arguments = {"-l", "-i", "-c", std::string {"printf '\\n%s%s\\n' "} + pathMarker + " \"$PATH\""};
+    const auto output = eacp::Processes::run(options).output;
+    const auto start = output.rfind(pathMarker);
+
+    if (start == std::string::npos)
+        return readPathOfThisProcess();
+
+    const auto valueStart = start + std::string_view {pathMarker}.size();
+    return output.substr(valueStart, output.find('\n', valueStart) - valueStart);
+}
+
+bool isCommandInstalled(const std::string& command, const std::string& searchPath)
 {
     const auto program = getProgramName(command);
 
     if (program.empty())
         return false;
 
-    auto options = eacp::Processes::ProcessOptions {};
-    options.executable = getLoginShell();
-    options.arguments = {"-l", "-c", "command -v \"$0\" >/dev/null 2>&1", program};
-    return eacp::Processes::run(options).exitCode == 0;
+    auto directories = std::istringstream {searchPath};
+
+    for (auto directory = std::string {}; std::getline(directories, directory, ':');)
+    {
+        if (!directory.empty() && access((directory + "/" + program).c_str(), X_OK) == 0)
+            return true;
+    }
+
+    return false;
 }
 } // namespace term

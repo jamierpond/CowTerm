@@ -256,11 +256,21 @@ struct Daemon
 
         // A command that isn't installed here: the app says so in the pane,
         // instead of a pane that opens and closes in the same instant.
-        if (const auto& command = request.payload.command;
-            !command.empty() && !term::isCommandInstalled(command))
+        const auto& command = request.payload.command;
+        auto environment = std::vector<term::EnvironmentVariable> {
+            {term::proto::paneEnvironmentVariable, id}};
+
+        if (!command.empty())
         {
-            sender.send(term::proto::make("missing-command", {id}, term::getProgramName(command)));
-            return;
+            const auto searchPath = term::findCommandSearchPath();
+
+            if (!term::isCommandInstalled(command, searchPath))
+            {
+                sender.send(term::proto::make("missing-command", {id}, term::getProgramName(command)));
+                return;
+            }
+
+            environment.push_back({"PATH", searchPath});
         }
 
         if (auto found = panes.find(id); found != panes.end())
@@ -284,7 +294,7 @@ struct Daemon
             {request.size,
              request.payload.workingDirectory,
              request.payload.command,
-             {{term::proto::paneEnvironmentVariable, id}}},
+             environment},
             [this, id](std::string data)
             {
                 Threads::callAsync([this, id, data = std::move(data)]
