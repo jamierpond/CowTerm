@@ -43,7 +43,7 @@ public:
 private:
     void push();
     std::function<void()> createPendingRun(bool RudderPublisher::*pending, void (RudderPublisher::*action)());
-    RudderPane describePane(TerminalView& pane);
+    RudderPane describePane(TerminalView& pane, bool isOnThisMachine);
     RudderTab describeSession(TermSession& session);
     const TerminalView* findFocusedPane(TermSession& session);
     void activate(const std::string& contextId, bool raise);

@@ -81,11 +81,21 @@ void RudderPublisher::schedulePush()
     eacp::Threads::callAsync(createPendingRun(&RudderPublisher::pushPending, &RudderPublisher::push));
 }
 
-RudderPane RudderPublisher::describePane(TerminalView& pane)
+// A remote pane's directory is a path on another machine: looking for its git
+// checkout here would stat paths like /home/x/.git on this Mac, where /home is
+// an automount and every miss costs a directory-service lookup.
+RudderPane RudderPublisher::describePane(TerminalView& pane, bool isOnThisMachine)
 {
     auto cwd = pane.workingDirectory();
-    auto branch = branches.of(cwd);
-    auto repo = branches.repositoryRootOf(cwd);
+    auto branch = std::string {};
+    auto repo = std::string {};
+
+    if (isOnThisMachine)
+    {
+        branch = branches.of(cwd);
+        repo = branches.repositoryRootOf(cwd);
+    }
+
     return {pane.shellId(),
             pane.currentTitle(),
             pane.foregroundProcess(),
@@ -102,7 +112,7 @@ RudderTab RudderPublisher::describeSession(TermSession& session)
 
     for (auto* pane: session.view.panes())
     {
-        auto description = describePane(*pane);
+        auto description = describePane(*pane, !session.isRemote());
         description.focused = pane == focused;
         tab.panes.push_back(std::move(description));
     }
