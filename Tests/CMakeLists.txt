@@ -228,3 +228,19 @@ add_executable(CowTermRenderPicker
 target_include_directories(CowTermRenderPicker PRIVATE ../Terminal)
 target_link_libraries(CowTermRenderPicker PRIVATE
         CowTerm::Terminal CowTermRemote eacp-ui eacp-text emberstore FrecencySearch SearchKeys SessionLog PondApp)
+
+# Not a test: Ctrl+A i's popup for a pane on a remote host, opened with no
+# window so its trace shows what the command drew (scripts/run-remote-popup.sh).
+add_executable(CowTermRunRemotePopup
+        ../Bench/RunRemotePopup.cpp
+        ../Terminal/Config.cpp
+        ../Terminal/DaemonClient.cpp
+        ../Terminal/DataDirectories.cpp
+        ../Terminal/Popup.cpp
+        ../Terminal/Projects.cpp
+        ../Terminal/RemoteHosts.cpp
+        ../Terminal/SshBridgeLink.cpp
+        ../Terminal/UsageLog.cpp)
+target_include_directories(CowTermRunRemotePopup PRIVATE ../Terminal ${PROJECT_BINARY_DIR}/generated)
+add_dependencies(CowTermRunRemotePopup CowTermVersion)
+target_link_libraries(CowTermRunRemotePopup PRIVATE CowTerm::Terminal CowTermRemote SessionLog PondApp)
