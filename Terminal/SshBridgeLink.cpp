@@ -1,6 +1,7 @@
 #include "SshBridgeLink.h"
 
 #include "RemoteInstall.h"
+#include "RemoteLocation.h"
 
 #include <eacp/Core/Process/Process.h>
 #include <eacp/Core/Threads/Async.h>
@@ -45,7 +46,7 @@ Processes::ProcessOptions makeBridgeProcessOptions(const std::string& host)
                          "-o", serverAliveCountMax,
                          "-o", connectTimeout,
                          host,
-                         "$HOME/.local/bin/ct bridge"};
+                         remote::bridgeCommand};
     return options;
 }
 } // namespace

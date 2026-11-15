@@ -3,11 +3,15 @@
 # its own config and session store) without typing anything: seeds one
 # session whose shell lives on <alias>, launches the app, then checks on the
 # remote that the shell runs there and screenshots the window.
-# usage: scripts/try-remote-session.sh <ssh alias> [app path]
+# With --notify-user, also runs ct notify-user in that pane's environment on
+# the remote and checks that its prompt window opens here; the ct is then
+# stopped, which closes the prompt again.
+# usage: scripts/try-remote-session.sh <ssh alias> [--notify-user]
 set -e
 
 alias_name="$1"
-app="${2:-build-remote/Terminal/CowTerm.app}"
+app="build-remote/Terminal/CowTerm.app"
+check_notify_user="${2:-}"
 instance="remote-try"
 shell_id="remotetry$(date +%s)"
 store="$HOME/Library/Application Support/pond/CowTerm/sessions-$instance"
@@ -34,3 +38,14 @@ fi
 
 # The window is titled after its session; Jamie's own CowTerm windows aren't.
 screencap --window "$alias_name/tmp" --out "/tmp/cowterm-remote-try.png" || true
+
+if [ "$check_notify_user" = "--notify-user" ]; then
+    ssh -o BatchMode=yes "$alias_name" "COWTERM_PANE=$shell_id timeout 6 \$HOME/.local/bin/ct notify-user --title try-remote-session --content 'remote notify-user check' --options ok" &
+    sleep 3
+    if screencap --list | grep -q "CowTerm · try-remote-session"; then
+        echo "ok: notify-user from $alias_name opened a prompt here"
+    else
+        echo "FAILED: no notify-user prompt from $alias_name"
+    fi
+    wait
+fi

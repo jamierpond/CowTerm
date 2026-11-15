@@ -10,10 +10,10 @@
 
 #include <array>
 #include <map>
-#include <csignal>
+#include "StandardStreams.h"
+
 #include <cstdlib>
 #include <thread>
-#include <unistd.h>
 
 namespace term::bridge
 {
@@ -25,8 +25,6 @@ constexpr int exitOk = 0;
 constexpr int exitFail = 1;
 constexpr auto daemonHelloTimeout = Time::MS {1500};
 constexpr auto readChunkBytes = std::size_t {65536};
-constexpr int standardInput = 0;
-constexpr int standardOutput = 1;
 
 bool writeAllToStandardOutput(const std::string& bytes)
 {
@@ -34,8 +32,7 @@ bool writeAllToStandardOutput(const std::string& bytes)
 
     while (written < bytes.size())
     {
-        const auto result =
-            ::write(standardOutput, bytes.data() + written, bytes.size() - written);
+        const auto result = writeStandardOutput(bytes.data() + written, bytes.size() - written);
 
         if (result <= 0)
             return false;
@@ -62,7 +59,7 @@ struct BridgeApp
         : ctVersion(std::move(ctVersionToUse))
     {
         Apps::setDockIconVisible(false);
-        std::signal(SIGPIPE, SIG_IGN);
+        prepareStandardStreams();
 
         relay.writeToApp = [](const std::string& bytes)
         {
@@ -213,7 +210,7 @@ struct BridgeApp
 
                 while (true)
                 {
-                    const auto count = ::read(standardInput, buffer.data(), buffer.size());
+                    const auto count = readStandardInput(buffer.data(), buffer.size());
 
                     if (count <= 0)
                         break;

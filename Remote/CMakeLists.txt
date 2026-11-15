@@ -17,6 +17,12 @@ add_library(CowTermRemote STATIC
         RemoteInstall.cpp
         RemoteLocation.cpp)
 
+if (WIN32)
+    target_sources(CowTermRemote PRIVATE StandardStreams-Windows.cpp)
+else ()
+    target_sources(CowTermRemote PRIVATE StandardStreams-Posix.cpp)
+endif ()
+
 target_include_directories(CowTermRemote
         PUBLIC . ../Terminal
         PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/generated)

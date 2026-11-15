@@ -12,7 +12,11 @@ import subprocess
 import sys
 import time
 
-TIMEOUT_SECONDS = 20
+TIMEOUT_SECONDS = 60
+# The same as bridgeCommand in Remote/RemoteLocation.h.
+BRIDGE_COMMAND = ('ct="$HOME/.local/libexec/cowterm-remote/ct"; '
+                  '[ -x "$ct" ] || [ -x "$ct.exe" ] || ct="$HOME/.local/bin/ct"; '
+                  'exec "$ct" bridge')
 POLL_SECONDS = 0.5
 READ_BYTES = 65536
 MARKER = "cowterm-bridge-probe"
@@ -95,7 +99,7 @@ def main():
     if arguments[0] == "--local":
         command = [arguments[1], "bridge"]
     else:
-        command = ["ssh", "-o", "BatchMode=yes", arguments[0], "$HOME/.local/bin/ct bridge"]
+        command = ["ssh", "-o", "BatchMode=yes", arguments[0], BRIDGE_COMMAND]
     try:
         Probe(command, "--keep" in sys.argv).run()
     except RuntimeError as error:

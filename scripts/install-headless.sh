@@ -14,8 +14,18 @@ build_directory="build-headless"
 install_directory="$HOME/.local/libexec/cowterm-remote"
 bin_directory="$HOME/.local/bin"
 
+# Windows (git-bash over ssh) builds with MSVC, whose environment
+# scripts/with-msvc.ps1 brings in; executables there end in .exe.
+compiler_environment=""
+executable_suffix=""
+case "$(uname -s)" in
+    MINGW*|MSYS*)
+        compiler_environment="powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/with-msvc.ps1"
+        executable_suffix=".exe" ;;
+esac
+
 configure() {
-    cmake -S . -B "$build_directory" -G Ninja -DCMAKE_BUILD_TYPE=Release -DCOWTERM_HEADLESS=ON "$@" >/dev/null
+    $compiler_environment cmake -S . -B "$build_directory" -G Ninja -DCMAKE_BUILD_TYPE=Release -DCOWTERM_HEADLESS=ON "$@" >/dev/null
 }
 
 # eacp's network library needs libcurl on Linux. When CMake can't find one
@@ -37,15 +47,35 @@ if ! configure 2>/dev/null; then
     fi
 fi
 
-cmake --build "$build_directory" --target CowTermDaemon CowTermCli
+$compiler_environment cmake --build "$build_directory" --target CowTermDaemon CowTermCli
 
 mkdir -p "$install_directory" "$bin_directory"
+
 # Copy to a new name and rename over the old one: a daemon still running the
 # old binary keeps its inode, and the copy never writes into a busy file.
-cp "$build_directory/Daemon/CowTermDaemon" "$install_directory/cowtermd.new"
-mv -f "$install_directory/cowtermd.new" "$install_directory/cowtermd"
-cp "$build_directory/Remote/ct" "$install_directory/ct.new"
-mv -f "$install_directory/ct.new" "$install_directory/ct"
+install_executable() {
+    cp "$1" "$2.new"
+    mv -f "$2.new" "$2"
+}
+
+daemon="cowtermd$executable_suffix"
+ct="ct$executable_suffix"
+
+if [ -n "$executable_suffix" ]; then
+    # Windows can't overwrite a running exe, but can rename it: a running
+    # daemon moves aside and keeps its sessions. ~/.local/bin is left alone
+    # (a full install's ct.cmd lives there); CowTerm runs this ct by its path.
+    for name in "$daemon" "$ct"; do
+        [ -f "$install_directory/$name" ] && mv -f "$install_directory/$name" "$install_directory/$name.old" 2>/dev/null || true
+    done
+    cp "$build_directory/Daemon/CowTermDaemon.exe" "$install_directory/$daemon"
+    cp "$build_directory/Remote/ct.exe" "$install_directory/$ct"
+    echo "[cowterm] installed $("$install_directory/$ct" version)"
+    exit 0
+fi
+
+install_executable "$build_directory/Daemon/CowTermDaemon" "$install_directory/cowtermd"
+install_executable "$build_directory/Remote/ct" "$install_directory/ct"
 ln -sf "$install_directory/cowtermd" "$bin_directory/cowtermd"
 
 existing_ct="$(readlink "$bin_directory/ct" 2>/dev/null || true)"
