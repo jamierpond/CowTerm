@@ -4,6 +4,7 @@
 #include "Protocol.h"
 #include "RemoteLocation.h"
 #include "SshBridgeLink.h"
+#include "UsageLog.h"
 
 #include <algorithm>
 
@@ -81,6 +82,7 @@ void RemoteHost::handleConnected()
     status = Status::Connected;
     failedAttempts = 0;
     failureReason.clear();
+    logUsage("remote.connected", {{"host", host}});
     daemon->reattachPanes();
     requestScan();
     requestLayouts();
@@ -92,6 +94,7 @@ void RemoteHost::handleFailed(const std::string& reason)
     status = Status::Unreachable;
     failureReason = reason;
     ++failedAttempts;
+    logUsage("remote.unreachable", {{"host", host}, {"reason", reason}, {"attempt", failedAttempts}});
     daemon->reportLinkLost(getHostLabel(host) + ": " + reason + "; reconnecting…");
     onChanged();
     scheduleReconnect();
@@ -153,6 +156,7 @@ void RemoteHost::readScanResult(const std::string& payload)
     for (const auto& path: splitLines(payload))
         lastScan.push_back({remote::makeRemoteProjectDir(host, path), sessionNameFor(path)});
 
+    logUsage("remote.scan", {{"host", host}, {"projects", lastScan.size()}});
     onChanged();
 }
 
