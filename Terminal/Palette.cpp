@@ -336,6 +336,14 @@ bool Palette::handleNavigationKey(const KeyEvent& event)
     return true;
 }
 
+namespace
+{
+bool isRemoveRowKey(const std::string& charactersIgnoringModifiers)
+{
+    return charactersIgnoringModifiers == "x" || charactersIgnoringModifiers == "q";
+}
+} // namespace
+
 bool Palette::handleCommandKey(const KeyEvent& event)
 {
     if (event.keyCode == KeyCode::Delete)
@@ -347,8 +355,9 @@ bool Palette::handleCommandKey(const KeyEvent& event)
     if (event.modifiers.control && chars == "w")
         beginWorktree();
 
-    // Ctrl+X on a highlighted worktree: move it to the trash (with a confirm).
-    else if (event.modifiers.control && chars == "x")
+    // Ctrl+X or Ctrl+Q (the remove-row key in Rudder and Grazer too) on a
+    // highlighted worktree: move it to the trash (with a confirm).
+    else if (event.modifiers.control && isRemoveRowKey(chars))
         beginRemoveWorktree();
 
     return event.modifiers.command || event.modifiers.control;
