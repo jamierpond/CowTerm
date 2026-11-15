@@ -18,7 +18,7 @@ import sys
 import time
 
 TIMEOUT_SECONDS = 60
-# The same as bridgeCommand in Remote/RemoteLocation.h.
+# The same as bridgeCommand in Lib/Multiplexer/RemoteLocation.h.
 BRIDGE_COMMAND = ('ct="$HOME/.local/libexec/cowterm-remote/ct"; '
                   '[ -x "$ct" ] || [ -x "$ct.exe" ] || ct="$HOME/.local/bin/ct"; '
                   'exec "$ct" bridge')

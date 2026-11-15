@@ -2,12 +2,12 @@
 
 #include "Emulator/Debug.h"
 #include "CowTermVersion.h"
-#include "DaemonClient.h"
-#include "RemoteHosts.h"
+#include "Multiplexer/DaemonClient.h"
+#include "Multiplexer/RemoteHosts.h"
 #include "LeaderKeys.h"
 #include "Notifier.h"
-#include "TextLayout.h"
-#include "UsageLog.h"
+#include "Multiplexer/TextLayout.h"
+#include "Multiplexer/UsageLog.h"
 
 #include <eacp/Core/App/App.h>
 #include <eacp/Core/Platform/Platform.h>

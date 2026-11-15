@@ -1,8 +1,8 @@
 #include "TrayController.h"
 
 #include "Emulator/Debug.h"
-#include "UsageLog.h"
-#include "DaemonClient.h"
+#include "Multiplexer/UsageLog.h"
+#include "Multiplexer/DaemonClient.h"
 
 #include <eacp/Core/App/App.h>
 

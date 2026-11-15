@@ -1,7 +1,7 @@
 #pragma once
 
-#include "Config.h"
-#include "TextLayout.h"
+#include "Multiplexer/Config.h"
+#include "Multiplexer/TextLayout.h"
 
 #include <eacp/UI/UI.h>
 

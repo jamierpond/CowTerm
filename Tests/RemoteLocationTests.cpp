@@ -1,4 +1,4 @@
-#include "RemoteLocation.h"
+#include "Multiplexer/RemoteLocation.h"
 
 #include <NanoTest/NanoTest.h>
 

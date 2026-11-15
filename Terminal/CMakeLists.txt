@@ -8,24 +8,18 @@ else ()
     set(COWTERM_EXECUTABLE_TARGET CowTerm)
 endif ()
 
-# The emulator and the terminal widget live in Lib/ (CowTerm::TerminalView);
-# what remains here is the product around them — sessions, splits, palette,
-# switcher, daemon client, tray.
+# The libraries live in Lib/ (CowTerm::TerminalView draws a pane,
+# CowTerm::Multiplexer keeps panes in the daemon and on remote hosts); what
+# remains here is the app's own UI — sessions, splits, palette, switcher,
+# popups, notifications, tray.
 add_executable(${COWTERM_EXECUTABLE_TARGET}
         Main.cpp
         AppShell.cpp
         Cli.cpp
-        CliParsing.cpp
         Command.cpp
-        Config.cpp
-        DataDirectories.cpp
         GitBranch.cpp
-        HostColours.cpp
         LeaderKeys.cpp
-        MruStore.cpp
-        NotifyUserClient.cpp
         NotifyUserPrompt.cpp
-        NotifyUserProtocol.cpp
         NotifyUserServer.cpp
         OverlayPanel.cpp
         Palette.cpp
@@ -34,19 +28,13 @@ add_executable(${COWTERM_EXECUTABLE_TARGET}
         PasteConfirmation.cpp
         CowTermPermissions.cpp
         Popup.cpp
-        Projects.cpp
-        RemoteHosts.cpp
         RudderContexts.cpp
         RudderPublisher.cpp
         SearchField.cpp
         Session.cpp
         SessionView.cpp
-        SshBridgeLink.cpp
         Switcher.cpp
-        TextLayout.cpp
         TrayController.cpp
-        UsageLog.cpp
-        DaemonClient.cpp
         PaneTerminalConfig.cpp)
 
 # Per-platform halves of ct, shell commands, the places watcher,
@@ -96,7 +84,7 @@ endif ()
 # per-platform branches. The overlays use it rather than Graphics::Context,
 # which is the native 2D tier and exists only on macOS and Windows.
 target_link_libraries(${COWTERM_EXECUTABLE_TARGET} PRIVATE
-        CowTerm::TerminalView CowTermRemote eacp-sprites eacp-text eacp-ui eacp-network emberstore PermissionsPanel
+        CowTerm::TerminalView CowTerm::Multiplexer eacp-sprites eacp-text eacp-ui eacp-network emberstore PermissionsPanel
         PondApp RudderClient FrecencySearch SearchKeys SessionLog)
 
 add_dependencies(${COWTERM_EXECUTABLE_TARGET} CowTermVersion)

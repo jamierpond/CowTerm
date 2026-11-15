@@ -1,4 +1,4 @@
-#include "NotifyUserProtocol.h"
+#include "Multiplexer/NotifyUserProtocol.h"
 
 #include <NanoTest/NanoTest.h>
 

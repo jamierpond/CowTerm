@@ -6,8 +6,8 @@
 // app gets the whole terminal state, and that state is saved to disk so a
 // pane comes back with its screen and history after the daemon restarts.
 
-#include "DataDirectories.h"
-#include "Protocol.h"
+#include "Multiplexer/DataDirectories.h"
+#include "Multiplexer/Protocol.h"
 #include "Signals.h"
 #include "CommandLookup.h"
 #include "Shell/Pty.h"

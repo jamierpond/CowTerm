@@ -2,16 +2,16 @@
 // executable itself, so the CLI is the same binary as the app.
 
 #include "Cli.h"
-#include "CliParsing.h"
+#include "Multiplexer/CliParsing.h"
 #include "CliPlatform.h"
 #include "CowTermVersion.h"
-#include "NotifyUserClient.h"
+#include "Multiplexer/NotifyUserClient.h"
 #include <PermissionsPanel/Permissions.h>
-#include "Protocol.h"
-#include "Bridge.h"
-#include "Config.h"
-#include "RemoteCommands.h"
-#include "RemoteLocation.h"
+#include "Multiplexer/Protocol.h"
+#include "Multiplexer/Bridge.h"
+#include "Multiplexer/Config.h"
+#include "Multiplexer/RemoteCommands.h"
+#include "Multiplexer/RemoteLocation.h"
 
 #include <eacp/Core/Platform/ScopedAutoReleasePool.h>
 

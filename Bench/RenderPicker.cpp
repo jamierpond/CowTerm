@@ -5,7 +5,7 @@
 // usage: CowTermRenderPicker <out.png> [query] [rows to move the selection down]
 
 #include "Palette.h"
-#include "RemoteHosts.h"
+#include "Multiplexer/RemoteHosts.h"
 #include "Session.h"
 
 #include <eacp/Core/App/App.h>

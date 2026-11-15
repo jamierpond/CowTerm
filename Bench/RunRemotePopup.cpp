@@ -5,8 +5,8 @@
 // usage: CowTermRunRemotePopup <host> <directory there>
 
 #include "Popup.h"
-#include "RemoteHosts.h"
-#include "RemoteLocation.h"
+#include "Multiplexer/RemoteHosts.h"
+#include "Multiplexer/RemoteLocation.h"
 
 #include <eacp/Core/App/App.h>
 #include <eacp/Core/Threads/EventLoop.h>

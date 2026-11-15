@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Config.h"
+#include "Multiplexer/Config.h"
 #include "NotifyUserServer.h"
 #include "PasteConfirmation.h"
 #include "Palette.h"

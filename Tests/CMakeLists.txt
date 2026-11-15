@@ -71,11 +71,7 @@ nano_add_executable(CowTermSessionViewTests
         SOURCES
             SessionViewTests.cpp
             ../Terminal/SessionView.cpp
-            ../Terminal/HostColours.cpp
-            ../Terminal/Config.cpp
-            ../Terminal/UsageLog.cpp
-            ../Terminal/DataDirectories.cpp
-        TARGETS CowTerm::TerminalView CowTermRemote eacp-ui SessionLog PondApp)
+        TARGETS CowTerm::TerminalView CowTerm::Multiplexer eacp-ui SessionLog PondApp)
 
 target_include_directories(CowTermSessionViewTests PRIVATE ../Terminal)
 
@@ -94,10 +90,7 @@ target_include_directories(CowTermRudderTests PRIVATE ../Terminal)
 nano_add_executable(CowTermNotifyUserTests
         SOURCES
             NotifyUserProtocolTests.cpp
-            ../Terminal/NotifyUserProtocol.cpp
-            ../Terminal/TextLayout.cpp)
-
-target_include_directories(CowTermNotifyUserTests PRIVATE ../Terminal)
+        TARGETS CowTerm::Multiplexer)
 
 # The overlay panels' shared list layout and key mapping, and the text
 # splitting, wrapping and editing they and `ct notify-user` use.
@@ -108,11 +101,7 @@ nano_add_executable(CowTermPanelTests
             TextLayoutTests.cpp
             ../Terminal/OverlayPanel.cpp
             ../Terminal/SearchField.cpp
-            ../Terminal/TextLayout.cpp
-            ../Terminal/Config.cpp
-            ../Terminal/UsageLog.cpp
-            ../Terminal/DataDirectories.cpp
-        TARGETS CowTerm::TerminalView eacp-ui emberstore FrecencySearch SearchKeys SessionLog PondApp)
+        TARGETS CowTerm::TerminalView CowTerm::Multiplexer eacp-ui emberstore FrecencySearch SearchKeys SessionLog PondApp)
 
 target_include_directories(CowTermPanelTests PRIVATE ../Terminal)
 
@@ -147,16 +136,14 @@ target_include_directories(CowTermLeaderKeysTests PRIVATE ../Terminal)
 nano_add_executable(CowTermCliTests
         SOURCES
             CliParsingTests.cpp
-            ../Terminal/CliParsing.cpp)
-
-target_include_directories(CowTermCliTests PRIVATE ../Terminal)
+        TARGETS CowTerm::Multiplexer)
 
 # The palette's order: match level, learned picks, usage.
 nano_add_executable(CowTermPaletteRankingTests
         SOURCES
             PaletteRankingTests.cpp
             ../Terminal/PaletteRanking.cpp
-        TARGETS FrecencySearch CowTermRemote)
+        TARGETS FrecencySearch CowTerm::Multiplexer)
 
 target_include_directories(CowTermPaletteRankingTests PRIVATE ../Terminal)
 
@@ -174,9 +161,8 @@ target_link_libraries(CowTermScreenMemoryBench PRIVATE CowTerm::Emulator)
 nano_add_executable(CowTermDaemonRestoreTests
         SOURCES
             DaemonRestoreTests.cpp
-        TARGETS CowTerm::Emulator eacp-network PondApp)
+        TARGETS CowTerm::Multiplexer eacp-network PondApp)
 
-target_include_directories(CowTermDaemonRestoreTests PRIVATE ../Terminal)
 target_compile_definitions(CowTermDaemonRestoreTests
         PRIVATE COWTERM_DAEMON_PATH="$<TARGET_FILE:CowTermDaemon>")
 add_dependencies(CowTermDaemonRestoreTests CowTermDaemon)
@@ -188,43 +174,28 @@ nano_add_executable(CowTermRemoteTests
             RemoteLocationTests.cpp
             BridgeFramingTests.cpp
             BridgeRelayTests.cpp
-        TARGETS CowTermRemote)
+        TARGETS CowTerm::Multiplexer)
 
 # Host colours and what an ssh or ct bridge failure means for the user.
 nano_add_executable(CowTermRemoteAppTests
         SOURCES
             HostColoursTests.cpp
             SshBridgeLinkTests.cpp
-            ../Terminal/HostColours.cpp
-            ../Terminal/SshBridgeLink.cpp
-            ../Terminal/Config.cpp
-        TARGETS CowTermRemote CowTerm::Emulator)
-
-target_include_directories(CowTermRemoteAppTests PRIVATE ../Terminal)
+        TARGETS CowTerm::Multiplexer)
 
 # Not a test: Ctrl+A F rendered off screen to a PNG with the user's config
 # (scripts/render-picker.sh), to look at the picker without opening a window.
 add_executable(CowTermRenderPicker
         ../Bench/RenderPicker.cpp
         ../Terminal/Command.cpp
-        ../Terminal/Config.cpp
-        ../Terminal/DaemonClient.cpp
         ../Terminal/PaneTerminalConfig.cpp
-        ../Terminal/DataDirectories.cpp
-        ../Terminal/HostColours.cpp
-        ../Terminal/MruStore.cpp
         ../Terminal/OverlayPanel.cpp
         ../Terminal/Palette.cpp
         ../Terminal/PaletteRanking.cpp
         ../Terminal/PaletteUsageStore.cpp
-        ../Terminal/Projects.cpp
-        ../Terminal/RemoteHosts.cpp
         ../Terminal/SearchField.cpp
         ../Terminal/Session.cpp
-        ../Terminal/SessionView.cpp
-        ../Terminal/SshBridgeLink.cpp
-        ../Terminal/TextLayout.cpp
-        ../Terminal/UsageLog.cpp)
+        ../Terminal/SessionView.cpp)
 if (WIN32)
     target_sources(CowTermRenderPicker PRIVATE ../Terminal/Command-Windows.cpp)
     target_compile_options(CowTermRenderPicker PRIVATE /utf-8)
@@ -233,21 +204,14 @@ else ()
 endif ()
 target_include_directories(CowTermRenderPicker PRIVATE ../Terminal)
 target_link_libraries(CowTermRenderPicker PRIVATE
-        CowTerm::TerminalView CowTermRemote eacp-ui eacp-text emberstore FrecencySearch SearchKeys SessionLog PondApp)
+        CowTerm::TerminalView CowTerm::Multiplexer eacp-ui eacp-text emberstore FrecencySearch SearchKeys SessionLog PondApp)
 
 # Not a test: Ctrl+A i's popup for a pane on a remote host, opened with no
 # window so its trace shows what the command drew (scripts/run-remote-popup.sh).
 add_executable(CowTermRunRemotePopup
         ../Bench/RunRemotePopup.cpp
-        ../Terminal/Config.cpp
-        ../Terminal/DaemonClient.cpp
         ../Terminal/PaneTerminalConfig.cpp
-        ../Terminal/DataDirectories.cpp
-        ../Terminal/Popup.cpp
-        ../Terminal/Projects.cpp
-        ../Terminal/RemoteHosts.cpp
-        ../Terminal/SshBridgeLink.cpp
-        ../Terminal/UsageLog.cpp)
+        ../Terminal/Popup.cpp)
 target_include_directories(CowTermRunRemotePopup PRIVATE ../Terminal ${PROJECT_BINARY_DIR}/generated)
 add_dependencies(CowTermRunRemotePopup CowTermVersion)
-target_link_libraries(CowTermRunRemotePopup PRIVATE CowTerm::TerminalView CowTermRemote SessionLog PondApp)
+target_link_libraries(CowTermRunRemotePopup PRIVATE CowTerm::TerminalView CowTerm::Multiplexer SessionLog PondApp)

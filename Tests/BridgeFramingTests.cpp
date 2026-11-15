@@ -1,4 +1,4 @@
-#include "BridgeFraming.h"
+#include "Multiplexer/BridgeFraming.h"
 
 #include <NanoTest/NanoTest.h>
 

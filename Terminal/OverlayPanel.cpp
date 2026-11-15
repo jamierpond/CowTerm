@@ -1,6 +1,6 @@
 #include "OverlayPanel.h"
 
-#include "TextLayout.h"
+#include "Multiplexer/TextLayout.h"
 
 #include <algorithm>
 

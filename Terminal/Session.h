@@ -1,7 +1,7 @@
 #pragma once
 
-#include "Config.h"
-#include "MruStore.h"
+#include "Multiplexer/Config.h"
+#include "Multiplexer/MruStore.h"
 #include "PaletteRanking.h"
 #include "PaletteUsageStore.h"
 #include "SessionView.h"

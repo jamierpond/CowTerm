@@ -1,6 +1,6 @@
 #include "PaletteRanking.h"
 
-#include "RemoteLocation.h"
+#include "Multiplexer/RemoteLocation.h"
 
 #include <FrecencySearch/RowOrder.h>
 

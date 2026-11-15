@@ -2,7 +2,7 @@
 
 #include <eacp/Core/App/Clipboard.h>
 
-#include "TextLayout.h"
+#include "Multiplexer/TextLayout.h"
 
 #include <algorithm>
 #include <cmath>

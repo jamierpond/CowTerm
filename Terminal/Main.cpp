@@ -1,9 +1,9 @@
 #include "AppShell.h"
 #include "Cli.h"
 #include "CowTermVersion.h"
-#include "DaemonClient.h"
-#include "Protocol.h"
-#include "UsageLog.h"
+#include "Multiplexer/DaemonClient.h"
+#include "Multiplexer/Protocol.h"
+#include "Multiplexer/UsageLog.h"
 
 #include <eacp/Core/App/App.h>
 #include <eacp/Core/Platform/Platform.h>

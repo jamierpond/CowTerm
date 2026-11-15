@@ -1,7 +1,7 @@
 #include "SessionView.h"
 #include "PaneTerminalConfig.h"
-#include "HostColours.h"
-#include "UsageLog.h"
+#include "Multiplexer/HostColours.h"
+#include "Multiplexer/UsageLog.h"
 
 #include <algorithm>
 #include <optional>

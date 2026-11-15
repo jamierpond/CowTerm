@@ -1,12 +1,12 @@
 #include "Session.h"
-#include "UsageLog.h"
+#include "Multiplexer/UsageLog.h"
 #include "Command.h"
-#include "DataDirectories.h"
-#include "Projects.h"
-#include "HostColours.h"
-#include "Protocol.h"
-#include "RemoteHosts.h"
-#include "RemoteLocation.h"
+#include "Multiplexer/DataDirectories.h"
+#include "Multiplexer/Projects.h"
+#include "Multiplexer/HostColours.h"
+#include "Multiplexer/Protocol.h"
+#include "Multiplexer/RemoteHosts.h"
+#include "Multiplexer/RemoteLocation.h"
 
 #include <eacp/Core/Threads/Async.h>
 #include <emberstore/AppDatabase.h>

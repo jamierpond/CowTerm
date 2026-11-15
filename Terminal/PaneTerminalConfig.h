@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Config.h"
+#include "Multiplexer/Config.h"
 
 #include "TerminalView/TerminalView.h"
 

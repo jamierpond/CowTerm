@@ -1,7 +1,7 @@
 #pragma once
 
-#include "Config.h"
-#include "NotifyUserProtocol.h"
+#include "Multiplexer/Config.h"
+#include "Multiplexer/NotifyUserProtocol.h"
 
 #include <eacp/Core/Utils/Common.h>
 

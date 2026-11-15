@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Config.h"
+#include "Multiplexer/Config.h"
 
 #include <eacp/Core/Utils/Common.h>
 

@@ -1,5 +1,5 @@
 #include <Emulator/TermState.h>
-#include <Protocol.h>
+#include <Multiplexer/Protocol.h>
 #include <PondApp/DataDirectory.h>
 
 #include <NanoTest/NanoTest.h>

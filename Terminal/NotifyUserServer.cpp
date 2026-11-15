@@ -1,7 +1,7 @@
 #include "NotifyUserServer.h"
 
 #include "NotifyUserPrompt.h"
-#include "Protocol.h"
+#include "Multiplexer/Protocol.h"
 
 #include "Emulator/Debug.h"
 

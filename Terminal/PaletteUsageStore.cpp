@@ -1,5 +1,5 @@
 #include "PaletteUsageStore.h"
-#include "StorePruning.h"
+#include "Multiplexer/StorePruning.h"
 
 #include <FrecencySearch/MatchLevel.h>
 

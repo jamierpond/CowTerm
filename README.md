@@ -36,6 +36,14 @@ Branch-pinned dependencies (Rudder and emberstore at `main`) stay at their
 locked commit until `just update-deps`, which moves every package to where its
 branch or tag points now and rewrites `lockstep.lock`; commit the result.
 
+### Where the code lives
+
+- `Lib/Emulator` (`CowTerm::Emulator`): bytes in, screen state out. Parser, screen, scrollback, reflow.
+- `Lib/Shell` (`CowTerm::Shell`): the process behind a pane, the PTY and the `Shell` interface.
+- `Lib/TerminalView` (`CowTerm::TerminalView`): draws an emulator and handles keys, mouse, scrolling and copy mode. Links Emulator and Shell.
+- `Lib/Multiplexer` (`CowTerm::Multiplexer`): panes that outlive the app. The daemon protocol and client, remote hosts over ssh, `ct bridge`, config. Links Emulator and Shell, never TerminalView, so the headless build has no graphics.
+- `Terminal/` is the app's own UI, `Daemon/` is `CowTermDaemon`, `Remote/` is the headless `ct`.
+
 ### macOS privacy permissions
 
 CowTerm is not certificate-signed. macOS remembers Accessibility

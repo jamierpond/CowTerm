@@ -1,14 +1,14 @@
 // ct without the app: what a remote machine runs. `ssh host ct bridge`
 // carries the session daemon to CowTerm on another machine.
 
-#include "Bridge.h"
-#include "CliParsing.h"
-#include "Config.h"
-#include "NotifyUserClient.h"
-#include "Protocol.h"
+#include "Multiplexer/Bridge.h"
+#include "Multiplexer/CliParsing.h"
+#include "Multiplexer/Config.h"
+#include "Multiplexer/NotifyUserClient.h"
+#include "Multiplexer/Protocol.h"
 #include "CowTermVersion.h"
-#include "RemoteCommands.h"
-#include "RemoteLocation.h"
+#include "Multiplexer/RemoteCommands.h"
+#include "Multiplexer/RemoteLocation.h"
 
 #include <algorithm>
 #include <array>

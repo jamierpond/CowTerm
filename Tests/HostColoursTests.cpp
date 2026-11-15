@@ -1,4 +1,4 @@
-#include "HostColours.h"
+#include "Multiplexer/HostColours.h"
 
 #include <NanoTest/NanoTest.h>
 

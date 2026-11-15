@@ -1,6 +1,6 @@
 #include "PaneTerminalConfig.h"
-#include "DaemonClient.h"
-#include "Protocol.h"
+#include "Multiplexer/DaemonClient.h"
+#include "Multiplexer/Protocol.h"
 
 namespace term
 {

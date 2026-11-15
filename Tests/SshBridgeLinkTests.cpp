@@ -1,4 +1,4 @@
-#include "SshBridgeLink.h"
+#include "Multiplexer/SshBridgeLink.h"
 
 #include <NanoTest/NanoTest.h>
 

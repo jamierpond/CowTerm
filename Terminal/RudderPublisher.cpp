@@ -1,7 +1,7 @@
 #include "RudderPublisher.h"
-#include "UsageLog.h"
+#include "Multiplexer/UsageLog.h"
 
-#include "Projects.h"
+#include "Multiplexer/Projects.h"
 
 #include <eacp/Core/Threads/Async.h>
 #include <eacp/Core/Utils/FilePath.h>

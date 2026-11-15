@@ -1,4 +1,4 @@
-#include "BridgeRelay.h"
+#include "Multiplexer/BridgeRelay.h"
 
 #include <NanoTest/NanoTest.h>
 

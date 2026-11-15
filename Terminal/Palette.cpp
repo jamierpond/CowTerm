@@ -1,13 +1,13 @@
 #include "Palette.h"
 
 #include "PaletteRanking.h"
-#include "HostColours.h"
-#include "Projects.h"
-#include "RemoteHosts.h"
-#include "RemoteLocation.h"
-#include "TextLayout.h"
-#include "MruStore.h"
-#include "UsageLog.h"
+#include "Multiplexer/HostColours.h"
+#include "Multiplexer/Projects.h"
+#include "Multiplexer/RemoteHosts.h"
+#include "Multiplexer/RemoteLocation.h"
+#include "Multiplexer/TextLayout.h"
+#include "Multiplexer/MruStore.h"
+#include "Multiplexer/UsageLog.h"
 
 #include <algorithm>
 

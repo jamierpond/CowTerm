@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Config.h"
+#include "Multiplexer/Config.h"
 #include "DirWatcher.h"
 #include "GitBranch.h"
 #include "RudderContexts.h"

@@ -1,9 +1,9 @@
 #include "Switcher.h"
 
-#include "HostColours.h"
+#include "Multiplexer/HostColours.h"
 
-#include "TextLayout.h"
-#include "UsageLog.h"
+#include "Multiplexer/TextLayout.h"
+#include "Multiplexer/UsageLog.h"
 
 #include <eacp/Core/Threads/EventLoop.h>
 #include <eacp/Graphics/Graphics/Keyboard.h>
