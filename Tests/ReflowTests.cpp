@@ -1,5 +1,5 @@
-#include <CowTermCore/TermParser.h>
-#include <CowTermCore/TermScreen.h>
+#include <Emulator/TermParser.h>
+#include <Emulator/TermScreen.h>
 
 #include <NanoTest/NanoTest.h>
 

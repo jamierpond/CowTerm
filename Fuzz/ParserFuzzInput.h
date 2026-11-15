@@ -1,7 +1,7 @@
 #pragma once
 
-#include <CowTermCore/TermParser.h>
-#include <CowTermCore/TermScreen.h>
+#include <Emulator/TermParser.h>
+#include <Emulator/TermScreen.h>
 
 #include <algorithm>
 #include <cstdint>

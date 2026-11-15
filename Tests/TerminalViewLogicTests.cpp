@@ -5,7 +5,7 @@
 #include <CowTermTerminal/LinkDetection.h>
 #include <CowTermTerminal/MacKeyCodes.h>
 
-#include <CowTermCore/TermParser.h>
+#include <Emulator/TermParser.h>
 
 #include <NanoTest/NanoTest.h>
 

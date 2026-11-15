@@ -1,6 +1,6 @@
 #pragma once
 
-#include "CowTermCore/TermTypes.h"
+#include "Emulator/TermTypes.h"
 
 #include <Miro/Reflect.h>
 

@@ -3,7 +3,7 @@
 #include "NotifyUserPrompt.h"
 #include "Protocol.h"
 
-#include "CowTermCore/Debug.h"
+#include "Emulator/Debug.h"
 
 #include <eacp/Core/Threads/EventLoop.h>
 #include <eacp/Graphics/Window/Window.h>

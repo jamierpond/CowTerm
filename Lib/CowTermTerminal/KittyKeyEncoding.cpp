@@ -1,7 +1,7 @@
 #include "KittyKeyEncoding.h"
 
-#include <CowTermCore/KittyKeyboardFlags.h>
-#include <CowTermCore/Utf8Decoder.h>
+#include <Emulator/KittyKeyboardFlags.h>
+#include <Emulator/Utf8Decoder.h>
 
 #include <algorithm>
 #include <array>

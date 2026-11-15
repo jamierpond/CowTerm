@@ -9,9 +9,9 @@
 #include "RowDrawingCache.h"
 #include "OutputParserThread.h"
 
-#include "CowTermCore/FocusReports.h"
-#include "CowTermCore/Shell.h"
-#include "CowTermCore/TerminalModel.h"
+#include "Emulator/FocusReports.h"
+#include "Shell/Shell.h"
+#include "Emulator/TerminalModel.h"
 
 #include <eacp/Core/Threads/EventLoop.h>
 #include <eacp/Core/Threads/Timer.h>

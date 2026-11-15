@@ -3,7 +3,7 @@
 #include "CowTermVersion.h"
 #include "DaemonClient.h"
 
-#include "CowTermCore/Debug.h"
+#include "Emulator/Debug.h"
 
 #include <eacp/Core/Threads/EventLoop.h>
 

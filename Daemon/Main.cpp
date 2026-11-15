@@ -10,8 +10,8 @@
 #include "Protocol.h"
 #include "Signals.h"
 #include "CommandLookup.h"
-#include "CowTermCore/Pty.h"
-#include "CowTermCore/TerminalModel.h"
+#include "Shell/Pty.h"
+#include "Emulator/TerminalModel.h"
 
 #include <eacp/Core/App/App.h>
 #include <eacp/Core/Core.h>

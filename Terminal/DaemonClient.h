@@ -3,7 +3,7 @@
 #include "Config.h"
 #include "DaemonLink.h"
 
-#include "CowTermCore/Pty.h"
+#include "Shell/Pty.h"
 #include "CowTermTerminal/TerminalView.h"
 
 #include <eacp/Core/Threads/Timer.h>

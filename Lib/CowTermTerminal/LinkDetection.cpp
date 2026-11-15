@@ -2,7 +2,7 @@
 
 #include "CellText.h"
 
-#include "CowTermCore/HyperlinkTable.h"
+#include "Emulator/HyperlinkTable.h"
 
 #include <algorithm>
 #include <cctype>

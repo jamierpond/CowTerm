@@ -16,7 +16,7 @@ add_library(CowTermTerminal STATIC
         OutputParserThread.cpp)
 
 if (MSVC)
-    # Unicode literals (copy-mode indicators) — same reason as CowTermCore.
+    # Unicode literals (copy-mode indicators) — same reason as CowTermEmulator.
     target_compile_options(CowTermTerminal PRIVATE /utf-8)
 endif ()
 
@@ -28,7 +28,8 @@ find_package(ResEmbed REQUIRED)
 
 target_include_directories(CowTermTerminal PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/..)
 target_link_libraries(CowTermTerminal PUBLIC
-        CowTermCore
+        CowTerm::Emulator
+        CowTerm::Shell
         eacp-sprites
         eacp-text
         ResEmbed)

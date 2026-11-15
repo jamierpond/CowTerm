@@ -5,7 +5,7 @@
 
 #include "DaemonDialer.h"
 
-#include "CowTermCore/Shell.h"
+#include "Shell/Shell.h"
 
 #include <utility>
 

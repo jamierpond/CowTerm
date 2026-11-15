@@ -2,7 +2,7 @@
 
 #include "GridSelection.h"
 
-#include "CowTermCore/TermScreen.h"
+#include "Emulator/TermScreen.h"
 
 #include <optional>
 #include <string>

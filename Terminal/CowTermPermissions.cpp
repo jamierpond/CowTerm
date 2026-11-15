@@ -1,6 +1,6 @@
 #include "CowTermPermissions.h"
 
-#include "CowTermCore/Debug.h"
+#include "Emulator/Debug.h"
 
 #include <eacp/Core/App/App.h>
 

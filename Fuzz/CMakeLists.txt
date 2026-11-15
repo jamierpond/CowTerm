@@ -1,7 +1,7 @@
 # Writes Snapshots.txt: the screen each corpus recording replays to, which
 # Tests/FuzzCorpusReplayTests.cpp checks. Run by scripts/update-fuzz-snapshots.sh.
 add_executable(CowTermWriteFuzzSnapshots WriteSnapshots.cpp)
-target_link_libraries(CowTermWriteFuzzSnapshots PRIVATE CowTerm::Core)
+target_link_libraries(CowTermWriteFuzzSnapshots PRIVATE CowTerm::Emulator)
 
 # libFuzzer target for TermParser::feed and the screen it drives, under
 # AddressSanitizer and UndefinedBehaviorSanitizer. Needs a Clang that ships
@@ -13,15 +13,15 @@ if (COWTERM_ENABLE_FUZZING)
 
     add_executable(CowTermParserFuzzer
             ParserFuzzer.cpp
-            ../Lib/CowTermCore/CharWidth.cpp
-            ../Lib/CowTermCore/GraphemeBreak.cpp
-            ../Lib/CowTermCore/CsiParameters.cpp
-            ../Lib/CowTermCore/HyperlinkTable.cpp
-            ../Lib/CowTermCore/KittyKeyboardFlags.cpp
-            ../Lib/CowTermCore/Reflow.cpp
-            ../Lib/CowTermCore/SelectGraphicRendition.cpp
-            ../Lib/CowTermCore/TermParser.cpp
-            ../Lib/CowTermCore/TermScreen.cpp)
+            ../Lib/Emulator/CharWidth.cpp
+            ../Lib/Emulator/GraphemeBreak.cpp
+            ../Lib/Emulator/CsiParameters.cpp
+            ../Lib/Emulator/HyperlinkTable.cpp
+            ../Lib/Emulator/KittyKeyboardFlags.cpp
+            ../Lib/Emulator/Reflow.cpp
+            ../Lib/Emulator/SelectGraphicRendition.cpp
+            ../Lib/Emulator/TermParser.cpp
+            ../Lib/Emulator/TermScreen.cpp)
 
     target_compile_options(CowTermParserFuzzer PRIVATE ${COWTERM_SANITIZER_FLAGS} -g -O1)
     target_link_options(CowTermParserFuzzer PRIVATE ${COWTERM_SANITIZER_FLAGS})

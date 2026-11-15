@@ -1,4 +1,4 @@
-#include <CowTermCore/KittyKeyboardFlags.h>
+#include <Emulator/KittyKeyboardFlags.h>
 #include <CowTermTerminal/KeyEncoding.h>
 #include <CowTermTerminal/KittyKeyEncoding.h>
 

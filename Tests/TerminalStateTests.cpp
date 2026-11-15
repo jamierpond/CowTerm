@@ -1,4 +1,4 @@
-#include <CowTermCore/TerminalModel.h>
+#include <Emulator/TerminalModel.h>
 
 #include <NanoTest/NanoTest.h>
 

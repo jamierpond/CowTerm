@@ -2,7 +2,7 @@
 
 #include "CellText.h"
 
-#include "CowTermCore/Debug.h"
+#include "Emulator/Debug.h"
 
 #include <eacp/Core/App/Clipboard.h>
 

@@ -1,4 +1,4 @@
-#include <CowTermCore/TermState.h>
+#include <Emulator/TermState.h>
 #include <Protocol.h>
 #include <PondApp/DataDirectory.h>
 

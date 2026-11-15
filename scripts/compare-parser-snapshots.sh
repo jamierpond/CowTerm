@@ -11,18 +11,18 @@ base="${1:-jp/parser-fuzzer}"
 corpus="${2:-build-fuzz/corpus}"
 work="build-compare"
 # Every include directory the library's own build of TermParser.cpp uses.
-include_flags="$(python3 -c 'import json,shlex,sys; e=[c for c in json.load(open("build/compile_commands.json")) if c["file"].endswith("CowTermCore/TermParser.cpp")][0]; print(" ".join(a for a in shlex.split(e["command"]) if a.startswith("-I")))')"
+include_flags="$(python3 -c 'import json,shlex,sys; e=[c for c in json.load(open("build/compile_commands.json")) if c["file"].endswith("Emulator/TermParser.cpp")][0]; print(" ".join(a for a in shlex.split(e["command"]) if a.startswith("-I")))')"
 rm -rf "$work"
-mkdir -p "$work/base/CowTermCore"
+mkdir -p "$work/base/Emulator"
 
-for file in $(git ls-tree --name-only "$base" Lib/CowTermCore/); do
-    git show "$base:$file" > "$work/base/CowTermCore/$(basename "$file")"
+for file in $(git ls-tree --name-only "$base" Lib/Emulator/); do
+    git show "$base:$file" > "$work/base/Emulator/$(basename "$file")"
 done
 
 build_writer() {
     root="$1"
     output="$2"
-    sources=$(ls "$root"/CowTermCore/*.cpp | grep -v Pty)
+    sources=$(ls "$root"/Emulator/*.cpp | grep -v Pty)
     c++ -std=c++20 -O1 -I"$root" $include_flags -IFuzz Fuzz/WriteSnapshots.cpp $sources -o "$output"
 }
 

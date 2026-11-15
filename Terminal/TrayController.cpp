@@ -1,6 +1,6 @@
 #include "TrayController.h"
 
-#include "CowTermCore/Debug.h"
+#include "Emulator/Debug.h"
 #include "UsageLog.h"
 #include "DaemonClient.h"
 

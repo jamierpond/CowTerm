@@ -4,7 +4,7 @@
 #include "GridSelection.h"
 #include "LinkDetection.h"
 
-#include "CowTermCore/TermScreen.h"
+#include "Emulator/TermScreen.h"
 
 #include <eacp/Sprites/Sprites.h>
 

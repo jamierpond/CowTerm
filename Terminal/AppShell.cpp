@@ -1,6 +1,6 @@
 #include "AppShell.h"
 
-#include "CowTermCore/Debug.h"
+#include "Emulator/Debug.h"
 #include "CowTermVersion.h"
 #include "DaemonClient.h"
 #include "RemoteHosts.h"

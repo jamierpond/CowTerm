@@ -14,16 +14,16 @@ if (WIN32)
             SOURCES
                 PtyTests.cpp
                 PtyTests-Windows.cpp
-            TARGETS CowTerm::Core)
+            TARGETS CowTerm::Shell)
 else ()
     nano_add_executable(CowTermTests
             SOURCES
                 PtyTests.cpp
                 PtyTests-Posix.cpp
-                ../Lib/CowTermCore/Pty-Posix.cpp)
+                ../Lib/Shell/Pty-Posix.cpp)
 endif ()
 
-target_include_directories(CowTermTests PRIVATE ../Lib/CowTermCore)
+target_include_directories(CowTermTests PRIVATE ../Lib/Shell)
 
 # The parser and screen do pull in eacp (Rgb and friends), so these link the
 # library rather than compiling its sources in the way the PTY tests do.
@@ -35,7 +35,7 @@ nano_add_executable(CowTermScreenTests
             ReflowTests.cpp
             TerminalStateTests.cpp
             DirtyRowTests.cpp
-        TARGETS CowTerm::Core)
+        TARGETS CowTerm::Emulator)
 
 # Replays every recording in Fuzz/Corpus (the fuzzer's seeds and every input
 # it once crashed on) and checks each screen against Fuzz/Snapshots.txt.
@@ -43,7 +43,7 @@ nano_add_executable(CowTermFuzzCorpusTests
         SOURCES
             FuzzCorpusReplayTests.cpp
             FuzzCorpusStateTests.cpp
-        TARGETS CowTerm::Core)
+        TARGETS CowTerm::Emulator)
 
 target_include_directories(CowTermFuzzCorpusTests PRIVATE ../Fuzz)
 target_compile_definitions(CowTermFuzzCorpusTests PRIVATE
@@ -168,13 +168,13 @@ target_link_libraries(CowTermCatThroughputBench PRIVATE CowTerm::Terminal)
 
 # Not a test: one pane's memory with 10,000 lines of scrollback.
 add_executable(CowTermScreenMemoryBench ../Bench/ScreenMemoryBench.cpp)
-target_link_libraries(CowTermScreenMemoryBench PRIVATE CowTerm::Core)
+target_link_libraries(CowTermScreenMemoryBench PRIVATE CowTerm::Emulator)
 # Drives the real session daemon over IPC under its own instance name: a pane's
 # screen must come back after the daemon quits and starts again.
 nano_add_executable(CowTermDaemonRestoreTests
         SOURCES
             DaemonRestoreTests.cpp
-        TARGETS CowTerm::Core eacp-network PondApp)
+        TARGETS CowTerm::Emulator eacp-network PondApp)
 
 target_include_directories(CowTermDaemonRestoreTests PRIVATE ../Terminal)
 target_compile_definitions(CowTermDaemonRestoreTests
@@ -198,7 +198,7 @@ nano_add_executable(CowTermRemoteAppTests
             ../Terminal/HostColours.cpp
             ../Terminal/SshBridgeLink.cpp
             ../Terminal/Config.cpp
-        TARGETS CowTermRemote CowTerm::Core)
+        TARGETS CowTermRemote CowTerm::Emulator)
 
 target_include_directories(CowTermRemoteAppTests PRIVATE ../Terminal)
 

@@ -3,7 +3,7 @@
 #include "Config.h"
 #include "RemoteLocation.h"
 
-#include "CowTermCore/TermTypes.h"
+#include "Emulator/TermTypes.h"
 
 #include <optional>
 #include <string>

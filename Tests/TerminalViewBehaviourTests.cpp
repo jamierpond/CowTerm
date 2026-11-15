@@ -1,5 +1,5 @@
 #include <CowTermTerminal/TerminalView.h>
-#include <CowTermCore/TerminalModel.h>
+#include <Emulator/TerminalModel.h>
 
 #include <eacp/Core/Threads/EventLoop.h>
 
