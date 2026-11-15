@@ -194,8 +194,6 @@ void SearchablePanel::performSearchAction(searchkeys::Action action)
         chooseSelected();
     else if (action == Action::closeSearch)
         dismiss();
-    else if (action == Action::closeHighlighted)
-        closeHighlighted();
     else
         moveSelectionForSearchAction(action);
 
@@ -216,15 +214,6 @@ void SearchablePanel::moveSelectionForSearchAction(searchkeys::Action action)
         moveSelection(countRows() - 1 - selected);
 }
 
-bool SearchablePanel::editSearchFieldText(const UI::KeyEvent& event)
-{
-    if (!searchField.editText(event))
-        return false;
-
-    selected = 0;
-    return true;
-}
-
 namespace
 {
 // The block covers the character after the caret, or a space at the end of
@@ -243,7 +232,7 @@ std::string getCharacterUnderCaret(const std::string& text, int caret)
 
 void SearchablePanel::paintSearchField(UI::Graphics& g, Point baselineStart)
 {
-    const auto& text = searchField.getText();
+    const auto text = searchField.getText();
     const auto caret = searchField.getCaret();
     const auto beforeCaret = searchPrompt + text.substr(0, (std::size_t) caret);
     g.setColour(toColor(theme.foreground));

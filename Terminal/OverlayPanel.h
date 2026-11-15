@@ -120,10 +120,6 @@ protected:
     // false when the panel should handle the key itself.
     bool handleSearchFieldKey(const eacp::UI::KeyEvent& event);
 
-    // Types into or erases from the search field at its caret; true when the
-    // text changed. Typing moves the selection back to the first row.
-    bool editSearchFieldText(const eacp::UI::KeyEvent& event);
-
     // "› query" with a thin caret in insert mode, or a block caret and a
     // NORMAL label in normal mode.
     void paintSearchField(eacp::UI::Graphics& g, eacp::UI::Point baselineStart);
@@ -134,7 +130,6 @@ protected:
     virtual int countRows() const = 0;
     virtual void moveSelection(int delta) = 0;
     virtual void searchTextChanged() = 0;
-    virtual void closeHighlighted() {}
 
     SearchField searchField;
 };

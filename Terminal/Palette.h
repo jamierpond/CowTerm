@@ -78,8 +78,6 @@ private:
     int countRows() const override;
     void moveSelection(int delta) override;
     void searchTextChanged() override;
-    void closeHighlighted() override;
-    void editQuery(const eacp::UI::KeyEvent& event);
     bool handleListKey(const eacp::UI::KeyEvent& event);
     bool handleNavigationKey(const eacp::UI::KeyEvent& event);
     bool handleCommandKey(const eacp::UI::KeyEvent& event);

@@ -303,8 +303,8 @@ bool Palette::keyDown(const KeyEvent& event)
         worktreeKeyDown(event);
     else if (confirmDeleteMode)
         confirmDeleteKeyDown(event);
-    else if (!handleListKey(event))
-        editQuery(event);
+    else
+        handleListKey(event);
 
     if (shown && searchField.isNormalMode() != wasNormalMode)
         logUsage("palette.mode", {{"mode", searchField.isNormalMode() ? "normal" : "insert"}});
@@ -324,8 +324,6 @@ bool Palette::handleNavigationKey(const KeyEvent& event)
 {
     if (event.modifiers.command && event.charactersIgnoringModifiers == "k")
         dismiss();
-    else if (event.keyCode == KeyCode::Return)
-        chooseSelected();
     else if (isSelectPreviousKey(event))
         moveSelection(-1);
     else if (isSelectNextKey(event))
@@ -363,15 +361,6 @@ bool Palette::handleCommandKey(const KeyEvent& event)
     return event.modifiers.command || event.modifiers.control;
 }
 
-void Palette::editQuery(const KeyEvent& event)
-{
-    if (!editSearchFieldText(event))
-        return;
-
-    searchTextChanged();
-    repaint();
-}
-
 void Palette::searchTextChanged()
 {
     applyQuery();
@@ -383,12 +372,6 @@ void Palette::searchTextChanged()
 int Palette::countRows() const
 {
     return (int) visible.size();
-}
-
-// dd or x in normal mode: the palette's only removable rows are worktrees.
-void Palette::closeHighlighted()
-{
-    beginRemoveWorktree();
 }
 
 // A repo the user already has open shows up as a Session, so take its project

@@ -7,26 +7,22 @@
 
 namespace term
 {
-// A palette's query box with Rudder's vim modes: SearchKeys picks the mode and
-// the action for each key, this keeps the text and caret it edits.
+// A palette's query box: Rudder's one-line vim search box, fed eacp key events.
 class SearchField
 {
 public:
     void reset();
 
-    const std::string& getText() const { return state.text; }
-    int getCaret() const { return state.caret; }
-    bool isNormalMode() const;
+    std::string getText() const { return box.getText(); }
+    int getCaret() const { return box.getCaret(); }
+    bool isNormalMode() const { return box.isNormalMode(); }
 
-    // Applies the key's mode and text change; passThrough means the panel
-    // handles the key itself (typing, Enter in insert mode, chords).
+    // Edits the text or names a list action; passThrough means the panel
+    // handles the key itself (its control and command chords).
     searchkeys::Action handleKey(const eacp::UI::KeyEvent& event);
 
-    // Insert-mode typing and backspace at the caret; true when the text changed.
-    bool editText(const eacp::UI::KeyEvent& event);
-
 private:
-    searchkeys::State state = searchkeys::getOpeningState();
+    searchkeys::SearchBox box;
 };
 
 searchkeys::Key makeSearchKey(const eacp::UI::KeyEvent& event);

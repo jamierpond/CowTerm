@@ -30,7 +30,7 @@ UI::KeyEvent makeSpecialKey(std::uint16_t keyCode)
 void typeText(SearchField& field, const std::string& text)
 {
     for (auto character: text)
-        field.editText(makeTypedKey(std::string(1, character)));
+        field.handleKey(makeTypedKey(std::string(1, character)));
 }
 
 SearchField makeNormalModeFieldWithText(const std::string& text)
@@ -42,21 +42,23 @@ SearchField makeNormalModeFieldWithText(const std::string& text)
 }
 } // namespace
 
-auto tOpensInInsert = test("SearchField/opensInInsertModeAndTypingPassesThrough") = []
+auto tOpensInInsert = test("SearchField/opensInInsertModeAndTypingEditsTheText") = []
 {
     auto field = SearchField {};
 
     check(!field.isNormalMode());
-    check(field.handleKey(makeTypedKey("j")) == Action::passThrough);
-    check(field.handleKey(makeSpecialKey(UI::KeyCode::Return)) == Action::passThrough);
+    check(field.handleKey(makeTypedKey("j")) == Action::none);
+    check(field.getText() == "j");
+    check(field.handleKey(makeSpecialKey(UI::KeyCode::Return)) == Action::openHighlighted);
 };
 
-auto tEscapeKeepsText = test("SearchField/escapeInInsertGoesToNormalAndKeepsText") = []
+auto tEscapeOnLastCharacter = test("SearchField/escapeInInsertGoesToNormalWithTheCaretOnTheLastCharacter") = []
 {
     auto field = makeNormalModeFieldWithText("cow");
 
     check(field.isNormalMode());
     check(field.getText() == "cow");
+    check(field.getCaret() == 2);
 };
 
 auto tEscapeInNormalCloses = test("SearchField/escapeInNormalClosesTheSearch") = []
@@ -66,7 +68,7 @@ auto tEscapeInNormalCloses = test("SearchField/escapeInNormalClosesTheSearch") =
     check(field.handleKey(makeSpecialKey(UI::KeyCode::Escape)) == Action::closeSearch);
 };
 
-auto tNormalKeys = test("SearchField/normalModeKeysMapToRowActions") = []
+auto tNormalListKeys = test("SearchField/normalModeListKeysMapToRowActions") = []
 {
     auto field = makeNormalModeFieldWithText("cow");
 
@@ -75,33 +77,29 @@ auto tNormalKeys = test("SearchField/normalModeKeysMapToRowActions") = []
     check(field.handleKey(makeTypedKey("G")) == Action::moveHighlightToLast);
     check(field.handleKey(makeTypedKey("g")) == Action::none);
     check(field.handleKey(makeTypedKey("g")) == Action::moveHighlightToFirst);
-    check(field.handleKey(makeTypedKey("x")) == Action::closeHighlighted);
-    check(field.handleKey(makeTypedKey("d")) == Action::none);
-    check(field.handleKey(makeTypedKey("d")) == Action::closeHighlighted);
     check(field.handleKey(makeTypedKey("s")) == Action::starHighlighted);
-    check(field.handleKey(makeSpecialKey(UI::KeyCode::Return)) == Action::openHighlighted);
-    check(field.handleKey(makeTypedKey("q")) == Action::none);
     check(field.getText() == "cow");
 };
 
-auto tBackspaceInNormal = test("SearchField/backspaceInNormalLeavesTextAlone") = []
+auto tWordBack = test("SearchField/bFromTheEndOfHelloWorldGoesBackAWord") = []
 {
-    auto field = makeNormalModeFieldWithText("cow");
+    constexpr auto startOfWorld = 6;
+    auto field = makeNormalModeFieldWithText("hello world");
 
-    check(field.handleKey(makeSpecialKey(UI::KeyCode::Delete)) == Action::none);
-    check(field.getText() == "cow");
+    field.handleKey(makeTypedKey("b"));
+    check(field.getCaret() == startOfWorld);
 };
 
-auto tInsertAtStart = test("SearchField/capitalIThenTypingInsertsAtTheStart") = []
+auto tVimEdits = test("SearchField/xAndDdEditTheText") = []
 {
     auto field = makeNormalModeFieldWithText("cow");
 
-    field.handleKey(makeTypedKey("I"));
-    typeText(field, "my");
+    check(field.handleKey(makeTypedKey("x")) == Action::none);
+    check(field.getText() == "co");
 
-    check(!field.isNormalMode());
-    check(field.getText() == "mycow");
-    check(field.getCaret() == 2);
+    field.handleKey(makeTypedKey("d"));
+    field.handleKey(makeTypedKey("d"));
+    check(field.getText().empty());
 };
 
 auto tBackspaceAtCaret = test("SearchField/backspaceErasesBeforeTheCaret") = []
@@ -110,27 +108,10 @@ auto tBackspaceAtCaret = test("SearchField/backspaceErasesBeforeTheCaret") = []
 
     field.handleKey(makeTypedKey("I"));
     typeText(field, "ab");
-    field.editText(makeSpecialKey(UI::KeyCode::Delete));
+    field.handleKey(makeSpecialKey(UI::KeyCode::Delete));
 
     check(field.getText() == "acow");
     check(field.getCaret() == 1);
-};
-
-auto tClearAndInsert = test("SearchField/ccAndCapitalSClearTheTextIntoInsert") = []
-{
-    auto field = makeNormalModeFieldWithText("cow");
-    field.handleKey(makeTypedKey("S"));
-
-    check(field.getText().empty());
-    check(!field.isNormalMode());
-
-    typeText(field, "moo");
-    field.handleKey(makeSpecialKey(UI::KeyCode::Escape));
-    field.handleKey(makeTypedKey("c"));
-    field.handleKey(makeTypedKey("c"));
-
-    check(field.getText().empty());
-    check(!field.isNormalMode());
 };
 
 auto tChordsPassThrough = test("SearchField/controlChordsPassThroughInNormal") = []
