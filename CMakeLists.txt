@@ -66,6 +66,15 @@ lockstep_add_package(
         SYSTEM YES
         OPTIONS ${COWTERM_EACP_OPTIONS})
 
+# Crash reports (Crashout): the app and the daemon write one to
+# <app support>/<executable>/Crashes/pending/<id>/ when they crash, which
+# scripts/crash-reports.py lists. Its handler exists on macOS and Windows only.
+lockstep_add_package(
+        NAME Crashout
+        GITHUB_REPOSITORY jamierpond/Crashout
+        GIT_TAG main
+        SYSTEM YES)
+
 # eacp appends its CMake helper directory to CMAKE_MODULE_PATH only within its
 # own directory scope, so re-add it here: the app subdirectories call
 # find_package(ResEmbed) (via eacp_set_gui_subsystem) and need the Find modules.

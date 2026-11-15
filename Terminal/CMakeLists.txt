@@ -109,6 +109,12 @@ set_default_target_setting(${COWTERM_EXECUTABLE_TARGET})
 eacp_set_app_icon(${COWTERM_EXECUTABLE_TARGET}
         IMAGE "${CMAKE_CURRENT_SOURCE_DIR}/Icon.png")
 
+if (APPLE OR WIN32)
+    eacp_enable_crash_reporting(${COWTERM_EXECUTABLE_TARGET}
+            SYMBOLS_DIR ${PROJECT_BINARY_DIR}/symbols)
+    target_link_libraries(${COWTERM_EXECUTABLE_TARGET} PRIVATE eacp-crash-faults)
+endif ()
+
 # The daemon rides beside the GUI executable. CowTermApp is deliberately always
 # out of date so a daemon-only rebuild never leaves a stale bundled copy.
 if (APPLE)

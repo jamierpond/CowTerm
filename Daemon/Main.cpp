@@ -17,6 +17,10 @@
 #include <eacp/Core/Core.h>
 #include <eacp/Core/Utils/Files.h>
 #include <eacp/Network/IPC/Messenger.h>
+#if EACP_CRASH_REPORTING
+#include "CowTermVersion.h"
+#include <eacp/CrashReporting/CrashReporting.h>
+#endif
 #include <emberstore/AppDatabase.h>
 #include <SessionLog/EventLine.h>
 
@@ -466,8 +470,17 @@ struct Daemon
 };
 } // namespace
 
-int main()
+int main([[maybe_unused]] int argc, [[maybe_unused]] char** argv)
 {
+#if EACP_CRASH_REPORTING
+    if (auto handlerExitCode = CrashReporting::runHandlerIfRequested(argc, argv))
+        return *handlerExitCode;
+
+    auto crashReportingOptions = CrashReporting::Options {};
+    crashReportingOptions.release = term::versionTag();
+    CrashReporting::start(crashReportingOptions);
+#endif
+
     try
     {
         return Apps::run<Daemon>();

@@ -10,7 +10,13 @@
 #include <eacp/Graphics/Menu/Menu.h>
 #include <PondApp/SingleInstance.h>
 
+#if EACP_CRASH_REPORTING
+#include <eacp/CrashReporting/CrashReporting.h>
+#include <eacp/CrashReporting/Faults/Faults.h>
+#endif
+
 #include <cstdio>
+#include <string_view>
 #include <utility>
 
 using namespace eacp;
@@ -25,6 +31,22 @@ pondapp::SingleInstance& getRunningInstanceClaim()
         suffix.empty() ? std::string {"audio.pond.cowterm"} : "audio.pond.cowterm." + suffix};
     return claim;
 }
+
+#if EACP_CRASH_REPORTING
+// `CowTerm --crash-for-testing <fault>` crashes on purpose with one of Crashout's
+// faults (nullptr, abort, stackoverflow, ...), to check a crash report end to end.
+constexpr auto crashForTestingFlag = std::string_view {"--crash-for-testing"};
+
+void crashIfAskedToForTesting(int argc, char** argv)
+{
+    for (auto index = 1; index + 1 < argc; ++index)
+    {
+        if (argv[index] == crashForTestingFlag)
+            CrashReporting::Faults::triggerFault(argv[index + 1],
+                                                 CrashReporting::Faults::ThreadChoice::main);
+    }
+}
+#endif
 
 Graphics::WindowOptions windowOptions()
 {
@@ -140,6 +162,11 @@ struct TerminalApp
 
 int main(int argc, char** argv)
 {
+#if EACP_CRASH_REPORTING
+    if (auto handlerExitCode = CrashReporting::runHandlerIfRequested(argc, argv))
+        return *handlerExitCode;
+#endif
+
     if (term::isCliInvocation(argc, argv))
         return term::runCli(argc, argv);
 
@@ -148,6 +175,13 @@ int main(int argc, char** argv)
     if (!claim.isTheRunningInstance()
         && claim.handOverToRunningInstance(pondapp::getLaunchArguments(argc, argv)))
         return pondapp::exitCodeAnotherInstanceIsRunning;
+
+#if EACP_CRASH_REPORTING
+    auto crashReportingOptions = CrashReporting::Options {};
+    crashReportingOptions.release = term::versionTag();
+    CrashReporting::start(crashReportingOptions);
+    crashIfAskedToForTesting(argc, argv);
+#endif
 
     std::fprintf(stderr,
                  "CowTerm %s (%s)\n",

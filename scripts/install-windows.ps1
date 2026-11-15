@@ -26,7 +26,9 @@ foreach ($old in Get-ChildItem -Path $InstallDir -Filter '*.old' -ErrorAction Si
     try { Remove-Item -Force $old.FullName } catch { }
 }
 
-foreach ($name in 'CowTerm.exe', 'CowTermDaemon.exe')
+# Windows Error Reporting loads the helper DLL from beside CowTerm.exe to report
+# the crashes no in-process handler sees (fast-fail, heap corruption).
+foreach ($name in 'CowTerm.exe', 'CowTermDaemon.exe', 'eacp-windows-error-reporting-helper.dll')
 {
     $source = Join-Path $BuildDir "Terminal\$name"
     $target = Join-Path $InstallDir $name
