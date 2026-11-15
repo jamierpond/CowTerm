@@ -38,6 +38,7 @@ constexpr auto minimumAvailableWidth = 240.0f;
 constexpr auto cardCornerRadius = 8.0f;
 constexpr auto highlightedCardAlpha = 0.9f;
 constexpr auto plainCardAlpha = 0.06f;
+constexpr auto remoteCardTintAlpha = 0.14f;
 constexpr auto iconBaseline = 26.0f;
 constexpr auto nameBaseline = 50.0f;
 constexpr auto minimumNameLength = 4;
@@ -277,6 +278,7 @@ void Switcher::paintCard(UI::Graphics& g, int index, Rect card)
         g.setColour(toColor(theme.foreground, plainCardAlpha));
 
     g.fillRoundedRect(card, cardCornerRadius);
+    paintRemoteCardTint(g, session, card);
 
     const auto icon = claude ? "✳" : "●";
     g.setColour(toColor(getCardIconColour(session)));
@@ -288,6 +290,16 @@ void Switcher::paintCard(UI::Graphics& g, int index, Rect card)
     g.setColour(toColor(theme.foreground, nameAlpha));
     drawCentered(
         g, truncateWithEllipsis(session.name, maxChars), {cx, card.y + nameBaseline}, rowFont);
+}
+
+// A remote session's card carries a faint wash of its host's colour.
+void Switcher::paintRemoteCardTint(UI::Graphics& g, const TermSession& session, Rect card) const
+{
+    if (!session.isRemote())
+        return;
+
+    g.setColour(toColor(getHostColour(config, session.host), remoteCardTintAlpha));
+    g.fillRoundedRect(card, cardCornerRadius);
 }
 
 // Claude's colour, the host's for a remote session, green otherwise.

@@ -201,3 +201,30 @@ nano_add_executable(CowTermRemoteAppTests
         TARGETS CowTermRemote CowTerm::Core)
 
 target_include_directories(CowTermRemoteAppTests PRIVATE ../Terminal)
+
+# Not a test: Ctrl+A F rendered off screen to a PNG with the user's config
+# (scripts/render-picker.sh), to look at the picker without opening a window.
+add_executable(CowTermRenderPicker
+        ../Bench/RenderPicker.cpp
+        ../Terminal/Command.cpp
+        ../Terminal/Command-Posix.cpp
+        ../Terminal/Config.cpp
+        ../Terminal/DaemonClient.cpp
+        ../Terminal/DataDirectories.cpp
+        ../Terminal/HostColours.cpp
+        ../Terminal/MruStore.cpp
+        ../Terminal/OverlayPanel.cpp
+        ../Terminal/Palette.cpp
+        ../Terminal/PaletteRanking.cpp
+        ../Terminal/PaletteUsageStore.cpp
+        ../Terminal/Projects.cpp
+        ../Terminal/RemoteHosts.cpp
+        ../Terminal/SearchField.cpp
+        ../Terminal/Session.cpp
+        ../Terminal/SessionView.cpp
+        ../Terminal/SshBridgeLink.cpp
+        ../Terminal/TextLayout.cpp
+        ../Terminal/UsageLog.cpp)
+target_include_directories(CowTermRenderPicker PRIVATE ../Terminal)
+target_link_libraries(CowTermRenderPicker PRIVATE
+        CowTerm::Terminal CowTermRemote eacp-ui eacp-text emberstore FrecencySearch SearchKeys SessionLog PondApp)

@@ -41,6 +41,8 @@ constexpr auto labelLength = 32;
 constexpr auto labelToDetailGap = 14.0f;
 constexpr auto detailLength = 48;
 constexpr auto badgeRightPadding = 12.0f;
+constexpr auto remoteRowTintAlpha = 0.10f;
+constexpr auto remoteRowStripeWidth = 3.0f;
 
 bool isSessionItem(const PaletteItem& item)
 {
@@ -77,12 +79,45 @@ Rgb getItemIconColour(const PaletteItem& item, const Theme& theme)
     return theme.ansi[8];
 }
 
+// The host suffix takes room the detail would have had.
+std::size_t calculateDetailLength(const PaletteItem& item)
+{
+    if (item.host.empty())
+        return detailLength;
+
+    constexpr auto hostSuffixDecoration = std::size_t {3};
+    const auto hostSuffixLength = getHostLabel(item.host).size() + hostSuffixDecoration;
+    return detailLength - std::min(hostSuffixLength, std::size_t {detailLength} / 2);
+}
+
 std::string describeItem(const PaletteItem& item)
 {
     if (!item.status.empty())
-        return truncateWithEllipsis(item.status, detailLength);
+        return truncateWithEllipsis(item.status, calculateDetailLength(item));
 
-    return truncateWithEllipsis(item.detail, detailLength);
+    return truncateWithEllipsis(item.detail, calculateDetailLength(item));
+}
+
+// "/home/jamie/projects/x", "/Users/jamie/x" or "C:/Users/jamie/x" with the
+// home part as ~, the way local rows show theirs.
+std::string compactRemoteHomePath(const std::string& path)
+{
+    for (const auto* homesRoot: {"/home/", "/Users/", "C:/Users/"})
+    {
+        const auto root = std::string {homesRoot};
+
+        if (!path.starts_with(root))
+            continue;
+
+        const auto userEnd = path.find('/', root.size());
+
+        if (userEnd == std::string::npos)
+            return "~";
+
+        return "~" + path.substr(userEnd);
+    }
+
+    return path;
 }
 
 bool isOrderedForEmptyQuery(const PaletteItem& a, const PaletteItem& b)
@@ -168,7 +203,7 @@ PaletteItem Palette::makeProjectItem(const std::string& name, const std::string&
     if (const auto remote = remote::parseRemoteSearchDir(path))
     {
         item.host = remote->host;
-        item.detail = remote->path;
+        item.detail = compactRemoteHomePath(remote->path);
     }
 
     return item;
@@ -435,6 +470,20 @@ void Palette::paintRow(UI::Graphics& g, const PaletteItem& item, Rect rowArea)
     }
 }
 
+// A remote row sits on a faint wash of its host's colour, with a stripe of it
+// at the left edge that stays visible under the selection highlight.
+void Palette::paintRemoteRowTint(UI::Graphics& g, const PaletteItem& item, Rect rowArea) const
+{
+    if (item.host.empty() || item.unavailable)
+        return;
+
+    const auto hostColour = getHostColour(config, item.host);
+    g.setColour(toColor(hostColour, remoteRowTintAlpha));
+    g.fillRect(rowArea);
+    g.setColour(toColor(hostColour));
+    g.fillRect({rowArea.x, rowArea.y, remoteRowStripeWidth, rowArea.h});
+}
+
 void Palette::paint(UI::Graphics& g)
 {
     const auto panel = calculatePanelBounds();
@@ -453,6 +502,8 @@ void Palette::paint(UI::Graphics& g)
                                    calculateListRowTop(panel, listMetrics, i),
                                    panel.w - 2.0f * rowSideInset,
                                    listMetrics.rowHeight - rowGap};
+
+        paintRemoteRowTint(g, visible[(std::size_t) i], rowArea);
 
         if (i == selected)
             paintSelectedRowHighlight(g, rowArea);
