@@ -412,6 +412,17 @@ void readOutputUntilClosed(HANDLE readHandle,
 
     exit();
 }
+
+// A conhost can outlive its shell and keep the output pipe open, leaving the
+// reader in ReadFile forever; cancelling its read is what lets it finish.
+void cancelReadsUntilThreadEnds(std::thread& reader)
+{
+    constexpr auto retryIntervalMilliseconds = DWORD {50};
+    const auto threadHandle = static_cast<HANDLE>(reader.native_handle());
+
+    while (WaitForSingleObject(threadHandle, retryIntervalMilliseconds) == WAIT_TIMEOUT)
+        CancelSynchronousIo(threadHandle);
+}
 } // namespace
 
 // ConPTY state. The pseudoconsole is guarded by consoleLock: the waiter thread
@@ -768,7 +779,10 @@ void Pty::shutdown()
         native->waiter.join();
 
     if (native->reader.joinable())
+    {
+        cancelReadsUntilThreadEnds(native->reader);
         native->reader.join();
+    }
 
     for (auto* handle: {&native->process, &native->inputWrite, &native->outputRead})
     {
