@@ -117,8 +117,6 @@ void AppShell::wireOverlays()
 
     switcher.onClosed = [this] { hideOverlayAndRefocus(); };
 
-    claudeHud.onClosed = [this] { hideOverlayAndRefocus(); };
-
     permissions.onClosed = [this] { hideOverlayAndRefocus(); };
 
     popup.onClosed = [this]
@@ -279,7 +277,7 @@ void AppShell::attachActive(TermSession& session)
 bool AppShell::anyOverlayShown() const
 {
     return palette.isShown() || switcher.isShown()
-           || claudeHud.isShown() || popup.isShown() || permissions.isShown();
+           || popup.isShown() || permissions.isShown();
 }
 
 void AppShell::setWindowFocused(bool focused)
@@ -399,8 +397,6 @@ void AppShell::raiseOverlay()
         showOverlay(palette);
     else if (switcher.isShown())
         showOverlay(switcher);
-    else if (claudeHud.isShown())
-        showOverlay(claudeHud);
     else if (permissions.isShown())
         showOverlay(permissions);
 
@@ -449,15 +445,6 @@ void AppShell::showSwitcher(bool reverse)
 bool AppShell::isSwitcherBlocked() const
 {
     return switcher.isShown() || palette.isShown() || popup.isShown();
-}
-
-void AppShell::showClaudeHud()
-{
-    if (anyOverlayShown())
-        return;
-
-    showOverlay(claudeHud);
-    claudeHud.show();
 }
 
 // Like the other overlays, it waits for whichever one is open to close.
@@ -711,12 +698,11 @@ bool AppShell::handlePrefixed(const KeyEvent& event)
 
 bool AppShell::runPrefixedKey(const KeyEvent& event)
 {
-    // f/w palette, a Claude HUD, i lazygit popup, " and %
+    // f/w palette, i lazygit popup, " and %
     // split below and beside, [ ] copy mode and paste, x kills the pane.
     static constexpr auto leaderActions = std::array {
         KeyAction {"f", &AppShell::showPalette},
         KeyAction {"w", &AppShell::showPalette},
-        KeyAction {"a", &AppShell::showClaudeHud},
         KeyAction {"i", &AppShell::showLazygitPopup},
         KeyAction {"\"", &AppShell::splitActivePaneBelow},
         KeyAction {"%", &AppShell::splitActivePaneBeside},

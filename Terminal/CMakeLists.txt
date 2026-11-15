@@ -22,7 +22,6 @@ endif ()
 add_executable(${COWTERM_EXECUTABLE_TARGET}
         Main.cpp
         AppShell.cpp
-        ClaudeHud.cpp
         Cli.cpp
         CliParsing.cpp
         Command.cpp

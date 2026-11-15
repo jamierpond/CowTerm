@@ -1,6 +1,5 @@
 #pragma once
 
-#include "ClaudeHud.h"
 #include "Config.h"
 #include "NotifyUserServer.h"
 #include "PasteConfirmation.h"
@@ -105,7 +104,6 @@ private:
     void showSwitcher(bool reverse);
     void showPopup(const std::string& command);
     void hidePopup();
-    void showClaudeHud();
     bool anyOverlayShown() const;
     void attachActive(TermSession& session);
     void setGlobalFontSize(float size);
@@ -123,7 +121,6 @@ private:
     SessionManager manager {config};
     Palette palette {config, manager};
     Switcher switcher {config, manager};
-    ClaudeHud claudeHud {config, manager};
     Popup popup {config};
     PermissionsPanel permissions {config};
     eacp::UI::ComponentHost overlayHost;

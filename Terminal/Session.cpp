@@ -8,7 +8,6 @@
 #include <emberstore/AppDatabase.h>
 
 #include <algorithm>
-#include <ctime>
 
 namespace term
 {
@@ -126,8 +125,6 @@ void SessionManager::wireSession(TermSession& session)
         pane.onNotify = [this, raw](const std::string& text)
         {
             raw->lastNotify = text;
-            raw->lastNotifyAt = (std::int64_t) std::time(nullptr);
-            raw->notifyUnseen = activeSession != raw;
             onNotify(*raw, text);
         };
 
@@ -204,7 +201,6 @@ void SessionManager::switchTo(TermSession& session)
     }
 
     activeSession = &session;
-    session.notifyUnseen = false;
     mru.touch(session.key());
     paletteUsage.recordUse(session.key(), PaletteUsageStore::seenWeight, MruStore::nowMs());
     persist();
@@ -256,10 +252,8 @@ void SessionManager::peekTo(TermSession& session)
 
     // Swap and repaint only — no mru.touch, no persist. Peeking through five
     // sessions must not stamp all five as recently used, and it must not hit
-    // disk on every keystroke. Seeing the session does count as seeing its
-    // notification, though.
+    // disk on every keystroke.
     activeSession = &session;
-    session.notifyUnseen = false;
     onActiveChanged(session);
 }
 

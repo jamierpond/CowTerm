@@ -59,7 +59,7 @@ public:
     void repaintAllPanes();
 
     // Leaves whose foreground process or title says a Claude Code
-    // conversation runs there — the Claude HUD's row source.
+    // conversation runs there.
     std::vector<TerminalView*> claudePanes() const;
 
     // Moves the active-pane marker (and keyboard focus) to this pane, if it
