@@ -14,13 +14,8 @@ build_directory="build-headless"
 install_directory="$HOME/.local/libexec/cowterm-remote"
 bin_directory="$HOME/.local/bin"
 
-wrapper=""
-if [ "$(uname -s)" = "Linux" ]; then
-    wrapper="scripts/with-linux-deps.sh"
-fi
-
-$wrapper cmake -S . -B "$build_directory" -G Ninja -DCMAKE_BUILD_TYPE=Release -DCOWTERM_ENABLE_TESTS=OFF >/dev/null
-$wrapper cmake --build "$build_directory" --target CowTermDaemon CowTermCli
+cmake -S . -B "$build_directory" -G Ninja -DCMAKE_BUILD_TYPE=Release -DCOWTERM_HEADLESS=ON >/dev/null
+cmake --build "$build_directory" --target CowTermDaemon CowTermCli
 
 mkdir -p "$install_directory" "$bin_directory"
 # Copy to a new name and rename over the old one: a daemon still running the

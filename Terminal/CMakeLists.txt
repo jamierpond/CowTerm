@@ -1,11 +1,3 @@
-# Local persistence (MRU stamps, session restore). Fetched here rather than
-# at the top level because only the CowTerm app uses it; emberstore reuses
-# the eacp/Miro targets already in this build.
-lockstep_add_package(
-        NAME emberstore
-        GITHUB_REPOSITORY tamber-inc/emberstore
-        GIT_TAG main)
-
 # On macOS the CowTermApp build target is an always-run packaging target: it
 # refreshes the bundled daemon and signs the completed app even when only the
 # daemon, plist, icon, or another resource changed. Keep the executable target
@@ -103,22 +95,9 @@ target_link_libraries(${COWTERM_EXECUTABLE_TARGET} PRIVATE
         CowTerm::Terminal CowTermRemote eacp-sprites eacp-text eacp-ui eacp-network emberstore PermissionsPanel
         PondApp RudderClient FrecencySearch SearchKeys SessionLog)
 
-# Stamp the git SHA into a generated header on every build so the running app
-# can report exactly which commit it came from (window title + startup log).
-set(_version_in  ${CMAKE_CURRENT_SOURCE_DIR}/Version.h.in)
-set(_version_out ${CMAKE_CURRENT_BINARY_DIR}/generated/CowTermVersion.h)
-add_custom_target(CowTermVersion
-        BYPRODUCTS ${_version_out}
-        COMMAND ${CMAKE_COMMAND}
-                -DSRC=${CMAKE_SOURCE_DIR}
-                -DIN=${_version_in}
-                -DOUT=${_version_out}
-                -DCOWTERM_PROJECT_VERSION=${PROJECT_VERSION}
-                -P ${CMAKE_SOURCE_DIR}/cmake/GitVersion.cmake
-        COMMENT "Stamping git version")
 add_dependencies(${COWTERM_EXECUTABLE_TARGET} CowTermVersion)
 target_include_directories(${COWTERM_EXECUTABLE_TARGET} PRIVATE
-        ${CMAKE_CURRENT_BINARY_DIR}/generated)
+        ${PROJECT_BINARY_DIR}/generated)
 
 # JetBrains Mono (OFL) rides inside the binary; registered with the platform
 # font system at startup, so the default font needs no install step.

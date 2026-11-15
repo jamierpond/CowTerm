@@ -8,4 +8,6 @@
 # Everything around them — sessions, splits, the palette, the daemon client,
 # the tray — is the CowTerm app and stays in Terminal/.
 add_subdirectory(CowTermCore)
-add_subdirectory(CowTermTerminal)
+if (NOT COWTERM_HEADLESS)
+    add_subdirectory(CowTermTerminal)
+endif ()

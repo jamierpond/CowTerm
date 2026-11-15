@@ -49,14 +49,22 @@ set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
 # a dangling hoveredView. Not `main`, which lags develop.
 # Provides eacp-text (GlyphAtlas.h) and the IPC::Messenger layer the session
 # daemon and DaemonClient ride on.
+# A remote machine needs only ct and the session daemon (docs/RemoteSessions.md).
+# Headless skips eacp's graphics, so the build needs no Wayland or font
+# libraries, and skips the app, the fuzzers and the tests.
+option(COWTERM_HEADLESS "Build only ct and cowtermd, for a remote machine" OFF)
+
+set(COWTERM_EACP_OPTIONS "EACP_ENABLE_EXAMPLES OFF" "EACP_ENABLE_TESTS OFF")
+if (COWTERM_HEADLESS)
+    list(APPEND COWTERM_EACP_OPTIONS "EACP_BUILD_GRAPHICS OFF")
+endif ()
+
 lockstep_add_package(
         NAME eacp
         GITHUB_REPOSITORY eyalamirmusic/eacp
         GIT_TAG develop
         SYSTEM YES
-        OPTIONS
-            "EACP_ENABLE_EXAMPLES OFF"
-            "EACP_ENABLE_TESTS OFF")
+        OPTIONS ${COWTERM_EACP_OPTIONS})
 
 # eacp appends its CMake helper directory to CMAKE_MODULE_PATH only within its
 # own directory scope, so re-add it here: the app subdirectories call
@@ -93,10 +101,35 @@ if (MSVC)
     add_compile_definitions(_CRT_SECURE_NO_WARNINGS)
 endif ()
 
+# Local persistence (MRU stamps, session restore, the daemon's saved panes).
+# emberstore reuses the eacp/Miro targets already in this build.
+lockstep_add_package(
+        NAME emberstore
+        GITHUB_REPOSITORY tamber-inc/emberstore
+        GIT_TAG main)
+
+# Stamp the git SHA into a generated header on every build so ct and the app
+# can report exactly which commit they came from (window title + startup log).
+set(COWTERM_VERSION_HEADER ${PROJECT_BINARY_DIR}/generated/CowTermVersion.h)
+add_custom_target(CowTermVersion
+        BYPRODUCTS ${COWTERM_VERSION_HEADER}
+        COMMAND ${CMAKE_COMMAND}
+                -DSRC=${CMAKE_SOURCE_DIR}
+                -DIN=${CMAKE_SOURCE_DIR}/Terminal/Version.h.in
+                -DOUT=${COWTERM_VERSION_HEADER}
+                -DCOWTERM_PROJECT_VERSION=${PROJECT_VERSION}
+                -P ${CMAKE_SOURCE_DIR}/cmake/GitVersion.cmake
+        COMMENT "Stamping git version")
+
 # The libraries (see Lib/CMakeLists.txt), then the product built on them.
 add_subdirectory(Lib)
 add_subdirectory(Daemon)
 add_subdirectory(Remote)
+
+if (COWTERM_HEADLESS)
+    return()
+endif ()
+
 add_subdirectory(Terminal)
 add_subdirectory(Fuzz)
 
