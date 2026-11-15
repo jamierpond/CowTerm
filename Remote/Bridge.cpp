@@ -24,6 +24,10 @@ namespace
 constexpr int exitOk = 0;
 constexpr int exitFail = 1;
 constexpr auto daemonHelloTimeout = Time::MS {1500};
+
+// An outdated daemon still holds its name for a moment after it says goodbye;
+// dialing at once would reach it again, not the new one.
+constexpr auto pauseBeforeDialingRestartedDaemon = Time::MS {1500};
 constexpr auto readChunkBytes = std::size_t {65536};
 
 bool writeAllToStandardOutput(const std::string& bytes)
@@ -126,7 +130,7 @@ struct BridgeApp
         helloTimer.reset();
 
         if (restartedDaemon)
-            return startRelaying();
+            return fail("cowtermd did not answer after restarting it");
 
         restartedDaemon = true;
         restartingDaemon = true;
@@ -139,14 +143,16 @@ struct BridgeApp
             return fail("cowtermd went away");
 
         restartingDaemon = false;
-        Threads::callAsync([this, guard = std::weak_ptr<bool> {alive}]
-                           {
-                               if (!guard.expired())
-                               {
-                                   daemon.reset();
-                                   dial();
-                               }
-                           });
+        Threads::delay(pauseBeforeDialingRestartedDaemon)
+            .then(
+                [this, guard = std::weak_ptr<bool> {alive}]
+                {
+                    if (!guard.expired())
+                    {
+                        daemon.reset();
+                        dial();
+                    }
+                });
     }
 
     void startRelaying()
