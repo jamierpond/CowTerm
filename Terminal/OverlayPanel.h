@@ -1,7 +1,6 @@
 #pragma once
 
 #include "Config.h"
-#include "SearchField.h"
 #include "Session.h"
 
 #include <eacp/UI/UI.h>
@@ -90,22 +89,9 @@ protected:
                             float headerHeight) const;
     void paintSelectedRowHighlight(eacp::UI::Graphics& g, eacp::UI::Rect row) const;
 
-    // Runs a key through the search field's vim modes and performs its action;
-    // false when the panel should handle the key itself.
-    bool handleSearchFieldKey(const eacp::UI::KeyEvent& event);
-
-    // Types into or erases from the search field at its caret; true when the
-    // text changed. Typing moves the selection back to the first row.
-    bool editSearchFieldText(const eacp::UI::KeyEvent& event);
-
-    // "› query" with a thin caret in insert mode, or a block caret and a
-    // NORMAL label in normal mode.
-    void paintSearchField(eacp::UI::Graphics& g, eacp::UI::Point baselineStart);
-
-    virtual int countRows() const = 0;
-    virtual void moveSelection(int delta) = 0;
-    virtual void searchTextChanged() = 0;
-    virtual void closeHighlighted() {}
+    // Types into or erases from query; true when it changed. Typing moves the
+    // selection back to the first row.
+    bool editQueryText(std::string& query, const eacp::UI::KeyEvent& event);
 
     virtual eacp::UI::Rect calculatePanelBounds() const = 0;
 
@@ -123,6 +109,5 @@ protected:
     eacp::UI::Font detailFont;
 
     int selected = 0;
-    SearchField searchField;
 };
 } // namespace term
