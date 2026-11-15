@@ -39,10 +39,16 @@ searchkeys::SpecialKey getSpecialKey(const UI::KeyEvent& event)
     return searchkeys::SpecialKey::none;
 }
 
+// A control chord names its letter (ctrl+w is "w"), as SearchBox expects.
 std::string getTypedCharacters(const UI::KeyEvent& event)
 {
-    if (getSpecialKey(event) != searchkeys::SpecialKey::none
-        || !isPrintableTypedText(event.characters))
+    if (getSpecialKey(event) != searchkeys::SpecialKey::none)
+        return {};
+
+    if (event.modifiers.control)
+        return event.charactersIgnoringModifiers;
+
+    if (!isPrintableTypedText(event.characters))
         return {};
 
     return event.characters;

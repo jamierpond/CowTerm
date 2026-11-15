@@ -96,7 +96,6 @@ private:
     void wireSessionManager();
     void wireTray();
     void wireOverlays();
-    void wireWorktreeActions();
     void wireNotifications();
     void raiseOverlay();
     void raisePopup();

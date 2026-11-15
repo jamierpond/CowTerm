@@ -82,9 +82,6 @@ protected:
                               eacp::UI::Color border,
                               OverlayCardStyle style) const;
     void paintListBackdropAndCard(eacp::UI::Graphics& g, eacp::UI::Rect panel) const;
-    void paintListBackdropAndCardWithBorder(eacp::UI::Graphics& g,
-                                            eacp::UI::Rect panel,
-                                            eacp::UI::Color border) const;
     void paintHeaderDivider(eacp::UI::Graphics& g,
                             eacp::UI::Rect panel,
                             float headerHeight) const;

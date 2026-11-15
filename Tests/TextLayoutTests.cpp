@@ -21,23 +21,6 @@ auto tSplitKeepsEmptyPieces = test("TextLayout/splitAtSeparatorKeepsEmptyPieces"
     check(splitAtSeparator(std::string {"x\0y", 3}, '\0') == Lines {"x", "y"});
 };
 
-auto tEraseLastCodepoint = test("TextLayout/eraseLastCodepointRemovesAWholeCharacter") = []
-{
-    auto text = std::string {"aé"};
-    eraseLastCodepoint(text);
-    check(text == "a");
-
-    eraseLastCodepoint(text);
-    check(text.empty());
-
-    eraseLastCodepoint(text);
-    check(text.empty(), "erasing nothing is a no-op");
-
-    auto emoji = std::string {"x✳"};
-    eraseLastCodepoint(emoji);
-    check(emoji == "x");
-};
-
 auto tCodepointSteps = test("TextLayout/codepointBoundaries") = []
 {
     const auto text = std::string {"é✳a"};

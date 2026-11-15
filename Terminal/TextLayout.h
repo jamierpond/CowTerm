@@ -16,7 +16,6 @@ std::vector<std::string> splitAtSeparator(const std::string& text, char separato
 bool isUtf8ContinuationByte(char byte);
 std::size_t findPreviousCodepointStart(const std::string& text, std::size_t end);
 std::size_t findNextCodepointEnd(const std::string& text, std::size_t start);
-void eraseLastCodepoint(std::string& text);
 
 // Whether a key's characters are text to type rather than a control code.
 bool isPrintableTypedText(const std::string& characters);

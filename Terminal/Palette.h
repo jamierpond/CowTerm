@@ -4,8 +4,6 @@
 #include "PaletteItem.h"
 
 #include <cstdint>
-#include <functional>
-#include <optional>
 #include <string>
 #include <vector>
 
@@ -28,42 +26,11 @@ public:
     // and restores terminal focus.
     eacp::Callback onClosed = [] {};
 
-    // Ctrl+W on a highlighted repo: create a new git worktree + branch based
-    // on it and open a session there. Returns "" on success (the palette then
-    // closes), or a git error to display in the branch prompt on failure.
-    std::function<std::string(const std::string& repoPath, const std::string& branch)>
-        onCreateWorktree =
-            [](const std::string&, const std::string&) { return std::string {}; };
-
-    // Ctrl+X on a highlighted worktree (after a y/n confirm): move it to the OS
-    // trash. Returns "" on success (the palette then closes), or an error to
-    // show in the confirm prompt on failure. Only worktree rows offer this.
-    std::function<std::string(const std::string& worktreePath)> onRemoveWorktree =
-        [](const std::string&) { return std::string {}; };
-
     void paint(eacp::UI::Graphics& g) override;
     bool keyDown(const eacp::UI::KeyEvent& event) override;
-    void mouseDown(const eacp::UI::MouseEvent& event) override;
     void mouseMove(const eacp::UI::MouseEvent& event) override;
 
 private:
-    struct SelectedRepository
-    {
-        std::string path;
-        std::string label;
-    };
-
-    // The frame shared by the worktree and trash prompts.
-    struct SubPrompt
-    {
-        std::string title;
-        std::string targetName;
-        std::string error;
-        std::string hint;
-        eacp::UI::Color titleColour;
-        eacp::UI::Color borderColour;
-    };
-
     void logPick(const PaletteItem& item) const;
     void logCancel() const;
     std::int64_t measureMsSinceOpen() const;
@@ -78,48 +45,16 @@ private:
     int countRows() const override;
     void moveSelection(int delta) override;
     void searchTextChanged() override;
-    bool handleListKey(const eacp::UI::KeyEvent& event);
     bool handleNavigationKey(const eacp::UI::KeyEvent& event);
-    bool handleCommandKey(const eacp::UI::KeyEvent& event);
-    std::optional<SelectedRepository> findSelectedRepository() const;
     int findRowAt(eacp::UI::Point pos) const override;
     eacp::UI::Rect calculatePanelBounds() const override;
 
-    // The worktree branch-name sub-prompt.
-    void beginWorktree();
-    void worktreeKeyDown(const eacp::Graphics::KeyEvent& event);
-    void createWorktreeFromInput();
-    void exitWorktree();
-    void paintWorktree(eacp::UI::Graphics& context);
-    eacp::UI::Rect paintSubPrompt(eacp::UI::Graphics& g, const SubPrompt& prompt);
     void paintRow(eacp::UI::Graphics& g, const PaletteItem& item, eacp::UI::Rect rowArea);
-
-    // The "trash this worktree?" y/n confirmation.
-    void beginRemoveWorktree();
-    void confirmDeleteKeyDown(const eacp::Graphics::KeyEvent& event);
-    void performRemoveWorktree();
-    void exitConfirmDelete();
-    void paintConfirmDelete(eacp::UI::Graphics& context);
 
     std::vector<PaletteItem> allItems;
     std::vector<PaletteItem> visible;
     bool shown = false;
     int keysSinceOpen = 0;
     std::int64_t openedAtMs = 0;
-
-    // Worktree sub-prompt: when active the list is replaced by a single
-    // branch-name field bound to the repo we entered from.
-    bool worktreeMode = false;
-    std::string worktreeRepoPath;
-    std::string worktreeRepoName;
-    std::string branchName;
-    std::string worktreeError;
-
-    // Confirm sub-prompt: when active the list is replaced by a y/n question
-    // guarding the trashing of deleteTargetPath.
-    bool confirmDeleteMode = false;
-    std::string deleteTargetPath;
-    std::string deleteTargetName;
-    std::string deleteError;
 };
 } // namespace term

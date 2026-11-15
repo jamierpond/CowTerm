@@ -125,11 +125,6 @@ std::size_t findNextCodepointEnd(const std::string& text, std::size_t start)
     return end;
 }
 
-void eraseLastCodepoint(std::string& text)
-{
-    text.erase(findPreviousCodepointStart(text, text.size()));
-}
-
 bool isPrintableTypedText(const std::string& characters)
 {
     if (characters.empty())

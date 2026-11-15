@@ -145,14 +145,7 @@ void OverlayPanel::paintBackdropAndCard(UI::Graphics& g,
 
 void OverlayPanel::paintListBackdropAndCard(UI::Graphics& g, Rect panel) const
 {
-    paintListBackdropAndCardWithBorder(g, panel, toColor(theme.selection, cardBorderAlpha));
-}
-
-void OverlayPanel::paintListBackdropAndCardWithBorder(UI::Graphics& g,
-                                                      Rect panel,
-                                                      Color border) const
-{
-    paintBackdropAndCard(g, panel, border, listCardStyle);
+    paintBackdropAndCard(g, panel, toColor(theme.selection, cardBorderAlpha), listCardStyle);
 }
 
 void OverlayPanel::paintHeaderDivider(UI::Graphics& g, Rect panel, float headerHeight) const

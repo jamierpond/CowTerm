@@ -122,3 +122,29 @@ auto tChordsPassThrough = test("SearchField/controlChordsPassThroughInNormal") =
 
     check(field.handleKey(event) == Action::passThrough);
 };
+
+auto tControlWDeletesWord = test("SearchField/controlWInInsertDeletesTheWordBehindTheCaret") = []
+{
+    auto field = SearchField {};
+    typeText(field, "cow term");
+
+    auto controlW = makeTypedKey("\x17");
+    controlW.charactersIgnoringModifiers = "w";
+    controlW.modifiers.control = true;
+
+    check(field.handleKey(controlW) == Action::none);
+    check(field.getText() == "cow ");
+};
+
+auto tControlQPassesThrough = test("SearchField/controlQPassesThroughAndLeavesTheText") = []
+{
+    auto field = SearchField {};
+    typeText(field, "cow");
+
+    auto controlQ = makeTypedKey("\x11");
+    controlQ.charactersIgnoringModifiers = "q";
+    controlQ.modifiers.control = true;
+
+    check(field.handleKey(controlQ) == Action::passThrough);
+    check(field.getText() == "cow");
+};

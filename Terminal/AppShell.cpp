@@ -3,7 +3,6 @@
 #include "CowTermCore/Debug.h"
 #include "CowTermVersion.h"
 #include "DaemonClient.h"
-#include "GitWorktree.h"
 #include "LeaderKeys.h"
 #include "Notifier.h"
 #include "TextLayout.h"
@@ -28,7 +27,6 @@ AppShell::AppShell()
     wireSessionManager();
     wireTray();
     wireOverlays();
-    wireWorktreeActions();
     wireNotifications();
 }
 
@@ -126,39 +124,6 @@ void AppShell::wireOverlays()
     };
 
     popup.interceptKey = [this](const KeyEvent& event) { return popupKey(event); };
-}
-
-void AppShell::wireWorktreeActions()
-{
-    // Branch a highlighted repo into a fresh worktree and drop a session in
-    // it. Returns git's error on failure so the palette can show it in place.
-    palette.onCreateWorktree =
-        [this](const std::string& repoPath, const std::string& branch) -> std::string
-    {
-        const auto result = createWorktree(repoPath, branch);
-
-        if (!result.ok)
-            return result.message;
-
-        manager.newSession(result.path);
-        return {};
-    };
-
-    // Trash a highlighted worktree: bin the checkout, then close any session
-    // still open on it (its directory is gone). Git's error, if any, goes back
-    // to the confirm prompt.
-    palette.onRemoveWorktree = [this](const std::string& worktreePath) -> std::string
-    {
-        const auto result = removeWorktree(worktreePath);
-
-        if (!result.ok)
-            return result.message;
-
-        if (auto* session = manager.find(worktreePath))
-            manager.close(*session);
-
-        return {};
-    };
 }
 
 void AppShell::wireNotifications()

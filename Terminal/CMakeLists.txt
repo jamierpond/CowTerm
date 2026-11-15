@@ -28,7 +28,6 @@ add_executable(${COWTERM_EXECUTABLE_TARGET}
         Config.cpp
         DataDirectories.cpp
         GitBranch.cpp
-        GitWorktree.cpp
         LeaderKeys.cpp
         MruStore.cpp
         NotifyUserClient.cpp
@@ -66,8 +65,7 @@ if (APPLE)
             Command-Posix.cpp
             DirWatcher-macOS.mm
             Notifier-macOS.mm
-            Permissions-macOS.mm
-            Trash-macOS.mm)
+            Permissions-macOS.mm)
 
     target_link_libraries(${COWTERM_EXECUTABLE_TARGET} PRIVATE
             "-framework UserNotifications"
@@ -81,8 +79,7 @@ elseif (WIN32)
             Command-Windows.cpp
             DirWatcher-Windows.cpp
             Notifier-Windows.cpp
-            Permissions-Default.cpp
-            Trash-Windows.cpp)
+            Permissions-Default.cpp)
 
     # The dashboard and switcher sources hold Unicode literals (powerline
     # glyphs); MSVC assumes the ANSI codepage without this.
@@ -104,8 +101,7 @@ elseif (LINUX)
             Command-Posix.cpp
             DirWatcher-Linux.cpp
             Notifier-Linux.cpp
-            Permissions-Default.cpp
-            Trash-Linux.cpp)
+            Permissions-Default.cpp)
 endif ()
 
 # eacp-ui is the portable component/painter tier: one ComponentHost (a GPUView)
