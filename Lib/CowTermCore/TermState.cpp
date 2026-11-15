@@ -210,40 +210,47 @@ SavedPen savePen(const Pen& pen)
             pen.hyperlink};
 }
 
+struct ModeFieldPair
+{
+    bool Modes::*liveField;
+    bool SavedModes::*savedField;
+};
+
+constexpr ModeFieldPair modeFieldPairs[] = {
+    {&Modes::autowrap, &SavedModes::autowrap},
+    {&Modes::origin, &SavedModes::origin},
+    {&Modes::appCursorKeys, &SavedModes::appCursorKeys},
+    {&Modes::appKeypad, &SavedModes::appKeypad},
+    {&Modes::showCursor, &SavedModes::showCursor},
+    {&Modes::cursorBlink, &SavedModes::cursorBlink},
+    {&Modes::bracketedPaste, &SavedModes::bracketedPaste},
+    {&Modes::altScreen, &SavedModes::altScreen},
+    {&Modes::mouseButtons, &SavedModes::mouseButtons},
+    {&Modes::mouseDrag, &SavedModes::mouseDrag},
+    {&Modes::mouseMotion, &SavedModes::mouseMotion},
+    {&Modes::mouseSgr, &SavedModes::mouseSgr},
+    {&Modes::synchronizedOutput, &SavedModes::synchronizedOutput},
+    {&Modes::focusEvents, &SavedModes::focusEvents},
+};
+
 SavedModes saveModes(const Modes& modes)
 {
-    return {modes.autowrap,
-            modes.origin,
-            modes.appCursorKeys,
-            modes.appKeypad,
-            modes.showCursor,
-            modes.cursorBlink,
-            modes.bracketedPaste,
-            modes.altScreen,
-            modes.mouseButtons,
-            modes.mouseDrag,
-            modes.mouseMotion,
-            modes.mouseSgr,
-            modes.synchronizedOutput,
-            modes.focusEvents};
+    auto saved = SavedModes {};
+
+    for (const auto& pair: modeFieldPairs)
+        saved.*pair.savedField = modes.*pair.liveField;
+
+    return saved;
 }
 
 Modes restoreModes(const SavedModes& saved)
 {
-    return {saved.autowrap,
-            saved.origin,
-            saved.appCursorKeys,
-            saved.appKeypad,
-            saved.showCursor,
-            saved.cursorBlink,
-            saved.bracketedPaste,
-            saved.altScreen,
-            saved.mouseButtons,
-            saved.mouseDrag,
-            saved.mouseMotion,
-            saved.mouseSgr,
-            saved.synchronizedOutput,
-            saved.focusEvents};
+    auto modes = Modes {};
+
+    for (const auto& pair: modeFieldPairs)
+        modes.*pair.liveField = saved.*pair.savedField;
+
+    return modes;
 }
 } // namespace
 

@@ -1,4 +1,5 @@
 #include "PaletteUsageStore.h"
+#include "StorePruning.h"
 
 #include <FrecencySearch/MatchLevel.h>
 
@@ -87,19 +88,9 @@ void PaletteUsageStore::forgetOldPicks(std::int64_t nowMs)
 
 void PaletteUsageStore::forgetLeastUsed(std::int64_t nowMs)
 {
-    if (usage.size() <= maximumUsageEntries)
-        return;
-
-    auto ranked = std::vector<std::pair<double, std::string>> {};
-
-    for (auto& key: usage.ids())
-        ranked.push_back({getUsage(key, nowMs), key});
-
-    std::sort(ranked.begin(), ranked.end());
-
-    auto excess = ranked.size() - maximumUsageEntries;
-
-    for (std::size_t index = 0; index < excess; ++index)
-        usage.remove(ranked[index].second);
+    removeLowestRankedEntriesOverLimit(usage,
+                                       maximumUsageEntries,
+                                       [this, nowMs](const std::string& key)
+                                       { return getUsage(key, nowMs); });
 }
 } // namespace term

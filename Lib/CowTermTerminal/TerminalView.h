@@ -203,6 +203,9 @@ private:
     void copySelection();
     void applyGridSize();
     void scheduleGridSizeOnceBoundsSettle();
+    void runAfterDelayUnlessRestarted(eacp::Time::MS delay,
+                                      std::uint64_t& generationCounter,
+                                      std::function<void()> action);
     void restoreTerminalState(const std::string& serialized);
     void startShell(const TerminalConfig& config,
                     const std::string& workingDirectory,

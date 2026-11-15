@@ -264,19 +264,14 @@ void TerminalView::repaintIfShown()
 void TerminalView::startSynchronizedOutputTimeout()
 {
     constexpr auto synchronizedOutputTimeout = Time::MS {1000};
-    const auto generation = ++synchronizedOutputGeneration;
-    auto guard = std::weak_ptr<bool> {alive};
 
-    Threads::callAfter(synchronizedOutputTimeout,
-                       [this, guard, generation]
-                       {
-                           if (guard.expired() || generation != synchronizedOutputGeneration)
-                               return;
-
-                           const auto lock = lockTerminal();
-                           screen.modes.synchronizedOutput = false;
-                           repaintIfShown();
-                       });
+    runAfterDelayUnlessRestarted(synchronizedOutputTimeout,
+                                 synchronizedOutputGeneration,
+                                 [this]
+                                 {
+                                     screen.modes.synchronizedOutput = false;
+                                     repaintIfShown();
+                                 });
 }
 
 void TerminalView::send(std::string_view bytes)
@@ -346,19 +341,33 @@ void TerminalView::resized()
 void TerminalView::scheduleGridSizeOnceBoundsSettle()
 {
     constexpr auto gridResizeQuietPeriod = Time::MS {25};
-    const auto generation = ++gridResizeGeneration;
+
+    runAfterDelayUnlessRestarted(gridResizeQuietPeriod,
+                                 gridResizeGeneration,
+                                 [this]
+                                 {
+                                     applyGridSize();
+                                     rowDrawings.invalidateAllRows();
+                                     repaintIfShown();
+                                 });
+}
+
+// Each call bumps the generation, so only the latest scheduled action runs.
+void TerminalView::runAfterDelayUnlessRestarted(Time::MS delay,
+                                                std::uint64_t& generationCounter,
+                                                std::function<void()> action)
+{
+    const auto generation = ++generationCounter;
     auto guard = std::weak_ptr<bool> {alive};
 
-    Threads::callAfter(gridResizeQuietPeriod,
-                       [this, guard, generation]
+    Threads::callAfter(delay,
+                       [this, guard, generation, &generationCounter, action = std::move(action)]
                        {
-                           if (guard.expired() || generation != gridResizeGeneration)
+                           if (guard.expired() || generation != generationCounter)
                                return;
 
                            const auto lock = lockTerminal();
-                           applyGridSize();
-                           rowDrawings.invalidateAllRows();
-                           repaintIfShown();
+                           action();
                        });
 }
 

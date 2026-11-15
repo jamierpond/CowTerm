@@ -1,9 +1,7 @@
 #include "MruStore.h"
+#include "StorePruning.h"
 
-#include <algorithm>
 #include <chrono>
-#include <utility>
-#include <vector>
 
 namespace term
 {
@@ -28,20 +26,9 @@ std::int64_t MruStore::lastUsed(const std::string& key)
 
 void MruStore::prune()
 {
-    if (stamps.size() <= maxEntries)
-        return;
-
-    auto aged = std::vector<std::pair<std::int64_t, std::string>> {};
-
-    for (auto& id: stamps.ids())
-        aged.emplace_back(lastUsed(id), id);
-
-    std::sort(aged.begin(), aged.end());
-
-    auto excess = aged.size() - maxEntries;
-
-    for (std::size_t i = 0; i < excess; ++i)
-        stamps.remove(aged[i].second);
+    removeLowestRankedEntriesOverLimit(stamps,
+                                       maxEntries,
+                                       [this](const std::string& key) { return lastUsed(key); });
 }
 
 std::int64_t MruStore::nowMs()
