@@ -56,12 +56,6 @@ std::optional<Rgb> parseHexColour(const std::string& text)
     return value;
 }
 
-std::string getHostLabel(const std::string& host)
-{
-    const auto at = host.find('@');
-    return at == std::string::npos ? host : host.substr(at + 1);
-}
-
 Rgb getHostColour(const AppConfig& config, const std::string& host)
 {
     const auto label = getHostLabel(host);

@@ -1,5 +1,7 @@
 #include "PaletteRanking.h"
 
+#include "RemoteLocation.h"
+
 #include <FrecencySearch/RowOrder.h>
 
 #include <algorithm>
@@ -26,6 +28,16 @@ frecencysearch::SearchableTexts getSearchableTexts(const PaletteItem& item)
     auto texts = frecencysearch::SearchableTexts {};
     texts.names = {item.label, getLastPathComponent(item.key)};
     texts.details = {item.detail, item.status};
+
+    // A remote row also answers to its host typed before or after the name,
+    // as one run of letters: "macprorackmiro" or "miromacprorack".
+    if (!item.host.empty())
+    {
+        const auto host = remote::getHostLabel(item.host);
+        const auto name = getLastPathComponent(item.label);
+        texts.names.push_back(host + name);
+        texts.names.push_back(name + host);
+    }
 
     if (item.claude)
         texts.details.push_back("claude");

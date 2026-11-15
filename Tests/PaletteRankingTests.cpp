@@ -81,3 +81,42 @@ auto tLearnedPickFirst = test("PaletteRanking/a session picked twice for the tex
 
     check(rankPaletteItems(makeItems(), "gra", usage).front().key == "/p/grader");
 };
+
+namespace
+{
+std::vector<PaletteItem> makeItemsOnSeveralMachines()
+{
+    auto local = makeItem(PaletteItem::Kind::Project, "Miro", "/p/Miro");
+    auto onMacprorack =
+        makeItem(PaletteItem::Kind::Project, "Miro", "macprorack:/home/j/projects/Miro");
+    onMacprorack.host = "macprorack";
+    auto onTamby = makeItem(PaletteItem::Kind::Project, "Miro", "tamby:/Users/j/projects/Miro");
+    onTamby.host = "jamie@tamby";
+    return {local, onMacprorack, onTamby};
+}
+} // namespace
+
+auto tHostThenName = test("PaletteRanking/host then name finds the remote project") = []
+{
+    const auto ranked = rankPaletteItems(makeItemsOnSeveralMachines(), "macprorackmiro", makeUsage({}));
+
+    check(!ranked.empty());
+    check(ranked.front().key == "macprorack:/home/j/projects/Miro");
+};
+
+auto tNameThenHost = test("PaletteRanking/name then host finds it too") = []
+{
+    const auto ranked = rankPaletteItems(makeItemsOnSeveralMachines(), "mirotamby", makeUsage({}));
+
+    check(!ranked.empty());
+    check(ranked.front().key == "tamby:/Users/j/projects/Miro");
+};
+
+auto tPlainNameKeepsEveryMachine = test("PaletteRanking/a plain name still lists it on every machine") = []
+{
+    const auto ranked =
+        rankPaletteItems(makeItemsOnSeveralMachines(), "miro", makeUsage({{"/p/Miro", 1.0}}));
+
+    check(ranked.size() == 3);
+    check(ranked.front().key == "/p/Miro");
+};

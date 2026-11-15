@@ -75,7 +75,7 @@ nano_add_executable(CowTermSessionViewTests
             ../Terminal/Config.cpp
             ../Terminal/UsageLog.cpp
             ../Terminal/DataDirectories.cpp
-        TARGETS CowTerm::Terminal eacp-ui SessionLog PondApp)
+        TARGETS CowTerm::Terminal CowTermRemote eacp-ui SessionLog PondApp)
 
 target_include_directories(CowTermSessionViewTests PRIVATE ../Terminal)
 
@@ -156,7 +156,7 @@ nano_add_executable(CowTermPaletteRankingTests
         SOURCES
             PaletteRankingTests.cpp
             ../Terminal/PaletteRanking.cpp
-        TARGETS FrecencySearch)
+        TARGETS FrecencySearch CowTermRemote)
 
 target_include_directories(CowTermPaletteRankingTests PRIVATE ../Terminal)
 
