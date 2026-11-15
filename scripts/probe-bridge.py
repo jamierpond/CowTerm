@@ -67,7 +67,9 @@ class Probe:
         if verb.startswith(b"output"):
             self.output += payload
             if not self.sent_command:
-                self.send(f"write {self.pane}\necho {MARKER}-$((40+2))\n")
+                # 4'2' prints as 42 in sh and PowerShell alike, while the echoed
+                # command line itself never contains the expected text.
+                self.send(f"write {self.pane}\necho {MARKER}-4'2'\r")
                 self.sent_command = True
 
     def finish(self):
