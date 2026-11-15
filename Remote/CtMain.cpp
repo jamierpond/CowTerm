@@ -1,6 +1,7 @@
 // ct without the app: what a remote machine runs. `ssh host ct bridge`
 // carries the session daemon to CowTerm on another machine.
 
+#include "Bridge.h"
 #include "Config.h"
 #include "CowTermVersion.h"
 #include "RemoteCommands.h"
@@ -22,6 +23,8 @@ constexpr int exitFail = 1;
 
 constexpr auto usage = R"(usage: ct <command>    (headless: no CowTerm window on this machine)
 
+  bridge                  relay this machine's session daemon over
+                          stdin/stdout (CowTerm runs it through ssh)
   install-remote <host>   build and install ct + cowtermd on host over ssh
   update-remotes          install-remote for every host in searchDirs
   version
@@ -37,6 +40,11 @@ int printVersion(const Arguments&)
 {
     std::printf("ct %s (%s, headless)\n", term::appVersion, term::versionTag().c_str());
     return exitOk;
+}
+
+int bridge(const Arguments&)
+{
+    return term::bridge::runBridge(term::versionTag());
 }
 
 int installRemote(const Arguments& arguments)
@@ -62,6 +70,7 @@ constexpr auto commands = std::array {
     Command {"-h", printUsage},
     Command {"version", printVersion},
     Command {"--version", printVersion},
+    Command {"bridge", bridge},
     Command {"install-remote", installRemote},
     Command {"update-remotes", updateRemotes},
 };

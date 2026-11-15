@@ -21,16 +21,19 @@
 
 #include <algorithm>
 #include <array>
+#include <cstdio>
 #include <map>
 #include <memory>
 #include <string>
 #include <string_view>
+#include <vector>
 
 using namespace eacp;
 
 namespace
 {
-constexpr int idleExitSeconds = 60;
+constexpr auto idleCheckInterval = Time::MS {10000};
+constexpr int idleChecksBeforeExit = 6;
 constexpr int saveIntervalMilliseconds = 5000;
 
 // Default-coloured cells are re-coloured by the app's theme on restore; the
@@ -56,6 +59,10 @@ struct DaemonPane
     term::TerminalModel terminal;
     bool alive = false;
     bool hasUnsavedChanges = false;
+    std::string sessionName;
+
+    // The clients showing this pane: its output, state and exit go to them.
+    std::vector<IPC::Messenger*> watchers;
 };
 
 // Moves the panes from where an older daemon kept them, before opening them.
@@ -69,6 +76,14 @@ emberstore::Database openPaneStore()
     return emberstore::Database {eacp::FilePath {term::getPaneStoreDirectory().string()},
                                  emberstore::Durability::Atomic};
 }
+
+struct SpawnRequest
+{
+    std::string id;
+    term::PtySize size;
+    std::string workingDirectory;
+    std::string sessionName;
+};
 
 struct Daemon
 {
@@ -87,44 +102,57 @@ struct Daemon
         { adoptClient(messenger); };
     }
 
+    // Every Mac that attaches (the local app, each `ct bridge`) is a client
+    // of its own; a pane's messages go only to the clients showing it.
     void adoptClient(IPC::Messenger& messenger)
     {
-        client = &messenger;
+        clients.push_back(&messenger);
 
         messenger.onMessage = [this, &messenger](const std::string& body)
-        {
-            if (client == &messenger)
-                handle(term::proto::parse(body));
-        };
+        { handle(messenger, term::proto::parse(body)); };
 
-        messenger.onDisconnected = [this, &messenger]
-        {
-            if (client == &messenger)
-                client = nullptr;
-        };
+        messenger.onDisconnected = [this, &messenger] { forgetClient(messenger); };
     }
 
-    void send(const std::string& message)
+    void forgetClient(IPC::Messenger& messenger)
     {
-        if (client != nullptr)
-            client->send(message);
+        std::erase(clients, &messenger);
+
+        for (auto& [id, pane]: panes)
+            std::erase(pane->watchers, &messenger);
+    }
+
+    void sendToWatchers(const DaemonPane& pane, const std::string& message)
+    {
+        for (auto* watcher: pane.watchers)
+            watcher->send(message);
+    }
+
+    static void watch(DaemonPane& pane, IPC::Messenger& messenger)
+    {
+        if (std::ranges::find(pane.watchers, &messenger) == pane.watchers.end())
+            pane.watchers.push_back(&messenger);
     }
 
     struct MessageHandler
     {
         std::string_view verb;
         std::size_t minimumArgumentCount = 0;
-        void (Daemon::*handle)(const term::proto::Message& message);
+        void (Daemon::*handle)(IPC::Messenger& sender, const term::proto::Message& message);
     };
 
-    void handle(const term::proto::Message& message)
+    void handle(IPC::Messenger& sender, const term::proto::Message& message)
     {
         static constexpr auto handlers = std::array {
+            MessageHandler {"hello", 0, &Daemon::handleHello},
             MessageHandler {"spawn", 3, &Daemon::handleSpawn},
+            MessageHandler {"release", 1, &Daemon::handleRelease},
             MessageHandler {"write", 1, &Daemon::handleWrite},
             MessageHandler {"resize", 3, &Daemon::handleResize},
             MessageHandler {"kill", 1, &Daemon::handleKill},
             MessageHandler {"info", 0, &Daemon::handleInfo},
+            MessageHandler {"layout", 1, &Daemon::handleLayout},
+            MessageHandler {"layouts", 0, &Daemon::handleLayouts},
             MessageHandler {"quit-server", 0, &Daemon::handleQuitServer},
         };
 
@@ -133,38 +161,86 @@ struct Daemon
         if (found == handlers.end() || message.args.size() < found->minimumArgumentCount)
             return;
 
-        (this->*(found->handle))(message);
+        (this->*(found->handle))(sender, message);
     }
 
-    void handleSpawn(const term::proto::Message& message)
+    void handleHello(IPC::Messenger& sender, const term::proto::Message&)
     {
-        spawn(message.args[0],
-              std::stoi(message.args[1]),
-              std::stoi(message.args[2]),
-              message.payload);
+        sender.send(term::proto::make(
+            "daemon-hello", {std::to_string(term::proto::daemonProtocolVersion)}));
     }
 
-    void handleWrite(const term::proto::Message& message)
+    // spawn <id> <cols> <rows> [session], payload the working directory.
+    void handleSpawn(IPC::Messenger& sender, const term::proto::Message& message)
+    {
+        constexpr auto sessionArgument = std::size_t {3};
+        const auto sessionName =
+            message.args.size() > sessionArgument ? message.args[sessionArgument] : std::string {};
+
+        spawn(sender,
+              {message.args[0],
+               {std::stoi(message.args[1]), std::stoi(message.args[2])},
+               message.payload,
+               sessionName});
+    }
+
+    void handleRelease(IPC::Messenger& sender, const term::proto::Message& message)
+    {
+        if (auto found = panes.find(message.args[0]); found != panes.end())
+            std::erase(found->second->watchers, &sender);
+    }
+
+    void handleWrite(IPC::Messenger&, const term::proto::Message& message)
     {
         write(message.args[0], message.payload);
     }
 
-    void handleResize(const term::proto::Message& message)
+    void handleResize(IPC::Messenger&, const term::proto::Message& message)
     {
         resize(message.args[0], std::stoi(message.args[1]), std::stoi(message.args[2]));
     }
 
-    void handleKill(const term::proto::Message& message)
+    void handleKill(IPC::Messenger&, const term::proto::Message& message)
     {
         kill(message.args[0]);
     }
 
-    void handleInfo(const term::proto::Message&)
+    void handleInfo(IPC::Messenger& sender, const term::proto::Message&)
     {
-        sendInfo();
+        sendInfo(sender);
     }
 
-    void handleQuitServer(const term::proto::Message&)
+    // layout <session>, payload the session's saved layout (opaque here):
+    // what another Mac needs to attach to the same panes.
+    void handleLayout(IPC::Messenger&, const term::proto::Message& message)
+    {
+        layouts[message.args[0]] = message.payload;
+    }
+
+    void handleLayouts(IPC::Messenger& sender, const term::proto::Message&)
+    {
+        forgetLayoutsWithoutPanes();
+        auto payload = std::string {};
+
+        for (const auto& [name, layout]: layouts)
+            payload += term::proto::make("layout", {name}, layout) + '\0';
+
+        sender.send(term::proto::make("layouts", {}, payload));
+    }
+
+    void forgetLayoutsWithoutPanes()
+    {
+        std::erase_if(layouts,
+                      [this](const auto& entry)
+                      {
+                          return std::ranges::none_of(
+                              panes,
+                              [&](const auto& pane)
+                              { return pane.second->sessionName == entry.first; });
+                      });
+    }
+
+    void handleQuitServer(IPC::Messenger&, const term::proto::Message&)
     {
         saveAllPanes();
         Apps::quit();
@@ -172,12 +248,15 @@ struct Daemon
 
     ~Daemon() { saveAllPanes(); }
 
-    void spawn(const std::string& id, int cols, int rows, const std::string& cwd)
+    void spawn(IPC::Messenger& sender, const SpawnRequest& request)
     {
+        const auto& id = request.id;
+
         if (auto found = panes.find(id); found != panes.end())
         {
             if (found->second->alive)
             {
+                watch(*found->second, sender);
                 adopt(id, *found->second);
                 return;
             }
@@ -185,11 +264,16 @@ struct Daemon
             panes.erase(found);
         }
 
-        auto& pane = *(panes[id] = std::make_unique<DaemonPane>(term::PtySize {cols, rows}));
+        auto& pane = *(panes[id] = std::make_unique<DaemonPane>(request.size));
+        pane.sessionName = request.sessionName;
+        watch(pane, sender);
         restoreSavedPane(id, pane);
 
         const auto started = pane.pty.start(
-            {{cols, rows}, cwd, {}, {{term::proto::paneEnvironmentVariable, id}}},
+            {request.size,
+             request.workingDirectory,
+             {},
+             {{term::proto::paneEnvironmentVariable, id}}},
             [this, id](std::string data)
             {
                 Threads::callAsync([this, id, data = std::move(data)]
@@ -201,7 +285,7 @@ struct Daemon
 
         if (!started)
         {
-            send(term::proto::make("exit", {id}));
+            sendToWatchers(pane, term::proto::make("exit", {id}));
             panes.erase(id);
         }
     }
@@ -227,7 +311,7 @@ struct Daemon
 
     void sendState(const std::string& id, const DaemonPane& pane)
     {
-        send(term::proto::make(
+        sendToWatchers(pane, term::proto::make(
             "state", {id}, term::serializeTerminalState(pane.terminal.captureState())));
     }
 
@@ -250,16 +334,22 @@ struct Daemon
 
         found->second->terminal.feed(data);
         found->second->hasUnsavedChanges = true;
-        send(term::proto::make("output", {id}, data));
+        sendToWatchers(*found->second, term::proto::make("output", {id}, data));
     }
 
     void shellExited(const std::string& id)
     {
-        if (panes.erase(id) > 0)
-        {
-            forgetSavedPane(id);
-            send(term::proto::make("exit", {id}));
-        }
+        auto found = panes.find(id);
+
+        if (found == panes.end())
+            return;
+
+        const auto watchers = std::move(found->second->watchers);
+        panes.erase(found);
+        forgetSavedPane(id);
+
+        for (auto* watcher: watchers)
+            watcher->send(term::proto::make("exit", {id}));
     }
 
     void write(const std::string& id, const std::string& data)
@@ -315,25 +405,26 @@ struct Daemon
         saveChangedPanes();
     }
 
-    void sendInfo()
+    void sendInfo(IPC::Messenger& requester)
     {
         auto payload = std::string {};
 
         for (auto& [id, pane]: panes)
         {
             payload += id + "\t" + pane->pty.foregroundProcess() + "\t"
-                       + pane->pty.currentWorkingDirectory() + "\n";
+                       + pane->pty.currentWorkingDirectory() + "\t" + pane->sessionName
+                       + "\n";
         }
 
-        send(term::proto::make("info", {}, payload));
+        requester.send(term::proto::make("info", {}, payload));
     }
 
     // A daemon with nothing to hold and nobody attached retires itself.
     void checkIdle()
     {
-        if (client == nullptr && panes.empty())
+        if (clients.empty() && panes.empty())
         {
-            if (++idleTicks * 10 >= idleExitSeconds)
+            if (++idleTicks >= idleChecksBeforeExit)
                 Apps::quit();
         }
         else
@@ -343,12 +434,13 @@ struct Daemon
     }
 
     std::map<std::string, std::unique_ptr<DaemonPane>> panes;
-    IPC::Messenger* client = nullptr;
+    std::vector<IPC::Messenger*> clients;
+    std::map<std::string, std::string> layouts;
     int idleTicks = 0;
     emberstore::Database paneStore = openPaneStore();
 
     IPC::MessageServer server {term::proto::serverName()};
-    Threads::Timer idleTimer {[this] { checkIdle(); }, 10};
+    Threads::Timer idleTimer {[this] { checkIdle(); }, idleCheckInterval};
     Threads::Timer saveTimer {[this] { saveChangedPanes(); }, Time::MS {saveIntervalMilliseconds}};
 };
 } // namespace
@@ -359,9 +451,10 @@ int main()
     {
         return Apps::run<Daemon>();
     }
-    catch (const std::exception&)
+    catch (const std::exception& error)
     {
-        // Another daemon already holds the name; nothing to do.
+        // Usually another daemon already holds the name; nothing to do.
+        std::fprintf(stderr, "cowtermd: %s\n", error.what());
         return 0;
     }
 }

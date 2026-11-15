@@ -30,6 +30,11 @@ inline std::string appServerName()
     return suffix.empty() ? std::string {"cowterm"} : "cowterm-" + suffix;
 }
 
+// What the daemon answers to "hello". Bumped when the daemon's messages
+// change, so a newer `ct bridge` restarts an older daemon (its panes come back
+// through the saved-state restore) instead of talking past it.
+inline constexpr auto daemonProtocolVersion = 2;
+
 // Set in every pane's shell environment to the pane's stable shell id, so
 // `ct notify-user` run there knows which pane asked.
 inline constexpr auto paneEnvironmentVariable = "COWTERM_PANE";

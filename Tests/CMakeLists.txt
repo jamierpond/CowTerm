@@ -186,4 +186,5 @@ nano_add_executable(CowTermRemoteTests
         SOURCES
             RemoteLocationTests.cpp
             BridgeFramingTests.cpp
+            BridgeRelayTests.cpp
         TARGETS CowTermRemote)

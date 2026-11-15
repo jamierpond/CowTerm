@@ -8,7 +8,10 @@ configure_file(RemoteBootstrapScript.h.in
         ${CMAKE_CURRENT_BINARY_DIR}/generated/RemoteBootstrapScript.h @ONLY)
 
 add_library(CowTermRemote STATIC
+        Bridge.cpp
         BridgeFraming.cpp
+        BridgeRelay.cpp
+        DaemonDialer.cpp
         RemoteCommands.cpp
         RemoteInstall.cpp
         RemoteLocation.cpp)

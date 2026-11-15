@@ -1,11 +1,9 @@
 #include "DaemonClient.h"
 #include "Protocol.h"
 
-#include "CowTermCore/Shell.h"
+#include "DaemonDialer.h"
 
-#include <eacp/Core/Process/Process.h>
-#include <eacp/Core/Utils/Files.h>
-#include <eacp/Core/Utils/StdPath.h>
+#include "CowTermCore/Shell.h"
 
 namespace term
 {
@@ -15,39 +13,6 @@ namespace
 {
 std::unique_ptr<DaemonClient> instance;
 
-// The daemon ships beside the app's executable (inside the bundle on macOS)
-// and shares its extension, so this is the one name on every platform. The
-// path comes from the OS rather than argv[0], which a caller controls; without
-// it the daemon is unreachable and the app falls back to in-process shells
-// that die with the window.
-std::string daemonExecutablePath()
-{
-    const auto self = toStdPath(Files::executablePath());
-
-    if (self.empty())
-        return {};
-
-    return FilePath {self.parent_path()
-                     / ("CowTermDaemon" + self.extension().string())}
-        .str();
-}
-
-void launchDaemon()
-{
-    const auto executable = daemonExecutablePath();
-
-    if (executable.empty())
-        return;
-
-    auto options = Processes::ProcessOptions {};
-    options.executable = executable;
-    options.detached = true;
-
-    // Detached: destroying the handle leaves the daemon running — the
-    // whole point of it.
-    auto daemon = Processes::Process {options};
-}
-
 std::string toString(int value)
 {
     return std::to_string(value);
@@ -56,42 +21,14 @@ std::string toString(int value)
 
 void DaemonClient::initialize(const Callback& whenReady)
 {
-    auto adopt = [](std::unique_ptr<IPC::Messenger> messenger)
-    { instance.reset(new DaemonClient {std::move(messenger)}); };
-
-    // First dial is short: the daemon is either already there or not
-    // installed at all. The second, after launching it, allows startup time.
-    auto first = std::make_shared<std::unique_ptr<IPC::Messenger>>(
-        std::make_unique<IPC::Messenger>(proto::serverName(), Time::MS {600}));
-
-    (*first)->onConnected = [first, adopt, whenReady]
-    {
-        adopt(std::move(*first));
-        whenReady();
-    };
-
-    (*first)->onDisconnected = [first, adopt, whenReady]
-    {
-        launchDaemon();
-
-        auto second = std::make_shared<std::unique_ptr<IPC::Messenger>>(
-            std::make_unique<IPC::Messenger>(proto::serverName(), Time::MS {4000}));
-
-        (*second)->onConnected = [second, adopt, whenReady]
+    daemon::dialOrLaunchDaemon(
+        [whenReady](std::unique_ptr<IPC::Messenger> messenger)
         {
-            adopt(std::move(*second));
-            whenReady();
-        };
+            if (messenger != nullptr)
+                instance.reset(new DaemonClient {std::move(messenger)});
 
-        (*second)->onDisconnected = [second, whenReady]
-        {
-            second->reset();
             whenReady();
-        };
-
-        // Keep the dying first messenger alive until this handler returns.
-        Threads::callAsync([first] {});
-    };
+        });
 }
 
 DaemonClient* DaemonClient::get()
@@ -238,6 +175,7 @@ void DaemonClient::kill(const std::string& id)
 void DaemonClient::release(const std::string& id)
 {
     routes.erase(id);
+    messenger->send(proto::make("release", {id}));
 }
 
 DaemonClient::ShellInfo DaemonClient::infoFor(const std::string& id) const

@@ -8,6 +8,7 @@
 #include "NotifyUserClient.h"
 #include <PermissionsPanel/Permissions.h>
 #include "Protocol.h"
+#include "Bridge.h"
 #include "Config.h"
 #include "RemoteCommands.h"
 #include "RemoteLocation.h"
@@ -46,6 +47,8 @@ constexpr auto usage = R"(usage: ct <command>
                                   ask the user in a window over everything;
                                   prints the chosen option or typed answer
 
+  bridge                          relay this machine's session daemon over
+                                  stdin/stdout (CowTerm runs it through ssh)
   install-remote <host>           build and install ct + cowtermd on host
                                   over ssh, for remote sessions
   update-remotes                  install-remote for every host in searchDirs
@@ -142,6 +145,11 @@ int notifyUserCommand(const Arguments& args)
     return notifyUser(dropFirst(args));
 }
 
+int bridge(const Arguments&)
+{
+    return bridge::runBridge(versionTag());
+}
+
 int installRemote(const Arguments& args)
 {
     return remote::runInstallRemoteCommand(dropFirst(args));
@@ -166,6 +174,7 @@ constexpr auto commandsRunAnywhere = std::array {
     Command {"--version", printVersion},
     Command {"--reset-permissions", resetPermissions},
     Command {"notify-user", notifyUserCommand},
+    Command {"bridge", bridge},
     Command {"install-remote", installRemote},
     Command {"update-remotes", updateRemotes},
 };
@@ -204,6 +213,7 @@ bool isCliInvocation(int argc, char** argv)
                              "version",
                              "--version",
                              "--reset-permissions",
+                             "bridge",
                              "install-remote",
                              "update-remotes"})
         if (verb == known)
