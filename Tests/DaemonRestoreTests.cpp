@@ -91,6 +91,16 @@ struct DaemonConversation
         return state;
     }
 
+    std::string listReceivedVerbs() const
+    {
+        auto verbs = std::string {"received:"};
+
+        for (const auto& message: received)
+            verbs += " " + message.verb;
+
+        return verbs;
+    }
+
     void quitDaemon()
     {
         messenger.send(term::proto::make("quit-server"));
@@ -146,7 +156,7 @@ auto tPaneComesBackAfterDaemonRestart = test("DaemonRestore/paneComesBackAfterDa
 
         second.messenger.send(term::proto::make("spawn", {paneId, "80", "24"}, "/tmp"));
         const auto state = second.waitForState();
-        check(state.has_value());
+        check(state.has_value(), second.listReceivedVerbs());
 
         if (state)
         {
