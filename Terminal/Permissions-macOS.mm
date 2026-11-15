@@ -263,14 +263,6 @@ Status statusFromGranted(bool granted)
     return Status::notGranted;
 }
 
-// Adds CowTerm to the list (switched off) and shows macOS's prompt, once;
-// from then on it only answers.
-void requestScreenRecording(bool prompted)
-{
-    if (prompted || CGRequestScreenCaptureAccess())
-        openSettings(Kind::screenRecording);
-}
-
 void requestAccessibility(bool prompted)
 {
     if (prompted)
@@ -348,8 +340,6 @@ Status check(Kind kind)
 {
     switch (kind)
     {
-        case Kind::screenRecording:
-            return statusFromGranted(CGPreflightScreenCaptureAccess());
         case Kind::accessibility:
             return statusFromGranted(AXIsProcessTrusted());
         case Kind::fullDiskAccess:
@@ -366,27 +356,10 @@ Status check(Kind kind)
     return Status::unknown;
 }
 
-void probeScreenRecording(std::function<void(bool)> done)
-{
-    // `ct screen-cap check` is this same binary as a fresh process, charged to
-    // this app (its parent), so it reads TCC as it stands now.
-    const auto self = macos::getExecutablePath().string();
-
-    inBackground(
-        [self, done = std::move(done)]
-        {
-            const auto granted = run({self, "screen-cap", "check"}).status == 0;
-            onMain([done, granted] { done(granted); });
-        });
-}
-
 void request(Kind kind, bool prompted, std::function<void()> done)
 {
     switch (kind)
     {
-        case Kind::screenRecording:
-            requestScreenRecording(prompted);
-            break;
         case Kind::accessibility:
             requestAccessibility(prompted);
             break;

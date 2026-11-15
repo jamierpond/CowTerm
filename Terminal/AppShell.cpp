@@ -196,20 +196,6 @@ void AppShell::start()
         daemon->onInfoChanged = [this] { rudderChanged(); };
 
     manager.restoreOrCreateInitial();
-
-    // Unlock first: a required grant missing opens the panel over the
-    // restored sessions, and it goes again by itself once granted. Never on
-    // Windows or Linux, where every grant is always in force.
-    if (PermissionsPanel::requiredMissingNow())
-        Threads::callAsync(
-            [this]
-            {
-                if (!anyOverlayShown())
-                {
-                    showOverlay(permissions);
-                    permissions.show(true);
-                }
-            });
 }
 
 void AppShell::rudderChanged()
@@ -419,7 +405,7 @@ void AppShell::showPermissions(bool confirmReset)
         return;
 
     showOverlay(permissions);
-    permissions.show(false, confirmReset);
+    permissions.show(confirmReset);
 }
 
 void AppShell::showPopup(const std::string& command)

@@ -7,7 +7,6 @@
 #include <eacp/UI/UI.h>
 
 #include <memory>
-#include <optional>
 #include <set>
 #include <string>
 #include <vector>
@@ -16,9 +15,7 @@ namespace term
 {
 // CowTerm > Permissions… (macOS): one row per privacy grant with its live
 // status and a Grant button, and under the selected row Rudder's unlock
-// card -- the draggable app icon for lists that take one, and the steps. It
-// opens by itself on launch while a required grant is missing, and then goes
-// away by itself once they are all in force.
+// card -- the draggable app icon for lists that take one, and the steps.
 //
 // macOS sends nothing when a grant changes, so the panel checks once a
 // second, and only while it is shown: a closed panel never wakes CowTerm.
@@ -28,13 +25,9 @@ public:
     explicit PermissionsPanel(const AppConfig& configToUse);
     ~PermissionsPanel() override;
 
-    // `automatic` is the launch-time showing, the one that dismisses itself.
     // `confirmReset` opens straight onto the reset confirmation.
-    void show(bool automatic, bool confirmReset = false);
+    void show(bool confirmReset = false);
     bool isShown() const { return shown; }
-
-    // Whether launch should show the panel: a required grant is missing.
-    static bool requiredMissingNow();
 
     eacp::Callback onClosed = [] {};
 
@@ -65,7 +58,6 @@ private:
 
     void refresh();
     permissions::Status checkGrant(const permissions::Info& grant) const;
-    void probeScreenRecordingWhileInDoubt();
     void act(int row);
     void resetAll();
     void close();
@@ -74,18 +66,12 @@ private:
     void handleConfirmingResetClick(const Layout& at, eacp::UI::Point pos);
     bool handleRowClick(const Layout& at, eacp::UI::Point pos);
     bool handleButtonClick(const Layout& at, eacp::UI::Point pos);
-    bool isScreenProbeDue() const;
     void loadAppIconOnce();
     bool isDragTileActive() const;
     std::string describeBanner() const;
 
     void paintRow(eacp::UI::Graphics& g, const Layout& at, int row);
-    void paintRequiredTag(eacp::UI::Graphics& g,
-                          const permissions::Info& grant,
-                          const eacp::UI::Rect& row,
-                          float nameWidth);
-    eacp::UI::Color getStatusColour(const permissions::Info& grant,
-                                    permissions::Status status) const;
+    eacp::UI::Color getStatusColour(permissions::Status status) const;
     void paintDetail(eacp::UI::Graphics& g, const Layout& at);
     void paintDragTile(eacp::UI::Graphics& g, const eacp::UI::Rect& tile, bool done);
     void paintTitle(eacp::UI::Graphics& g, const eacp::UI::Rect& card);
@@ -102,18 +88,11 @@ private:
     std::vector<permissions::Entry> entries;
     std::set<permissions::Kind> prompted;
 
-    // The fresh-process answer for Screen Recording (see probeScreenRecording)
-    // and whether one is already running.
-    std::optional<bool> screenProbe;
-    bool probing = false;
-    int ticks = 0;
 
     bool shown = false;
-    bool automatic = false;
     bool confirmingReset = false;
 
-    // Since a reset this process's cached grants are stale, so Screen
-    // Recording is believed only from a fresh process.
+    // Since a reset this process's cached grants are stale until it relaunches.
     bool resetDone = false;
     std::string error;
     int selected = 0;

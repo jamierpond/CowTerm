@@ -38,8 +38,8 @@ branch or tag points now and rewrites `lockstep.lock`; commit the result.
 
 ### macOS privacy permissions
 
-CowTerm is not certificate-signed. macOS remembers Screen Recording,
-Accessibility and other privacy grants against the responsible app's signature
+CowTerm is not certificate-signed. macOS remembers Accessibility
+and other privacy grants against the responsible app's signature
 (for a terminal that's CowTerm, for every command it runs), and each rebuild is
 a new ad-hoc identity, so those grants re-prompt after a rebuild. `just run`
 resets Accessibility before launching for that reason, so the prompt is real
@@ -53,46 +53,23 @@ your consent.
 ### The permissions panel
 
 CowTerm > Permissions… (also in the tray menu) lists every macOS privacy grant
-CowTerm asks for, with live status: Screen & System Audio Recording (required:
-`ct` captures and agents' `screencapture`), then the optional Accessibility,
-Full Disk Access, Automation, Desktop/Documents/Downloads and Notifications.
+CowTerm asks for, with live status: Accessibility, Full Disk Access,
+Automation, Desktop/Documents/Downloads and Notifications.
 Commands in a CowTerm shell are charged to CowTerm, so these are what they get.
 Grant shows macOS's prompt where there is one, else opens the exact System
 Settings pane; for lists that take an app, drag CowTerm's icon from the panel
-into them. It opens by itself on launch while a required grant is missing and
-checks once a second only while open. Screen Recording applies after a
-relaunch; the panel's Relaunch button quits normally (the daemon keeps every
-shell) and reopens CowTerm.
+into them. It checks once a second only while open. After a reset its Relaunch
+button quits normally (the daemon keeps every shell) and reopens CowTerm.
 
 Reset all permissions… (or `CowTerm --reset-permissions [service]` from any
 shell) runs `tccutil reset All` for CowTerm's bundle id. Notifications aren't
 TCC, so a reset leaves them alone.
 
-### Screen capture for agents
+### `ct`
 
-`ct` is the CowTerm executable's CLI mode: same binary, same grant.
-`just install` symlinks it to `~/.local/bin/ct`; an alias works too:
-
-```bash
-alias ct=~/.local/libexec/cowterm/CowTerm.app/Contents/MacOS/CowTerm
-```
-
-Everything but `help`/`version` only runs from a CowTerm shell (exit 3
-otherwise): the grant belongs to the terminal hosting the shell, so from iTerm
-or ssh it would prompt for the wrong app.
-
-```bash
-ct screen-cap status        # granted / not granted, plus CowTerm's signature
-ct screen-cap request       # ask for Screen Recording
-ct screenshot               # = ct screen-cap shot; prints the PNG path
-ct screen-cap shot -o f.png --display 2 --window <id> --rect x,y,w,h --interactive
-ct start-whole-screen-recording [--duration 30] [--audio]   # prints the .mov path
-ct stop-screen-recording    # finalises, prints the path
-ct screen-cap record status
-```
-
-Output defaults to `$COWTERM_CAPTURE_DIR`, else `~/Pictures/CowTerm`. Captures
-exit 2 with a hint when Screen Recording isn't granted.
+`ct` is the CowTerm executable's CLI mode (`ct notify-user`, `ct version`).
+`just install` symlinks it to `~/.local/bin/ct`. Screen capture lives in the
+separate `screencap` tool.
 
 ## Keys
 

@@ -12,7 +12,7 @@ class View;
 
 // The macOS privacy grants (TCC) CowTerm asks for. A terminal needs them less
 // for itself than for what it runs: macOS charges a command to the app that
-// hosts its shell, so `screencapture`, `osascript` or a shell reading
+// hosts its shell, so `osascript` or a shell reading
 // ~/Library/Mail get CowTerm's grants or none.
 //
 // The model here is pure, so it is tested anywhere; the platform half (live
@@ -22,7 +22,6 @@ namespace term::permissions
 {
 enum class Kind
 {
-    screenRecording,
     accessibility,
     fullDiskAccess,
     automation,
@@ -33,10 +32,6 @@ enum class Kind
 enum class Status
 {
     granted,
-
-    // Granted in TCC, but this process still sees the old answer: macOS
-    // caches Screen Recording per process, so it applies from the next launch.
-    needsRelaunch,
 
     // Off, or never asked.
     notGranted,
@@ -53,8 +48,6 @@ struct Info
     Kind kind;
     std::string name;
     std::string why;
-    bool required = false;
-
     // System Settings' name for the list, for the steps.
     std::string listName;
 
@@ -65,7 +58,7 @@ struct Info
     bool canPrompt = false;
 };
 
-// Every grant, in the order the panel lists them: required first.
+// Every grant, in the order the panel lists them.
 const std::vector<Info>& all();
 const Info& info(Kind kind);
 
@@ -78,12 +71,6 @@ struct Entry
     Kind kind;
     Status status;
 };
-
-// What the panel shows on launch for: a required grant this process can't use.
-bool requiredMissing(const std::vector<Entry>& entries);
-
-// Every required grant in force now, so an automatically shown panel can go.
-bool requiredSatisfied(const std::vector<Entry>& entries);
 
 std::string statusLabel(Status status);
 
@@ -103,11 +90,6 @@ namespace platform
 {
 // Live, never prompts. Cheap except where noted in the .mm.
 Status check(Kind kind);
-
-// Screen Recording as a fresh process sees it, asynchronously (it runs `ct`):
-// the only way to see a grant this process has cached the absence of.
-// `done` runs on the main thread.
-void probeScreenRecording(std::function<void(bool granted)> done);
 
 // The system prompt where there is one, otherwise (or the second time) the
 // System Settings pane. Asynchronous where macOS blocks; `done` runs on the

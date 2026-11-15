@@ -29,7 +29,6 @@ constexpr float bannerHeight = 40.0f;
 constexpr float footerHeight = 52.0f;
 
 constexpr auto refreshIntervalMs = 1000;
-constexpr auto ticksPerScreenProbe = 2;
 
 bool isDone(Status status)
 {
@@ -40,16 +39,10 @@ std::vector<std::string> stepsFor(const permissions::Info& grant)
 {
     if (grant.dragToList)
     {
-        auto steps = std::vector<std::string> {
-            "1. Start dragging the icon: System Settings opens at",
-            "    Privacy & Security › " + grant.listName + ".",
-            "2. Drop it into the list, or press + there and choose CowTerm.",
-            "3. Turn CowTerm on. This row turns green by itself."};
-
-        if (grant.kind == Kind::screenRecording)
-            steps.push_back("4. Relaunch CowTerm (below); every shell keeps running.");
-
-        return steps;
+        return {"1. Start dragging the icon: System Settings opens at",
+                "    Privacy & Security › " + grant.listName + ".",
+                "2. Drop it into the list, or press + there and choose CowTerm.",
+                "3. Turn CowTerm on. This row turns green by itself."};
     }
 
     switch (grant.kind)
@@ -88,26 +81,12 @@ PermissionsPanel::~PermissionsPanel()
     *alive = false;
 }
 
-bool PermissionsPanel::requiredMissingNow()
+void PermissionsPanel::show(bool confirmReset)
 {
-    // A fresh process, so its own Screen Recording answer is current.
-    auto entries = std::vector<permissions::Entry> {};
-
-    for (const auto& grant: permissions::all())
-        if (grant.required)
-            entries.push_back({grant.kind, platform::check(grant.kind)});
-
-    return permissions::requiredMissing(entries);
-}
-
-void PermissionsPanel::show(bool automaticToUse, bool confirmReset)
-{
-    automatic = automaticToUse;
     confirmingReset = confirmReset;
     error.clear();
     shown = true;
     selected = 0;
-    ticks = 0;
 
     refresh();
 
@@ -120,11 +99,7 @@ void PermissionsPanel::show(bool automaticToUse, bool confirmReset)
         }
 
     tick = std::make_unique<Threads::Timer>(
-        [this]
-        {
-            ++ticks;
-            refresh();
-        },
+        [this] { refresh(); },
         Time::MS {refreshIntervalMs});
 
     repaint();
@@ -154,54 +129,7 @@ const permissions::Info& PermissionsPanel::selectedInfo() const
 
 bool PermissionsPanel::bannerShown() const
 {
-    return resetDone || statusOf(Kind::screenRecording) == Status::needsRelaunch
-           || selectedInfo().kind == Kind::screenRecording;
-}
-
-permissions::Status PermissionsPanel::checkGrant(const permissions::Info& grant) const
-{
-    const auto status = platform::check(grant.kind);
-
-    // This process caches its Screen Recording answer, so a grant made while
-    // it runs (or a reset) shows only in a fresh process.
-    const auto isCachedAnswerStale =
-        grant.kind == Kind::screenRecording && (status != Status::granted || resetDone);
-
-    if (!isCachedAnswerStale)
-        return status;
-
-    return screenProbe.value_or(false) ? Status::needsRelaunch : Status::notGranted;
-}
-
-bool PermissionsPanel::isScreenProbeDue() const
-{
-    const auto screenDoubt = statusOf(Kind::screenRecording) != Status::granted;
-    const auto isProbeTick = ticks % ticksPerScreenProbe == 0;
-    return screenDoubt && !probing && isProbeTick;
-}
-
-// The probe spawns a process, so every other tick, and only while the
-// in-process answer can't be trusted.
-void PermissionsPanel::probeScreenRecordingWhileInDoubt()
-{
-    if (!isScreenProbeDue())
-        return;
-
-    probing = true;
-    platform::probeScreenRecording(
-        [this, alive = alive](bool granted)
-        {
-            if (!*alive)
-                return;
-
-            probing = false;
-
-            if (screenProbe != granted)
-            {
-                screenProbe = granted;
-                refresh();
-            }
-        });
+    return resetDone;
 }
 
 void PermissionsPanel::refresh()
@@ -212,17 +140,7 @@ void PermissionsPanel::refresh()
     entries.clear();
 
     for (const auto& grant: permissions::all())
-        entries.push_back({grant.kind, checkGrant(grant)});
-
-    probeScreenRecordingWhileInDoubt();
-
-    // Launch's showing goes away once nothing required is missing, as
-    // Rudder's unlock card does.
-    if (automatic && permissions::requiredSatisfied(entries))
-    {
-        close();
-        return;
-    }
+        entries.push_back({grant.kind, platform::check(grant.kind)});
 
     repaint();
 }
@@ -234,12 +152,6 @@ void PermissionsPanel::act(int row)
 
     if (status == Status::granted)
         return;
-
-    if (status == Status::needsRelaunch)
-    {
-        platform::relaunch();
-        return;
-    }
 
     const auto wasPrompted = prompted.contains(grant.kind);
     prompted.insert(grant.kind);
@@ -267,9 +179,7 @@ void PermissionsPanel::resetAll()
 
     // macOS forgets them all, so it will prompt again; this process doesn't.
     resetDone = true;
-    automatic = false;
     prompted.clear();
-    screenProbe = false;
     refresh();
 }
 
@@ -471,14 +381,12 @@ void PermissionsPanel::paintButton(UI::Graphics& g,
     g.drawText(label, area, UI::Justification::Centred);
 }
 
-Color PermissionsPanel::getStatusColour(const permissions::Info& grant, Status status) const
+Color PermissionsPanel::getStatusColour(Status status) const
 {
     switch (status)
     {
         case Status::granted:
             return toColor(theme.ansi[2]);
-        case Status::needsRelaunch:
-            return toColor(theme.ansi[3]);
         case Status::denied:
             return toColor(theme.ansi[1]);
         case Status::unknown:
@@ -487,24 +395,7 @@ Color PermissionsPanel::getStatusColour(const permissions::Info& grant, Status s
             break;
     }
 
-    return grant.required ? toColor(theme.ansi[1]) : toColor(theme.ansi[3]);
-}
-
-// Required vs optional, beside the name.
-void PermissionsPanel::paintRequiredTag(UI::Graphics& g,
-                                        const permissions::Info& grant,
-                                        const Rect& row,
-                                        float nameWidth)
-{
-    const auto tag = grant.required ? std::string {"required"} : std::string {"optional"};
-    const auto tagWidth = measureTextInFont(g, tag, detailFont) + 12.0f;
-    const auto tagRect = Rect {row.x + 26.0f + nameWidth + 10.0f, row.y + 5.0f, tagWidth, 16.0f};
-    const auto tagColour = grant.required ? toColor(theme.ansi[5]) : toColor(theme.ansi[8]);
-    g.setColour(tagColour.withAlpha(0.25f));
-    g.fillRoundedRect(tagRect, 8.0f);
-    g.setColour(grant.required ? toColor(theme.ansi[5]) : toColor(theme.ansi[7]));
-    g.setFont(detailFont);
-    g.drawText(tag, tagRect, UI::Justification::Centred);
+    return toColor(theme.ansi[3]);
 }
 
 void PermissionsPanel::paintRow(UI::Graphics& g, const Layout& at, int i)
@@ -519,16 +410,13 @@ void PermissionsPanel::paintRow(UI::Graphics& g, const Layout& at, int i)
         g.fillRoundedRect(row, 6.0f);
     }
 
-    const auto colour = getStatusColour(grant, status);
+    const auto colour = getStatusColour(status);
 
     g.setColour(colour);
     g.fillRoundedRect({row.x + 10.0f, row.y + 11.0f, 8.0f, 8.0f}, 4.0f);
 
     g.setColour(toColor(theme.foreground));
-    const auto nameWidth = measureTextInFont(g, grant.name, rowFont);
     drawTextInFont(g, grant.name, {row.x + 26.0f, row.y + 18.0f}, rowFont);
-
-    paintRequiredTag(g, grant, row, nameWidth);
 
     const auto& action = at.actions[(std::size_t) i];
 
@@ -613,12 +501,10 @@ void PermissionsPanel::paintDetail(UI::Graphics& g, const Layout& at)
 
 void PermissionsPanel::paintTitle(UI::Graphics& g, const Rect& card)
 {
-    const auto missing = permissions::requiredMissing(entries);
-
     g.setColour(toColor(theme.foreground));
     g.setFont(titleFont);
     g.setFontStyle(UI::FontStyle::Bold);
-    g.drawText(missing ? "Unlock CowTerm" : "CowTerm permissions",
+    g.drawText("CowTerm permissions",
                {card.x, card.y + 18.0f, card.w, 26.0f},
                UI::Justification::Centred);
 
@@ -627,20 +513,14 @@ void PermissionsPanel::paintTitle(UI::Graphics& g, const Rect& card)
     g.drawText("Commands you run in CowTerm get CowTerm's macOS privacy grants, so agents",
                {card.x, card.y + 50.0f, card.w, 16.0f},
                UI::Justification::Centred);
-    g.drawText("and scripts can only screenshot, drive apps or read ~/Library if CowTerm can.",
+    g.drawText("and scripts can only drive apps or read ~/Library if CowTerm can.",
                {card.x, card.y + 66.0f, card.w, 16.0f},
                UI::Justification::Centred);
 }
 
 std::string PermissionsPanel::describeBanner() const
 {
-    if (resetDone)
-        return "Grants reset. Relaunch so CowTerm drops the ones it cached.";
-
-    if (statusOf(Kind::screenRecording) == Status::needsRelaunch)
-        return "Screen Recording is on; CowTerm sees it after a relaunch.";
-
-    return "Screen Recording only takes effect after CowTerm relaunches.";
+    return "Grants reset. Relaunch so CowTerm drops the ones it cached.";
 }
 
 void PermissionsPanel::paintBanner(UI::Graphics& g, const Layout& at)

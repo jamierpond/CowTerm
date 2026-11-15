@@ -12,45 +12,33 @@ constexpr auto privacyPane = "x-apple.systempreferences:com.apple.preference.sec
 const std::vector<Info>& all()
 {
     static const auto grants = std::vector<Info> {
-        {Kind::screenRecording,
-         "Screen & System Audio Recording",
-         "ct screenshot/recordings and agents' screencapture. Applies on relaunch.",
-         true,
-         "Screen & System Audio Recording",
-         true,
-         true},
         {Kind::accessibility,
          "Accessibility",
          "Commands that drive other apps: osascript keystrokes, cliclick, agents.",
-         false,
          "Accessibility",
          true,
          true},
         {Kind::fullDiskAccess,
          "Full Disk Access",
          "Shells reading protected data: ~/Library/Mail, Safari, Messages.",
-         false,
          "Full Disk Access",
          true,
          false},
         {Kind::automation,
          "Automation",
          "osascript / Apple Events to other apps; macOS asks per target app.",
-         false,
          "Automation",
          false,
          true},
         {Kind::filesAndFolders,
          "Desktop, Documents & Downloads",
          "Shells in those folders. Not needed once Full Disk Access is on.",
-         false,
          "Files & Folders",
          false,
          true},
         {Kind::notifications,
          "Notifications",
          "Ring-back alerts when a session asks for you.",
-         false,
          "Notifications",
          false,
          true},
@@ -74,8 +62,6 @@ std::string settingsUrl(Kind kind, const std::string& bundleId)
 
     switch (kind)
     {
-        case Kind::screenRecording:
-            return privacy("Privacy_ScreenCapture");
         case Kind::accessibility:
             return privacy("Privacy_Accessibility");
         case Kind::fullDiskAccess:
@@ -92,37 +78,12 @@ std::string settingsUrl(Kind kind, const std::string& bundleId)
     return privacy("");
 }
 
-bool requiredMissing(const std::vector<Entry>& entries)
-{
-    return std::any_of(entries.begin(),
-                       entries.end(),
-                       [](const Entry& entry)
-                       {
-                           return info(entry.kind).required
-                                  && entry.status != Status::granted
-                                  && entry.status != Status::needsRelaunch;
-                       });
-}
-
-bool requiredSatisfied(const std::vector<Entry>& entries)
-{
-    return std::all_of(entries.begin(),
-                       entries.end(),
-                       [](const Entry& entry)
-                       {
-                           return !info(entry.kind).required
-                                  || entry.status == Status::granted;
-                       });
-}
-
 std::string statusLabel(Status status)
 {
     switch (status)
     {
         case Status::granted:
             return "granted";
-        case Status::needsRelaunch:
-            return "granted · relaunch to apply";
         case Status::notGranted:
             return "not granted";
         case Status::denied:
@@ -149,9 +110,6 @@ std::string actionLabel(const Info& grant, Status status, bool prompted)
 {
     if (status == Status::granted)
         return {};
-
-    if (status == Status::needsRelaunch)
-        return "Relaunch";
 
     if (canAskDirectly(grant, status, prompted))
         return "Grant";

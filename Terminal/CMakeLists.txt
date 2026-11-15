@@ -60,7 +60,6 @@ add_executable(${COWTERM_EXECUTABLE_TARGET}
 # grant in force.
 if (APPLE)
     target_sources(${COWTERM_EXECUTABLE_TARGET} PRIVATE
-            Cli-macOS.mm
             MacProcesses.mm
             Command-Posix.cpp
             DirWatcher-macOS.mm
@@ -97,7 +96,6 @@ elseif (LINUX)
     # notify-send for desktop notifications, the freedesktop.org trash spec for
     # deletes: both are plain filesystem/process work, so nothing to link.
     target_sources(${COWTERM_EXECUTABLE_TARGET} PRIVATE
-            Cli-Linux.cpp
             Command-Posix.cpp
             DirWatcher-Linux.cpp
             Notifier-Linux.cpp
