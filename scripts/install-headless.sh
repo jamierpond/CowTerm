@@ -14,17 +14,29 @@ build_directory="build-headless"
 install_directory="$HOME/.local/libexec/cowterm-remote"
 bin_directory="$HOME/.local/bin"
 
-# eacp's network library needs libcurl on Linux. Without the system package
-# (libcurl4-openssl-dev), borrow it from nixpkgs when nix is there: no sudo.
-curl_options=""
-if [ "$(uname -s)" = "Linux" ] && ! pkg-config --exists libcurl 2>/dev/null && command -v nix >/dev/null 2>&1; then
+configure() {
+    cmake -S . -B "$build_directory" -G Ninja -DCMAKE_BUILD_TYPE=Release -DCOWTERM_HEADLESS=ON "$@" >/dev/null
+}
+
+# eacp's network library needs libcurl on Linux. When CMake can't find one
+# (no libcurl4-openssl-dev), borrow it from nixpkgs if nix is there: no sudo.
+configure_with_libcurl_from_nix() {
     nix_build="nix --extra-experimental-features nix-command build --no-link --print-out-paths"
     curl_headers="$($nix_build nixpkgs#curl.dev)"
     curl_library="$($nix_build nixpkgs#curl.out)"
-    curl_options="-DCURL_INCLUDE_DIR=$curl_headers/include -DCURL_LIBRARY=$curl_library/lib/libcurl.so"
+    rm -f "$build_directory/CMakeCache.txt"
+    configure -DCURL_INCLUDE_DIR="$curl_headers/include" -DCURL_LIBRARY="$curl_library/lib/libcurl.so"
+}
+
+if ! configure 2>/dev/null; then
+    if [ "$(uname -s)" = "Linux" ] && command -v nix >/dev/null 2>&1; then
+        echo "[cowterm] no libcurl found; using nixpkgs#curl"
+        configure_with_libcurl_from_nix
+    else
+        configure
+    fi
 fi
 
-cmake -S . -B "$build_directory" -G Ninja -DCMAKE_BUILD_TYPE=Release -DCOWTERM_HEADLESS=ON $curl_options >/dev/null
 cmake --build "$build_directory" --target CowTermDaemon CowTermCli
 
 mkdir -p "$install_directory" "$bin_directory"
