@@ -23,11 +23,16 @@ if [ "$branch" != "main" ] || ! git -C "$repository" diff --quiet; then
     if [ ! -d "$main_worktree" ]; then
         echo "[cowterm] $repository is on $branch or has local changes; adding a main worktree at $main_worktree"
         git -C "$repository" fetch --quiet origin main
-        git -C "$repository" worktree add --quiet "$main_worktree" main 2>/dev/null \
-            || git -C "$repository" worktree add --quiet -b main "$main_worktree" origin/main
+        git -c core.autocrlf=false -C "$repository" worktree add --quiet --detach "$main_worktree" origin/main
+        git -C "$main_worktree" config core.autocrlf false
     fi
 fi
 
 echo "[cowterm] updating $source_directory"
-git -C "$source_directory" pull --ff-only --quiet origin main
+git -C "$source_directory" fetch --quiet origin main
+if [ "$source_directory" = "$main_worktree" ]; then
+    git -C "$source_directory" checkout --quiet --detach FETCH_HEAD
+else
+    git -C "$source_directory" merge --ff-only --quiet FETCH_HEAD
+fi
 exec "$source_directory/scripts/install-headless.sh"
