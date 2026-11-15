@@ -1,4 +1,5 @@
 #include <CowTermTerminal/TerminalView.h>
+#include <CowTermCore/TerminalModel.h>
 
 #include <eacp/Core/Threads/EventLoop.h>
 
@@ -42,6 +43,7 @@ struct ShellRecording
     std::string written;
     std::vector<PtySize> resizes;
     std::function<void(std::string)> deliverOutput;
+    std::function<void(const std::string&)> deliverRestoredState;
 };
 
 class RecordingShell final : public Shell
@@ -57,6 +59,7 @@ public:
                std::function<void()>) override
     {
         recording->deliverOutput = std::move(onOutput);
+        recording->deliverRestoredState = onRestoreState;
         return true;
     }
 
@@ -1000,4 +1003,23 @@ auto tDraggedResizesCoalesce = test("View/resizesWhileDraggingReachTheShellOnceW
 
     check(pane.recording->resizes.size() == 1);
     check(pane.recording->resizes.back().cols == expectedColumns);
+};
+
+// A pane attached to a shell that already runs elsewhere (a remote daemon, or
+// the local one after CowTerm restarts) learns the program's mouse mode only
+// from the restored state, never from fresh output.
+auto tRestoredMouseModeReportsTheWheel = test("View/aRestoredMouseModeReportsTheWheel") = []
+{
+    constexpr auto daemonColumns = 80;
+    constexpr auto daemonRows = 24;
+    auto daemonSide = TerminalModel {daemonColumns, daemonRows, Theme {}};
+    daemonSide.feed("\033[?1049h\033[?1000h\033[?1006h");
+
+    auto pane = TestPane {};
+    pane.recording->deliverRestoredState(serializeTerminalState(daemonSide.captureState()));
+    pane.showOutput({});
+    pane.takeWritten();
+
+    pane.view->mouseWheel(wheelBy(1.f));
+    check(pane.takeWritten() == "\033[<64;1;1M", "the wheel goes to the program, not the scrollback");
 };
