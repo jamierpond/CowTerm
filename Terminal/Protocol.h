@@ -33,7 +33,7 @@ inline std::string appServerName()
 // What the daemon answers to "hello". Bumped when the daemon's messages
 // change, so a newer `ct bridge` restarts an older daemon (its panes come back
 // through the saved-state restore) instead of talking past it.
-inline constexpr auto daemonProtocolVersion = 3;
+inline constexpr auto daemonProtocolVersion = 4;
 
 // spawn's payload: the working directory, then optionally a newline and a
 // command to run in place of an interactive shell.
