@@ -60,7 +60,9 @@ void changeToWorkingDirectory(const std::string& workingDirectory)
         return;
 
     if (const auto* home = getenv("HOME"))
-        chdir(home);
+    {
+        [[maybe_unused]] const auto homeChangeResult = chdir(home);
+    }
 }
 
 // A leading dash asks the shell to start as a login shell, so the user's
