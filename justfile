@@ -131,15 +131,17 @@ install: build
     # Earlier installs put both executables directly on PATH; leaving the old
     # daemon there would shadow nothing but would still confuse a `which`.
     rm -f "$HOME/.local/bin/CowTermDaemon"
+    # CowTerm was com.eacp.cowterm before it moved to audio.pond.cowterm.
+    rm -f "$HOME/.local/share/applications/com.eacp.cowterm.desktop" "$HOME"/.local/share/icons/hicolor/*/apps/com.eacp.cowterm.*
     # One size per directory, because a shell picks the nearest and scales it:
     # handing it only 512 leaves a 32px panel icon downscaled from a picture
     # eight times too big, which is where the detail turns to mush.
     for size in 16 24 32 48 64 128 256 512; do \
         mkdir -p "$HOME/.local/share/icons/hicolor/${size}x${size}/apps"; \
-        magick "Terminal/Icon.png" -resize "${size}x${size}" "$HOME/.local/share/icons/hicolor/${size}x${size}/apps/com.eacp.cowterm.png"; \
+        magick "Terminal/Icon.png" -resize "${size}x${size}" "$HOME/.local/share/icons/hicolor/${size}x${size}/apps/audio.pond.cowterm.png"; \
     done
-    cp "Terminal/Icon.svg" "$HOME/.local/share/icons/hicolor/scalable/apps/com.eacp.cowterm.svg"
-    sed "s|^Exec=cowterm$|Exec=$HOME/.local/bin/cowterm|" "Terminal/com.eacp.cowterm.desktop" > "$HOME/.local/share/applications/com.eacp.cowterm.desktop"
+    cp "Terminal/Icon.svg" "$HOME/.local/share/icons/hicolor/scalable/apps/audio.pond.cowterm.svg"
+    sed "s|^Exec=cowterm$|Exec=$HOME/.local/bin/cowterm|" "Terminal/audio.pond.cowterm.desktop" > "$HOME/.local/share/applications/audio.pond.cowterm.desktop"
     -update-desktop-database "$HOME/.local/share/applications" 2>/dev/null
     -gtk-update-icon-cache -f -t "$HOME/.local/share/icons/hicolor" 2>/dev/null
     @echo "Installed to ~/.local/bin, with a desktop entry and icon"

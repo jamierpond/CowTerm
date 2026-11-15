@@ -131,8 +131,7 @@ target_include_directories(${COWTERM_EXECUTABLE_TARGET} PRIVATE
 # font system at startup, so the default font needs no install step.
 res_embed_add(${COWTERM_EXECUTABLE_TARGET} DIRECTORY Resources)
 
-set(BUNDLE_ID "com.eacp.cowterm")
-set(DAEMON_BUNDLE_ID "${BUNDLE_ID}.daemon")
+set(BUNDLE_ID "audio.pond.cowterm")
 
 set_target_properties(${COWTERM_EXECUTABLE_TARGET} PROPERTIES
         OUTPUT_NAME "CowTerm"

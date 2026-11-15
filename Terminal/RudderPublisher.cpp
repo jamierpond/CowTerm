@@ -30,7 +30,7 @@ RudderPublisher::RudderPublisher(const AppConfig& configToUse,
                                  SessionManager& managerToUse)
     : config(configToUse)
     , manager(managerToUse)
-    , client(rudder::protocol::Hello {"CowTerm", "com.eacp.cowterm", 0, true},
+    , client(rudder::protocol::Hello {"CowTerm", "audio.pond.cowterm", 0, true},
              findRudderEndpoint())
 {
     client.onActivate = [this](const std::string& contextId) { activate(contextId, true); };

@@ -22,7 +22,7 @@ pondapp::SingleInstance& getRunningInstanceClaim()
 {
     const auto suffix = term::proto::instanceSuffix();
     static auto claim = pondapp::SingleInstance {
-        suffix.empty() ? std::string {"com.pond.cowterm"} : "com.pond.cowterm." + suffix};
+        suffix.empty() ? std::string {"audio.pond.cowterm"} : "audio.pond.cowterm." + suffix};
     return claim;
 }
 
@@ -35,8 +35,8 @@ Graphics::WindowOptions windowOptions()
     options.minHeight = 200;
     options.title = "CowTerm";
 
-    // TODO(linux): options.appId = "com.eacp.cowterm"; — what the desktop
-    // matches against com.eacp.cowterm.desktop to label the window and pick
+    // TODO(linux): options.appId = "audio.pond.cowterm"; — what the desktop
+    // matches against audio.pond.cowterm.desktop to label the window and pick
     // its icon; without it every eacp app shows up as "eacp" with a
     // placeholder. WindowOptions::appId only exists in the Linux box's local
     // eacp (upstream Window-Linux.cpp still hardcodes app_id "eacp"); restore
