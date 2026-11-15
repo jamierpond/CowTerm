@@ -159,6 +159,7 @@ struct Daemon
 
     void handleQuitServer(const term::proto::Message&)
     {
+        saveAllPanes();
         Apps::quit();
     }
 
