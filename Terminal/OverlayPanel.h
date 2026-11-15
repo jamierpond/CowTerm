@@ -63,7 +63,7 @@ float measureTextInFont(eacp::UI::Graphics& g,
                         const std::string& text,
                         const eacp::UI::Font& font);
 
-// What the palette, switcher, PR dashboard and Claude HUD share: the session
+// What the palette, switcher and Claude HUD share: the session
 // list they drive, the theme, three fonts, and the dimmed backdrop and card
 // they paint over the terminal.
 class OverlayPanel : public eacp::UI::Component
@@ -109,7 +109,7 @@ protected:
     int selected = 0;
 };
 
-// An overlay with a query box over its rows (the palette, the PR dashboard),
+// An overlay with a query box over its rows (the palette),
 // driven by Rudder's vim modes.
 class SearchablePanel : public OverlayPanel
 {

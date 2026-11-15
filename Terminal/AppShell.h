@@ -7,7 +7,6 @@
 #include "Palette.h"
 #include "PermissionsPanel.h"
 #include "Popup.h"
-#include "PrDashboard.h"
 #include "RudderPublisher.h"
 #include "Session.h"
 #include "Switcher.h"
@@ -104,7 +103,6 @@ private:
     void showSwitcher(bool reverse);
     void showPopup(const std::string& command);
     void hidePopup();
-    void showPrDashboard();
     void showClaudeHud();
     bool anyOverlayShown() const;
     void attachActive(TermSession& session);
@@ -123,7 +121,6 @@ private:
     SessionManager manager {config};
     Palette palette {config, manager};
     Switcher switcher {config, manager};
-    PrDashboard prDashboard {config, manager};
     ClaudeHud claudeHud {config, manager};
     Popup popup {config};
     PermissionsPanel permissions {config};

@@ -109,8 +109,6 @@ void AppShell::wireOverlays()
 
     switcher.onClosed = [this] { hideOverlayAndRefocus(); };
 
-    prDashboard.onClosed = [this] { hideOverlayAndRefocus(); };
-
     claudeHud.onClosed = [this] { hideOverlayAndRefocus(); };
 
     permissions.onClosed = [this] { hideOverlayAndRefocus(); };
@@ -268,7 +266,7 @@ void AppShell::attachActive(TermSession& session)
 
 bool AppShell::anyOverlayShown() const
 {
-    return palette.isShown() || switcher.isShown() || prDashboard.isShown()
+    return palette.isShown() || switcher.isShown()
            || claudeHud.isShown() || popup.isShown() || permissions.isShown();
 }
 
@@ -388,8 +386,6 @@ void AppShell::raiseOverlay()
         showOverlay(palette);
     else if (switcher.isShown())
         showOverlay(switcher);
-    else if (prDashboard.isShown())
-        showOverlay(prDashboard);
     else if (claudeHud.isShown())
         showOverlay(claudeHud);
     else if (permissions.isShown())
@@ -440,15 +436,6 @@ void AppShell::showSwitcher(bool reverse)
 bool AppShell::isSwitcherBlocked() const
 {
     return switcher.isShown() || palette.isShown() || popup.isShown();
-}
-
-void AppShell::showPrDashboard()
-{
-    if (anyOverlayShown())
-        return;
-
-    showOverlay(prDashboard);
-    prDashboard.show();
 }
 
 void AppShell::showClaudeHud()
@@ -693,12 +680,11 @@ bool AppShell::runSessionDigitKey(const std::string& characters)
 
 bool AppShell::handlePrefixed(const KeyEvent& event)
 {
-    // f/w palette, p PR dashboard, a Claude HUD, i lazygit popup, " and %
+    // f/w palette, a Claude HUD, i lazygit popup, " and %
     // split below and beside, [ ] copy mode and paste, x kills the pane.
     static constexpr auto leaderActions = std::array {
         KeyAction {"f", &AppShell::showPalette},
         KeyAction {"w", &AppShell::showPalette},
-        KeyAction {"p", &AppShell::showPrDashboard},
         KeyAction {"a", &AppShell::showClaudeHud},
         KeyAction {"i", &AppShell::showLazygitPopup},
         KeyAction {"\"", &AppShell::splitActivePaneBelow},

@@ -42,7 +42,6 @@ add_executable(${COWTERM_EXECUTABLE_TARGET}
         PasteConfirmation.cpp
         Permissions.cpp
         PermissionsPanel.cpp
-        PrDashboard.cpp
         Popup.cpp
         Projects.cpp
         RudderContexts.cpp

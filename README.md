@@ -281,6 +281,6 @@ still live in the daemon reconnect to them.
 
 ## Not yet
 
-The native PR dashboard (worktree-per-PR stitching), scrollback search, a
+Scrollback search, a
 single-instance guard (two GUIs racing the same saved state can duplicate
 session names), and finishing the Windows backends are next.
