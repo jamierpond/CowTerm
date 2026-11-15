@@ -90,6 +90,7 @@ struct Daemon
     Daemon()
     {
         term::ignoreHangups();
+        term::releaseInheritedStreams();
 
         // The daemon is a headless PTY server with no UI. Its executable
         // lives inside CowTerm.app/Contents/MacOS, so [NSBundle mainBundle]
