@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|clear",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "reports=$(python3 \"$CLAUDE_PROJECT_DIR/scripts/crash-reports.py\" list big-cow jamiepond@tamby jamie@tamby-windows 2>/dev/null); if [ -n \"$reports\" ]; then printf 'CowTerm crashed and nobody has fixed these yet. Fix each one, and once the fix has landed run its mark-fixed line.\\n\\n%s\\n' \"$reports\"; fi; exit 0",
+            "timeout": 20
+          }
+        ]
+      }
+    ]
+  }
+}
