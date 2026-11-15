@@ -14,6 +14,8 @@
 #include <eacp/UI/UI.h>
 
 #include <functional>
+#include <map>
+#include <memory>
 #include <set>
 #include <span>
 #include <string_view>
@@ -108,7 +110,12 @@ private:
     void showPalette();
     void showSwitcher(bool reverse);
     void showPopup(const std::string& command);
-    void hidePopup();
+    void hidePopup(const TermSession& session);
+    Popup* findAttachedPopup() const;
+    bool isAttachedPopupShown() const;
+    Popup& makePopupFor(const TermSession& session);
+    void detachPopupOf(const TermSession* session);
+    void closePopupsOfClosedSessions();
     bool anyOverlayShown() const;
     void attachActive(TermSession& session);
     void setGlobalFontSize(float size);
@@ -126,7 +133,9 @@ private:
     SessionManager manager {config};
     Palette palette {config, manager};
     Switcher switcher {config, manager};
-    Popup popup {config};
+    // Each session's own Ctrl+A i popup, kept while the session is switched
+    // away from and shown again when it comes back.
+    std::map<const TermSession*, std::unique_ptr<Popup>> popupsBySession;
     pond::PermissionsPanel permissions {permissions::makePermissionsPanelSettings(config)};
     eacp::UI::ComponentHost overlayHost;
     TrayController tray {manager};

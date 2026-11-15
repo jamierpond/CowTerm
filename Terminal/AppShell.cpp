@@ -43,6 +43,7 @@ void AppShell::wireSessionManager()
 
     manager.onSessionsChanged = [this]
     {
+        closePopupsOfClosedSessions();
         tray.refresh();
         rudderChanged();
     };
@@ -119,13 +120,6 @@ void AppShell::wireOverlays()
     permissions.onClosed = [this] { hideOverlayAndRefocus(); };
     permissions.onRelaunch = [] { permissions::relaunchCowTerm(); };
 
-    popup.onClosed = [this]
-    {
-        logUsage("popup.close");
-        hidePopup();
-    };
-
-    popup.interceptKey = [this](const KeyEvent& event) { return popupKey(event); };
 }
 
 void AppShell::wireNotifications()
@@ -257,11 +251,17 @@ void AppShell::attachActive(TermSession& session)
     if (attached != &session)
     {
         if (attached != nullptr)
+        {
+            detachPopupOf(attached);
             removeSubview(attached->view);
+        }
 
         attached = &session;
         addSubview(session.view);
         session.view.repaintAllPanes();
+
+        if (isAttachedPopupShown())
+            raisePopup();
 
         // A live peek swaps the attached terminal while an overlay is open;
         // re-raise the overlay host so it stays on top and keeps keyboard focus.
@@ -276,8 +276,8 @@ void AppShell::attachActive(TermSession& session)
 
 bool AppShell::anyOverlayShown() const
 {
-    return palette.isShown() || switcher.isShown()
-           || popup.isShown() || permissions.isShown();
+    return palette.isShown() || switcher.isShown() || isAttachedPopupShown()
+           || permissions.isShown();
 }
 
 void AppShell::setWindowFocused(bool focused)
@@ -298,7 +298,9 @@ void AppShell::resized()
         attached->view.setBounds(bounds);
 
     overlayHost.setBounds(bounds);
-    popup.setBounds(bounds);
+
+    if (auto* popup = findAttachedPopup())
+        popup->setBounds(bounds);
 }
 
 void AppShell::setGlobalFontSize(float size)
@@ -400,7 +402,7 @@ void AppShell::raiseOverlay()
     else if (permissions.isShown())
         showOverlay(permissions);
 
-    if (popup.isShown())
+    if (isAttachedPopupShown())
         raisePopup();
 }
 
@@ -410,10 +412,64 @@ void AppShell::raiseOverlay()
 // does nothing because the popup counts as shown.
 void AppShell::raisePopup()
 {
-    removeSubview(popup);
-    addSubview(popup);
-    popup.setBounds(getLocalBounds());
-    popup.focusTerminal();
+    auto* popup = findAttachedPopup();
+
+    if (popup == nullptr)
+        return;
+
+    removeSubview(*popup);
+    addSubview(*popup);
+    popup->setBounds(getLocalBounds());
+    popup->focusTerminal();
+}
+
+Popup* AppShell::findAttachedPopup() const
+{
+    if (auto found = popupsBySession.find(attached); found != popupsBySession.end())
+        return found->second.get();
+
+    return nullptr;
+}
+
+bool AppShell::isAttachedPopupShown() const
+{
+    const auto* popup = findAttachedPopup();
+    return popup != nullptr && popup->isShown();
+}
+
+// A session switched away from keeps its popup running, just off screen.
+void AppShell::detachPopupOf(const TermSession* session)
+{
+    if (auto found = popupsBySession.find(session); found != popupsBySession.end())
+        removeSubview(*found->second);
+}
+
+Popup& AppShell::makePopupFor(const TermSession& session)
+{
+    auto& popup = *(popupsBySession[&session] = std::make_unique<Popup>(config));
+    const auto* owner = &session;
+
+    popup.onClosed = [this, owner]
+    {
+        logUsage("popup.close");
+        hidePopup(*owner);
+    };
+
+    popup.interceptKey = [this](const KeyEvent& event) { return popupKey(event); };
+    return popup;
+}
+
+// Closing a session takes its popup (and the program in it) with it.
+void AppShell::closePopupsOfClosedSessions()
+{
+    for (const auto& [session, popup]: popupsBySession)
+    {
+        const auto isOpen = std::ranges::any_of(
+            manager.all(), [session](const auto& open) { return open.get() == session; });
+
+        if (!isOpen)
+            popup->dismiss();
+    }
 }
 
 void AppShell::showPalette()
@@ -444,7 +500,7 @@ void AppShell::showSwitcher(bool reverse)
 
 bool AppShell::isSwitcherBlocked() const
 {
-    return switcher.isShown() || palette.isShown() || popup.isShown();
+    return switcher.isShown() || palette.isShown() || isAttachedPopupShown();
 }
 
 // Like the other overlays, it waits for whichever one is open to close.
@@ -459,24 +515,28 @@ void AppShell::showPermissions(bool confirmReset)
 
 void AppShell::showPopup(const std::string& command)
 {
-    if (popup.isShown())
+    auto* active = manager.active();
+
+    if (active == nullptr || isAttachedPopupShown())
         return;
 
-    auto* active = manager.active();
-    const auto dir = active != nullptr ? active->activeWorkingDirectory() : std::string {};
-    const auto host = active != nullptr ? active->host : std::string {};
-
+    auto& popup = makePopupFor(*active);
     popupPrefixArmed = false;
-    logUsage("popup.open", {{"command", command}, {"host", host}});
+    logUsage("popup.open", {{"command", command}, {"host", active->host}});
     addSubview(popup);
     popup.setBounds(getLocalBounds());
-    popup.show(command, dir, host);
+    popup.show(command, active->activeWorkingDirectory(), active->host);
 }
 
-void AppShell::hidePopup()
+// The popup goes on the next tick: this runs inside its own close callback.
+void AppShell::hidePopup(const TermSession& session)
 {
-    removeSubview(popup);
-    focusAttachedPane();
+    detachPopupOf(&session);
+
+    Threads::callAsync([this, owner = &session] { popupsBySession.erase(owner); });
+
+    if (attached == &session)
+        focusAttachedPane();
 }
 
 bool AppShell::isLeaderPrefixKey(const KeyEvent& event)
@@ -505,8 +565,8 @@ bool AppShell::popupKey(const KeyEvent& event)
 
     // The rest of the leader table targets panes hidden behind the
     // popup; swallow rather than mutate what the user can't see.
-    if (doesKeyTogglePopup(event.charactersIgnoringModifiers))
-        popup.dismiss();
+    if (auto* popup = findAttachedPopup(); popup != nullptr && doesKeyTogglePopup(event.charactersIgnoringModifiers))
+        popup->dismiss();
 
     return true;
 }
