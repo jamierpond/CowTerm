@@ -29,13 +29,14 @@ std::string makeInstanceName()
     return "daemon-restore-test-" + std::to_string(now);
 }
 
-void launchDaemon(const std::string& instance)
+// Not detached: the test waits for each daemon to exit before starting the
+// next, so a relaunch never connects to the previous one while it shuts down.
+Processes::Process launchDaemon(const std::string& instance)
 {
     auto options = Processes::ProcessOptions {};
     options.executable = COWTERM_DAEMON_PATH;
     options.environment.push_back({"COWTERM_INSTANCE", instance});
-    options.detached = true;
-    auto daemon = Processes::Process {options};
+    return Processes::Process {options};
 }
 
 // One conversation with a daemon instance: collects every message it sends.
@@ -140,7 +141,7 @@ auto tPaneComesBackAfterDaemonRestart = test("DaemonRestore/paneComesBackAfterDa
     const auto instance = makeInstanceName();
 
     {
-        launchDaemon(instance);
+        auto firstDaemon = launchDaemon(instance);
         auto first = DaemonConversation {instance};
         check(first.waitForConnection());
 
@@ -149,10 +150,11 @@ auto tPaneComesBackAfterDaemonRestart = test("DaemonRestore/paneComesBackAfterDa
             term::proto::make("write", {paneId}, echoMarkerCommand));
         check(first.waitForOutputContaining(marker));
         first.quitDaemon();
+        firstDaemon.wait();
     }
 
     {
-        launchDaemon(instance);
+        auto secondDaemon = launchDaemon(instance);
         auto second = DaemonConversation {instance};
         check(second.waitForConnection());
 
@@ -168,6 +170,7 @@ auto tPaneComesBackAfterDaemonRestart = test("DaemonRestore/paneComesBackAfterDa
 
         second.messenger.send(term::proto::make("kill", {paneId}));
         second.quitDaemon();
+        secondDaemon.wait();
     }
 
     std::filesystem::remove_all(pondapp::getPondAppDataDirectory("CowTerm")
