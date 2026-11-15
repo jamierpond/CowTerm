@@ -33,7 +33,33 @@ inline std::string appServerName()
 // What the daemon answers to "hello". Bumped when the daemon's messages
 // change, so a newer `ct bridge` restarts an older daemon (its panes come back
 // through the saved-state restore) instead of talking past it.
-inline constexpr auto daemonProtocolVersion = 2;
+inline constexpr auto daemonProtocolVersion = 3;
+
+// spawn's payload: the working directory, then optionally a newline and a
+// command to run in place of an interactive shell.
+struct SpawnPayload
+{
+    std::string workingDirectory;
+    std::string command;
+};
+
+inline std::string makeSpawnPayload(const SpawnPayload& spawn)
+{
+    if (spawn.command.empty())
+        return spawn.workingDirectory;
+
+    return spawn.workingDirectory + "\n" + spawn.command;
+}
+
+inline SpawnPayload parseSpawnPayload(const std::string& payload)
+{
+    const auto newline = payload.find('\n');
+
+    if (newline == std::string::npos)
+        return {payload, {}};
+
+    return {payload.substr(0, newline), payload.substr(newline + 1)};
+}
 
 // Set in every pane's shell environment to the pane's stable shell id, so
 // `ct notify-user` run there knows which pane asked.

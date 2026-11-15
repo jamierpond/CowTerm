@@ -9,6 +9,7 @@
 #include "DataDirectories.h"
 #include "Protocol.h"
 #include "Signals.h"
+#include "CommandLookup.h"
 #include "CowTermCore/Pty.h"
 #include "CowTermCore/TerminalModel.h"
 
@@ -81,7 +82,7 @@ struct SpawnRequest
 {
     std::string id;
     term::PtySize size;
-    std::string workingDirectory;
+    term::proto::SpawnPayload payload;
     std::string sessionName;
 };
 
@@ -181,7 +182,7 @@ struct Daemon
         spawn(sender,
               {message.args[0],
                {std::stoi(message.args[1]), std::stoi(message.args[2])},
-               message.payload,
+               term::proto::parseSpawnPayload(message.payload),
                sessionName});
     }
 
@@ -253,6 +254,15 @@ struct Daemon
     {
         const auto& id = request.id;
 
+        // A command that isn't installed here: the app says so in the pane,
+        // instead of a pane that opens and closes in the same instant.
+        if (const auto& command = request.payload.command;
+            !command.empty() && !term::isCommandInstalled(command))
+        {
+            sender.send(term::proto::make("missing-command", {id}, term::getProgramName(command)));
+            return;
+        }
+
         if (auto found = panes.find(id); found != panes.end())
         {
             if (found->second->alive)
@@ -272,8 +282,8 @@ struct Daemon
 
         const auto started = pane.pty.start(
             {request.size,
-             request.workingDirectory,
-             {},
+             request.payload.workingDirectory,
+             request.payload.command,
              {{term::proto::paneEnvironmentVariable, id}}},
             [this, id](std::string data)
             {

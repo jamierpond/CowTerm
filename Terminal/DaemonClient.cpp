@@ -1,10 +1,13 @@
 #include "DaemonClient.h"
 #include "Protocol.h"
 #include "RemoteHosts.h"
+#include "RemoteLocation.h"
 
 #include "DaemonDialer.h"
 
 #include "CowTermCore/Shell.h"
+
+#include <utility>
 
 namespace term
 {
@@ -16,7 +19,7 @@ std::unique_ptr<DaemonClient> instance;
 
 bool isPaneMessage(const std::string& verb)
 {
-    return verb == "output" || verb == "state" || verb == "exit";
+    return verb == "output" || verb == "state" || verb == "exit" || verb == "missing-command";
 }
 
 std::string toString(int value)
@@ -128,6 +131,8 @@ void DaemonClient::handleMessage(const std::string& body)
         handleOutput(message.args[0], std::move(message.payload));
     else if (message.verb == "state")
         handleState(message.args[0], message.payload);
+    else if (message.verb == "missing-command")
+        handleMissingCommand(message.args[0], message.payload);
     else
         handleExit(message.args[0]);
 }
@@ -151,6 +156,16 @@ void DaemonClient::handleExit(const std::string& id)
         auto route = std::move(found->second);
         routes.erase(found);
         route.routes.onExit();
+    }
+}
+
+void DaemonClient::handleMissingCommand(const std::string& id, const std::string& program)
+{
+    if (auto found = routes.find(id); found != routes.end())
+    {
+        auto route = std::move(found->second);
+        routes.erase(found);
+        route.routes.onMissingCommand(program);
     }
 }
 
@@ -202,7 +217,7 @@ void DaemonClient::sendSpawn(const SpawnRequest& request)
                       toString(request.size.cols),
                       toString(request.size.rows),
                       proto::encodeArgument(request.sessionName)},
-                     request.workingDirectory));
+                     proto::makeSpawnPayload({request.workingDirectory, request.command})));
 }
 
 void DaemonClient::spawn(const SpawnRequest& request, Routes routesToUse)
@@ -263,9 +278,13 @@ using FindDaemon = std::function<DaemonClient*()>;
 class DaemonShell final : public Shell
 {
 public:
-    DaemonShell(std::string idToUse, std::string sessionNameToUse, FindDaemon findDaemonToUse)
+    DaemonShell(std::string idToUse,
+                std::string sessionNameToUse,
+                std::string machineLabelToUse,
+                FindDaemon findDaemonToUse)
         : id(std::move(idToUse))
         , sessionName(std::move(sessionNameToUse))
+        , machineLabel(std::move(machineLabelToUse))
         , findDaemon(std::move(findDaemonToUse))
     {
     }
@@ -288,10 +307,16 @@ public:
             status({});
             restore(state);
         };
-        routes.onExit = std::move(onExit);
+        routes.onExit = onExit;
         routes.onLinkLost = onStatusChanged;
+        routes.onMissingCommand = [this, onOutput](const std::string& program)
+        {
+            closeOnNextKey = std::move(exitAfterNotice);
+            onOutput(describeMissingCommand(program));
+        };
+        exitAfterNotice = std::move(onExit);
 
-        client->spawn({id, options.size, options.workingDirectory, sessionName},
+        client->spawn({id, options.size, options.workingDirectory, sessionName, options.command},
                       std::move(routes));
         attached = true;
         return true;
@@ -299,6 +324,12 @@ public:
 
     void write(std::string_view data) override
     {
+        if (closeOnNextKey)
+        {
+            attached = false;
+            return std::exchange(closeOnNextKey, nullptr)();
+        }
+
         if (auto* client = findDaemon())
             client->write(id, data);
     }
@@ -348,9 +379,18 @@ public:
     }
 
 private:
+    std::string describeMissingCommand(const std::string& program) const
+    {
+        return "\r\n  " + program + " is not installed on " + machineLabel
+               + " (not found on its PATH).\r\n\r\n  Press any key to close.";
+    }
+
     std::string id;
     std::string sessionName;
+    std::string machineLabel;
     FindDaemon findDaemon;
+    std::function<void()> exitAfterNotice;
+    std::function<void()> closeOnNextKey;
     bool attached = false;
 };
 
@@ -359,7 +399,8 @@ std::unique_ptr<Shell> makeLocalShell(const std::string& shellId)
     auto* client = DaemonClient::get();
 
     if (client != nullptr && client->isConnected())
-        return std::make_unique<DaemonShell>(shellId, std::string {}, [] { return DaemonClient::get(); });
+        return std::make_unique<DaemonShell>(
+            shellId, std::string {}, std::string {"this machine"}, [] { return DaemonClient::get(); });
 
     return std::make_unique<LocalShell>();
 }
@@ -368,8 +409,10 @@ std::unique_ptr<Shell> makeRemoteShell(const std::string& shellId,
                                        const std::string& host,
                                        const std::string& sessionName)
 {
-    return std::make_unique<DaemonShell>(
-        shellId, sessionName, [host] { return RemoteHosts::findDaemon(host); });
+    return std::make_unique<DaemonShell>(shellId,
+                                         sessionName,
+                                         remote::getHostLabel(host),
+                                         [host] { return RemoteHosts::findDaemon(host); });
 }
 } // namespace
 
@@ -389,6 +432,13 @@ TerminalConfig terminalConfig(const AppConfig& config,
 
         return makeRemoteShell(shellId, host, sessionName);
     };
+
+    // A remote pane's popup (Ctrl+A i) runs on that machine, in the daemon.
+    if (!host.empty())
+    {
+        result.makeCommandShell = [host](const std::string& shellId)
+        { return makeRemoteShell(shellId, host, {}); };
+    }
 
     result.environmentForShell = [](const std::string& shellId)
     {

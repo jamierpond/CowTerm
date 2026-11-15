@@ -34,7 +34,7 @@ std::unique_ptr<Shell> shellFor(const TerminalConfig& config,
     if (command.empty())
         return config.makeShell(shellId);
 
-    return std::make_unique<LocalShell>();
+    return config.makeCommandShell(shellId);
 }
 
 bool isPositiveSize(float width, float height)

@@ -26,12 +26,14 @@ Popup::Popup(const AppConfig& configToUse)
     setHandlesMouseEvents(true);
 }
 
-void Popup::show(const std::string& command, const std::string& workingDirectory)
+void Popup::show(const std::string& command,
+                 const std::string& workingDirectory,
+                 const std::string& host)
 {
     if (terminal != nullptr)
         return;
 
-    terminal = std::make_unique<TerminalView>(terminalConfig(config),
+    terminal = std::make_unique<TerminalView>(terminalConfig(config, host),
                                               workingDirectory, "", command);
 
     terminal->interceptKey = [this](const Graphics::KeyEvent& event)

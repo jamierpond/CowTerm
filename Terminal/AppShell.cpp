@@ -463,15 +463,14 @@ void AppShell::showPopup(const std::string& command)
         return;
 
     auto* active = manager.active();
-
-    const auto dir =
-        active != nullptr ? active->activeWorkingDirectory() : std::string {};
+    const auto dir = active != nullptr ? active->activeWorkingDirectory() : std::string {};
+    const auto host = active != nullptr ? active->host : std::string {};
 
     popupPrefixArmed = false;
-    logUsage("popup.open", {{"command", command}});
+    logUsage("popup.open", {{"command", command}, {"host", host}});
     addSubview(popup);
     popup.setBounds(getLocalBounds());
-    popup.show(command, dir);
+    popup.show(command, dir, host);
 }
 
 void AppShell::hidePopup()
@@ -781,7 +780,7 @@ void AppShell::pasteIntoActivePane()
 void AppShell::openSessionInActiveDirectory()
 {
     if (auto* active = manager.active())
-        manager.newSession(active->activeWorkingDirectory());
+        manager.newSession(active->getActiveDirectoryAsProjectDir());
 }
 
 void AppShell::switchToLastSession()

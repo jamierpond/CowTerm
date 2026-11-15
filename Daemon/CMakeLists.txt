@@ -4,9 +4,9 @@
 add_executable(CowTermDaemon Main.cpp ../Terminal/DataDirectories.cpp)
 
 if (WIN32)
-    target_sources(CowTermDaemon PRIVATE Signals-Windows.cpp)
+    target_sources(CowTermDaemon PRIVATE CommandLookup-Windows.cpp Signals-Windows.cpp)
 else ()
-    target_sources(CowTermDaemon PRIVATE Signals-Posix.cpp)
+    target_sources(CowTermDaemon PRIVATE CommandLookup-Posix.cpp Signals-Posix.cpp)
 endif ()
 
 target_include_directories(CowTermDaemon PRIVATE ../Terminal)

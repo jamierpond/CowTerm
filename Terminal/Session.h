@@ -56,6 +56,10 @@ public:
     std::string activeTitle() const;
     std::string activeWorkingDirectory() const;
 
+    // The active pane's directory as a project dir: "tamby:/x/y" for a
+    // remote session, so a session opened from it lands on the same machine.
+    std::string getActiveDirectoryAsProjectDir() const;
+
     std::string name;
     std::string projectDir;
     std::string host;

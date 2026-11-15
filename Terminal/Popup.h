@@ -18,9 +18,9 @@ class Popup final : public eacp::Graphics::View
 public:
     explicit Popup(const AppConfig& configToUse);
 
-    // Spawns the command in a fresh in-process PTY; a popup's shell never
-    // goes to the session daemon and dies with the popup.
-    void show(const std::string& command, const std::string& workingDirectory);
+    // Spawns the command in a fresh PTY that dies with the popup: in-process
+    // here, or in host's daemon for a remote pane's popup.
+    void show(const std::string& command, const std::string& workingDirectory, const std::string& host);
 
     // Ends the command (the toggle case) and tears the popup down on the
     // next loop tick — never inline, since the call usually originates

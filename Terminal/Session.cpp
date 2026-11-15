@@ -80,7 +80,19 @@ std::string TermSession::activeTitle() const
 std::string TermSession::activeWorkingDirectory() const
 {
     const auto* pane = view.activePane();
-    return pane != nullptr ? pane->workingDirectory() : projectDir;
+
+    if (pane != nullptr && !pane->workingDirectory().empty())
+        return pane->workingDirectory();
+
+    return getStartDirectory(projectDir, {});
+}
+
+std::string TermSession::getActiveDirectoryAsProjectDir() const
+{
+    if (!isRemote())
+        return activeWorkingDirectory();
+
+    return remote::makeRemoteProjectDir(host, activeWorkingDirectory());
 }
 
 namespace

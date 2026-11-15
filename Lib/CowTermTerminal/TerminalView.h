@@ -40,8 +40,12 @@ struct TerminalConfig
     Theme theme;
 
     // Builds the shell behind an interactive pane, keyed by its stable id.
-    // Command panes (a non-empty commandToRun) always run in-process.
     std::function<std::unique_ptr<Shell>(const std::string& shellId)> makeShell =
+        [](const std::string&) { return std::make_unique<LocalShell>(); };
+
+    // Builds the shell behind a command pane (a non-empty commandToRun, like
+    // a lazygit popup): in-process unless the pane belongs to another machine.
+    std::function<std::unique_ptr<Shell>(const std::string& shellId)> makeCommandShell =
         [](const std::string&) { return std::make_unique<LocalShell>(); };
 
     // Extra environment for an interactive pane's shell, keyed by its stable
