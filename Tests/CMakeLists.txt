@@ -56,7 +56,7 @@ target_compile_definitions(CowTermFuzzCorpusTests PRIVATE
 nano_add_executable(CowTermRenderTests
         SOURCES
             RenderBackgroundTests.cpp
-        TARGETS CowTerm::Terminal)
+        TARGETS CowTerm::TerminalView)
 
 if (WIN32)
     target_sources(CowTermRenderTests PRIVATE RenderBackgroundTests-Windows.cpp)
@@ -75,7 +75,7 @@ nano_add_executable(CowTermSessionViewTests
             ../Terminal/Config.cpp
             ../Terminal/UsageLog.cpp
             ../Terminal/DataDirectories.cpp
-        TARGETS CowTerm::Terminal CowTermRemote eacp-ui SessionLog PondApp)
+        TARGETS CowTerm::TerminalView CowTermRemote eacp-ui SessionLog PondApp)
 
 target_include_directories(CowTermSessionViewTests PRIVATE ../Terminal)
 
@@ -112,7 +112,7 @@ nano_add_executable(CowTermPanelTests
             ../Terminal/Config.cpp
             ../Terminal/UsageLog.cpp
             ../Terminal/DataDirectories.cpp
-        TARGETS CowTerm::Terminal eacp-ui emberstore FrecencySearch SearchKeys SessionLog PondApp)
+        TARGETS CowTerm::TerminalView eacp-ui emberstore FrecencySearch SearchKeys SessionLog PondApp)
 
 target_include_directories(CowTermPanelTests PRIVATE ../Terminal)
 
@@ -133,7 +133,7 @@ nano_add_executable(CowTermViewTests
             OutputParserThreadTests.cpp
             GraphemeTests.cpp
             RowDrawingCacheTests.cpp
-        TARGETS CowTerm::Terminal)
+        TARGETS CowTerm::TerminalView)
 
 # The leader-key letters and digits AppShell turns into pane and session moves.
 nano_add_executable(CowTermLeaderKeysTests
@@ -164,7 +164,7 @@ target_include_directories(CowTermPaletteRankingTests PRIVATE ../Terminal)
 # the UI thread's responsiveness meanwhile. Run it by hand before and after a
 # change to the output path.
 add_executable(CowTermCatThroughputBench ../Bench/CatThroughputBench.cpp)
-target_link_libraries(CowTermCatThroughputBench PRIVATE CowTerm::Terminal)
+target_link_libraries(CowTermCatThroughputBench PRIVATE CowTerm::TerminalView)
 
 # Not a test: one pane's memory with 10,000 lines of scrollback.
 add_executable(CowTermScreenMemoryBench ../Bench/ScreenMemoryBench.cpp)
@@ -232,7 +232,7 @@ else ()
 endif ()
 target_include_directories(CowTermRenderPicker PRIVATE ../Terminal)
 target_link_libraries(CowTermRenderPicker PRIVATE
-        CowTerm::Terminal CowTermRemote eacp-ui eacp-text emberstore FrecencySearch SearchKeys SessionLog PondApp)
+        CowTerm::TerminalView CowTermRemote eacp-ui eacp-text emberstore FrecencySearch SearchKeys SessionLog PondApp)
 
 # Not a test: Ctrl+A i's popup for a pane on a remote host, opened with no
 # window so its trace shows what the command drew (scripts/run-remote-popup.sh).
@@ -248,4 +248,4 @@ add_executable(CowTermRunRemotePopup
         ../Terminal/UsageLog.cpp)
 target_include_directories(CowTermRunRemotePopup PRIVATE ../Terminal ${PROJECT_BINARY_DIR}/generated)
 add_dependencies(CowTermRunRemotePopup CowTermVersion)
-target_link_libraries(CowTermRunRemotePopup PRIVATE CowTerm::Terminal CowTermRemote SessionLog PondApp)
+target_link_libraries(CowTermRunRemotePopup PRIVATE CowTerm::TerminalView CowTermRemote SessionLog PondApp)

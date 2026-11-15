@@ -1,4 +1,4 @@
-#include <CowTermTerminal/OutputParserThread.h>
+#include <TerminalView/OutputParserThread.h>
 
 #include <NanoTest/NanoTest.h>
 

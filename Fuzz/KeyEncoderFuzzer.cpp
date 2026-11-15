@@ -1,5 +1,5 @@
-#include <CowTermTerminal/KeyEncoding.h>
-#include <CowTermTerminal/KittyKeyEncoding.h>
+#include <TerminalView/KeyEncoding.h>
+#include <TerminalView/KittyKeyEncoding.h>
 
 #include <cstddef>
 #include <cstdint>

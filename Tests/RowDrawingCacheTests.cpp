@@ -1,4 +1,4 @@
-#include <CowTermTerminal/RowDrawingCache.h>
+#include <TerminalView/RowDrawingCache.h>
 
 #include <NanoTest/NanoTest.h>
 

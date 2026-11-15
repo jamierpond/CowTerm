@@ -1,9 +1,9 @@
-#include <CowTermTerminal/CellText.h>
-#include <CowTermTerminal/CopyMode.h>
-#include <CowTermTerminal/GridPainter.h>
-#include <CowTermTerminal/KeyEncoding.h>
-#include <CowTermTerminal/LinkDetection.h>
-#include <CowTermTerminal/MacKeyCodes.h>
+#include <TerminalView/CellText.h>
+#include <TerminalView/CopyMode.h>
+#include <TerminalView/GridPainter.h>
+#include <TerminalView/KeyEncoding.h>
+#include <TerminalView/LinkDetection.h>
+#include <TerminalView/MacKeyCodes.h>
 
 #include <Emulator/TermParser.h>
 

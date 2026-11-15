@@ -1,6 +1,6 @@
 #include <Emulator/KittyKeyboardFlags.h>
-#include <CowTermTerminal/KeyEncoding.h>
-#include <CowTermTerminal/KittyKeyEncoding.h>
+#include <TerminalView/KeyEncoding.h>
+#include <TerminalView/KittyKeyEncoding.h>
 
 #include <NanoTest/NanoTest.h>
 

@@ -4,7 +4,7 @@
 #include "DaemonLink.h"
 
 #include "Shell/Pty.h"
-#include "CowTermTerminal/TerminalView.h"
+#include "TerminalView/TerminalView.h"
 
 #include <eacp/Core/Threads/Timer.h>
 

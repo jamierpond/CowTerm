@@ -1,4 +1,4 @@
-#include <CowTermTerminal/TerminalView.h>
+#include <TerminalView/TerminalView.h>
 
 #include <eacp/Core/Threads/EventLoop.h>
 

@@ -1,6 +1,6 @@
 #include <Emulator/TermParser.h>
 #include <Emulator/TermScreen.h>
-#include <CowTermTerminal/CellText.h>
+#include <TerminalView/CellText.h>
 
 #include <NanoTest/NanoTest.h>
 

@@ -34,6 +34,6 @@ target_link_libraries(CowTermTerminal PUBLIC
         eacp-text
         ResEmbed)
 
-add_library(CowTerm::Terminal ALIAS CowTermTerminal)
+add_library(CowTerm::TerminalView ALIAS CowTermTerminal)
 
 set_default_target_setting(CowTermTerminal)

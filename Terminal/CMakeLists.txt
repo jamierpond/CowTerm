@@ -8,7 +8,7 @@ else ()
     set(COWTERM_EXECUTABLE_TARGET CowTerm)
 endif ()
 
-# The emulator and the terminal widget live in Lib/ (CowTerm::Terminal);
+# The emulator and the terminal widget live in Lib/ (CowTerm::TerminalView);
 # what remains here is the product around them — sessions, splits, palette,
 # switcher, daemon client, tray.
 add_executable(${COWTERM_EXECUTABLE_TARGET}
@@ -95,7 +95,7 @@ endif ()
 # per-platform branches. The overlays use it rather than Graphics::Context,
 # which is the native 2D tier and exists only on macOS and Windows.
 target_link_libraries(${COWTERM_EXECUTABLE_TARGET} PRIVATE
-        CowTerm::Terminal CowTermRemote eacp-sprites eacp-text eacp-ui eacp-network emberstore PermissionsPanel
+        CowTerm::TerminalView CowTermRemote eacp-sprites eacp-text eacp-ui eacp-network emberstore PermissionsPanel
         PondApp RudderClient FrecencySearch SearchKeys SessionLog)
 
 add_dependencies(${COWTERM_EXECUTABLE_TARGET} CowTermVersion)

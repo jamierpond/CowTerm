@@ -1,7 +1,7 @@
 #pragma once
 
 #include "Config.h"
-#include "CowTermTerminal/TerminalView.h"
+#include "TerminalView/TerminalView.h"
 
 #include <eacp/UI/UI.h>
 

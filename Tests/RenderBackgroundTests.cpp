@@ -1,6 +1,6 @@
 #include "RenderBackgroundTests.h"
 
-#include <CowTermTerminal/TerminalView.h>
+#include <TerminalView/TerminalView.h>
 
 #include <eacp/Core/Threads/EventLoop.h>
 #include <eacp/GPU/GPU.h>
