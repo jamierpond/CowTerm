@@ -33,6 +33,12 @@ if (MSVC)
     add_compile_options(/EHsc)
 endif ()
 
+# GCC 15.3's link-time bit propagation turns a std::max-clamped argument into 1:
+# TermScreen::resize kept one grid row and the next write below it crashed (View tests).
+if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    add_compile_options(-fno-ipa-bit-cp)
+endif ()
+
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
 # The framework: Core, Network, the GPU/Sprites stack, and the eacp_* CMake
