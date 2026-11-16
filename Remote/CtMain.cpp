@@ -6,7 +6,7 @@
 #include "Multiplexer/Config.h"
 #include "Multiplexer/NotifyUserClient.h"
 #include "Multiplexer/Protocol.h"
-#include "CowTermVersion.h"
+#include <PondVersion.h>
 #include "Multiplexer/RemoteCommands.h"
 #include "Multiplexer/RemoteLocation.h"
 
@@ -35,7 +35,7 @@ constexpr auto usage = R"(usage: ct <command>    (headless: no CowTerm window on
                           window shows this pane (through ct bridge)
   install-remote <host>   build and install ct + cowtermd on host over ssh
   update-remotes          install-remote for every host in searchDirs
-  version
+  version, --version      print ct's version and the commit it was built from
 )";
 
 int printUsage(const Arguments&)
@@ -46,13 +46,13 @@ int printUsage(const Arguments&)
 
 int printVersion(const Arguments&)
 {
-    std::printf("ct %s (%s, headless)\n", term::appVersion, term::versionTag().c_str());
+    std::printf("ct %s\n", pond::getVersionString().c_str());
     return exitOk;
 }
 
 int bridge(const Arguments&)
 {
-    return term::bridge::runBridge(term::versionTag());
+    return term::bridge::runBridge(pond::getVersionString());
 }
 
 constexpr int exitNotifyUserDismissed = 1;

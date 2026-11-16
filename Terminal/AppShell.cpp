@@ -1,7 +1,7 @@
 #include "AppShell.h"
 
 #include "Emulator/Debug.h"
-#include "CowTermVersion.h"
+#include <PondVersion.h>
 #include "Multiplexer/DaemonClient.h"
 #include "Multiplexer/RemoteHosts.h"
 #include "LeaderKeys.h"
@@ -333,7 +333,7 @@ void AppShell::updateTitle()
         title += " — " + session->activeTitle();
 
     // Trailing build tag so it is always clear which commit is running.
-    title += "  ·  " + versionTag();
+    title += "  ·  " + pond::getVersionString();
 
     onWindowTitleChanged(title);
 }

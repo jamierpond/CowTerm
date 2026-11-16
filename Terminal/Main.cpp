@@ -1,6 +1,6 @@
 #include "AppShell.h"
 #include "Cli.h"
-#include "CowTermVersion.h"
+#include <PondVersion.h>
 #include "Multiplexer/DaemonClient.h"
 #include "Multiplexer/Protocol.h"
 #include "Multiplexer/UsageLog.h"
@@ -79,7 +79,7 @@ struct TerminalApp
     {
         shell.onWindowTitleChanged = [this](const std::string& title)
         {
-            window.setTitle(title.empty() ? "CowTerm  ·  " + term::versionTag()
+            window.setTitle(title.empty() ? "CowTerm  ·  " + pond::getVersionString()
                                           : title);
         };
 
@@ -178,18 +178,15 @@ int main(int argc, char** argv)
 
 #if EACP_CRASH_REPORTING
     auto crashReportingOptions = CrashReporting::Options {};
-    crashReportingOptions.release = term::versionTag();
+    crashReportingOptions.release = pond::getVersionString();
     CrashReporting::start(crashReportingOptions);
     crashIfAskedToForTesting(argc, argv);
 #endif
 
-    std::fprintf(stderr,
-                 "CowTerm %s (%s)\n",
-                 term::appVersion,
-                 term::versionTag().c_str());
+    std::fprintf(stderr, "CowTerm %s\n", pond::getVersionString().c_str());
 
     term::startUsageLog();
-    term::logUsage("app.launch", {{"version", term::versionTag()}});
+    term::logUsage("app.launch", {{"version", pond::getVersionString()}});
     term::registerEmbeddedFonts();
     return Apps::run<TerminalApp>();
 }

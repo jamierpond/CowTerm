@@ -116,18 +116,8 @@ lockstep_add_package(
         GITHUB_REPOSITORY tamber-inc/emberstore
         GIT_TAG main)
 
-# Stamp the git SHA into a generated header on every build so ct and the app
-# can report exactly which commit they came from (window title + startup log).
-set(COWTERM_VERSION_HEADER ${PROJECT_BINARY_DIR}/generated/CowTermVersion.h)
-add_custom_target(CowTermVersion
-        BYPRODUCTS ${COWTERM_VERSION_HEADER}
-        COMMAND ${CMAKE_COMMAND}
-                -DSRC=${CMAKE_SOURCE_DIR}
-                -DIN=${CMAKE_SOURCE_DIR}/Terminal/Version.h.in
-                -DOUT=${COWTERM_VERSION_HEADER}
-                -DCOWTERM_PROJECT_VERSION=${PROJECT_VERSION}
-                -P ${CMAKE_SOURCE_DIR}/cmake/GitVersion.cmake
-        COMMENT "Stamping git version")
+# ct, the daemon and the app report one version: <semver>+<commit>, from Rudder.
+pond_add_version_library(CowTermVersion)
 
 # The libraries (see Lib/CMakeLists.txt), then the product built on them.
 add_subdirectory(Lib)

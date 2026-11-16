@@ -145,7 +145,7 @@ def formatStackFrame(index, frame):
 
 def formatReportLines(executable, host, folder, report):
     metadata = report.get("metadata", {})
-    version = f"{metadata.get('appVersion') or '?'} (commit {metadata.get('release') or '?'})"
+    version = metadata.get("release") or metadata.get("appVersion") or "?"
     message = report.get("message", "")
     thread = report.get("crashingThread", {})
     frames = thread.get("frames", [])[:TOP_FRAME_COUNT]

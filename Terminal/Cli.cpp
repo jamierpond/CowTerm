@@ -4,7 +4,7 @@
 #include "Cli.h"
 #include "Multiplexer/CliParsing.h"
 #include "CliPlatform.h"
-#include "CowTermVersion.h"
+#include <PondVersion.h>
 #include "Multiplexer/NotifyUserClient.h"
 #include <PermissionsPanel/Permissions.h>
 #include "Multiplexer/Protocol.h"
@@ -53,7 +53,8 @@ constexpr auto usage = R"(usage: ct <command>
                                   over ssh, for remote sessions
   update-remotes                  install-remote for every host in searchDirs
 
-  version
+  version, --version              print ct's version and the commit it was
+                                  built from, e.g. ct 0.1.0+f30059f
   --reset-permissions [service]   tccutil reset <service> (default All) for
                                   CowTerm's bundle id; runs from any shell
 
@@ -119,7 +120,7 @@ int printUsage(const Arguments&)
 
 int printVersion(const Arguments&)
 {
-    std::printf("ct %s (%s)\n", appVersion, versionTag().c_str());
+    std::printf("ct %s\n", pond::getVersionString().c_str());
     return exitOk;
 }
 
@@ -147,7 +148,7 @@ int notifyUserCommand(const Arguments& args)
 
 int bridge(const Arguments&)
 {
-    return bridge::runBridge(versionTag());
+    return bridge::runBridge(pond::getVersionString());
 }
 
 int installRemote(const Arguments& args)

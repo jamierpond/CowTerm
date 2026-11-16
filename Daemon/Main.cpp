@@ -18,7 +18,7 @@
 #include <eacp/Core/Utils/Files.h>
 #include <eacp/Network/IPC/Messenger.h>
 #if EACP_CRASH_REPORTING
-#include "CowTermVersion.h"
+#include <PondVersion.h>
 #include <eacp/CrashReporting/CrashReporting.h>
 #endif
 #include <emberstore/AppDatabase.h>
@@ -477,7 +477,7 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char** argv)
         return *handlerExitCode;
 
     auto crashReportingOptions = CrashReporting::Options {};
-    crashReportingOptions.release = term::versionTag();
+    crashReportingOptions.release = pond::getVersionString();
     CrashReporting::start(crashReportingOptions);
 #endif
 

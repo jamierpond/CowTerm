@@ -1,6 +1,6 @@
 #include "Popup.h"
 
-#include "CowTermVersion.h"
+#include <PondVersion.h>
 #include "PaneTerminalConfig.h"
 
 #include "Emulator/Debug.h"
@@ -46,8 +46,10 @@ void Popup::show(const std::string& command,
     };
 
     debugLog("[popup] show build=%s command='%s' local=%.1fx%.1f\n",
-             versionTag().c_str(), command.c_str(),
-             getLocalBounds().w, getLocalBounds().h);
+             pond::getVersionString().c_str(),
+             command.c_str(),
+             getLocalBounds().w,
+             getLocalBounds().h);
 
     addSubview(*terminal);
     resized();

@@ -76,6 +76,8 @@ TCC, so a reset leaves them alone.
 ### `ct`
 
 `ct` is the CowTerm executable's CLI mode (`ct notify-user`, `ct version`).
+`ct --version` prints the version and the commit it was built from, e.g.
+`ct 0.1.0+f30059f` (`.dirty` on the end for uncommitted changes).
 `just install` symlinks it to `~/.local/bin/ct`. Screen capture lives in the
 separate `screencap` tool.
 

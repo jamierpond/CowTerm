@@ -85,11 +85,7 @@ endif ()
 # which is the native 2D tier and exists only on macOS and Windows.
 target_link_libraries(${COWTERM_EXECUTABLE_TARGET} PRIVATE
         CowTerm::TerminalView CowTerm::Multiplexer eacp-sprites eacp-text eacp-ui eacp-network emberstore PermissionsPanel
-        PondApp RudderClient FrecencySearch SearchKeys SessionLog)
-
-add_dependencies(${COWTERM_EXECUTABLE_TARGET} CowTermVersion)
-target_include_directories(${COWTERM_EXECUTABLE_TARGET} PRIVATE
-        ${PROJECT_BINARY_DIR}/generated)
+        PondApp RudderClient FrecencySearch SearchKeys SessionLog CowTermVersion)
 
 # JetBrains Mono (OFL) rides inside the binary; registered with the platform
 # font system at startup, so the default font needs no install step.

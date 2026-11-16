@@ -218,6 +218,11 @@ add_executable(CowTermRunRemotePopup
         ../Bench/RunRemotePopup.cpp
         ../Terminal/PaneTerminalConfig.cpp
         ../Terminal/Popup.cpp)
-target_include_directories(CowTermRunRemotePopup PRIVATE ../Terminal ${PROJECT_BINARY_DIR}/generated)
-add_dependencies(CowTermRunRemotePopup CowTermVersion)
-target_link_libraries(CowTermRunRemotePopup PRIVATE CowTerm::TerminalView CowTerm::Multiplexer SessionLog PondApp)
+target_include_directories(CowTermRunRemotePopup PRIVATE ../Terminal)
+target_link_libraries(CowTermRunRemotePopup PRIVATE CowTerm::TerminalView CowTerm::Multiplexer SessionLog PondApp CowTermVersion)
+
+# The headless ct a remote host runs, and the app's own ct mode.
+pond_add_version_test(CowTermCli ct)
+get_directory_property(appExecutableTarget
+        DIRECTORY ${PROJECT_SOURCE_DIR}/Terminal DEFINITION COWTERM_EXECUTABLE_TARGET)
+pond_add_version_test(${appExecutableTarget} ct)
