@@ -64,6 +64,7 @@ lockstep_add_package(
         GITHUB_REPOSITORY eyalamirmusic/eacp
         GIT_TAG develop
         SYSTEM YES
+        PATCHES "${CMAKE_CURRENT_LIST_DIR}/Patches/eacp-hidden-gpuview-releases-frame-memory.patch"
         OPTIONS ${COWTERM_EACP_OPTIONS})
 
 # Crash reports (Crashout): the app and the daemon write one to

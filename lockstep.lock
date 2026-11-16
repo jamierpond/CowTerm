@@ -146,11 +146,13 @@
       "usesGitLfs": false
     },
     {
-      "commit": "760d12f3244c1dc420e0d657e960cf9d5b6a472a",
-      "hash": "2ad58b40c8cd102224569d3ecf2ad3ab056a0ae87887b3d86550d6168625ed25",
+      "commit": "3892bedb8e4d50001d509b14adc5a6e70ce5af88",
+      "hash": "9b3b1debea307b857cc17a0d0c01a17f0bb02d3c98e02784d726b2a41da59e37",
       "kind": "git",
       "name": "eacp",
-      "patches": [],
+      "patches": [
+        "Patches/eacp-hidden-gpuview-releases-frame-memory.patch"
+      ],
       "requestedRef": "develop",
       "submoduleSelection": {
         "isRecursive": true,
@@ -242,6 +244,6 @@
       "usesGitLfs": false
     }
   ],
-  "root": "cf0c8816aeb12be6450d4cebeb9e4c9273c03f61201f013338d8a1ed969ecd5c",
+  "root": "777ad2fe1a4c3f4ae6fba21544411335647456c1d0a47e653cc66f7e490762e6",
   "version": 1
 }

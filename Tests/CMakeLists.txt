@@ -75,6 +75,12 @@ nano_add_executable(CowTermSessionViewTests
 
 target_include_directories(CowTermSessionViewTests PRIVATE ../Terminal)
 
+# Session switching against the process footprint, which only macOS reports
+# this way (the GPU memory of a hidden session's panes).
+if (APPLE)
+    target_sources(CowTermSessionViewTests PRIVATE SessionMemoryTests-macOS.cpp)
+endif ()
+
 # The context list CowTerm publishes to Rudder and the branch it reads from
 # each pane's repo; pure, so only the protocol types come along.
 nano_add_executable(CowTermRudderTests

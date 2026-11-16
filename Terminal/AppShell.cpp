@@ -253,10 +253,12 @@ void AppShell::attachActive(TermSession& session)
         if (attached != nullptr)
         {
             detachPopupOf(attached);
+            attached->view.setVisible(false);
             removeSubview(attached->view);
         }
 
         attached = &session;
+        session.view.setVisible(true);
         addSubview(session.view);
         session.view.repaintAllPanes();
 
@@ -418,6 +420,7 @@ void AppShell::raisePopup()
         return;
 
     removeSubview(*popup);
+    popup->setVisible(true);
     addSubview(*popup);
     popup->setBounds(getLocalBounds());
     popup->focusTerminal();
@@ -437,11 +440,15 @@ bool AppShell::isAttachedPopupShown() const
     return popup != nullptr && popup->isShown();
 }
 
-// A session switched away from keeps its popup running, just off screen.
+// A session switched away from keeps its popup running, just off screen and
+// hidden, which frees the GPU memory its frames are drawn in.
 void AppShell::detachPopupOf(const TermSession* session)
 {
     if (auto found = popupsBySession.find(session); found != popupsBySession.end())
+    {
+        found->second->setVisible(false);
         removeSubview(*found->second);
+    }
 }
 
 Popup& AppShell::makePopupFor(const TermSession& session)

@@ -1,0 +1,96 @@
+diff --git a/Lib/eacp/GPU/View/GPUView-Apple.mm b/Lib/eacp/GPU/View/GPUView-Apple.mm
+index 9879c15f..542c891d 100644
+--- a/Lib/eacp/GPU/View/GPUView-Apple.mm
++++ b/Lib/eacp/GPU/View/GPUView-Apple.mm
+@@ -82,6 +82,30 @@ struct GPUView::Native
+         [metalLayer.get() removeFromSuperlayer];
+     }
+ 
++    // A CAMetalLayer keeps its drawables until it is destroyed, so the way to
++    // give them back is a fresh layer with the same settings in its place.
++    void releaseFrameMemory()
++    {
++        auto* oldLayer = metalLayer.get();
++        CAMetalLayer* newLayer = [[getImmediateMetalLayerClass() alloc] init];
++
++        newLayer.device = oldLayer.device;
++        newLayer.pixelFormat = oldLayer.pixelFormat;
++        newLayer.framebufferOnly = oldLayer.framebufferOnly;
++        newLayer.maximumDrawableCount = oldLayer.maximumDrawableCount;
++        newLayer.allowsNextDrawableTimeout = oldLayer.allowsNextDrawableTimeout;
++        newLayer.opaque = oldLayer.opaque;
++        newLayer.frame = oldLayer.frame;
++        newLayer.contentsScale = oldLayer.contentsScale;
++        newLayer.drawableSize = oldLayer.drawableSize;
++
++        [oldLayer.superlayer replaceSublayer:oldLayer with:newLayer];
++        metalLayer = newLayer;
++
++        msaaTexture.release();
++        depthTexture.release();
++    }
++
+     void updateSize()
+     {
+         auto scale = platformBackingScale(view);
+@@ -410,6 +434,18 @@ void GPUView::resizeFinished()
+     renderNow();
+ }
+ 
++void GPUView::visibilityChanged(bool isVisible)
++{
++    if (!isVisible)
++    {
++        impl->releaseFrameMemory();
++        return;
++    }
++
++    impl->updateSize();
++    repaint();
++}
++
+ float GPUView::backingScale() const
+ {
+     if (renderScale > 0.f)
+diff --git a/Lib/eacp/GPU/View/GPUView-Linux.cpp b/Lib/eacp/GPU/View/GPUView-Linux.cpp
+index cf4221ff..b38dbeb4 100644
+--- a/Lib/eacp/GPU/View/GPUView-Linux.cpp
++++ b/Lib/eacp/GPU/View/GPUView-Linux.cpp
+@@ -1038,6 +1038,8 @@ bool GPUView::isTransparent() const
+ 
+ // No drawable to resize here: the swapchain is rebuilt from the surface's own
+ // configure, so all this owes either event is the scale notification.
++void GPUView::visibilityChanged(bool) {}
++
+ void GPUView::resizeStarted()
+ {
+     impl->notifyScaleChange();
+diff --git a/Lib/eacp/GPU/View/GPUView-Windows.cpp b/Lib/eacp/GPU/View/GPUView-Windows.cpp
+index a01d34a6..fcf03665 100644
+--- a/Lib/eacp/GPU/View/GPUView-Windows.cpp
++++ b/Lib/eacp/GPU/View/GPUView-Windows.cpp
+@@ -788,6 +788,8 @@ int GPUView::framesInFlight() const
+ // Serves both events: the swapchain follows the new bounds or the new scale
+ // (same logical bounds, different pixel count), and updateSize() fires
+ // onBackingScaleChanged for itself when the scale is what moved.
++void GPUView::visibilityChanged(bool) {}
++
+ void GPUView::resizeStarted()
+ {
+     impl->updateSize();
+diff --git a/Lib/eacp/GPU/View/GPUView.h b/Lib/eacp/GPU/View/GPUView.h
+index f6f26e2a..f388247c 100644
+--- a/Lib/eacp/GPU/View/GPUView.h
++++ b/Lib/eacp/GPU/View/GPUView.h
+@@ -41,6 +41,11 @@ public:
+     void resizeStarted() override;
+     void resizeFinished() override;
+ 
++    // Hiding the view frees the memory its frames are drawn in (the drawables,
++    // and the multisample and depth textures) on Metal; showing it allocates
++    // them again and repaints. Other backends keep theirs.
++    void visibilityChanged(bool isVisible) override;
++
+     // Multisample (MSAA) count used for rendering; defaults to 4 for smooth
+     // edges. Feed this into your RenderPipelineDescriptor::sampleCount so the
+     // pipeline matches the render target. Set before building the pipeline.
