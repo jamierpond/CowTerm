@@ -54,7 +54,8 @@ iPhone                                         each machine
 └───────────────────────────────┘
           ▲ APNs push (phase 3)
           │
-   tiny push relay ◀── cowtermd / ct posts on OSC 9/777 and nu-request
+   ct push-relay on an always-on tailnet host
+          ▲ daemons POST over the tailnet on OSC 9/777 and nu-request
 ```
 
 ### Transport: SwiftNIO SSH, a key in the Secure Enclave
@@ -69,21 +70,43 @@ unlocked by Face ID, and it's one key per device. NIOSSH speaks
 `ecdsa-sha2-nistp256`, the only curve the Secure Enclave supports. This keeps
 the Mac's own policy (key auth only, never a password prompt).
 
-### Reaching the machines: Tailscale
+### Reaching the machines: the tailnet
 
-The phone isn't on the home LAN and has no `~/.ssh/config`. With Tailscale on
-the phone, every host is reachable by its MagicDNS name, with nothing exposed
-to the internet. The app just needs a host list.
+Decided: the phone is on Jamie's tailnet, and so is every machine. That
+settles reachability and changes a few other things:
+
+- **Addresses:** every host is reachable by its MagicDNS name (or its
+  100.x address) from anywhere: home, 5G, a café. No port forwarding, no
+  ProxyJump, nothing exposed to the internet. The app never deals with
+  `~/.ssh/config`; it stores `user@magicdns-name` per host.
+- **sshd only on the tailnet:** the hosts can bind sshd to the tailscale
+  interface, or firewall port 22 to `100.64.0.0/10`. On the Macs, Remote
+  Login listens everywhere, so pf or the macOS firewall has to narrow it.
+- **Normal sshd, not Tailscale SSH:** Tailscale SSH would remove key
+  management entirely, with auth by tailnet identity and ACLs. But it can't
+  serve on macOS (the App Store Tailscale has no SSH server) or on Windows,
+  and the Macs and tamby-windows are hosts. So the app uses the system sshd
+  everywhere with its Secure Enclave key. One code path. Where Tailscale SSH
+  happens to be on, it still works, because the app offers `none` auth first.
+- **Tailscale is off:** iOS reports the VPN state. If a 100.x host
+  doesn't answer and the tunnel isn't up, the session list shows one banner,
+  "Tailscale is off", instead of every host failing on its own timeout.
+- **Woken in the background:** Tailscale's tunnel is a Network Extension.
+  It stays up while CowTerm is suspended, so a lock-screen answer can dial
+  ssh straight away. Nothing has to reconnect first.
 
 ### Pairing: `ct pair-device`
 
 This is the setup step, and it's where the app should feel good to use.
 Running `ct pair-device` on the Mac prints a QR code holding:
 
-- every host in `cowterm.json`, resolved through `ssh -G` (real hostname,
-  user, port, ProxyJump) so the phone needn't parse ssh config,
-- each host's **host key fingerprint**, so the phone pins it and never
-  trusts on first use,
+- every host in `cowterm.json`, mapped to its tailnet name: `ssh -G <alias>`
+  gives the user and the real hostname, and `tailscale status --json` matches
+  that to a peer's MagicDNS name. A host that isn't on the tailnet is
+  listed as a warning on the Mac and left out,
+- each host's **host key fingerprint**, so the phone pins it. WireGuard
+  already proves which node it's talking to, but pinning is cheap and also
+  catches a reinstalled box,
 - a one-time pairing token.
 
 The phone scans it, creates its Secure Enclave key, and sends back the public
@@ -138,19 +161,28 @@ Proposal, in two steps:
 ### 2. Backgrounding: push notifications need a server
 
 iOS suspends the app shortly after it leaves the screen, which closes every ssh
-channel. Rings and asks then need **APNs**, and APNs needs a server holding the
-`.p8` key. That's the one new piece of infrastructure:
+channel. Tailscale doesn't change that: the tunnel stays up, but the app
+isn't running to listen on it. Rings and asks then need **APNs**, and APNs
+needs something holding the `.p8` key.
 
-- A **push relay**: a Cloudflare Worker, or similar, of about 50 lines.
-  `cowtermd` (or `ct`) POSTs `{device, title, body, pane, ask options}` to it
-  when a pane rings (OSC 9/777) or asks (`nu-request`), and only when no
-  interactive client has had input in the last N minutes. That way the phone
-  stays quiet while you're at the desk.
-- The phone registers its APNs token with each daemon over the bridge
-  (`register-device <name>` + token payload). The daemon persists it in
-  emberstore with the pane state.
-- `ntfy.sh` can stand in as a zero-infrastructure relay for an MVP, but it
-  can't give tappable answer buttons.
+The tailnet lets that be one of Jamie's own machines, with no public
+server:
+
+- **`ct push-relay`** runs on one always-on host (tamby) and listens only on
+  its tailnet address. It holds the `.p8` key and is the only thing that talks
+  to Apple. It's about 100 lines: a small HTTP endpoint plus an
+  ES256-signed APNs request.
+- Every `cowtermd` POSTs `{device, title, body, host, pane, ask options}` to
+  `http://<relay>.<tailnet>.ts.net` when a pane rings (OSC 9/777) or asks
+  (`nu-request`). It only does this when no interactive client has had
+  input in the last few minutes, so the phone stays quiet at the desk. The relay's
+  address goes in `cowterm.json` (`"pushRelay": "tamby"`).
+- No auth beyond the tailnet itself: Tailscale ACLs decide who may reach the
+  relay's port.
+- The phone registers its APNs token once, with the relay, over the tailnet.
+  Daemons only need to know the device *name*, not the token.
+- If the relay host is down, pushes stop and nothing else breaks. Opening
+  the app still shows everything.
 
 **Answering from the lock screen:** a `nu-request`'s options become
 `UNNotificationAction` buttons, plus a text field when `--allow-type-response`
@@ -212,14 +244,14 @@ finds the daemon inside `CowTerm.app`.
   captured `state` blob and dump the grid as text.
 - If both work, the remaining risk is product work, not feasibility.
 
-**Phase 1: Glance.** iOS app, Tailscale, `ct pair-device`, one session list
+**Phase 1: Glance.** iOS app over the tailnet, `ct pair-device` with MagicDNS names, one session list
 across hosts with Claude badges, read-only panes at daemon size with pinch-zoom,
 and an instant redraw on foreground through adopt + `state`.
 
 **Phase 2: Steer.** Typing, accessory bar, Claude composer and quick replies,
 take-over resize (daemon protocol v5).
 
-**Phase 3: Ring.** Push relay, `register-device`, notify-user fan-out with
+**Phase 3: Ring.** `ct push-relay` on a tailnet host, device registration, notify-user fan-out with
 first-answer-wins, lock-screen answers, Live Activities.
 
 **Phase 4: iPad.** Hardware keyboard, real splits, maybe the Metal renderer.
@@ -233,18 +265,19 @@ first-answer-wins, lock-screen answers, Live Activities.
 | Window title in `info` (Claude's conversation title), if the daemon's model keeps OSC 0/2 | `Daemon/Main.cpp` | 1 |
 | Size ownership (`claim-size`, `size-owner`), protocol v5 | `Daemon/Main.cpp`, `DaemonClient` | 2 |
 | "On iPhone" banner on the Mac | `Terminal/SessionView` | 2 |
-| `register-device`, push on ring/ask when idle | `Daemon/Main.cpp` | 3 |
+| Push on ring/ask when idle, POST to the relay | `Daemon/Main.cpp` | 3 |
+| `ct push-relay` (APNs, listens on the tailnet only) | `Remote/CtMain.cpp` | 3 |
 | notify-user goes through the daemon, fans out, first answer wins | `NotifyUserServer`, `Bridge.cpp`, `ct` | 3 |
 
 ## Open questions for Jamie
 
-1. **Tailscale everywhere?** It's the simplest way to reach every box from the
-   phone. The alternative is exposing sshd.
-2. **Is a push relay OK?** A small Worker that holds the APNs key, or ntfy for
-   now and no lock-screen answers.
-3. **iPhone first or iPad first?** iPad with a keyboard is nearly the Mac
+Decided: the phone and every host are on the tailnet.
+
+1. **Which host runs `ct push-relay`?** It needs to be always on and on the
+   tailnet; tamby is assumed above.
+2. **iPhone first or iPad first?** iPad with a keyboard is nearly the Mac
    app. iPhone is the steering use case this page is built around.
-4. **Same repo?** An `iOS/` directory here would share `Lib/Emulator`
+3. **Same repo?** An `iOS/` directory here would share `Lib/Emulator`
    directly. A separate repo would pin CowTerm through lockstep like the other
    dependencies.
-5. It needs an Apple Developer account for TestFlight and APNs.
+4. It needs an Apple Developer account for TestFlight and APNs.
