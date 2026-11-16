@@ -130,6 +130,18 @@ nano_add_executable(CowTermViewTests
             RowDrawingCacheTests.cpp
         TARGETS CowTerm::TerminalView)
 
+# Guards the -fno-ipa-bit-cp in the top CMakeLists.txt: under GCC 15.3 with
+# link-time optimisation, the row count reaches the receiver as 1 without it.
+if (NOT MSVC)
+    nano_add_executable(CowTermBuildTests
+            SOURCES
+                ClampedRowCountTests.cpp
+                ClampedRowCount.cpp)
+
+    # Link-time optimised like CowTerm's libraries, which is what the bug needs.
+    set_default_target_setting(CowTermBuildTests)
+endif ()
+
 # The leader-key letters and digits AppShell turns into pane and session moves.
 nano_add_executable(CowTermLeaderKeysTests
         SOURCES

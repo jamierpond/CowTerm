@@ -33,8 +33,7 @@ if (MSVC)
     add_compile_options(/EHsc)
 endif ()
 
-# GCC 15.3's link-time bit propagation turns a std::max-clamped argument into 1:
-# TermScreen::resize kept one grid row and the next write below it crashed (View tests).
+# GCC 15.3 bug, not UB in CowTerm: with -flto, -fipa-bit-cp passes a std::max-clamped argument on as 1 (Tests/ClampedRowCount*.cpp reproduce it).
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     add_compile_options(-fno-ipa-bit-cp)
 endif ()
