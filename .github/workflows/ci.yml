@@ -58,3 +58,10 @@ jobs:
         with:
           path: .lockstep-cache
           key: ${{ steps.lockstep-cache.outputs.cache-primary-key }}
+
+  codehealth:
+    name: Code Health
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jamierpond/CodeHealth@v1
