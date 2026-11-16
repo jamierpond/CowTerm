@@ -41,34 +41,98 @@ that exists today.
 | `nu-request` / `nu-reply` / `nu-cancel` already cross the bridge (`Bridge.cpp`) | Asks from agents can reach the phone. |
 | `Lib/Emulator` is "bytes in, screen state out: no process, no GPU, no daemon" and depends only on `eacp-core` | The phone can run the *same* parser and load the same `state` JSON. Its scrollback, wide chars, reflow and Kitty modes behave like the Mac's. |
 
-## Architecture
+## Architecture: a normal eacp app, in C++
+
+Decided: iPhone first, and the app is an eacp iOS app written in C++ like the
+Mac app. No Swift, no SwiftUI. It lives in this repo as `iOS/` (target
+`CowTermMobile`) and links the same libraries the Mac app does. eacp already
+builds iOS apps: its CI has an iOS Simulator lane
+(`cmake -G Xcode -DCMAKE_SYSTEM_NAME=iOS`), and `set_default_target_setting`
+handles the iOS plist and signing.
 
 ```
-iPhone                                         each machine
-┌───────────────────────────────┐              ┌──────────────────────┐
-│ SwiftUI: sessions, panes, asks│              │ cowtermd (owns PTYs) │
-│ Metal/CoreText grid renderer  │              │        ▲             │
-│ Lib/Emulator (C++ via interop)│   ssh        │   ct bridge          │
-│ Bridge framing + proto verbs  │──(Tailscale)─▶│  (stdin/stdout)      │
-│ SwiftNIO SSH, Secure Enclave  │   exec       └──────────────────────┘
-└───────────────────────────────┘
+iPhone: CowTermMobile (eacp, C++)                     each machine
+┌───────────────────────────────────────────┐         ┌──────────────────────┐
+│ iOS/  session list, pane pager, asks, keys│         │ cowtermd (owns PTYs) │
+│ Lib/TerminalView  (Metal grid, GlyphAtlas)│         │        ▲             │
+│ Lib/Emulator      (same parser, same state)│        │   ct bridge          │
+│ Lib/Multiplexer   DaemonClient, RemoteHost│  ssh    │  (stdin/stdout)      │
+│   └ EmbeddedSshLink : DaemonLink  ────────┼─tailnet▶│                      │
+│       libssh2 + mbedTLS, Secure Enclave key│        └──────────────────────┘
+└───────────────────────────────────────────┘
           ▲ APNs push (phase 3)
-          │
    ct push-relay on an always-on tailnet host
           ▲ daemons POST over the tailnet on OSC 9/777 and nu-request
 ```
 
-### Transport: SwiftNIO SSH, a key in the Secure Enclave
+### What is reused as-is
 
-iOS apps can't run the system `ssh`, so the app embeds a client:
-[SwiftNIO SSH](https://github.com/apple/swift-nio-ssh), probably through the
-Citadel wrapper. It opens one exec channel per host running the same
-`bridgeCommand` that `RemoteLocation.h` builds, and speaks the frames.
+| Library | On the phone |
+| --- | --- |
+| `Lib/Emulator` | The same parser. It loads the daemon's `state` JSON directly, so a pane redraws correctly the moment it's adopted. |
+| `Lib/TerminalView` | Already "the embeddable terminal… an injectable shell factory". It draws on eacp's `GPUView` (Metal on iOS too) with `GlyphAtlas` on eacp-text, whose CoreText rasterizer is shared Apple code. So the phone gets the Mac's renderer, themes, JetBrains Mono, links and selection. |
+| `Lib/Multiplexer` | `DaemonClient` (spawn/adopt, routes, `info`), `RemoteHost` (reconnect with backoff, reattach, `scan`, `layouts`), bridge framing, the notify-user protocol and `HostColours`. The phone runs the same client code as the Mac. Only the link underneath is new. |
 
-The key is a **P-256 key in the Secure Enclave**: it can't be exported, it's
-unlocked by Face ID, and it's one key per device. NIOSSH speaks
-`ecdsa-sha2-nistp256`, the only curve the Secure Enclave supports. This keeps
-the Mac's own policy (key auth only, never a password prompt).
+### What is new in CowTerm
+
+**`EmbeddedSshLink : DaemonLink`.** iOS forbids starting processes (eacp's
+`Process-iOS.cpp` is a stub), so the system `ssh` that `SshBridgeLink` runs
+isn't available. The new link does ssh inside the app with **libssh2** on
+**mbedTLS**. Both are C, BSD/Apache licensed and built with CMake, so
+lockstep pins them like every other dependency. The link opens a session,
+runs `remote::bridgeCommand` on an exec channel, and feeds the channel into
+the existing `bridge::FrameDecoder`. Its reader thread marshals to the main
+thread with `Threads::callAsync`, as `SshBridgeLink` does. The link reports
+the same `onReady` / `onFailed` reasons, so pane banners read the same as on
+the Mac.
+
+The seam is one line. `RemoteHost::connect` (`RemoteHosts.cpp:74`) creates
+`SshBridgeLink` directly; it gets a link factory instead. The desktop factory
+still returns `SshBridgeLink`, and the iOS one returns `EmbeddedSshLink`.
+
+**Secure Enclave key.** The phone's key is a P-256 key created in the Secure
+Enclave with `SecKeyCreateRandomKey`: it can't be exported and is gated by
+Face ID. libssh2's `libssh2_userauth_publickey` takes a *sign callback*, so
+the private key never leaves the enclave. The callback calls
+`SecKeyCreateSignature` and re-encodes the DER `(r, s)` as the SSH
+`ecdsa-sha2-nistp256` signature blob. This goes in one small `.mm` file.
+
+**`Lib/Shell` without a PTY on iOS.** `Pty-Posix.cpp` uses `forkpty`, which
+the iOS sandbox refuses. An iOS build compiles a `Pty-iOS.cpp` stub, the way
+eacp stubs `Process`. The `Shell` interface is all the phone needs, because
+every pane is a `DaemonShell`.
+
+**`iOS/`.** The app itself: the session list, a pane pager, the ask sheet,
+the key bar and pairing. All of it is eacp views drawn on the GPU, like the
+Mac's palette and switcher. `PaletteRanking` (fuzzy match + MRU) moves from
+`Terminal/` into a library both apps link.
+
+### What is new in eacp (PRs on `jp/develop`, as usual)
+
+Today's iOS backend draws and takes touches, but it can't type, and it can't
+tell the app it's being backgrounded. A terminal needs:
+
+1. **Text input on `View-iOS.mm`.** Make the view a `UIKeyInput`
+   (`insertText:` and `deleteBackward` become eacp `KeyEvent`s with the
+   typed characters), with the trait switches a terminal wants:
+   autocorrect, autocapitalisation and smart quotes off. Add
+   `pressesBegan`/`pressesEnded` with `UIKey`, so a hardware keyboard
+   produces real key codes and modifiers. Today `Keyboard-iOS.mm` reports
+   nothing pressed.
+2. **Software keyboard frame.** An event carrying the keyboard's height as it
+   animates in and out, so the pane shrinks above it and the key bar can sit
+   on top of it.
+3. **App lifecycle.** "Entering background" and "back in foreground" events.
+   CowTerm drops its links on the first and reconnects and adopts on the
+   second, instead of waiting for TCP to notice.
+4. **Notifications.** Register for remote notifications and get the device
+   token. Post, receive and act on notifications with action buttons and a
+   text reply, through `UNUserNotificationCenter`. `App-iOS.mm` already says
+   "nothing to do here until eacp has notifications". The Mac's
+   `Notifier-macOS.mm` could move onto the same API.
+
+All four are UIKit plumbing behind interfaces eacp already has the shape of,
+which makes them good eacp PRs rather than CowTerm hacks.
 
 ### Reaching the machines: the tailnet
 
@@ -87,7 +151,7 @@ settles reachability and changes a few other things:
   serve on macOS (the App Store Tailscale has no SSH server) or on Windows,
   and the Macs and tamby-windows are hosts. So the app uses the system sshd
   everywhere with its Secure Enclave key. One code path. Where Tailscale SSH
-  happens to be on, it still works, because the app offers `none` auth first.
+  happens to be on, it still works, because libssh2 tries `none` auth first.
 - **Tailscale is off:** iOS reports the VPN state. If a 100.x host
   doesn't answer and the tunnel isn't up, the session list shows one banner,
   "Tailscale is off", instead of every host failing on its own timeout.
@@ -109,33 +173,24 @@ Running `ct pair-device` on the Mac prints a QR code holding:
   catches a reinstalled box,
 - a one-time pairing token.
 
-The phone scans it, creates its Secure Enclave key, and sends back the public
-key. `ct` then appends that key to `authorized_keys` on every host, in
-parallel as `ct update-remotes` does, tagged `cowterm-device:<name>`.
-`ct revoke-device <name>` removes the key again. One scan and every machine
-works.
+The phone scans it with the camera (eacp's `Camera` module has an iOS
+backend; the QR decode is Vision or CoreImage in an `.mm`), creates its Secure Enclave
+key, and sends back the public key. `ct` then appends that key to
+`authorized_keys` on every host, in parallel as `ct update-remotes` does,
+tagged `cowterm-device:<name>`. `ct revoke-device <name>` removes the key
+again. One scan and every machine works.
 
-### Emulator: reuse `Lib/Emulator`, don't adopt SwiftTerm
+### Touch on the terminal
 
-The daemon's adopt reply is `state <id>` followed by `serializeTerminalState`, which is
-Miro JSON of CowTerm's own `TerminalState`. A third-party Swift emulator such
-as SwiftTerm can't load that, so it would show a blank pane until new output
-arrives. Building `CowTermEmulator` as an XCFramework and calling it through
-Swift's C++ interop:
+`TerminalView` handles the mouse and keys today. On the phone it also needs:
 
-- loads `state` directly, so the redraw on reconnect is right the first time,
-- means one parser, one set of fuzz corpora, one set of bugs.
+- **one-finger drag** scrolls the scrollback,
+- **long-press then drag** selects, then copies through eacp's iOS `Clipboard`,
+- **pinch** sets the font size (the Mac's `Cmd +/-`),
+- **tap** brings up the keyboard,
+- **two-finger swipe** moves between the session's panes.
 
-**Risk #1:** `eacp-core` (for `Primitives.h` and Miro reflection) must build
-for `arm64-apple-ios`. If eacp doesn't target iOS yet, the emulator only
-needs a small part of it. Phase 0 checks this first.
-
-### Rendering
-
-For phase 1, draw the grid with CoreText into a `CALayer`. Phone panes are
-small and change rarely. If scrolling feels slow, move to a Metal glyph atlas
-like the Mac's `GlyphAtlas`, by reusing `Lib/TerminalView` if eacp's graphics
-run on iOS, or with a small Swift renderer otherwise.
+eacp already delivers `touchBegan/Moved/Ended`, so this is CowTerm code.
 
 ## The hard problems
 
@@ -209,7 +264,8 @@ finds the daemon inside `CowTerm.app`.
 
 ### 5. Typing on glass
 
-- An **accessory bar** above the keyboard: `Esc`, `Tab`, a sticky `Ctrl`,
+- A **key bar** drawn by CowTerm on top of the software keyboard, using
+  eacp's keyboard-frame event above the keyboard: `Esc`, `Tab`, a sticky `Ctrl`,
   `⌃A` (the leader), arrows, and `| ~ / -`. Dragging on the bar moves the
   cursor, like dragging on the space bar.
 - A **composer for Claude panes**: a native text field with dictation and
@@ -217,8 +273,8 @@ finds the daemon inside `CowTerm.app`.
   to Claude beats typing it in a terminal grid.
 - **Quick replies** when the screen shows a Claude permission prompt
   (`1. Yes  2. Yes, don't ask again  3. No`): buttons instead of keys.
-- iPad with a hardware keyboard: the Mac keymap and Kitty encoding
-  (`KeyEncoding.cpp`), and real splits from `layouts`.
+- **Hardware keyboards** go through the Mac's own `KeyEncoding.cpp` /
+  `KittyKeyEncoding.cpp` once eacp sends real key events.
 
 ## Things that would make it a joy
 
@@ -231,53 +287,73 @@ finds the daemon inside `CowTerm.app`.
   the phone as in the Mac picker.
 - **Handoff:** the Mac advertises the active pane as an `NSUserActivity`. When
   you pick up the phone, it opens the same pane.
-- **Shortcuts / widgets**: "Ask CowTerm: what's Claude doing on tamby?" shows
-  the last 20 lines of the pane.
+
+Live Activities and widgets are SwiftUI-only app extensions. If they're
+wanted later, each one is a small Swift extension target next to the C++
+app. That's the one place Swift can't be avoided, and none of it is needed
+for phases 1–3.
 
 ## Plan
 
-**Phase 0: spike (a weekend).** No UI yet.
-- A Swift command-line tool on macOS, using Citadel, that ports
-  `probe-bridge.py`: ssh to tamby, `ct bridge`, `info`, adopt a pane, print the
-  `state`.
-- Build `CowTermEmulator` + `eacp-core` for the iOS simulator. Load a
-  captured `state` blob and dump the grid as text.
-- If both work, the remaining risk is product work, not feasibility.
+**Phase 0: spike (a weekend, on a Mac).** No UI yet.
+- Configure CowTerm for the iOS Simulator the way eacp's CI lane does. Get
+  `CowTermEmulator`, `CowTermTerminal` and `CowTermMultiplexer` to build,
+  with the `Pty-iOS` stub. Find out whether emberstore, PondApp and SessionLog
+  build for iOS too, or have to stay out of the phone's link.
+- Add libssh2 + mbedTLS to lockstep. Write `EmbeddedSshLink`, and test it on
+  macOS first as a `ct`-style CLI that ports `scripts/probe-bridge.py`:
+  connect to tamby over the tailnet, adopt a pane, print it. Check that
+  libssh2's mbedTLS backend negotiates key exchange and host keys with
+  the hosts' stock OpenSSH. If it doesn't, use its OpenSSL backend instead.
+- The smallest possible `CowTermMobile`: one `TerminalView` filling the
+  screen, attached to one tamby pane, with a file-based key for now.
 
-**Phase 1: Glance.** iOS app over the tailnet, `ct pair-device` with MagicDNS names, one session list
-across hosts with Claude badges, read-only panes at daemon size with pinch-zoom,
-and an instant redraw on foreground through adopt + `state`.
+**Phase 1: Glance.** Session list across hosts with Claude badges and host
+colours, the pane pager with touch scrolling, adopt on foreground, `ct
+pair-device` + the Secure Enclave key. Read-only at the daemon's size, with
+pinch to zoom. eacp PR: lifecycle events.
 
-**Phase 2: Steer.** Typing, accessory bar, Claude composer and quick replies,
-take-over resize (daemon protocol v5).
+**Phase 2: Steer.** eacp PRs: text input and keyboard frame. Then the key
+bar, the Claude composer and quick replies, and take-over resize (daemon
+protocol v5).
 
-**Phase 3: Ring.** `ct push-relay` on a tailnet host, device registration, notify-user fan-out with
-first-answer-wins, lock-screen answers, Live Activities.
+**Phase 3: Ring.** eacp PR: notifications. Then `ct push-relay` on a
+tailnet host, notify-user fan-out with first-answer-wins, and answers from
+the lock screen.
 
-**Phase 4: iPad.** Hardware keyboard, real splits, maybe the Metal renderer.
+**Later:** iPad with real splits, and Live Activities as a Swift extension.
 
-### CowTerm-side changes, all phases
+### Changes, all phases
 
 | Change | Where | Phase |
 | --- | --- | --- |
+| libssh2 + mbedTLS in lockstep | `lockstep.lock`, `CMakeLists.txt` | 0 |
+| `EmbeddedSshLink`, Secure Enclave signing | `Lib/Multiplexer`, `iOS/` | 0 |
+| Link factory in `RemoteHost::connect` | `Lib/Multiplexer/RemoteHosts.cpp` | 0 |
+| `Pty-iOS.cpp` stub | `Lib/Shell` | 0 |
+| `CowTermMobile` app target | `iOS/`, `CMakeLists.txt` | 0 |
+| Touch scrolling, selection and pinch in `TerminalView` | `Lib/TerminalView` | 1 |
+| `PaletteRanking` moved into a shared library | `Terminal/` → `Lib/` | 1 |
+| eacp: background / foreground events | eacp `jp/develop` | 1 |
 | `ct pair-device`, `ct revoke-device` | `Remote/CtMain.cpp`, `RemoteInstall` | 1 |
 | Make sure `ct bridge` works against the Mac's bundled daemon | `Bridge.cpp`, `DaemonDialer` | 1 |
 | Window title in `info` (Claude's conversation title), if the daemon's model keeps OSC 0/2 | `Daemon/Main.cpp` | 1 |
+| eacp: `UIKeyInput`, hardware keys, keyboard frame | eacp `jp/develop` | 2 |
 | Size ownership (`claim-size`, `size-owner`), protocol v5 | `Daemon/Main.cpp`, `DaemonClient` | 2 |
 | "On iPhone" banner on the Mac | `Terminal/SessionView` | 2 |
+| eacp: notifications (token, actions, text reply) | eacp `jp/develop` | 3 |
 | Push on ring/ask when idle, POST to the relay | `Daemon/Main.cpp` | 3 |
 | `ct push-relay` (APNs, listens on the tailnet only) | `Remote/CtMain.cpp` | 3 |
 | notify-user goes through the daemon, fans out, first answer wins | `NotifyUserServer`, `Bridge.cpp`, `ct` | 3 |
 
 ## Open questions for Jamie
 
-Decided: the phone and every host are on the tailnet.
+Decided: the phone and every host are on the tailnet; iPhone first; a C++
+eacp app in this repo (`iOS/`).
 
 1. **Which host runs `ct push-relay`?** It needs to be always on and on the
    tailnet; tamby is assumed above.
-2. **iPhone first or iPad first?** iPad with a keyboard is nearly the Mac
-   app. iPhone is the steering use case this page is built around.
-3. **Same repo?** An `iOS/` directory here would share `Lib/Emulator`
-   directly. A separate repo would pin CowTerm through lockstep like the other
-   dependencies.
-4. It needs an Apple Developer account for TestFlight and APNs.
+2. **The phone's name in the app:** `CowTermMobile` as the target, but what
+   goes on the home screen?
+3. It needs an Apple Developer account for TestFlight and APNs; eacp's
+   `EACP_APPLE_DEVELOPMENT_TEAM` takes the team id.
