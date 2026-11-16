@@ -173,7 +173,8 @@ void applyPaletteColor(Pen& pen, int code, const Theme& theme)
         if (code < range.firstCode || code > range.lastCode)
             continue;
 
-        const auto color = theme.ansi[(std::size_t) (code - range.firstCode + range.firstPaletteIndex)];
+        const auto paletteIndex = code - range.firstCode + range.firstPaletteIndex;
+        const auto color = theme.ansi[static_cast<std::size_t>(paletteIndex)];
 
         if (range.isForeground)
             setForeground(pen, color);

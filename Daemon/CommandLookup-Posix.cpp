@@ -1,6 +1,7 @@
 #include "CommandLookup.h"
 
 #include <eacp/Core/Process/Process.h>
+#include <eacp/Core/Utils/Strings.h>
 
 #include <cstdlib>
 #include <sstream>
@@ -53,7 +54,9 @@ bool isCommandInstalled(const std::string& command, const std::string& searchPat
 
     for (auto directory = std::string {}; std::getline(directories, directory, ':');)
     {
-        if (!directory.empty() && access((directory + "/" + program).c_str(), X_OK) == 0)
+        if (!directory.empty()
+            && access(eacp::Strings::concat(directory, "/", program).c_str(), X_OK)
+                   == 0)
             return true;
     }
 

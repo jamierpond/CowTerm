@@ -53,7 +53,12 @@ void wrapParagraphToWidth(const std::string& paragraph,
         auto word = paragraph.substr(start, end - start);
         start = end + 1;
 
-        const auto joined = line.empty() ? word : line + " " + word;
+        auto joined = line;
+
+        if (!joined.empty())
+            joined += ' ';
+
+        joined += word;
 
         if (fits(joined))
         {

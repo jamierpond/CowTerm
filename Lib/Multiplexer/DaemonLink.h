@@ -19,7 +19,7 @@ public:
     virtual bool isConnected() const = 0;
     virtual void send(const std::string& message) = 0;
 
-    std::function<void(std::string)> onMessage = [](std::string) {};
+    std::function<void(std::string)> onMessage = [](const std::string&) {};
     eacp::Callback onDisconnected = [] {};
 };
 

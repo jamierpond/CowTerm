@@ -209,7 +209,7 @@ const auto kittySpecKeys = std::array {
 struct NamedModifiers
 {
     eacp::Graphics::ModifierKeys keys;
-    int kittyValue;
+    int kittyValue = 0;
 };
 
 eacp::Graphics::ModifierKeys controlShift()

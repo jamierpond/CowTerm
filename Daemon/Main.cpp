@@ -405,7 +405,7 @@ struct Daemon
         return paneStore.document<term::TerminalState>("pane-" + id);
     }
 
-    void forgetSavedPane(const std::string& id)
+    void forgetSavedPane(const std::string& id) const
     {
         eacp::Files::removeFile(paneDocument(id).filePath());
     }

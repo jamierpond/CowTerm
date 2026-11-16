@@ -63,7 +63,7 @@ public:
     std::vector<TerminalView*> panes() const;
 
     // Panes skip frames while off screen; call when the tree is shown again.
-    void repaintAllPanes();
+    void repaintAllPanes() const;
 
     // Leaves whose foreground process or title says a Claude Code
     // conversation runs there.
@@ -147,7 +147,7 @@ private:
     Node* leafFor(const TerminalView* view) const;
     void setActive(Node* leaf);
     void removeLeaf(Node* leaf);
-    void collapseIntoSurvivingSibling(Node& parent, const Node& closing);
+    void collapseIntoSurvivingSibling(Node& collapsingSplit, const Node& closing);
     Node* findFirstLeafUnder(Node* node) const;
     Node* findNearestLeafInDirection(char direction) const;
 

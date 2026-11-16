@@ -102,14 +102,15 @@ struct BridgeApp
             return fail("cowtermd did not start (is it installed beside ct?)");
 
         daemon = std::move(messenger);
-        daemon->onMessage = [this](std::string body) { handleDaemonMessage(std::move(body)); };
+        daemon->onMessage = [this](const std::string& body)
+        { handleDaemonMessage(body); };
         daemon->onDisconnected = [this] { handleDaemonGone(); };
         daemon->send(proto::make("hello"));
         helloTimer = std::make_unique<Threads::Timer>([this] { restartOutdatedDaemon(); },
                                                       daemonHelloTimeout);
     }
 
-    void handleDaemonMessage(std::string body)
+    void handleDaemonMessage(const std::string& body)
     {
         if (ready)
             return relay.receiveFromDaemon(body);
@@ -241,7 +242,7 @@ struct BridgeApp
         reader.detach();
     }
 
-    void fail(const std::string& reason)
+    void fail(const std::string& reason) const
     {
         relay.announceFailure(reason);
         Apps::quit(exitFail);

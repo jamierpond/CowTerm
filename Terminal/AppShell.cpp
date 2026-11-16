@@ -175,7 +175,7 @@ std::optional<NotifyUserPaneLabel>
 // The prompt window floats over everything, but while CowTerm is not the app
 // in front a desktop notification is what reaches the user.
 void AppShell::ringBackForNotifyUser(const NotifyUserRequest& request,
-                                     const std::string& title)
+                                     const std::string& title) const
 {
     if (windowFocused)
         return;

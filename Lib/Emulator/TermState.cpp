@@ -446,8 +446,8 @@ ParserState TermParser::saveState() const
     saved.params = collected.groups;
     saved.paramsNumberCount = (int) collected.numberCount;
     saved.paramsTooMany = collected.tooManyNumbers;
-    saved.privateMarker = privateMarker;
-    saved.intermediate = intermediate;
+    saved.privateMarker = static_cast<unsigned char>(privateMarker);
+    saved.intermediate = static_cast<unsigned char>(intermediate);
     saved.oscBufferHex = encodeHex(oscBuffer);
     saved.stringEscPending = stringEscPending;
     saved.charsetTarget = charsetTarget;

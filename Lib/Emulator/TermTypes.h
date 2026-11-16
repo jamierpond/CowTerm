@@ -170,5 +170,5 @@ struct Theme
 
 // East-Asian/emoji width classes the renderer and screen model agree on:
 // 0 = combining/zero-width, 2 = double cell, 1 = everything else.
-int charWidth(char32_t cp);
+int charWidth(char32_t codepoint);
 } // namespace term

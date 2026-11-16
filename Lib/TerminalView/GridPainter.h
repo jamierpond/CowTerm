@@ -132,7 +132,7 @@ private:
     GlyphQuad placeGlyph(const GlyphSlot& slot,
                          eacp::Graphics::Point penOnBaseline,
                          const eacp::Graphics::Color& tint,
-                         bool colored);
+                         bool colored) const;
     void queueGlyph(const GlyphSlot& slot,
                     eacp::Graphics::Point penOnBaseline,
                     const eacp::Graphics::Color& tint,

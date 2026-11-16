@@ -87,7 +87,7 @@ auto tAnsiBackgroundReachesThePixels =
 {
     // Five glyphs and five blank cells, all on red: the blanks are pure
     // background, so this cannot pass on glyph ink alone.
-    const auto image = renderAfter(redHelloCommand);
+    const auto image = renderAfter(getRedHelloCommand());
 
     if (image.width() == 0)
         return;
@@ -104,7 +104,7 @@ auto tBackgroundSurvivesTheCursorPass =
     // begin() on the same renderer, and begin() clears whatever is queued.
     // With the backgrounds left queued until then, the cursor pass threw the
     // whole frame's worth away and the terminal drew none at all.
-    const auto image = renderAfter(redHelloCommand);
+    const auto image = renderAfter(getRedHelloCommand());
 
     if (image.width() == 0)
         return;
@@ -117,7 +117,7 @@ auto tPlainTextHasNoBackground = test("Render/plainTextPaintsNoBackground") = []
 {
     // The other direction, so the checks above cannot pass by painting red
     // over everything.
-    const auto image = renderAfter(plainHelloCommand);
+    const auto image = renderAfter(getPlainHelloCommand());
 
     if (image.width() == 0)
         return;

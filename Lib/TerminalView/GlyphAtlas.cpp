@@ -26,7 +26,7 @@ void registerEmbeddedFonts()
         {
             const auto resource = ResEmbed::get(name);
 
-            if (resource.size() == 0)
+            if (resource.empty())
                 continue;
 
             const auto resourceSize = static_cast<int>(resource.size());

@@ -124,7 +124,8 @@ private:
     void rudderChanged();
     void showPaneAndBringToFront(const std::string& shellId);
     std::optional<NotifyUserPaneLabel> describePaneForNotifyUser(const std::string& shellId) const;
-    void ringBackForNotifyUser(const NotifyUserRequest& request, const std::string& title);
+    void ringBackForNotifyUser(const NotifyUserRequest& request,
+                               const std::string& title) const;
 
     AppConfig config = loadConfig();
     // Ahead of the manager, so it outlives the session teardown that still

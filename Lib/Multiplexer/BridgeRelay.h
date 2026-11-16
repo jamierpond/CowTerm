@@ -22,10 +22,10 @@ public:
 
     // False once the app's stream stops parsing; nothing more is relayed.
     bool receiveFromApp(std::string_view bytes);
-    void receiveFromDaemon(const std::string& message);
+    void receiveFromDaemon(const std::string& message) const;
 
-    void announceReady(std::string_view ctVersion);
-    void announceFailure(std::string_view reason);
+    void announceReady(std::string_view ctVersion) const;
+    void announceFailure(std::string_view reason) const;
 
 private:
     // "scan" lists this machine's projects (the app's picker asks); the

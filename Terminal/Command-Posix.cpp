@@ -44,6 +44,6 @@ void openInBrowser(const std::string& url)
 {
     constexpr auto* opener = eacp::Platform::isMac() ? "open" : "xdg-open";
     runViaLoginShellAsync(std::string {opener} + " " + shellQuote(url),
-                          [](CommandOutput) {});
+                          [](const CommandOutput&) {});
 }
 } // namespace term

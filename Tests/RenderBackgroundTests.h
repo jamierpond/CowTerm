@@ -6,8 +6,8 @@
 namespace term::tests
 {
 // HELLO and five blank cells, all on ANSI red (SGR 41), then a reset.
-extern const char* const redHelloCommand;
+const char* getRedHelloCommand();
 
 // HELLO with no styling at all.
-extern const char* const plainHelloCommand;
+const char* getPlainHelloCommand();
 } // namespace term::tests

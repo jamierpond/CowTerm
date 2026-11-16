@@ -117,7 +117,7 @@ std::u32string TermScreen::findClusterText(const Cell& cell) const
     if (cell.isGrapheme() && graphemes.holds(cell.value()))
         return graphemes.find(cell.value());
 
-    return std::u32string(1, (char32_t) cell.value());
+    return {static_cast<char32_t>(cell.value())};
 }
 
 ResolvedCell TermScreen::resolveCell(const Cell& cell) const

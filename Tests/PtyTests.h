@@ -16,7 +16,7 @@ constexpr auto budget = std::chrono::milliseconds {2500};
 
 // A command that does nothing, quietly, for a few seconds, in the shell the
 // platform's Pty runs commands through.
-extern const char* const idleCommand;
+const char* getIdleCommand();
 
 // Starts a shell running `command` and lets its reader thread settle into a
 // blocking read.

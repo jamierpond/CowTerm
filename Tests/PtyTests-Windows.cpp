@@ -6,7 +6,10 @@ using namespace nano;
 using namespace term::tests;
 
 // Commands run through PowerShell (cmd only when it is missing).
-const char* const term::tests::idleCommand = "Start-Sleep -Seconds 3";
+const char* term::tests::getIdleCommand()
+{
+    return "Start-Sleep -Seconds 3";
+}
 
 // ConPTY's own hazard: ClosePseudoConsole waits for the console to flush its
 // output, so with a shell writing flat out and nobody draining the pipe it

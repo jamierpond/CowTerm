@@ -10,7 +10,10 @@
 using namespace nano;
 using namespace term::tests;
 
-const char* const term::tests::idleCommand = "sleep 3";
+const char* term::tests::getIdleCommand()
+{
+    return "sleep 3";
+}
 
 // A shell that traps SIGHUP must not be able to wedge quit: shutdown escalates
 // to an unignorable SIGKILL after a short grace period.
@@ -36,7 +39,7 @@ auto environmentReachesShell = test("Pty sets the extra environment in the shell
 
     const auto started = pty.start(
         options,
-        [output, outputLock](std::string data)
+        [output, outputLock](const std::string& data)
         {
             auto lock = std::scoped_lock {*outputLock};
             *output += data;

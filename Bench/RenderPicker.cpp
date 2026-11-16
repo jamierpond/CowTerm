@@ -10,6 +10,7 @@
 
 #include <eacp/Core/App/App.h>
 #include <eacp/Core/Threads/EventLoop.h>
+#include <eacp/Core/Utils/Strings.h>
 #include <eacp/UI/UI.h>
 
 #include <cstdio>
@@ -102,6 +103,6 @@ int main(int argc, char** argv)
 
     const auto outputPath = std::string {argv[1]};
     const auto query = argc > 2 ? std::string {argv[2]} : std::string {};
-    const auto selectedRow = argc > 3 ? std::atoi(argv[3]) : 0;
+    const auto selectedRow = argc > 3 ? eacp::Strings::parseIntOr(argv[3]) : 0;
     return Apps::run([&] { Apps::quit(renderPicker(outputPath, query, selectedRow)); });
 }

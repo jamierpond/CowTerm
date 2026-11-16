@@ -301,7 +301,7 @@ public:
             return false;
 
         auto routes = DaemonClient::Routes {};
-        routes.onOutput = std::move(onOutput);
+        routes.onOutput = onOutput;
         routes.onState = [restore = onRestoreState, status = onStatusChanged](const std::string& state)
         {
             status({});

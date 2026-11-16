@@ -40,7 +40,7 @@ frecencysearch::SearchableTexts getSearchableTexts(const PaletteItem& item)
     }
 
     if (item.claude)
-        texts.details.push_back("claude");
+        texts.details.emplace_back("claude");
 
     return texts;
 }

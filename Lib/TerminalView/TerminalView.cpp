@@ -724,6 +724,8 @@ bool TerminalView::handleSpecialKey(const KeyEvent& event)
     return true;
 }
 
+// keyDown's handler table takes non-const members.
+// NOLINTNEXTLINE(readability-make-member-function-const)
 bool TerminalView::handleInterceptedKey(const KeyEvent& event)
 {
     return interceptKey(event);

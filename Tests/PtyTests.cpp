@@ -31,9 +31,8 @@ std::unique_ptr<Pty> startShell(const std::string& command)
 {
     auto pty = std::make_unique<Pty>();
 
-    const auto started = pty->start({{80, 24}, {}, command},
-                                    [](std::string) {},
-                                    [] {});
+    const auto started =
+        pty->start({{80, 24}, {}, command}, [](const std::string&) {}, [] {});
     check(started, "pty.start");
 
     // Let the reader thread reach its blocking read() on the master fd. The
@@ -81,22 +80,19 @@ using namespace term::tests;
 
 // A shell with nothing to do still tears down without hanging.
 auto normalShell = test("Pty shutdown returns promptly for a normal shell") = []
-{
-    check(shutsDownWithin(startShell(idleCommand), budget));
-};
+{ check(shutsDownWithin(startShell(getIdleCommand()), budget)); };
 
 // The exact crash: a silent shell leaves the reader thread parked in read() on
 // the master fd (ReadFile on the output pipe on Windows). Closing it out from
 // under the read used to deadlock.
-auto silentShell = test("Pty shutdown does not deadlock while the reader is blocked") = []
-{
-    check(shutsDownWithin(startShell(idleCommand), budget));
-};
+auto silentShell =
+    test("Pty shutdown does not deadlock while the reader is blocked") = []
+{ check(shutsDownWithin(startShell(getIdleCommand()), budget)); };
 
 // terminate()/detach() and ~Pty can both call shutdown(); the second is a no-op.
 auto doubleShutdown = test("Pty shutdown is safe to call twice") = []
 {
-    auto pty = startShell(idleCommand);
+    auto pty = startShell(getIdleCommand());
     pty->shutdown();
     check(shutsDownWithin(std::move(pty), budget));
 };
@@ -109,7 +105,10 @@ auto liveProcessInfo = test("Pty reports the shell's working directory and proce
     const auto directory = std::filesystem::canonical(std::filesystem::temp_directory_path());
 
     auto pty = std::make_unique<term::Pty>();
-    check(pty->start({{80, 24}, directory.string(), idleCommand}, [](std::string) {}, [] {}),
+    check(pty->start(
+              {{80, 24}, directory.string(), getIdleCommand()},
+              [](const std::string&) {},
+              [] {}),
           "pty.start");
 
     const auto isInStartDirectory = [&]

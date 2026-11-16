@@ -108,7 +108,7 @@ using Arguments = std::vector<std::string>;
 
 Arguments dropFirst(const Arguments& args)
 {
-    return Arguments(args.begin() + 1, args.end());
+    return {args.begin() + 1, args.end()};
 }
 
 int printUsage(const Arguments&)

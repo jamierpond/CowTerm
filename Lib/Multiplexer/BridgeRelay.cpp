@@ -18,17 +18,17 @@ bool BridgeRelay::receiveFromApp(std::string_view bytes)
     return !decoder.hasFailed();
 }
 
-void BridgeRelay::receiveFromDaemon(const std::string& message)
+void BridgeRelay::receiveFromDaemon(const std::string& message) const
 {
     writeToApp(encodeFrame(message));
 }
 
-void BridgeRelay::announceReady(std::string_view ctVersion)
+void BridgeRelay::announceReady(std::string_view ctVersion) const
 {
     writeToApp(encodeFrame(makeHelloMessage(ctVersion)));
 }
 
-void BridgeRelay::announceFailure(std::string_view reason)
+void BridgeRelay::announceFailure(std::string_view reason) const
 {
     writeToApp(encodeFrame(makeErrorMessage(reason)));
 }
@@ -49,7 +49,7 @@ std::vector<std::string> splitRoots(const std::string& payload, const std::strin
         auto root = payload.substr(start, end - start);
 
         if (!root.empty() && root[0] == '~')
-            root = homeDirectory + root.substr(1);
+            root.replace(0, 1, homeDirectory);
 
         if (!root.empty())
             roots.push_back(std::move(root));

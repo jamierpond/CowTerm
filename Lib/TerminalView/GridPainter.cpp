@@ -319,7 +319,7 @@ void GridPainter::forEachCellGlyph(const ResolvedCell& cell, Visit&& visit)
 GlyphQuad GridPainter::placeGlyph(const GlyphSlot& slot,
                                   Point penOnBaseline,
                                   const Color& tint,
-                                  bool colored)
+                                  bool colored) const
 {
     const auto scale = tools.atlas.scale();
 

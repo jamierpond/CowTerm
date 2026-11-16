@@ -3,6 +3,7 @@
 #include <TerminalView/CellText.h>
 
 #include <NanoTest/NanoTest.h>
+#include <eacp/Core/Utils/Strings.h>
 
 #include <string>
 #include <string_view>
@@ -99,7 +100,8 @@ auto tStylesAreShared = test("Styles/aFullStyleTableDropsUnusedStyles") = []
         const auto red = std::to_string(index % 256);
         const auto green = std::to_string(index / 256 % 256);
         const auto blue = std::to_string(index / 65536);
-        fed.parser.feed("\033[38;2;" + red + ";" + green + ";" + blue + "mX\r");
+        fed.parser.feed(
+            eacp::Strings::concat("\033[38;2;", red, ";", green, ";", blue, "mX\r"));
     }
 
     const auto last = styleCount - 1;

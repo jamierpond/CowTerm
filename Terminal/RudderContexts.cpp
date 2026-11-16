@@ -181,7 +181,7 @@ bool shouldPrependBranch(const std::string& branch, const std::string& title)
 
 std::string paneTitle(const RudderPane& pane, const std::string& home)
 {
-    const auto cwd = compactPath(pane.cwd, home);
+    auto cwd = compactPath(pane.cwd, home);
     auto title = withoutLeadingVersion(withoutStatusGlyph(pane.title));
     const auto command = commandName(pane.command);
 

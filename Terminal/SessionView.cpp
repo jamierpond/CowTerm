@@ -290,7 +290,7 @@ std::vector<TerminalView*> SessionView::panes() const
     return views;
 }
 
-void SessionView::repaintAllPanes()
+void SessionView::repaintAllPanes() const
 {
     for (auto* pane: panes())
         pane->repaint();
