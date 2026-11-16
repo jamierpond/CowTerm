@@ -1,3 +1,10 @@
+build*/
+cmake-build-*/
+.cache/
+.idea/
+.DS_Store
+.lockstep-cache/
+
 # CMake build trees
 /build/
 /cmake-build-*/
@@ -6,7 +13,6 @@ CMakeUserPresets.json
 .idea
 
 # macOS
-.DS_Store
 .cache/clangd/index
 cowcrash.txt
 /build-noipo
