@@ -47,6 +47,12 @@ test: configure
     {{deps}} cmake --build {{build_dir}}
     {{deps}} ctest --test-dir {{build_dir}} --output-on-failure
 
+[doc("Build everything, then run clang-tidy (eacp's checks) over CowTerm's sources; fails on any finding")]
+[unix]
+tidy: configure
+    {{deps}} cmake --build {{build_dir}}
+    {{deps}} scripts/tidy.sh {{build_dir}}
+
 # Every rebuild is a new ad-hoc identity to macOS, so it keeps the
 # old privacy grant switched on in System Settings while refusing it to the
 # new binary. Resetting before launch makes the app ask again for real. The
