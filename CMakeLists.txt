@@ -43,10 +43,9 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 # before eacp is added, so its libraries are built the same way in every pond app.
 set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
 
-# eacp develop, which carries PR #141 since it merged: Windows keys reach the
-# focused view, KeyEvent::charactersIgnoringModifiers is filled in (the Ctrl+A
-# leader matches on it), and removing a hovered nested subtree no longer leaves
-# a dangling hoveredView. Not `main`, which lags develop.
+# eacp jp/develop: develop plus Jamie's unmerged fixes, one commit each. CowTerm
+# needs #268 (a hidden GPUView gives back its frame memory, so hidden sessions
+# don't hold GPU surfaces). Move back to develop once #268 merges.
 # Provides eacp-text (GlyphAtlas.h) and the IPC::Messenger layer the session
 # daemon and DaemonClient ride on.
 # A remote machine needs only ct and the session daemon (docs/RemoteSessions.md).
@@ -62,9 +61,8 @@ endif ()
 lockstep_add_package(
         NAME eacp
         GITHUB_REPOSITORY eyalamirmusic/eacp
-        GIT_TAG develop
+        GIT_TAG jp/develop
         SYSTEM YES
-        PATCHES "${CMAKE_CURRENT_LIST_DIR}/Patches/eacp-hidden-gpuview-releases-frame-memory.patch"
         OPTIONS ${COWTERM_EACP_OPTIONS})
 
 # Crash reports (Crashout): the app and the daemon write one to
