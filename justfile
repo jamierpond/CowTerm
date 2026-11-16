@@ -188,3 +188,8 @@ rebuild: clean build
 [macos]
 debug-popup: build
     open -n --env COWTERM_POPUP_DEBUG=1 "{{build_dir}}/Terminal/CowTerm.app"
+
+[doc('clang-format every tracked source in place')]
+[unix]
+format:
+    git ls-files '*.h' '*.cpp' '*.mm' | xargs clang-format -i
