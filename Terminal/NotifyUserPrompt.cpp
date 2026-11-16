@@ -90,11 +90,11 @@ TextWidthMeasurer NotifyUserPrompt::createMeasurer(const UI::Font& font) const
     return [this, &font](const std::string& candidate) { return measureText(candidate, font); };
 }
 
-std::string NotifyUserPrompt::truncateTextToWidth(const std::string& text,
+std::string NotifyUserPrompt::truncateTextToWidth(const std::string& source,
                                                   float width,
                                                   const UI::Font& font) const
 {
-    return term::truncateTextToWidth(text, width, createMeasurer(font));
+    return term::truncateTextToWidth(source, width, createMeasurer(font));
 }
 
 float NotifyUserPrompt::calculateLineHeight(const UI::Font& font) const

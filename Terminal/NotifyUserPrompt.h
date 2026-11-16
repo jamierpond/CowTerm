@@ -87,7 +87,7 @@ private:
     float calculateLineHeight(const eacp::UI::Font& font) const;
     float calculateButtonWidth(const std::string& caption) const;
     TextWidthMeasurer createMeasurer(const eacp::UI::Font& font) const;
-    std::string truncateTextToWidth(const std::string& text,
+    std::string truncateTextToWidth(const std::string& source,
                                     float width,
                                     const eacp::UI::Font& font) const;
     std::vector<std::string> answerChoices() const;
