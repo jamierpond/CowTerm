@@ -40,11 +40,15 @@ while time.time() < deadline:
         if not chunk:
             break
         buffer += chunk
-for line in buffer.split(b"\n"):
-    if line.startswith(b"daemon-hello"):
-        print(f"{destination}: daemon protocol {line.split()[1].decode()}")
-bridge.stdin.close()
-bridge.wait(5)
+while b"\n" in buffer:
+    length_line, rest = buffer.split(b"\n", 1)
+    length = int(length_line) if length_line.isdigit() else 0
+    message, buffer = rest[:length], rest[length:]
+    if message.startswith(b"daemon-hello"):
+        print(f"{destination}: daemon protocol {message.split()[1].decode()}")
+    if length == 0:
+        break
+bridge.kill()
 PYTHON
 }
 
