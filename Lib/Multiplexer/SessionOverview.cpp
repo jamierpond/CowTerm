@@ -1,0 +1,143 @@
+#include "SessionOverview.h"
+
+#include <eacp/Core/Utils/Strings.h>
+
+#include <algorithm>
+#include <map>
+#include <utility>
+
+namespace term::overview
+{
+namespace
+{
+constexpr auto millisecondsPerMinute = std::int64_t {60000};
+constexpr auto activityColumnCount = 6;
+constexpr auto waitingState = "waiting";
+constexpr auto workingState = "working";
+constexpr auto finishedState = "finished";
+
+std::int64_t readMilliseconds(const std::string& text)
+{
+    return eacp::Strings::parseOr<std::int64_t>(text, 0);
+}
+
+// Whole minutes between two times, never negative.
+std::int64_t calculateWholeMinutesBetween(std::int64_t earlier, std::int64_t later)
+{
+    return std::max<std::int64_t>(0, (later - earlier) / millisecondsPerMinute);
+}
+
+std::string describeState(const PaneActivityReport& activity, std::int64_t now)
+{
+    const auto minutes = std::to_string(calculateWholeMinutesBetween(activity.stateSinceMilliseconds, now));
+
+    if (activity.state == waitingState)
+        return "waiting: " + activity.stateMessage;
+
+    if (activity.state == workingState)
+        return "working, " + minutes + " min";
+
+    if (activity.state == finishedState)
+        return "finished " + minutes + " min ago";
+
+    return {};
+}
+
+bool isClaudeProcess(const std::string& foregroundProcess)
+{
+    return foregroundProcess.find("claude") != std::string::npos;
+}
+
+// The pane whose state speaks for its session: a waiting one, else the one
+// whose state changed last.
+const PaneOnHost& findPaneThatSpeaksForSession(const std::vector<const PaneOnHost*>& panes)
+{
+    const auto isWaiting = [](const PaneOnHost* pane) { return pane->activity.state == waitingState; };
+
+    if (const auto waiting = std::ranges::find_if(panes, isWaiting); waiting != panes.end())
+        return **waiting;
+
+    return **std::ranges::max_element(
+        panes, {}, [](const PaneOnHost* pane) { return pane->activity.stateSinceMilliseconds; });
+}
+
+struct SessionPanes
+{
+    std::string host;
+    std::string sessionName;
+    std::vector<const PaneOnHost*> panes;
+};
+
+OverviewRow makeRow(const SessionPanes& session, std::int64_t now)
+{
+    auto row = OverviewRow {};
+    row.host = session.host;
+    row.sessionName = session.sessionName;
+
+    for (const auto* pane: session.panes)
+    {
+        row.paneIds.push_back(pane->paneId);
+        row.isClaude = row.isClaude || isClaudeProcess(pane->foregroundProcess);
+        row.lastUsedMilliseconds = std::max(row.lastUsedMilliseconds, pane->activity.lastInputMilliseconds);
+    }
+
+    const auto& speaker = findPaneThatSpeaksForSession(session.panes);
+    row.isWaiting = speaker.activity.state == waitingState;
+    row.stateLine = describeState(speaker.activity, now);
+    return row;
+}
+
+bool shouldRowComeFirst(const OverviewRow& first, const OverviewRow& second)
+{
+    if (first.isWaiting != second.isWaiting)
+        return first.isWaiting;
+
+    return first.lastUsedMilliseconds > second.lastUsedMilliseconds;
+}
+} // namespace
+
+std::vector<PaneActivityReport> parseActivityReport(const std::string& payload)
+{
+    auto reports = std::vector<PaneActivityReport> {};
+
+    for (const auto& line: eacp::Strings::split(payload, '\n'))
+    {
+        const auto columns = eacp::Strings::split(line, '\t');
+
+        if (columns.size() < activityColumnCount)
+            continue;
+
+        reports.push_back({columns[0],
+                           readMilliseconds(columns[1]),
+                           readMilliseconds(columns[2]),
+                           columns[3],
+                           readMilliseconds(columns[4]),
+                           columns[5]});
+    }
+
+    return reports;
+}
+
+std::vector<OverviewRow> buildOverviewRows(const std::vector<HostPanes>& hosts,
+                                           std::int64_t nowMilliseconds)
+{
+    auto rows = std::vector<OverviewRow> {};
+
+    for (const auto& host: hosts)
+    {
+        auto panesBySession = std::map<std::string, std::vector<const PaneOnHost*>> {};
+
+        for (const auto& pane: host.panes)
+        {
+            if (!pane.sessionName.empty())
+                panesBySession[pane.sessionName].push_back(&pane);
+        }
+
+        for (const auto& [sessionName, panes]: panesBySession)
+            rows.push_back(makeRow({host.host, sessionName, panes}, nowMilliseconds));
+    }
+
+    std::ranges::stable_sort(rows, shouldRowComeFirst);
+    return rows;
+}
+} // namespace term::overview

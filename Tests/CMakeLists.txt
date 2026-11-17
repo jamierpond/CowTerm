@@ -204,6 +204,7 @@ nano_add_executable(CowTermPaneSizeOwnerTests
         SOURCES
             PaneSizeOwnerTests.cpp
             DaemonClientSizeOwnerTests.cpp
+            SessionOverviewTests.cpp
         TARGETS CowTerm::Multiplexer)
 
 # Remote sessions: searchDirs host entries and the framing `ct bridge` speaks

@@ -30,6 +30,7 @@ add_library(CowTermMultiplexer STATIC
         RemoteHosts.cpp
         RemoteInstall.cpp
         RemoteLocation.cpp
+        SessionOverview.cpp
         SshBridgeLink.cpp
         TextLayout.cpp
         UsageLog.cpp)
