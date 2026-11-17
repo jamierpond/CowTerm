@@ -101,10 +101,12 @@ void PhoneLaunch::logWhatTheConnectionHears()
     connection.onLinkStateChanged = [this](PhoneLinkState state)
     {
         LOG("phone: link ", describeLinkState(state), " ", connection.getFailureReason());
+        onLinkStateChanged(state);
     };
 
-    connection.onPaneChosen = [](const ChosenPane& pane)
+    connection.onPaneChosen = [this](const ChosenPane& pane)
     {
+        onPaneChosen(pane);
         LOG("phone: pane ",
             pane.paneId,
             " on ",

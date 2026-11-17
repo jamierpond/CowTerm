@@ -1,19 +1,30 @@
 #include "InterfaceOrientation.h"
+#include "PaneScreen.h"
 #include "PhoneLaunch.h"
 
 #include "TerminalView/GlyphAtlas.h"
 #include "TerminalView/TerminalView.h"
 
 #include <eacp/Core/App/App.h>
+#include <eacp/Core/Threads/EventLoop.h>
+#include <eacp/Core/Threads/Timer.h>
 #include <eacp/Core/Utils/Logging.h>
 #include <eacp/Graphics/Window/Window.h>
 
+#include <algorithm>
+#include <chrono>
+#include <cstdlib>
+#include <optional>
 #include <string_view>
 
 using namespace eacp;
 
 namespace
 {
+constexpr auto samplePaneCount = 3;
+constexpr auto streamedLinesPerSecond = 10;
+constexpr auto scrollBackDelay = Time::MS {5000};
+
 constexpr std::string_view sampleScreenText =
     "\x1b[1;32mjamie@tamby\x1b[0m:\x1b[1;34m~/projects/CowTerm\x1b[0m$ git status\r\n"
     "On branch \x1b[1mjp/ios-app\x1b[0m\r\n"
@@ -36,15 +47,26 @@ constexpr std::string_view sampleScreenText =
     "\x1b[1;32mjamie@tamby\x1b[0m:\x1b[1;34m~/projects/CowTerm\x1b[0m$ ";
 
 // Stands in for the daemon until the ssh link exists: the pane shows
-// sampleScreenText once and logs what is typed into it.
+// sampleScreenText, then, when asked to stream, a numbered line ten times a
+// second, and logs what is typed into it.
 class SampleTextShell final : public term::Shell
 {
 public:
+    explicit SampleTextShell(bool streamsOutputToUse)
+        : streamsOutput(streamsOutputToUse)
+    {
+    }
+
     bool start(const term::PtyOptions&,
-               std::function<void(std::string)> onOutput,
+               std::function<void(std::string)> onOutputToUse,
                std::function<void()>) override
     {
+        onOutput = std::move(onOutputToUse);
         onOutput(std::string {sampleScreenText});
+
+        if (streamsOutput)
+            streamTimer.emplace([this] { writeNextStreamedLine(); }, streamedLinesPerSecond);
+
         return true;
     }
 
@@ -54,15 +76,27 @@ public:
     std::string foregroundProcess() const override { return {}; }
     std::string currentWorkingDirectory() const override { return {}; }
 
-    void terminate() override {}
-    void detach() override {}
+    void terminate() override { streamTimer.reset(); }
+    void detach() override { streamTimer.reset(); }
+
+private:
+    void writeNextStreamedLine()
+    {
+        ++streamedLineCount;
+        onOutput("output line " + std::to_string(streamedLineCount) + "\r\n");
+    }
+
+    bool streamsOutput = false;
+    int streamedLineCount = 0;
+    std::function<void(std::string)> onOutput = [](std::string) {};
+    std::optional<Threads::Timer> streamTimer;
 };
 
-term::TerminalConfig makeSampleTextTerminalConfig()
+term::TerminalConfig makeSampleTextTerminalConfig(bool streamsOutput)
 {
     auto config = term::TerminalConfig {};
-    config.makeShell = [](const std::string&)
-    { return std::make_unique<SampleTextShell>(); };
+    config.makeShell = [streamsOutput](const std::string&)
+    { return std::make_unique<SampleTextShell>(streamsOutput); };
     return config;
 }
 
@@ -72,8 +106,74 @@ struct LaunchOptions
 {
     bool raisesSoftwareKeyboard = false;
     bool turnsToLandscape = false;
+    bool opensMenu = false;
+    bool streamsOutput = false;
+    bool scrollsBack = false;
+    cowterm::mobile::LinkState linkState = cowterm::mobile::LinkState::Live;
+    int paneCount = samplePaneCount;
     std::optional<term::phone::PhoneSettings> phoneSettings;
 };
+
+std::optional<cowterm::mobile::LinkState> parseLinkState(std::string_view name)
+{
+    using cowterm::mobile::LinkState;
+
+    if (name == "live")
+        return LinkState::Live;
+
+    if (name == "connecting")
+        return LinkState::Connecting;
+
+    if (name == "stalled")
+        return LinkState::Stalled;
+
+    return std::nullopt;
+}
+
+struct LaunchSwitch
+{
+    std::string_view name;
+    bool LaunchOptions::*member;
+};
+
+constexpr LaunchSwitch launchSwitches[] = {
+    {"--raise-keyboard", &LaunchOptions::raisesSoftwareKeyboard},
+    {"--landscape", &LaunchOptions::turnsToLandscape},
+    {"--menu", &LaunchOptions::opensMenu},
+    {"--stream", &LaunchOptions::streamsOutput},
+    {"--scroll-back", &LaunchOptions::scrollsBack},
+};
+
+bool applyLaunchSwitch(LaunchOptions& options, std::string_view argument)
+{
+    for (const auto& launchSwitch: launchSwitches)
+    {
+        if (argument == launchSwitch.name)
+        {
+            options.*launchSwitch.member = true;
+            return true;
+        }
+    }
+
+    return false;
+}
+
+void applyLaunchValue(LaunchOptions& options, std::string_view argument)
+{
+    constexpr auto linkPrefix = std::string_view {"--link="};
+    constexpr auto panesPrefix = std::string_view {"--panes="};
+
+    if (argument.starts_with(linkPrefix))
+    {
+        options.linkState =
+            parseLinkState(argument.substr(linkPrefix.size())).value_or(options.linkState);
+    }
+    else if (argument.starts_with(panesPrefix))
+    {
+        const auto count = std::string {argument.substr(panesPrefix.size())};
+        options.paneCount = std::atoi(count.c_str());
+    }
+}
 
 LaunchOptions parseLaunchOptions(int argc, char* argv[])
 {
@@ -84,60 +184,48 @@ LaunchOptions parseLaunchOptions(int argc, char* argv[])
     {
         const auto argument = std::string_view {argv[index]};
 
-        if (argument == "--raise-keyboard")
-            options.raisesSoftwareKeyboard = true;
-        else if (argument == "--landscape")
-            options.turnsToLandscape = true;
+        if (!applyLaunchSwitch(options, argument))
+            applyLaunchValue(options, argument);
     }
 
     return options;
 }
 
-void logSafeAreaInsets(const Graphics::Insets& insets)
+cowterm::mobile::PaneDescription makeSamplePaneDescription(int paneCount)
 {
-    LOG("safe area top ",
-        insets.top,
-        " left ",
-        insets.left,
-        " bottom ",
-        insets.bottom,
-        " right ",
-        insets.right);
+    auto pane = cowterm::mobile::PaneDescription {};
+    pane.hostName = "tamby";
+    pane.sessionName = "Grazer";
+    pane.previousSessionName = "CowTerm";
+    pane.paneCount = std::max(paneCount, 1);
+    return pane;
 }
-
-// The window's content: the terminal, kept inside the safe area so the
-// status bar, the camera housing and the home indicator never cover text.
-class MobileRootView final : public Graphics::View
-{
-public:
-    MobileRootView(const term::TerminalConfig& config, const std::string& paneId)
-        : terminal(config, {}, paneId)
-    {
-        addSubview(terminal);
-    }
-
-    void resized() override { placeTerminalInsideSafeArea(); }
-
-    void safeAreaInsetsChanged() override
-    {
-        logSafeAreaInsets(getSafeAreaInsets());
-        placeTerminalInsideSafeArea();
-    }
-
-    term::TerminalView terminal;
-
-private:
-    void placeTerminalInsideSafeArea()
-    {
-        terminal.setBounds(getLocalBounds().inset(getSafeAreaInsets()));
-    }
-};
 
 Graphics::WindowOptions makeWindowOptions()
 {
     auto options = Graphics::WindowOptions {};
     options.statusBar = Graphics::StatusBar::LightText;
     return options;
+}
+
+// A finger dragging the pane down by scrollBackDistance and letting go: what
+// a reader does to scroll back, for a screenshot of the "n new" pill.
+void dragPaneDownToScrollBack(term::TerminalView& terminal)
+{
+    constexpr auto scrollBackDistance = 240.0f;
+    constexpr auto fingerId = 1;
+    const auto start = Graphics::Point {terminal.getLocalBounds().w / 2.0f, 100.0f};
+
+    auto touch = Graphics::TouchEvent {};
+    touch.id = fingerId;
+    touch.pos = start;
+    touch.downPos = start;
+    terminal.beginTouchScroll(touch);
+
+    touch.phase = Graphics::TouchPhase::Moved;
+    touch.pos = {start.x, start.y + scrollBackDistance};
+    terminal.moveTouchScroll(touch);
+    terminal.endTouchScrollWithVelocity(0.0f);
 }
 
 std::unique_ptr<cowterm::mobile::PhoneLaunch> makePhoneLaunch(const LaunchOptions& launchOptions)
@@ -148,21 +236,22 @@ std::unique_ptr<cowterm::mobile::PhoneLaunch> makePhoneLaunch(const LaunchOption
     return std::make_unique<cowterm::mobile::PhoneLaunch>(*launchOptions.phoneSettings);
 }
 
-// The daemon's pane when the launch named one; the sample text otherwise.
+// The daemon's pane when the launch named one; the sample shell otherwise.
 bool isOpeningAPhonePane(const std::unique_ptr<cowterm::mobile::PhoneLaunch>& phone)
 {
     return phone != nullptr && !phone->getPaneToOpen().empty();
 }
 
-term::TerminalConfig makeRootTerminalConfig(const std::unique_ptr<cowterm::mobile::PhoneLaunch>& phone)
+term::TerminalConfig makePaneTerminalConfig(const std::unique_ptr<cowterm::mobile::PhoneLaunch>& phone,
+                                            const LaunchOptions& launchOptions)
 {
     if (isOpeningAPhonePane(phone))
         return phone->makeTerminalConfig();
 
-    return makeSampleTextTerminalConfig();
+    return makeSampleTextTerminalConfig(launchOptions.streamsOutput);
 }
 
-std::string getRootPaneId(const std::unique_ptr<cowterm::mobile::PhoneLaunch>& phone)
+std::string getPaneId(const std::unique_ptr<cowterm::mobile::PhoneLaunch>& phone)
 {
     if (isOpeningAPhonePane(phone))
         return phone->getPaneToOpen();
@@ -170,11 +259,47 @@ std::string getRootPaneId(const std::unique_ptr<cowterm::mobile::PhoneLaunch>& p
     return {};
 }
 
+cowterm::mobile::LinkState toPaneScreenLinkState(term::phone::PhoneLinkState state)
+{
+    using term::phone::PhoneLinkState;
+    using cowterm::mobile::LinkState;
+
+    switch (state)
+    {
+        case PhoneLinkState::Live:
+            return LinkState::Live;
+        case PhoneLinkState::Connecting:
+            return LinkState::Connecting;
+        case PhoneLinkState::Stalled:
+            return LinkState::Stalled;
+        case PhoneLinkState::Unreachable:
+            return LinkState::Unreachable;
+    }
+
+    return LinkState::Connecting;
+}
+
+cowterm::mobile::PaneDescription describeChosenPane(const term::phone::ChosenPane& chosen)
+{
+    auto pane = cowterm::mobile::PaneDescription {};
+    pane.hostName = chosen.host;
+    pane.sessionName = chosen.sessionName;
+    pane.paneCount = std::max((int) chosen.sessionPaneIds.size(), 1);
+
+    const auto found = std::ranges::find(chosen.sessionPaneIds, chosen.paneId);
+
+    if (found != chosen.sessionPaneIds.end())
+        pane.activePaneIndex = (int) std::distance(chosen.sessionPaneIds.begin(), found);
+
+    return pane;
+}
+
 struct CowTermMobileApp
 {
-    explicit CowTermMobileApp(const LaunchOptions& launchOptions)
-        : phone(makePhoneLaunch(launchOptions))
-        , root(makeRootTerminalConfig(phone), getRootPaneId(phone))
+    explicit CowTermMobileApp(const LaunchOptions& launchOptionsToUse)
+        : launchOptions(launchOptionsToUse)
+        , phone(makePhoneLaunch(launchOptions))
+        , screen(makePaneTerminalConfig(phone, launchOptions), getPaneId(phone))
     {
         Apps::setSuspendHandler(
             [this](bool suspended)
@@ -189,28 +314,95 @@ struct CowTermMobileApp
             });
 
         window.events.onSoftwareKeyboardChanged =
-            [](const Graphics::SoftwareKeyboardChange& change)
+            [this](const Graphics::SoftwareKeyboardChange& change)
         {
             LOG("software keyboard covers ",
                 change.coveredHeight,
                 " points, animating ",
                 change.animationSeconds,
                 " s");
+            screen.setSoftwareKeyboardChange(change);
         };
 
+        if (phone != nullptr)
+            showWhatThePhoneConnectionHears();
+        else
+            showSamplePane();
+
+        applyLaunchOptions();
+    }
+
+    void showSamplePane()
+    {
+        auto pane = makeSamplePaneDescription(launchOptions.paneCount);
+        screen.setPaneDescription(pane);
+        screen.setLinkStatus({launchOptions.linkState, sampleLinkPictureTime()});
+
+        screen.actions.onChoosePane = [this, pane](int index) mutable
+        {
+            pane.activePaneIndex = index;
+            screen.setPaneDescription(pane);
+        };
+    }
+
+    // The picture stays as it was when the link stopped being live, so its
+    // age counts from then.
+    void showWhatThePhoneConnectionHears()
+    {
+        auto pane = cowterm::mobile::PaneDescription {};
+        pane.hostName = launchOptions.phoneSettings->destination.host;
+        screen.setPaneDescription(pane);
+
+        phone->onLinkStateChanged = [this](term::phone::PhoneLinkState state)
+        {
+            const auto linkState = toPaneScreenLinkState(state);
+
+            if (linkState == cowterm::mobile::LinkState::Live || isLive)
+                pictureTakenAt = std::chrono::steady_clock::now();
+
+            isLive = linkState == cowterm::mobile::LinkState::Live;
+            screen.setLinkStatus({linkState, pictureTakenAt});
+        };
+
+        phone->onPaneChosen = [this](const term::phone::ChosenPane& chosen)
+        { screen.setPaneDescription(describeChosenPane(chosen)); };
+    }
+
+    void applyLaunchOptions()
+    {
         if (launchOptions.raisesSoftwareKeyboard)
         {
-            root.terminal.setWantsTextInput(true);
-            root.terminal.focus();
+            screen.terminal.setWantsTextInput(true);
+            screen.terminal.focus();
         }
 
         if (launchOptions.turnsToLandscape)
             cowterm::mobile::requestLandscapeInterfaceOrientation(window);
+
+        if (launchOptions.opensMenu)
+            screen.openMenu();
+
+        if (launchOptions.scrollsBack)
+        {
+            Threads::callAfter(scrollBackDelay,
+                               [this] { dragPaneDownToScrollBack(screen.terminal); });
+        }
     }
 
+    // A picture taken twelve seconds before launch, so a pane that is not
+    // live has an age to show.
+    static std::chrono::steady_clock::time_point sampleLinkPictureTime()
+    {
+        constexpr auto samplePictureAge = std::chrono::seconds {12};
+        return std::chrono::steady_clock::now() - samplePictureAge;
+    }
+
+    LaunchOptions launchOptions;
     std::unique_ptr<cowterm::mobile::PhoneLaunch> phone;
-    MobileRootView root;
-    Graphics::Window window {root, makeWindowOptions()};
+    cowterm::mobile::PaneScreen screen;
+    std::chrono::steady_clock::time_point pictureTakenAt = std::chrono::steady_clock::now();
+    bool isLive = false;
+    Graphics::Window window {screen, makeWindowOptions()};
 };
 } // namespace
 

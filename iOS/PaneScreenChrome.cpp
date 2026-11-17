@@ -1,0 +1,392 @@
+#include "PaneScreenChrome.h"
+
+#include <eacp/Core/Threads/EventLoop.h>
+
+#include <algorithm>
+#include <chrono>
+
+namespace cowterm::mobile
+{
+using namespace eacp;
+using UI::Color;
+using UI::Point;
+using UI::Rect;
+
+namespace
+{
+constexpr auto fontFamily = "JetBrains Mono";
+constexpr auto topLineFontSize = 13.0f;
+constexpr auto barFontSize = 15.0f;
+constexpr auto barGlyphFontSize = 20.0f;
+constexpr auto menuNameFontSize = 15.0f;
+constexpr auto menuGestureFontSize = 12.0f;
+
+constexpr auto sidePadding = 12.0f;
+constexpr auto hostMarkSize = 8.0f;
+constexpr auto hostMarkGap = 8.0f;
+constexpr auto chipPadding = 10.0f;
+constexpr auto chipCornerRadius = 8.0f;
+constexpr auto paneDotSize = 8.0f;
+constexpr auto ringThickness = 1.5f;
+constexpr auto barDividerThickness = 1.0f;
+constexpr auto pillCornerRadius = 16.0f;
+constexpr auto menuCornerRadius = 14.0f;
+constexpr auto menuMargin = 12.0f;
+constexpr auto tallestMenuRow = 44.0f;
+constexpr auto shortestMenuRow = 30.0f;
+
+constexpr auto mutedTextAlpha = 0.55f;
+constexpr auto greyedTextAlpha = 0.3f;
+constexpr auto chipFillAlpha = 0.08f;
+constexpr auto dividerAlpha = 0.12f;
+constexpr auto menuBackdropAlpha = 0.5f;
+constexpr auto barBrightening = 0.03f;
+constexpr auto cardBrightening = 0.06f;
+
+constexpr auto longPressDelay = Time::MS {500};
+
+constexpr auto ansiRed = 1;
+constexpr auto ansiGreen = 2;
+constexpr auto ansiYellow = 3;
+constexpr auto ansiBlue = 4;
+
+constexpr auto previousSessionArrow = "\xe2\x80\xb9 ";
+constexpr auto keyboardGlyph = "\xe2\x8c\xa8";
+constexpr auto gitLabel = "git";
+constexpr auto menuGlyph = "\xe2\x98\xb0";
+
+double calculateSecondsSince(std::chrono::steady_clock::time_point then)
+{
+    const auto elapsed = std::chrono::steady_clock::now() - then;
+    return std::chrono::duration<double>(elapsed).count();
+}
+
+term::Rgb pickLinkStateColour(const term::Theme& theme, LinkState state)
+{
+    if (state == LinkState::Live)
+        return theme.ansi[ansiGreen];
+
+    if (state == LinkState::Connecting)
+        return theme.ansi[ansiYellow];
+
+    return theme.ansi[ansiRed];
+}
+
+void fillCircle(UI::Graphics& g, Point centre, float diameter)
+{
+    const auto radius = diameter / 2.0f;
+    g.fillRoundedRect({centre.x - radius, centre.y - radius, diameter, diameter}, radius);
+}
+
+struct RingColours
+{
+    Color fill;
+    Color ring;
+};
+
+// A pane dot for a pane that is not on screen: a ring, not a filled dot.
+void drawHollowPaneDot(UI::Graphics& g, Point centre, RingColours colours)
+{
+    g.setColour(colours.ring);
+    fillCircle(g, centre, paneDotSize);
+    g.setColour(colours.fill);
+    fillCircle(g, centre, paneDotSize - 2.0f * ringThickness);
+}
+
+UI::Font makeFont(float size)
+{
+    return UI::Font {fontFamily, size};
+}
+} // namespace
+
+TopLine::TopLine(const term::Theme& themeToUse)
+    : theme(themeToUse)
+{
+}
+
+void TopLine::paint(UI::Graphics& g)
+{
+    auto area = getLocalBounds().inset(sidePadding, 0.0f);
+    g.setColour(term::toColor(theme.background));
+    g.fillAll();
+
+    g.setColour(term::toColor(hostColour));
+    fillCircle(g, {area.x + hostMarkSize / 2.0f, area.center().y}, hostMarkSize);
+    area.removeFromLeft(hostMarkSize + hostMarkGap);
+
+    g.setFont(makeFont(topLineFontSize));
+    const auto status =
+        describeLinkStatus(link.state, calculateSecondsSince(link.pictureTakenAt));
+    const auto statusArea = area.removeFromRight(g.measureText(status));
+
+    g.setColour(term::toColor(pickLinkStateColour(theme, link.state)));
+    g.drawText(status, statusArea, UI::Justification::Right);
+
+    g.setColour(term::toColor(theme.foreground));
+    g.drawText(pane.hostName + "/" + pane.sessionName, area);
+}
+
+BottomBar::BottomBar(const term::Theme& themeToUse)
+    : theme(themeToUse)
+    , font(makeFont(barFontSize))
+{
+    setInterceptsMouseClicks(true);
+}
+
+BottomBar::~BottomBar()
+{
+    *alive = false;
+}
+
+std::string BottomBar::describePreviousSession() const
+{
+    return previousSessionArrow + pane.previousSessionName.value_or("");
+}
+
+BottomBarLayout BottomBar::calculateLayout() const
+{
+    auto chipWidth = std::optional<float> {};
+
+    if (pane.previousSessionName)
+        chipWidth = previousSessionWidth;
+
+    // The bar's own height at the top; below it the bar's colour runs on under
+    // the home indicator, as Safari's does.
+    const auto bar = getLocalBounds().fromTop(bottomBarHeight);
+    return calculateBottomBarLayout(bar, chipWidth, pane.paneCount);
+}
+
+void BottomBar::paint(UI::Graphics& g)
+{
+    const auto background = term::toColor(theme.background).brighter(barBrightening);
+    const auto foreground = term::toColor(theme.foreground);
+
+    g.setColour(background);
+    g.fillAll();
+    g.setColour(foreground.withAlpha(dividerAlpha));
+    g.fillRect(getLocalBounds().fromTop(barDividerThickness));
+
+    g.setFont(font);
+    previousSessionWidth = g.measureText(describePreviousSession()) + 2.0f * chipPadding;
+    const auto layout = calculateLayout();
+
+    if (layout.previousSession)
+    {
+        const auto chip = layout.previousSession->inset(0.0f, chipPadding);
+        g.setColour(foreground.withAlpha(chipFillAlpha));
+        g.fillRoundedRect(chip, chipCornerRadius);
+        g.setColour(foreground);
+        g.drawText(describePreviousSession(), chip, UI::Justification::Centred);
+    }
+
+    for (auto index = 0; index < (int) layout.paneDots.size(); ++index)
+    {
+        const auto centre = layout.paneDots[(std::size_t) index].center();
+
+        if (index == pane.activePaneIndex)
+        {
+            g.setColour(term::toColor(theme.ansi[ansiBlue]));
+            fillCircle(g, centre, paneDotSize);
+        }
+        else
+        {
+            drawHollowPaneDot(g, centre, {background, foreground.withAlpha(mutedTextAlpha)});
+        }
+    }
+
+    g.setColour(foreground);
+    g.setFont(makeFont(barGlyphFontSize));
+    g.drawText(keyboardGlyph, layout.keyboard, UI::Justification::Centred);
+    g.drawText(menuGlyph, layout.overview, UI::Justification::Centred);
+
+    g.setFont(font);
+    g.setColour(foreground.withAlpha(mutedTextAlpha));
+    g.drawText(gitLabel, layout.git, UI::Justification::Centred);
+}
+
+void BottomBar::mouseDown(const UI::MouseEvent&)
+{
+    isFingerDown = true;
+    hasLongPressFired = false;
+    ++pressGeneration;
+    waitForLongPress();
+}
+
+void BottomBar::waitForLongPress()
+{
+    auto guard = std::weak_ptr<bool> {alive};
+    const auto generation = pressGeneration;
+
+    Threads::callAfter(longPressDelay,
+                       [this, guard, generation]
+                       {
+                           if (guard.expired() || !isStillHeldSince(generation))
+                               return;
+
+                           hasLongPressFired = true;
+                           actions.onOpenMenu();
+                       });
+}
+
+bool BottomBar::isStillHeldSince(int generation) const
+{
+    return isFingerDown && generation == pressGeneration;
+}
+
+// A finger that starts to travel is a swipe, not a long press.
+void BottomBar::mouseDrag(const UI::MouseEvent& event)
+{
+    if (hasMovedBeyondTapSlop(event.downPosition, event.position))
+        ++pressGeneration;
+}
+
+void BottomBar::mouseUp(const UI::MouseEvent& event)
+{
+    isFingerDown = false;
+    ++pressGeneration;
+
+    if (hasLongPressFired)
+        return;
+
+    const auto gesture = classifyBottomBarRelease(event.downPosition, event.position);
+
+    if (gesture == BottomBarGesture::Tap)
+    {
+        pressControlAt(event.downPosition);
+        return;
+    }
+
+    if (gesture == BottomBarGesture::SwipeUp)
+    {
+        actions.onOverview();
+        return;
+    }
+
+    const auto chosen = choosePaneAfterSwipe(pane.activePaneIndex, pane.paneCount, gesture);
+
+    if (chosen != pane.activePaneIndex)
+        actions.onChoosePane(chosen);
+}
+
+void BottomBar::pressControlAt(Point position)
+{
+    const auto hit = findBottomBarControlAt(calculateLayout(), position);
+
+    switch (hit.control)
+    {
+        case BottomBarControl::PreviousSession:
+            actions.onPreviousSession();
+            break;
+        case BottomBarControl::PaneDot:
+            actions.onChoosePane(hit.paneIndex);
+            break;
+        case BottomBarControl::Keyboard:
+            actions.onKeyboard();
+            break;
+        case BottomBarControl::Git:
+            actions.onGit();
+            break;
+        case BottomBarControl::Overview:
+            actions.onOverview();
+            break;
+        case BottomBarControl::None:
+            break;
+    }
+}
+
+NewLinesPill::NewLinesPill(const term::Theme& themeToUse)
+    : theme(themeToUse)
+{
+    setInterceptsMouseClicks(true);
+}
+
+void NewLinesPill::paint(UI::Graphics& g)
+{
+    g.setColour(term::toColor(theme.background));
+    g.fillAll();
+    g.setColour(term::toColor(theme.ansi[ansiBlue]));
+    g.fillRoundedRect(getLocalBounds(), pillCornerRadius);
+    g.setColour(term::toColor(theme.background));
+    g.setFont(makeFont(barFontSize));
+    g.drawText(formatNewLinesPill(newLineCount), getLocalBounds(), UI::Justification::Centred);
+}
+
+void NewLinesPill::mouseUp(const UI::MouseEvent&)
+{
+    onReturnToBottom();
+}
+
+ActionMenu::ActionMenu(const term::Theme& themeToUse)
+    : theme(themeToUse)
+{
+    setInterceptsMouseClicks(true);
+}
+
+float ActionMenu::calculateRowHeight() const
+{
+    const auto room = getHeight() - 2.0f * menuMargin;
+    const auto fitted = room / (float) std::max((int) actions.size(), 1);
+    return std::clamp(fitted, shortestMenuRow, tallestMenuRow);
+}
+
+// A card along the bottom, where the thumb that opened it already is.
+Rect ActionMenu::calculateCardBounds() const
+{
+    const auto height = calculateRowHeight() * (float) actions.size();
+    return getLocalBounds().inset(menuMargin).fromBottom(height);
+}
+
+void ActionMenu::paint(UI::Graphics& g)
+{
+    const auto foreground = term::toColor(theme.foreground);
+    g.setColour(term::toColor(theme.background));
+    g.fillAll();
+    g.setColour(Color::black(menuBackdropAlpha));
+    g.fillAll();
+
+    const auto card = calculateCardBounds();
+    g.setColour(term::toColor(theme.background).brighter(cardBrightening));
+    g.fillRoundedRect(card, menuCornerRadius);
+
+    auto rows = card.inset(sidePadding, 0.0f);
+    const auto rowHeight = calculateRowHeight();
+
+    for (const auto& action: actions)
+    {
+        auto row = rows.removeFromTop(rowHeight);
+        const auto alpha = action.isBuilt ? 1.0f : greyedTextAlpha;
+
+        g.setFont(makeFont(menuGestureFontSize));
+        g.setColour(foreground.withAlpha(alpha * mutedTextAlpha));
+        g.drawText(action.gesture, row, UI::Justification::Right);
+
+        g.setFont(makeFont(menuNameFontSize));
+        g.setColour(foreground.withAlpha(alpha));
+        g.drawText(action.name, row);
+    }
+}
+
+void ActionMenu::mouseUp(const UI::MouseEvent& event)
+{
+    const auto card = calculateCardBounds();
+
+    if (!card.contains(event.position))
+    {
+        onClose();
+        return;
+    }
+
+    const auto row = (int) ((event.position.y - card.y) / calculateRowHeight());
+
+    if (row < 0 || row >= (int) actions.size())
+        return;
+
+    const auto& action = actions[(std::size_t) row];
+
+    if (!action.isBuilt)
+        return;
+
+    onClose();
+    action.perform();
+}
+} // namespace cowterm::mobile

@@ -112,6 +112,15 @@ nano_add_executable(CowTermPanelTests
 
 target_include_directories(CowTermPanelTests PRIVATE ../Terminal)
 
+# The phone's pane screen layout and bar gestures, from iOS/, on the Mac.
+nano_add_executable(CowTermPaneScreenTests
+        SOURCES
+            PaneScreenLayoutTests.cpp
+            ../iOS/PaneScreenLayout.cpp
+        TARGETS eacp-graphics)
+
+target_include_directories(CowTermPaneScreenTests PRIVATE ../iOS)
+
 # forkpty/openpty live in libutil on Linux; on Apple they are in libSystem.
 if (LINUX)
     target_link_libraries(CowTermTests PRIVATE util)
