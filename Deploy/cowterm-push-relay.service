@@ -1,0 +1,12 @@
+[Unit]
+Description=CowTerm push relay: rings Jamie's phone through Apple when a Claude finishes or asks
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+ExecStart=%h/.local/libexec/cowterm-push-relay/start
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=default.target

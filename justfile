@@ -333,3 +333,15 @@ claude-hooks-add host="":
 # Remove exactly those hooks, here or on user@host
 claude-hooks-remove host="":
     scripts/claude-hooks.sh remove {{host}}
+
+# Build and install the push relay on the relay host as a user service that survives a reboot
+push-relay-install host="jamiepond@macprorack":
+    scripts/install-push-relay.sh {{host}}
+
+# Restart the push relay on the relay host (after storing its token, say)
+push-relay-restart host="jamiepond@macprorack":
+    ssh {{host}} 'systemctl --user restart cowterm-push-relay && sleep 3 && journalctl --user -u cowterm-push-relay -n 5 --no-pager -o cat'
+
+# Print the push relay's last log lines: registrations, notices and Apple's answers
+push-relay-log host="jamiepond@macprorack" lines="40":
+    ssh {{host}} 'journalctl --user -u cowterm-push-relay -n {{lines}} --no-pager -o short-iso'
