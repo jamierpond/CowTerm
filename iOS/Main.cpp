@@ -285,12 +285,35 @@ struct CowTermMobileApp
 
     void applyLaunchOptions()
     {
+        applyLaunchKeyboardOptions();
+        applyLaunchOrientation();
+        scheduleLaunchActions();
+
+        if (launchOptions.opensMenu)
+            screen.openMenu();
+    }
+
+    void applyLaunchKeyboardOptions()
+    {
         if (launchOptions.typesRaw)
             screen.switchToRawMode();
 
         if (launchOptions.raisesSoftwareKeyboard)
             screen.raiseKeyboard();
+    }
 
+    void applyLaunchOrientation()
+    {
+        if (launchOptions.turnsToLandscape)
+            cowterm::mobile::requestLandscapeInterfaceOrientation(window);
+
+        if (launchOptions.turnsToPortrait)
+            cowterm::mobile::requestPortraitInterfaceOrientation(window);
+    }
+
+    // Test flags that act once the screen has settled.
+    void scheduleLaunchActions()
+    {
         if (launchOptions.switchesToSecondPane)
         {
             Threads::callAfter(paneSwitchDelay,
@@ -303,21 +326,11 @@ struct CowTermMobileApp
                                [this] { screen.composeAndSend(launchOptions.composedText); });
         }
 
-        if (launchOptions.turnsToLandscape)
-            cowterm::mobile::requestLandscapeInterfaceOrientation(window);
-
-        if (launchOptions.turnsToPortrait)
-            cowterm::mobile::requestPortraitInterfaceOrientation(window);
-
-        if (launchOptions.opensMenu)
-            screen.openMenu();
-
         if (launchOptions.scrollsBack)
         {
             Threads::callAfter(scrollBackDelay,
                                [this] { dragPaneDownToScrollBack(screen.getTerminal()); });
         }
-
     }
 
     // Sample rows until the connection layer feeds real ones; opening a
