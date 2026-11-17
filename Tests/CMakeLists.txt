@@ -156,6 +156,7 @@ target_include_directories(CowTermLeaderKeysTests PRIVATE ../Terminal)
 nano_add_executable(CowTermCliTests
         SOURCES
             CliParsingTests.cpp
+            PaneStateArgumentsTests.cpp
         TARGETS CowTerm::Multiplexer)
 
 # The palette's order: match level, learned picks, usage.

@@ -5,6 +5,7 @@
 #include "Multiplexer/CliParsing.h"
 #include "Multiplexer/Config.h"
 #include "Multiplexer/NotifyUserClient.h"
+#include "Multiplexer/PaneStateCommand.h"
 #include "Multiplexer/Protocol.h"
 #include <PondVersion.h>
 #include "Multiplexer/RemoteCommands.h"
@@ -33,6 +34,10 @@ constexpr auto usage = R"(usage: ct <command>    (headless: no CowTerm window on
               [--allow-type-response] [--title <text>] [--pane <id>]
                           ask the user in CowTerm, on the machine whose
                           window shows this pane (through ct bridge)
+  pane-state <working|waiting|finished> [--message <text>] [--pane <id>]
+                          tell this machine's daemon what the pane's program
+                          is doing (Claude Code's hooks), so the phone lists
+                          waiting panes first
   install-remote <host>   build and install ct + cowtermd on host over ssh
   update-remotes          install-remote for every host in searchDirs
   version, --version      print ct's version and the commit it was built from
@@ -89,6 +94,13 @@ int notifyUser(const Arguments& arguments)
     return term::askRunningAppAndWait(*parsed.request, exitCodeForNotifyUserOutcome);
 }
 
+int paneState(const Arguments& arguments)
+{
+    const auto* pane = std::getenv(term::proto::paneEnvironmentVariable);
+    const auto defaultPaneId = pane != nullptr ? std::string {pane} : std::string {};
+    return term::cli::runPaneStateCommand(arguments, defaultPaneId);
+}
+
 int installRemote(const Arguments& arguments)
 {
     return term::remote::runInstallRemoteCommand(arguments);
@@ -114,6 +126,7 @@ constexpr auto commands = std::array {
     Command {"--version", printVersion},
     Command {"bridge", bridge},
     Command {"notify-user", notifyUser},
+    Command {"pane-state", paneState},
     Command {"install-remote", installRemote},
     Command {"update-remotes", updateRemotes},
 };

@@ -47,6 +47,17 @@ constexpr int saveIntervalMilliseconds = 5000;
 // daemon has no config, so it resolves everything else with the built-in one.
 const term::Theme daemonTheme {};
 
+// What the overview shows for a pane: when it was last typed into and last
+// printed, and what its program said it is doing (`ct pane-state`).
+struct PaneActivity
+{
+    std::int64_t lastInputMilliseconds = 0;
+    std::int64_t lastOutputMilliseconds = 0;
+    std::string state;
+    std::int64_t stateSinceMilliseconds = 0;
+    std::string stateMessage;
+};
+
 struct DaemonPane
 {
     explicit DaemonPane(const term::PtySize& sizeToUse)
@@ -68,6 +79,7 @@ struct DaemonPane
     bool hasUnsavedChanges = false;
     std::string sessionName;
     term::PaneSizeOwner sizeOwner;
+    PaneActivity activity;
 
     // The clients showing this pane: its output, state and exit go to them.
     std::vector<IPC::Messenger*> watchers;
@@ -192,6 +204,8 @@ struct Daemon
             MessageHandler {"claim-size", 3, &Daemon::handleClaimSize},
             MessageHandler {"reclaim-sizes", 0, &Daemon::handleReclaimSizes},
             MessageHandler {"last-input", 0, &Daemon::handleLastInput},
+            MessageHandler {"pane-state", 2, &Daemon::handlePaneState},
+            MessageHandler {"activity", 0, &Daemon::handleActivity},
             MessageHandler {"kill", 1, &Daemon::handleKill},
             MessageHandler {"info", 0, &Daemon::handleInfo},
             MessageHandler {"layout", 1, &Daemon::handleLayout},
@@ -250,8 +264,11 @@ struct Daemon
         const auto isUserInput = message.args.size() > markerArgument
                                  && message.args[markerArgument] == term::proto::userInputMarker;
 
-        if (isUserInput && panes.contains(id))
+        if (auto found = panes.find(id); isUserInput && found != panes.end())
+        {
             lastInput = {id, getMillisecondsSinceEpoch()};
+            found->second->activity.lastInputMilliseconds = lastInput.millisecondsSinceEpoch;
+        }
 
         write(id, message.payload);
     }
@@ -313,6 +330,43 @@ struct Daemon
 
         sender.send(term::proto::make(
             "last-input", {lastInput.paneId, std::to_string(lastInput.millisecondsSinceEpoch)}));
+    }
+
+    // pane-state <id> <working|waiting|finished>, payload what it says.
+    void handlePaneState(IPC::Messenger&, const term::proto::Message& message)
+    {
+        if (auto found = panes.find(message.args[0]); found != panes.end())
+        {
+            auto& activity = found->second->activity;
+            activity.state = message.args[1];
+            activity.stateMessage = message.payload;
+            activity.stateSinceMilliseconds = getMillisecondsSinceEpoch();
+        }
+    }
+
+    // One "<id>\t<last input>\t<last output>\t<state>\t<state since>\t<message>"
+    // line per pane; times in milliseconds since 1970, 0 for never.
+    void handleActivity(IPC::Messenger& sender, const term::proto::Message&)
+    {
+        auto payload = std::string {};
+
+        for (const auto& [id, pane]: panes)
+        {
+            const auto& activity = pane->activity;
+            payload += id + "\t" + std::to_string(activity.lastInputMilliseconds) + "\t"
+                       + std::to_string(activity.lastOutputMilliseconds) + "\t" + activity.state
+                       + "\t" + std::to_string(activity.stateSinceMilliseconds) + "\t"
+                       + flattenToOneLine(activity.stateMessage) + "\n";
+        }
+
+        sender.send(term::proto::make("activity", {}, payload));
+    }
+
+    static std::string flattenToOneLine(std::string text)
+    {
+        std::ranges::replace(text, '\n', ' ');
+        std::ranges::replace(text, '\t', ' ');
+        return text;
     }
 
     void applySize(const std::string& id, DaemonPane& pane, const term::PtySize& size)
@@ -515,6 +569,7 @@ struct Daemon
 
         found->second->terminal.feed(data);
         found->second->hasUnsavedChanges = true;
+        found->second->activity.lastOutputMilliseconds = getMillisecondsSinceEpoch();
         sendToWatchers(*found->second, term::proto::make("output", {id}, data));
     }
 

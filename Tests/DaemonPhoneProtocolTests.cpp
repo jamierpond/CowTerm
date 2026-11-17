@@ -244,6 +244,51 @@ auto tLastInputNamesThePaneTypedInto = test("DaemonPhoneProtocol/lastInputNamesT
     mac.messenger.send(term::proto::make("kill", {otherPaneId}));
 };
 
+auto tActivityCarriesWhatThePaneSaid = test("DaemonPhoneProtocol/activityCarriesWhatThePaneSaid") = []
+{
+    constexpr auto activityColumnCount = std::size_t {6};
+    auto daemon = TestDaemon {"daemon-activity-test"};
+    auto mac = DaemonConversation {daemon.instance};
+    check(mac.waitForConnection());
+    introduce(mac, "Mac");
+
+    createPane(mac, paneId, desktopColumns);
+    mac.messenger.send(term::proto::make("write", {paneId, term::proto::userInputMarker}, " "));
+    mac.messenger.send(
+        term::proto::make("pane-state", {paneId, "waiting"}, "Claude needs\tyour permission\n"));
+    mac.messenger.send(term::proto::make("activity"));
+
+    const auto activity = mac.waitForMessage("activity");
+    check(activity.has_value(), mac.listReceivedVerbs());
+
+    if (activity)
+    {
+        auto columns = std::vector<std::string> {};
+        auto start = std::size_t {0};
+        const auto line = activity->payload.substr(0, activity->payload.find('\n'));
+
+        while (start <= line.size())
+        {
+            const auto end = std::min(line.find('\t', start), line.size());
+            columns.push_back(line.substr(start, end - start));
+            start = end + 1;
+        }
+
+        check(columns.size() == activityColumnCount, activity->payload);
+
+        if (columns.size() == activityColumnCount)
+        {
+            check(columns[0] == paneId);
+            check(std::stoll(columns[1]) > 0, "typing is recorded");
+            check(std::stoll(columns[2]) > 0, "output is recorded");
+            check(columns[3] == "waiting");
+            check(columns[5] == "Claude needs your permission ", "the message stays on one line");
+        }
+    }
+
+    mac.messenger.send(term::proto::make("kill", {paneId}));
+};
+
 auto tLocalSessionsAreKnown = test("DaemonPhoneProtocol/localSessionsAreKnown") = []
 {
     auto daemon = TestDaemon {"daemon-local-session-test"};

@@ -6,6 +6,7 @@
 #include "CliPlatform.h"
 #include <PondVersion.h>
 #include "Multiplexer/NotifyUserClient.h"
+#include "Multiplexer/PaneStateCommand.h"
 #include <PermissionsPanel/Permissions.h>
 #include "Multiplexer/Protocol.h"
 #include "Multiplexer/Bridge.h"
@@ -47,6 +48,11 @@ constexpr auto usage = R"(usage: ct <command>
                                   ask the user in a window over everything;
                                   prints the chosen option or typed answer
 
+  pane-state <working|waiting|finished> [--message <text>] [--pane <id>]
+                                  tell this machine's daemon what the pane's
+                                  program is doing (Claude Code's hooks), so
+                                  the phone lists waiting panes first
+
   bridge                          relay this machine's session daemon over
                                   stdin/stdout (CowTerm runs it through ssh)
   install-remote <host>           build and install ct + cowtermd on host
@@ -60,6 +66,7 @@ constexpr auto usage = R"(usage: ct <command>
 
 Exit codes: 0 ok, 1 error.
 notify-user: 0 answered, 1 dismissed, 2 usage error, 4 CowTerm not running.
+pane-state: 0 ok, 2 usage error, 4 no session daemon running.
 Its pane defaults to $COWTERM_PANE, which every CowTerm pane sets.
 )";
 
@@ -151,6 +158,13 @@ int bridge(const Arguments&)
     return bridge::runBridge(pond::getVersionString());
 }
 
+int paneState(const Arguments& args)
+{
+    const auto* pane = std::getenv(proto::paneEnvironmentVariable);
+    const auto defaultPaneId = pane != nullptr ? std::string {pane} : std::string {};
+    return runPaneStateCommand(dropFirst(args), defaultPaneId);
+}
+
 int installRemote(const Arguments& args)
 {
     return remote::runInstallRemoteCommand(dropFirst(args));
@@ -176,6 +190,7 @@ constexpr auto commandsRunAnywhere = std::array {
     Command {"--reset-permissions", resetPermissions},
     Command {"notify-user", notifyUserCommand},
     Command {"bridge", bridge},
+    Command {"pane-state", paneState},
     Command {"install-remote", installRemote},
     Command {"update-remotes", updateRemotes},
 };
@@ -215,6 +230,7 @@ bool isCliInvocation(int argc, char** argv)
                              "--version",
                              "--reset-permissions",
                              "bridge",
+                             "pane-state",
                              "install-remote",
                              "update-remotes"})
         if (verb == known)

@@ -23,6 +23,7 @@ add_library(CowTermMultiplexer STATIC
         NotifyUserClient.cpp
         NotifyUserProtocol.cpp
         PaneSizeOwner.cpp
+        PaneStateCommand.cpp
         ProjectScan.cpp
         Projects.cpp
         RemoteCommands.cpp

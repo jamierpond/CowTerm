@@ -364,6 +364,19 @@ cell), `leader o` (cycle panes), `leader ^` (previous session), `leader 1–9`
 palette), and the palette's normal mode. Click to focus stays. Cmd chords are
 not logged, so nothing is known about them.
 
+To let the daemon know which Claude is waiting (daemon change 3), Claude Code's
+hooks report it with `ct pane-state`. Nothing was added to his settings; these
+go in the `hooks` of `~/.claude/settings.json` on each machine:
+
+```json
+"Notification": [{"hooks": [{"type": "command",
+  "command": "ct pane-state waiting --message \"$(jq -r .message)\" 2>/dev/null || true"}]}],
+"UserPromptSubmit": [{"hooks": [{"type": "command",
+  "command": "ct pane-state working 2>/dev/null || true"}]}],
+"Stop": [{"hooks": [{"type": "command",
+  "command": "ct pane-state finished 2>/dev/null || true"}]}]
+```
+
 Found in the Mac app while reading it, and not changed: the leader key shows
 nothing while it is pending and never times out; the terminal bell is not
 connected to anything; the palette paints twelve rows and cannot scroll;
