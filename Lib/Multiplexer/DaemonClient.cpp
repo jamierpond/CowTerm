@@ -23,6 +23,12 @@ std::string& getClientName()
     return name;
 }
 
+bool& getClaimsSizeOfEveryPaneItShows()
+{
+    static auto claims = false;
+    return claims;
+}
+
 bool isPaneMessage(const std::string& verb)
 {
     return verb == "output" || verb == "state" || verb == "exit" || verb == "missing-command"
@@ -53,6 +59,11 @@ void DaemonClient::initialize(const Callback& whenReady)
 void DaemonClient::setClientName(const std::string& name)
 {
     getClientName() = name;
+}
+
+void DaemonClient::setClaimsSizeOfEveryPaneItShows(bool claims)
+{
+    getClaimsSizeOfEveryPaneItShows() = claims;
 }
 
 DaemonClient* DaemonClient::get()
@@ -267,6 +278,9 @@ void DaemonClient::sendSpawn(const SpawnRequest& request)
                       toString(request.size.rows),
                       proto::encodeArgument(request.sessionName)},
                      proto::makeSpawnPayload({request.workingDirectory, request.command})));
+
+    if (getClaimsSizeOfEveryPaneItShows())
+        claimSize(request.id, request.size);
 }
 
 void DaemonClient::spawn(const SpawnRequest& request, Routes routesToUse)
@@ -307,6 +321,9 @@ bool DaemonClient::hasPanesHeldElsewhere() const
 
 void DaemonClient::resize(const std::string& id, const PtySize& size)
 {
+    if (getClaimsSizeOfEveryPaneItShows())
+        return claimSize(id, size);
+
     if (auto found = routes.find(id); found != routes.end())
         found->second.request.size = size;
 

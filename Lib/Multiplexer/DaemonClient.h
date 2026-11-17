@@ -89,6 +89,10 @@ public:
     // What other clients see this process called ("Mac", "iPhone") when it
     // holds a pane's size. Set once at startup, before any client connects.
     static void setClientName(const std::string& name);
+
+    // The phone takes the size of every pane it opens or resizes, instead of
+    // waiting for the Mac to let go. Set once at startup.
+    static void setClaimsSizeOfEveryPaneItShows(bool claims);
     static DaemonClient* get();
     static void teardown();
 
