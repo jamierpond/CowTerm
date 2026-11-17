@@ -744,6 +744,27 @@ that receives touches never changes.
   before it was laid out reported 11 columns, and one of Jamie's Mac panes was
   squeezed to 11 × 5 and later given back at that size.
 
+### Links
+
+- A tap on a link opens it on the phone (`eacp::Apps::openExternalURL`), even
+  in a pane whose program asked for mouse reports, such as Claude inside tmux;
+  a tap anywhere else reaches the program as a click. The press that opened a
+  link keeps its release too, so the program never sees half a click (this
+  holds on the Mac as well). Inside dv or lazygit a tap on a URL therefore
+  opens the URL instead of clicking that cell; neither program does anything
+  of its own with a click on a URL, so nothing is lost.
+- On the phone every detected link is underlined all the time
+  (`TerminalView::setUnderlinesEveryLink`), so a tap's effect is visible
+  before it lands and is not told by colour alone. The Mac keeps underlining
+  only the link under the pointer with Cmd held.
+- Claude Code's /login URL inside tmux broke Cmd+click: tmux redraws each row
+  on its own, so no row is marked as wrapped, and drops Claude's OSC 8 link.
+  A row now runs on into an unindented next row when the row is one word from
+  its first column to within a column of the edge, and the next row starts
+  with URL text (`findColumnWhereBrokenUrlResumes`). Copying a selection uses
+  the same rule, so a yanked URL is the one line a click opens; text with
+  real line ends keeps them.
+
 ### Opening on protocol 4 daemons
 
 Jamie's daemons (the Mac's CowTerm, cowtermd on tamby and macprorack) speak

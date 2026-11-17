@@ -145,15 +145,19 @@ std::optional<int> findColumnWhereSelectedBrokenUrlResumes(const TermScreen& scr
     return findColumnWhereBrokenUrlResumes(screen, row);
 }
 
+struct SelectionOnScreen
+{
+    const TermScreen& screen;
+    SelectionRange selected;
+};
+
 // A soft-wrapped row runs straight on, keeping a space that ended it. A URL a
 // program broke at the edge runs on too, without the next row's indent.
 // Returns the column the next row's text starts from.
-int appendSelectedRowText(const TermScreen& screen,
-                          long row,
-                          const SelectionRange& selected,
-                          int firstColumn,
-                          std::string& result)
+int appendSelectedRowText(const SelectionOnScreen& selection, long row, int firstColumn, std::string& result)
 {
+    const auto& screen = selection.screen;
+    const auto& selected = selection.selected;
     const auto& line = findLineAtAbsoluteRow(screen, row);
     const auto isLastRow = row == selected.end.row;
     const auto selectedFromCol = row == selected.start.row ? selected.start.col : 0;
@@ -223,11 +227,12 @@ std::string extractTextBetween(const TermScreen& screen, CellRef start, CellRef 
 {
     auto result = std::string {};
     auto firstColumn = 0;
+    const auto selection = SelectionOnScreen {screen, {start, end, true}};
 
     for (auto row = start.row; row <= end.row; ++row)
     {
         if (isAbsoluteRowStored(screen, row))
-            firstColumn = appendSelectedRowText(screen, row, {start, end, true}, firstColumn, result);
+            firstColumn = appendSelectedRowText(selection, row, firstColumn, result);
     }
 
     return result;
