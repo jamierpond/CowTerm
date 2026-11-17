@@ -18,7 +18,14 @@ enum class ProbeMode
     LeavePaneRunning,
 
     // Kill this pane (one LeavePaneRunning made).
-    KillPane
+    KillPane,
+
+    // Open a pane with this id at 150 columns running `seq 1 300`, take its
+    // size, and print every size-owner notice until stopped.
+    WatchPane,
+
+    // Ask the daemon to quit (a test instance, never the user's own).
+    QuitServer
 };
 
 // CowTermEmbeddedSshProbe's command line:
@@ -26,6 +33,8 @@ enum class ProbeMode
 //   <user@host[:port]> --adopt [pane]        AdoptPane
 //   <user@host[:port]> --leave-pane <pane>   LeavePaneRunning
 //   <user@host[:port]> --kill-pane <pane>    KillPane
+//   <user@host[:port]> --watch-pane <pane>   WatchPane
+//   <user@host[:port]> --quit-server         QuitServer
 struct ProbeArguments
 {
     term::SshDestination destination;

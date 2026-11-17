@@ -16,6 +16,8 @@ constexpr auto modeFlags = std::array {
     ModeFlag {"--adopt", ProbeMode::AdoptPane, false},
     ModeFlag {"--leave-pane", ProbeMode::LeavePaneRunning, true},
     ModeFlag {"--kill-pane", ProbeMode::KillPane, true},
+    ModeFlag {"--watch-pane", ProbeMode::WatchPane, true},
+    ModeFlag {"--quit-server", ProbeMode::QuitServer, false},
 };
 
 constexpr auto mostArguments = std::size_t {3};

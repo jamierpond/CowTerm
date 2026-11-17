@@ -80,6 +80,18 @@ auto probeLeavesAndKillsANamedPane = test("EmbeddedSshProbe/leavesAndKillsANamed
     check(!parseProbeArguments({"jamie@tamby", "--kill-pane"}).has_value());
 };
 
+auto probeWatchesAPaneAndQuitsADaemon = test("EmbeddedSshProbe/watchesAPaneAndQuitsADaemon") = []
+{
+    const auto watch = parseProbeArguments({"jamie@tamby", "--watch-pane", "phone-test"});
+    const auto quit = parseProbeArguments({"jamie@tamby", "--quit-server"});
+
+    check(watch.has_value());
+    check(watch->mode == ProbeMode::WatchPane);
+    check(quit.has_value());
+    check(quit->mode == ProbeMode::QuitServer);
+    check(!parseProbeArguments({"jamie@tamby", "--watch-pane"}).has_value());
+};
+
 auto probeRefusesOtherArguments = test("EmbeddedSshProbe/refusesOtherArguments") = []
 {
     check(!parseProbeArguments({}).has_value());

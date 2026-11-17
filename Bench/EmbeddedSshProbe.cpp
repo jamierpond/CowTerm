@@ -4,12 +4,17 @@
 // draws it, then kills the pane. With --adopt it prints an existing pane's
 // screen instead and releases it, never writing to it. --leave-pane opens a
 // pane running `seq 1 300` and leaves it for the phone to open; --kill-pane
-// ends it. Run by scripts/probe-embedded-ssh.sh and run-ios-against-host.sh.
+// ends it. --watch-pane opens such a pane at 150 columns, holds its size and
+// prints each size-owner notice; --quit-server stops a test daemon.
+// COWTERM_BRIDGE_COMMAND replaces what runs `ct bridge` on the host.
+// Run by scripts/probe-embedded-ssh.sh, run-ios-against-host.sh and
+// run-ios-size-owner-test.sh.
 
 #include "EmbeddedSshProbeArguments.h"
 
 #include "Emulator/TerminalModel.h"
 #include "Multiplexer/Protocol.h"
+#include "Shell/Pty.h"
 #include "TerminalView/CellText.h"
 
 #include <eacp/Core/App/App.h>
@@ -29,6 +34,10 @@ using namespace eacp;
 namespace
 {
 constexpr auto waitForTheWholeProbe = Time::MS {60000};
+constexpr auto longestWatch = Time::MS {600000};
+constexpr auto watchColumns = 150;
+constexpr auto watchRows = 40;
+constexpr auto probeClientName = "probe";
 constexpr auto probeColumns = 80;
 constexpr auto probeRows = 24;
 constexpr auto probeSession = "embedded-ssh-probe";
@@ -45,7 +54,7 @@ struct PaneScript
 
 PaneScript makePaneScript(ProbeMode mode)
 {
-    if (mode == ProbeMode::LeavePaneRunning)
+    if (mode == ProbeMode::LeavePaneRunning || mode == ProbeMode::WatchPane)
         return {std::string {"seq 1 "} + lastNumberOfSequence + "\r", lastNumberOfSequence};
 
     return {std::string {"echo "} + marker + "\r", marker};
@@ -121,18 +130,24 @@ bool isShowingLine(const term::TermScreen& screen, const std::string& line)
 class EmbeddedSshProbe
 {
 public:
-    EmbeddedSshProbe(const ProbeArguments& argumentsToUse, const term::SshCredentials& credentials)
+    EmbeddedSshProbe(const ProbeArguments& argumentsToUse,
+                     const term::SshCredentials& credentials,
+                     const std::string& bridgeCommand)
         : arguments(argumentsToUse)
-        , link(arguments.destination, credentials)
+        , link(arguments.destination, credentials, bridgeCommand)
     {
         link.onReady = [this] { handleReady(); };
-        link.onFailed = [this](const std::string& reason) { finish("link failed: " + reason); };
+        link.onFailed = [this](const std::string& reason) { handleLinkFailed(reason); };
         link.onMessage = [this](const std::string& body) { handleMessage(body); };
     }
 
     int run()
     {
-        Threads::runEventLoopUntil([this] { return isFinished; }, waitForTheWholeProbe);
+        const auto isWatching = arguments.mode == ProbeMode::WatchPane;
+        Threads::runEventLoopUntil([this] { return isFinished; }, isWatching ? longestWatch : waitForTheWholeProbe);
+
+        if (!isFinished && isWatching)
+            finish({});
 
         if (!isFinished)
             finish("timed out waiting for the daemon");
@@ -148,9 +163,17 @@ private:
     {
         std::printf("connected to %s through EmbeddedSshLink; bridge hello received\n",
                     arguments.destination.host.c_str());
+        const auto protocolVersion = std::to_string(term::proto::daemonProtocolVersion);
+        link.send(term::proto::make("hello", {protocolVersion, probeClientName}));
 
         if (arguments.mode == ProbeMode::KillPane)
             return killPane(arguments.paneId);
+
+        if (arguments.mode == ProbeMode::QuitServer)
+        {
+            hasAskedTheDaemonToQuit = true;
+            return link.send(term::proto::make("quit-server"));
+        }
 
         link.send(term::proto::make("info"));
     }
@@ -162,14 +185,27 @@ private:
         if (message.verb == "info")
             return handleInfo(message.payload);
 
-        if (message.args.empty() || message.args[0] != paneId)
-            return;
+        if (isAboutThisPane(message))
+            handlePaneMessage(message);
+    }
+
+    bool isAboutThisPane(const term::proto::Message& message) const
+    {
+        return !message.args.empty() && message.args[0] == paneId;
+    }
+
+    void handlePaneMessage(const term::proto::Message& message)
+    {
+        if (message.verb == "size-owner")
+            return printSizeOwner(message);
 
         if (message.verb == "output")
-            handleOutput(message.payload);
-        else if (message.verb == "state")
-            handleState(message.payload);
-        else if (message.verb == "exit")
+            return handleOutput(message.payload);
+
+        if (message.verb == "state")
+            return handleState(message.payload);
+
+        if (message.verb == "exit")
             finish("pane " + paneId + " exited before the probe finished");
     }
 
@@ -190,7 +226,7 @@ private:
 
         paneId = makeThrowawayPaneId();
 
-        if (arguments.mode == ProbeMode::LeavePaneRunning)
+        if (arguments.mode == ProbeMode::LeavePaneRunning || arguments.mode == ProbeMode::WatchPane)
             paneId = arguments.paneId;
 
         std::printf("opening throwaway pane %s\n", paneId.c_str());
@@ -232,9 +268,48 @@ private:
 
     void sendSpawn(const std::string& session, const std::string& directory)
     {
-        const auto columns = std::to_string(probeColumns);
-        const auto rows = std::to_string(probeRows);
+        const auto size = findSpawnSize();
+        const auto columns = std::to_string(size.cols);
+        const auto rows = std::to_string(size.rows);
         link.send(term::proto::make("spawn", {paneId, columns, rows, session}, directory));
+    }
+
+    term::PtySize findSpawnSize() const
+    {
+        if (arguments.mode == ProbeMode::WatchPane)
+            return {watchColumns, watchRows};
+
+        return {probeColumns, probeRows};
+    }
+
+    // "size-owner <id> <cols> <rows> <1 when it is the receiver> [owner's name]"
+    void printSizeOwner(const term::proto::Message& message)
+    {
+        constexpr auto sizeOwnerArgumentCount = std::size_t {4};
+        constexpr auto ownerNameArgument = std::size_t {4};
+
+        if (message.args.size() < sizeOwnerArgumentCount)
+            return;
+
+        auto ownerName = std::string {};
+
+        if (message.args.size() > ownerNameArgument)
+            ownerName = term::proto::decodeArgument(message.args[ownerNameArgument]);
+
+        std::printf("size-owner %sx%s owner=%s mine=%s\n",
+                    message.args[1].c_str(),
+                    message.args[2].c_str(),
+                    ownerName.c_str(),
+                    message.args[3].c_str());
+    }
+
+    void handleLinkFailed(const std::string& reason)
+    {
+        if (!hasAskedTheDaemonToQuit)
+            return finish("link failed: " + reason);
+
+        std::printf("the daemon quit\n");
+        finish({});
     }
 
     void handleOutput(const std::string& payload)
@@ -251,13 +326,23 @@ private:
         if (!hasSeenCommandRun && isShowingLine(liveModel.screen, script.lineThatShowsItRan))
         {
             hasSeenCommandRun = true;
-            link.send(term::proto::make("release", {paneId}));
             handleCommandRan();
         }
     }
 
     void handleCommandRan()
     {
+        if (arguments.mode == ProbeMode::WatchPane)
+        {
+            const auto columns = std::to_string(watchColumns);
+            const auto rows = std::to_string(watchRows);
+            link.send(term::proto::make("claim-size", {paneId, columns, rows}));
+            std::printf("watching pane %s at %sx%s\n", paneId.c_str(), columns.c_str(), rows.c_str());
+            return;
+        }
+
+        link.send(term::proto::make("release", {paneId}));
+
         if (arguments.mode == ProbeMode::LeavePaneRunning)
         {
             std::printf("left pane %s running on %s\n", paneId.c_str(), arguments.destination.host.c_str());
@@ -267,8 +352,12 @@ private:
         sendSpawn(probeSession, probeDirectory);
     }
 
+    // The watcher also hears the state the daemon sends whoever adopts its pane.
     void handleState(const std::string& payload)
     {
+        if (arguments.mode == ProbeMode::WatchPane)
+            return;
+
         const auto state = term::parseTerminalState(payload);
 
         if (!state)
@@ -314,6 +403,7 @@ private:
     bool hasSentCommand = false;
     bool hasSeenCommandRun = false;
     bool hasKilledPane = false;
+    bool hasAskedTheDaemonToQuit = false;
     bool isFinished = false;
     std::string failure;
 };
@@ -356,10 +446,19 @@ int main(int argc, char** argv)
     {
         std::fprintf(stderr,
                      "usage: CowTermEmbeddedSshProbe <user@host[:port]> "
-                     "[--adopt [pane id] | --leave-pane <pane id> | --kill-pane <pane id>]\n");
+                     "[--adopt [pane id] | --leave-pane <pane id> | --kill-pane <pane id> "
+                     "| --watch-pane <pane id> | --quit-server]\n");
         return usageExitCode;
     }
 
+    // Each line reaches a log at once: scripts read the watch while it runs.
+    std::setvbuf(stdout, nullptr, _IOLBF, 0);
+
     const auto credentials = readCredentials();
-    return Apps::run([&] { Apps::quit(EmbeddedSshProbe {*arguments, credentials}.run()); });
+    auto bridgeCommand = readEnvironment("COWTERM_BRIDGE_COMMAND");
+
+    if (bridgeCommand.empty())
+        bridgeCommand = term::remote::bridgeCommand;
+
+    return Apps::run([&] { Apps::quit(EmbeddedSshProbe {*arguments, credentials, bridgeCommand}.run()); });
 }
