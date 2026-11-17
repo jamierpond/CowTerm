@@ -54,8 +54,8 @@ curl -sSfLo op.zip https://cache.agilebits.com/dist/1P/op2/pkg/v$op_version/op_l
 unzip -q op.zip op op.sig
 export GNUPGHOME=\$download/gnupg
 mkdir -m 700 \$GNUPGHOME
-gpg -q --keyserver keyserver.ubuntu.com --receive-keys $op_signing_key
-gpg -q --verify op.sig op
+curl -sSfL https://downloads.1password.com/linux/keys/1password.asc | gpg -q --import
+gpg --status-fd 1 --verify op.sig op 2>/dev/null | grep -q \"VALIDSIG $op_signing_key\"
 install -m 755 op $relay_folder/op
 rm -rf \$download
 $relay_folder/op --version"
