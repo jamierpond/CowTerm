@@ -30,6 +30,11 @@ struct OverviewReport
     std::int64_t nowMillisecondsSinceEpoch = 0;
 };
 
+// The row named "<host>/<session>" ("jamiepond@macprorack/Grazer"); the host
+// ends at the first '/', since session names may hold one.
+std::optional<overview::OverviewRow> findRowByName(const std::vector<overview::OverviewRow>& rows,
+                                                   const std::string& hostAndSession);
+
 // The overview's rows, from each host's daemon (RemoteHosts): while the
 // overview is shown it asks every connected daemon for `info` and `activity`
 // every few seconds and reports the rows each time. A daemon from before

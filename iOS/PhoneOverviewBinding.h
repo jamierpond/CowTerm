@@ -22,12 +22,18 @@ public:
     // every few seconds until a session opens.
     void setShown(bool isShown);
 
+    // Opens "<host>/<session>" the first time a report lists it, through the
+    // same path as a tap: for a launch that cannot tap (a headless simulator).
+    void openSessionOnceListed(const std::string& hostAndSession);
+
 private:
+    void showReport(const term::phone::OverviewReport& report);
     void openSession(const term::overview::OverviewRow& row);
 
     PhoneLaunch& phone;
     OverviewScreen& screen;
     ShowPane showPane;
+    std::string sessionToOpen;
 };
 
 OverviewInputs makeOverviewInputs(const term::phone::OverviewReport& report);

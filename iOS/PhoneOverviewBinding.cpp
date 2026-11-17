@@ -26,13 +26,29 @@ PhoneOverviewBinding::PhoneOverviewBinding(PhoneLaunch& phoneToUse,
     , screen(screenToUse)
     , showPane(std::move(showPaneToUse))
 {
-    phone.getOverview().onRowsChanged = [this](const term::phone::OverviewReport& report)
-    {
-        LOG("overview: ", report.sessions.size(), " sessions, ", report.unreachableHosts.size(), " hosts unreachable");
-        screen.setInputs(makeOverviewInputs(report));
-    };
+    phone.getOverview().onRowsChanged = [this](const term::phone::OverviewReport& report) { showReport(report); };
 
     screen.onOpenSession = [this](const term::overview::OverviewRow& row) { openSession(row); };
+}
+
+void PhoneOverviewBinding::showReport(const term::phone::OverviewReport& report)
+{
+    LOG("overview: ", report.sessions.size(), " sessions, ", report.unreachableHosts.size(), " hosts unreachable");
+    screen.setInputs(makeOverviewInputs(report));
+
+    if (sessionToOpen.empty())
+        return;
+
+    if (const auto row = term::phone::findRowByName(report.sessions, sessionToOpen))
+    {
+        sessionToOpen.clear();
+        screen.onOpenSession(*row);
+    }
+}
+
+void PhoneOverviewBinding::openSessionOnceListed(const std::string& hostAndSession)
+{
+    sessionToOpen = hostAndSession;
 }
 
 void PhoneOverviewBinding::setShown(bool isShown)

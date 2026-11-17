@@ -120,6 +120,18 @@ auto rowWithoutActivityOpensItsFirstPane = test("PhoneOverview/rowWithoutActivit
     check(shown.phone.connection.openSession(shown.findRow("macprorack/Miro")) == std::optional<std::string> {"c"});
 };
 
+auto rowIsFoundByHostAndSessionName = test("PhoneOverview/rowIsFoundByHostAndSessionName") = []
+{
+    auto shown = ShownOverview {};
+    shown.phone.answerFrom(rack, proto::make("info", {}, makeInfoLine("c", "macprorack/Miro")));
+
+    const auto found = findRowByName(shown.lastReport.sessions, "jamiepond@macprorack/macprorack/Miro");
+
+    check(found.has_value());
+    check(found->paneIds == std::vector<std::string> {"c"});
+    check(!findRowByName(shown.lastReport.sessions, "jamie@tamby/macprorack/Miro").has_value());
+};
+
 auto rowWhosePanesAreGoneOpensNothing = test("PhoneOverview/rowWhosePanesAreGoneOpensNothing") = []
 {
     auto shown = ShownOverview {};

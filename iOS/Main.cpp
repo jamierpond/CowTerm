@@ -127,6 +127,7 @@ struct LaunchOptions
     bool switchesToSecondPane = false;
     std::string composedText;
     bool showsOverview = false;
+    std::string sessionToOpen;
     cowterm::mobile::LinkState linkState = cowterm::mobile::LinkState::Live;
     int paneCount = samplePaneCount;
     std::optional<term::phone::PhoneSettings> phoneSettings;
@@ -184,6 +185,7 @@ void applyLaunchValue(LaunchOptions& options, std::string_view argument)
     constexpr auto linkPrefix = std::string_view {"--link="};
     constexpr auto panesPrefix = std::string_view {"--panes="};
     constexpr auto composePrefix = std::string_view {"--compose="};
+    constexpr auto openSessionPrefix = std::string_view {"--open-session="};
 
     if (argument.starts_with(linkPrefix))
     {
@@ -194,6 +196,10 @@ void applyLaunchValue(LaunchOptions& options, std::string_view argument)
     {
         options.composedText = std::string {argument.substr(composePrefix.size())};
         std::ranges::replace(options.composedText, '|', '\n');
+    }
+    else if (argument.starts_with(openSessionPrefix))
+    {
+        options.sessionToOpen = std::string {argument.substr(openSessionPrefix.size())};
     }
     else if (argument.starts_with(panesPrefix))
     {
@@ -404,6 +410,7 @@ struct CowTermMobileApp
                                       window.setContentView(screen);
                                   });
 
+            phoneOverview->openSessionOnceListed(launchOptions.sessionToOpen);
             phoneOverview->setShown(launchOptions.showsOverview);
         }
     }

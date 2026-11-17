@@ -23,6 +23,18 @@ bool isConnected(const RemoteHost& remote)
 }
 } // namespace
 
+std::optional<overview::OverviewRow> findRowByName(const std::vector<overview::OverviewRow>& rows,
+                                                   const std::string& hostAndSession)
+{
+    for (const auto& row: rows)
+    {
+        if (row.host + "/" + row.sessionName == hostAndSession)
+            return row;
+    }
+
+    return std::nullopt;
+}
+
 PhoneOverview::PhoneOverview(std::vector<std::string> hostsToUse)
     : hosts(std::move(hostsToUse))
 {
