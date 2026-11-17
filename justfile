@@ -325,3 +325,11 @@ ios-app-icon:
 # Ask for the push relay's 1Password service-account token and store it on the relay host, readable only by its user
 push-relay-store-token host="jamiepond@macprorack":
     scripts/store-push-relay-token.sh {{host}}
+
+# Add the Claude Code hooks that tell a pane's daemon when Claude finishes or asks (ct pane-state --claude-hook), here or on user@host
+claude-hooks-add host="":
+    scripts/claude-hooks.sh add {{host}}
+
+# Remove exactly those hooks, here or on user@host
+claude-hooks-remove host="":
+    scripts/claude-hooks.sh remove {{host}}
