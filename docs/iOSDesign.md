@@ -477,9 +477,14 @@ launched with `--landscape`, which is how landscape screenshots are taken.
   so a font size change needs no correction.
 - The scroll indicator shows on the Mac too, with no setting, since it behaves
   like the scroll bars macOS draws over content.
-- The phone fixes the pane's grid at the keyboard-up height
-  (`TerminalView::setFixedGridSize`); a taller view shows scrollback above the
-  grid, and the alternate screen shows blank rows there.
+- The pane's rows follow the visible area, like any terminal: with the
+  keyboard down a full-screen program fills the screen, and the shell is
+  resized when the keyboard comes and goes. Fixing the rows at the keyboard-up
+  height (17 November, replaced the same day) left the top half of the screen
+  empty under Claude and tmux on Jamie's phone, since the alternate screen has
+  no scrollback to show there. That rule spared inline Claude a reflow; Jamie
+  runs Claude full-screen, which repaints at each size.
+  `TerminalView::setFixedGridSize` is no longer used by the app.
 - Fractional cell widths (item 8) are not built. Cells are rounded up to whole
   points today. Rounding them to whole screen pixels is small but changes the
   Mac's column count at some font sizes, so it waits for Jamie's yes. The glyph
@@ -494,10 +499,9 @@ launched with `--landscape`, which is how landscape screenshots are taken.
   exists. A pane that dies between that answer and the open would still get a
   fresh shell; only a daemon-side "adopt, never create" message would close
   that, and it is not built.
-- The phone chooses its pane by an explicit id, else the daemon's
-  `last-input`, else the first pane `info` lists (alphabetical, since `info`
-  carries no recency). It waits 2 s for `last-input`, which older daemons never
-  answer.
+- The phone chooses its pane by an explicit id, else the latest `last-input`
+  of any host, else the pane it showed last time if still listed, else none.
+  It waits 2 s for `last-input`, which older daemons never answer.
 - Link state: stalled after 3 s with no bytes (the daemon answers `info` every
   second), dialled again after 8 s, and at once on returning to the foreground
   or a network change if the link stays quiet for 2 s. eacp has no
@@ -505,17 +509,11 @@ launched with `--landscape`, which is how landscape screenshots are taken.
   CowTerm.
 - The stored last screen is the daemon's own terminal-state JSON, saved every
   10 s while live and on going to the background.
-- In landscape the keyboard leaves about 4 rows, too few to fix a shell at, so
-  there the grid follows the pane and the keyboard does resize the shell.
 - The phone's search counts a session's last typing as one pick; it has no
   learned picks, because emberstore, where the Mac keeps them, does not build
   for iOS. The palette's ranking moved into `CowTerm::Multiplexer` with
   `git mv`.
 - A tap on a link opens it on the phone without a modifier key.
-- The pane's rows come from the tallest portrait keyboard seen (the
-  composer's keyboard has a suggestion bar, raw mode's does not), so switching
-  between them never resizes the shell. Before any keyboard has shown, the
-  default is 328 points.
 - The key row's keys are 48 points wide where they fit; on a 390-point phone
   they get 43.
 - iOS does not let an app relabel its own keyboard's keys, so a latched Ctrl
@@ -586,6 +584,28 @@ ios-pair` now gives it all three, and the sample needs `--sample`.
   silence is not a stall then; only the shown pane's host stalls and is
   redialled for being quiet.
 
+### Touch on a real phone
+
+On Jamie's phone no touch reached the pane screen: no tap on the bar, no
+keyboard, no way back to the list, no scrolling. The log of a session in which
+he tapped everything held not one touch. The app showed the list first and
+then swapped the pane screen in with `Window::setContentView`, which on iOS
+sets the window's view controller's `view`; the swapped-in view drew but got
+no touches. Both screens are now children of one content view
+(`ScreenStack` in `iOS/Main.cpp`) and the hidden one is hidden, so it takes
+no touches either. Nothing had ever tapped the app before: the simulator
+checks drove it with launch flags.
+
+- The app logs each finger that lands on the pane, the bar and the list, and
+  each bar action, so `just ios-device-log` shows what a finger did.
+- A finger on the bar below its row of controls, over the home indicator,
+  counts as the control above it.
+- A swipe right from the left edge of the pane goes back to the list, as the
+  iOS back gesture does; it never scrolls.
+- The phone never claims a grid narrower than 20 columns. A pane view built
+  before it was laid out reported 11 columns, and one of Jamie's Mac panes was
+  squeezed to 11 × 5 and later given back at that size.
+
 ### Opening on protocol 4 daemons
 
 Jamie's daemons (the Mac's CowTerm, cowtermd on tamby and macprorack) speak
@@ -612,10 +632,13 @@ there:
   the pane back without the phone knowing, and the phone then shows it at the
   Mac's width until it opens the pane again. If the app is killed in the
   foreground (a reinstall from Xcode or devicectl, a crash), nothing is sent
-  and the pane stays at phone size until the Mac resizes it. That happened
-  once while testing on 17 November: a reinstall left one of Jamie's eacp panes
-  at 45 × 17 until the Mac laid it out again at 74 × 20. A daemon that answers `daemon-hello` with 5 or more keeps size
+  then; the next launch gives the size back (below). Before that was built, a
+  reinstall left one of Jamie's eacp panes at 45 × 17 until the Mac laid it
+  out again at 74 × 20. A daemon that answers `daemon-hello` with 5 or more keeps size
   owners itself and gets none of this.
+- While the phone holds such a pane it keeps the pane and its earlier size in
+  `held-pane.json`. If the app is killed in the foreground, the next launch
+  sends that size back as soon as the pane's daemon says it is protocol 4.
 - `scripts/check-ios-size-return.sh` (`just ios-test-size-return`) checks it on
   two throwaway panes on a host.
 

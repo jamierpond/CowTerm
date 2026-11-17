@@ -32,6 +32,8 @@ public:
     void touchMoved(const eacp::Graphics::TouchEvent& event) override;
     void touchEnded(const eacp::Graphics::TouchEvent& event) override;
 
+    std::function<void()> onSwipeFromTheLeftEdge = [] {};
+
 private:
     void clickTerminalAt(const eacp::Graphics::TouchEvent& event);
 
@@ -62,7 +64,6 @@ public:
 
     // Fixes the pane's grid in portrait: columns from the pane's width, rows
     // from its keyboard-up height.
-    void fixGridAtKeyboardUpSize();
 
     // What a long press on the bottom bar opens.
     void openMenu();
@@ -87,7 +88,6 @@ private:
     void returnToLiveBottom();
     void refreshWhatChangesOverTime();
     void showScrolledBackState(term::ScrolledBackState state);
-    bool isLandscape() const;
     void closeMenu();
     std::vector<MenuAction> listMenuActions();
     eacp::Graphics::Insets calculateInsetsAroundParts() const;
@@ -104,7 +104,6 @@ private:
     PaneDescription pane;
     LinkStatus link;
     float softwareKeyboardCoveredHeight = 0.0f;
-    std::optional<float> portraitSoftwareKeyboardHeight;
 
     std::unique_ptr<term::TerminalView> terminal;
     PaneTouchSurface touchSurface {[this]() -> term::TerminalView& { return *terminal; }};

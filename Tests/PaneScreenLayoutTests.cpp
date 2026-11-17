@@ -21,7 +21,6 @@ constexpr auto smallWobble = 4.0f;
 constexpr auto dragShorterThanASwipe = 20.0f;
 constexpr auto pillWidth = 120.0f;
 constexpr auto measuredIPhone17eKeyboardHeight = 301.0f;
-constexpr auto screenTooShortForARow = 300.0f;
 constexpr auto manyPanes = 40;
 constexpr auto layoutTolerance = 0.01f;
 
@@ -52,34 +51,6 @@ auto tPill = test("PaneScreenLayout/pillSitsCentredAboveThePaneBottom") = []
     check(pill.center().x == pane.center().x);
     check(pill.bottom() < pane.bottom());
     check(pill.y > pane.y);
-};
-
-auto tKeyboardUpHeight = test("PaneScreenLayout/keyboardUpPaneLeavesRoomForComposerAndKeys") = []
-{
-    const auto height =
-        calculateKeyboardUpPaneHeight({.screenHeight = iPhone17eHeight,
-                                       .safeAreaTop = iPhone17eSafeAreaTop,
-                                       .softwareKeyboardHeight = measuredIPhone17eKeyboardHeight});
-
-    // 844 - 47 - 28 - 301 - 48 - 44 points.
-    check(height == 376.0f);
-};
-
-auto tKeyboardUpDefault = test("PaneScreenLayout/keyboardHeightDefaultsBeforeItHasShown") = []
-{
-    const auto withDefault = calculateKeyboardUpPaneHeight(
-        {.screenHeight = iPhone17eHeight, .safeAreaTop = iPhone17eSafeAreaTop});
-    const auto withMeasured =
-        calculateKeyboardUpPaneHeight({.screenHeight = iPhone17eHeight,
-                                       .safeAreaTop = iPhone17eSafeAreaTop,
-                                       .softwareKeyboardHeight = defaultSoftwareKeyboardHeight});
-
-    check(withDefault == withMeasured);
-};
-
-auto tKeyboardUpFloor = test("PaneScreenLayout/keyboardUpPaneNeverGoesNegative") = []
-{
-    check(calculateKeyboardUpPaneHeight({.screenHeight = screenTooShortForARow}) == 0.0f);
 };
 
 auto tBarWithEverything = test("PaneScreenLayout/barPlacesChipDotsAndButtons") = []
@@ -194,10 +165,6 @@ auto tTypingRects = test("PaneScreenLayout/typingStacksComposerAndKeyRowOnTheKey
     check(rects.keyRow.bottom() == iPhone17eHeight - measuredIPhone17eKeyboardHeight);
     check(rects.composer.bottom() == rects.keyRow.y);
     check(rects.pane.bottom() == rects.composer.y);
-    check(rects.pane.h
-          == calculateKeyboardUpPaneHeight({.screenHeight = iPhone17eHeight,
-                                            .safeAreaTop = iPhone17eSafeAreaTop,
-                                            .softwareKeyboardHeight = measuredIPhone17eKeyboardHeight}));
 };
 
 auto tTypingRectsRaw = test("PaneScreenLayout/rawModeHasNoComposer") = []
@@ -208,4 +175,68 @@ auto tTypingRectsRaw = test("PaneScreenLayout/rawModeHasNoComposer") = []
 
     check(rects.composer.h == 0.0f);
     check(rects.pane.bottom() == rects.keyRow.y);
+};
+
+namespace
+{
+constexpr auto iPhone12MiniWidth = 375.0f;
+constexpr auto iPhone12MiniHeight = 812.0f;
+constexpr auto iPhone12MiniSafeAreaTop = 50.0f;
+constexpr auto iPhone12MiniSafeAreaBottom = 34.0f;
+constexpr auto threeDots = 3;
+constexpr auto fingerOverTheHomeIndicator = 20.0f;
+constexpr auto backSwipeLength = 120.0f;
+constexpr auto edgeStart = 6.0f;
+constexpr auto middleOfTheScreen = 180.0f;
+
+// The bar as BottomBar sees it on a 12 mini: its own coordinates, running on
+// under the home indicator.
+BottomBarLayout layOutIPhone12MiniBar()
+{
+    const auto screen = Rect {0.0f, 0.0f, iPhone12MiniWidth, iPhone12MiniHeight};
+    const auto safeArea = Insets {.top = iPhone12MiniSafeAreaTop, .bottom = iPhone12MiniSafeAreaBottom};
+    const auto rects = calculatePaneScreenRects(screen, safeArea);
+    const auto barInItsOwnCoordinates = Rect {0.0f, 0.0f, rects.bottomBar.w, bottomBarHeight};
+    return calculateBottomBarLayout(barInItsOwnCoordinates, chipWidth, threeDots);
+}
+} // namespace
+
+auto tIPhone12MiniBarHits = test("PaneScreenLayout/everyBarControlTakesAFingerOnA12Mini") = []
+{
+    const auto layout = layOutIPhone12MiniBar();
+
+    check(layout.overview.right() <= iPhone12MiniWidth);
+    check(findBottomBarControlAt(layout, layout.overview.center()).control == BottomBarControl::Overview);
+    check(findBottomBarControlAt(layout, layout.keyboard.center()).control == BottomBarControl::Keyboard);
+    check(findBottomBarControlAt(layout, layout.git.center()).control == BottomBarControl::Git);
+    check(findBottomBarControlAt(layout, layout.previousSession->center()).control
+          == BottomBarControl::PreviousSession);
+
+    for (auto index = 0; index < threeDots; ++index)
+    {
+        const auto dot = findBottomBarControlAt(layout, layout.paneDots[(std::size_t) index].center());
+        check(dot.control == BottomBarControl::PaneDot && dot.paneIndex == index);
+    }
+};
+
+auto tFingerBelowTheRow = test("PaneScreenLayout/aFingerOverTheHomeIndicatorMeansTheControlAbove") = []
+{
+    const auto layout = layOutIPhone12MiniBar();
+    const auto belowOverview = Point {layout.overview.center().x, bottomBarHeight + fingerOverTheHomeIndicator};
+    const auto belowKeyboard = Point {layout.keyboard.center().x, bottomBarHeight + fingerOverTheHomeIndicator};
+
+    check(findBottomBarControlAt(layout, moveOntoTheBarsRow(belowOverview)).control == BottomBarControl::Overview);
+    check(findBottomBarControlAt(layout, moveOntoTheBarsRow(belowKeyboard)).control == BottomBarControl::Keyboard);
+};
+
+auto tBackSwipe = test("PaneScreenLayout/swipeFromTheLeftEdgeGoesBack") = []
+{
+    const auto start = Point {edgeStart, middleOfTheScreen};
+
+    check(isSwipeFromTheLeftEdge(start, {edgeStart + backSwipeLength, middleOfTheScreen + smallWobble}));
+    check(!isSwipeFromTheLeftEdge({middleOfTheScreen, middleOfTheScreen},
+                                  {middleOfTheScreen + backSwipeLength, middleOfTheScreen}),
+          "only from the edge");
+    check(!isSwipeFromTheLeftEdge(start, {edgeStart + smallWobble, middleOfTheScreen + backSwipeLength}),
+          "a drag down from the edge is not back");
 };

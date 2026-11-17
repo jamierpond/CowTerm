@@ -3,6 +3,7 @@
 #include "Emulator/TerminalModel.h"
 #include "Shell/Shell.h"
 
+#include <functional>
 #include <memory>
 
 namespace term::phone
@@ -16,6 +17,9 @@ struct PaneMirror
 
     // Output or a restored state reached the mirror: it shows the pane.
     bool hasContent = false;
+
+    // Each piece of output, as it arrives, with its size in bytes.
+    std::function<void(std::size_t)> onOutput = [](std::size_t) {};
 
     static constexpr int defaultColumns = 80;
     static constexpr int defaultRows = 24;

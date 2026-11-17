@@ -1,5 +1,6 @@
 #pragma once
 
+#include "HeldPane.h"
 #include "LinkWatch.h"
 #include "MirroredShell.h"
 #include "PaneChoice.h"
@@ -105,11 +106,17 @@ public:
         const ChosenPane& pane, PtySize size, std::optional<PtySize> borrowed)>
         onPaneDrawn = [](const ChosenPane&, PtySize, std::optional<PtySize>) {};
 
-    // Sizes given back to a protocol 4 daemon (background, a stalled link).
+    // Sizes given back to a protocol 4 daemon (background, a stalled link, or
+    // at launch, for a pane an earlier run was killed holding).
     std::function<void(const std::string& host,
                        const std::vector<DaemonClient::ReturnedSize>&)>
         onSizesReturned = [](const std::string&,
                              const std::vector<DaemonClient::ReturnedSize>&) {};
+
+    // Output from the shown pane after a second or more of quiet: how soon
+    // what is typed on the Mac shows on the phone.
+    std::function<void(const ChosenPane& pane, std::size_t bytes)> onPaneOutputAfterQuiet =
+        [](const ChosenPane&, std::size_t) {};
 
 private:
     std::unique_ptr<BridgeLink> makeWatchedLink(const std::string& requestedHost);
@@ -134,8 +141,11 @@ private:
     void storeShownScreen();
     bool isShownPaneDrawnButNotReported() const;
     void reportShownPaneDrawn();
+    void noteShownPaneOutput(std::size_t bytes);
     void returnBorrowedSizes(const std::string& onHost);
     void claimReturnedSizesAgain();
+    void rememberHeldPane();
+    void returnSizeHeldByEarlierRun(const std::string& fromHost, const std::string& daemonHello);
     void updateLinkState();
 
     PhoneSettings settings;
@@ -153,10 +163,13 @@ private:
     std::set<std::string> hostsThatAnsweredLastInput;
     std::vector<LastInput> lastInputs;
     std::optional<PaneOnHostId> paneShownLastTime;
+    std::filesystem::path heldPanePath;
+    std::optional<HeldPane> heldByEarlierRun;
     std::optional<Milliseconds> firstAskedForLastInputAt;
     Milliseconds startedAt = 0;
     std::string shownPaneId;
     bool hasReportedShownPaneDrawn = false;
+    std::optional<Milliseconds> lastShownPaneOutputAt;
     Milliseconds lastStoredAt = 0;
     std::unique_ptr<eacp::Threads::Timer> tickTimer;
     std::shared_ptr<bool> alive = std::make_shared<bool>(true);

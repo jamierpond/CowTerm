@@ -31,6 +31,17 @@ bool& getClaimsSizeOfEveryPaneItShows()
     return claims;
 }
 
+// A pane view not yet laid out (the phone builds the next pane before it is on
+// screen) reports a grid of a few columns; claiming it would squeeze the
+// desk's pane, and keeping it as the adopted size would give that back later.
+// The narrowest real phone grid is about 40 columns.
+constexpr auto narrowestSizeWorthClaiming = 20;
+
+bool isWideEnoughToClaim(const PtySize& size)
+{
+    return size.cols >= narrowestSizeWorthClaiming;
+}
+
 bool& getOpensOnlyListedPanes()
 {
     static auto opensOnlyListed = false;
@@ -220,8 +231,15 @@ void DaemonClient::rememberSizeFoundOnAdopt(const std::string& id,
     if (!getClaimsSizeOfEveryPaneItShows() || borrowedSizes.contains(id))
         return;
 
-    if (const auto state = parseTerminalState(serializedState))
-        borrowedSizes[id] = {state->screen.columns, state->screen.rows};
+    const auto state = parseTerminalState(serializedState);
+
+    if (!state)
+        return;
+
+    const auto adoptedSize = PtySize {state->screen.columns, state->screen.rows};
+
+    if (isWideEnoughToClaim(adoptedSize))
+        borrowedSizes[id] = adoptedSize;
 }
 
 bool DaemonClient::doesDaemonKeepSizeOwners() const
@@ -447,6 +465,9 @@ void DaemonClient::writeUserInput(const std::string& id, std::string_view data)
 
 void DaemonClient::claimSize(const std::string& id, const PtySize& size)
 {
+    if (!isWideEnoughToClaim(size))
+        return;
+
     if (auto found = routes.find(id); found != routes.end())
         found->second.request.size = size;
 

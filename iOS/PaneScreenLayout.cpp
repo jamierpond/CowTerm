@@ -87,13 +87,6 @@ Rect calculateNewLinesPillBounds(Rect pane, float pillWidth)
     return {pane.center().x - pillWidth / 2.0f, top, pillWidth, pillHeight};
 }
 
-float calculateKeyboardUpPaneHeight(const KeyboardUpHeights& heights)
-{
-    const auto height = heights.screenHeight - heights.safeAreaTop - topLineHeight
-                        - heights.softwareKeyboardHeight - keyRowHeight - composerHeight;
-    return std::max(height, 0.0f);
-}
-
 BottomBarLayout calculateBottomBarLayout(Rect bar,
                                          std::optional<float> previousSessionWidth,
                                          int paneCount)
@@ -159,6 +152,25 @@ BottomBarGesture classifyBottomBarRelease(Point start, Point end)
 bool hasMovedBeyondTapSlop(Point start, Point current)
 {
     return calculateDistance(start, current) > tapSlop;
+}
+
+bool isStartingAtTheLeftEdge(Point start)
+{
+    constexpr auto leftEdgeWidth = 24.0f;
+    return start.x <= leftEdgeWidth;
+}
+
+bool isSwipeFromTheLeftEdge(Point start, Point end)
+{
+    const auto across = end.x - start.x;
+    const auto down = end.y - start.y;
+    return isStartingAtTheLeftEdge(start) && across >= swipeMinimumDistance && isMostlyAlong(across, down);
+}
+
+Point moveOntoTheBarsRow(Point position)
+{
+    constexpr auto middleOfTheRow = bottomBarHeight / 2.0f;
+    return {position.x, std::min(position.y, middleOfTheRow)};
 }
 
 int choosePaneAfterSwipe(int activePane, int paneCount, BottomBarGesture gesture)

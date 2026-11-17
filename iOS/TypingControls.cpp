@@ -1,5 +1,7 @@
 #include "TypingControls.h"
 
+#include <eacp/Core/Utils/Logging.h>
+
 namespace cowterm::mobile
 {
 using namespace eacp;
@@ -100,6 +102,7 @@ void TypingControls::layOut(const TypingRects& rects, bool isKeyboardUp)
 
 void TypingControls::raiseKeyboard()
 {
+    LOG("typing: raising the keyboard");
     auto& terminal = findTerminal();
 
     if (isRawMode)

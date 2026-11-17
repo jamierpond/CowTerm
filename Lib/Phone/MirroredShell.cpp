@@ -38,6 +38,7 @@ bool MirroredShell::start(const PtyOptions& options,
     {
         shared->model.feed(bytes);
         shared->hasContent = true;
+        shared->onOutput(bytes.size());
         show(std::move(bytes));
     };
 

@@ -50,6 +50,7 @@ void PaneTouchSurface::touchBegan(const TouchEvent& event)
     if (fingerDown)
         return;
 
+    LOG("pane screen: finger down at ", event.pos.x, ", ", event.pos.y);
     fingerDown = event;
     isScrolling = false;
 }
@@ -57,6 +58,10 @@ void PaneTouchSurface::touchBegan(const TouchEvent& event)
 void PaneTouchSurface::touchMoved(const TouchEvent& event)
 {
     if (!fingerDown || event.id != fingerDown->id)
+        return;
+
+    // A back swipe from the edge never scrolls.
+    if (isStartingAtTheLeftEdge(fingerDown->pos))
         return;
 
     if (!isScrolling && hasMovedBeyondTapSlop(fingerDown->pos, event.pos))
@@ -74,9 +79,13 @@ void PaneTouchSurface::touchEnded(const TouchEvent& event)
     if (!fingerDown || event.id != fingerDown->id)
         return;
 
+    const auto isBackSwipe = isSwipeFromTheLeftEdge(fingerDown->pos, event.pos);
+
     if (isScrolling)
         findTerminal().endTouchScroll(event);
-    else if (event.phase == Graphics::TouchPhase::Ended)
+    else if (isBackSwipe)
+        onSwipeFromTheLeftEdge();
+    else if (event.phase == Graphics::TouchPhase::Ended && !hasMovedBeyondTapSlop(fingerDown->pos, event.pos))
         clickTerminalAt(event);
 
     fingerDown.reset();
@@ -110,9 +119,22 @@ PaneScreen::PaneScreen(const term::TerminalConfig& config, const std::string& pa
 
     bottomBar.actions.onPreviousSession = [this] { actions.onPreviousSession(); };
     bottomBar.actions.onChoosePane = [this](int index) { actions.onChoosePane(index); };
-    bottomBar.actions.onKeyboard = [this] { raiseKeyboard(); };
+    bottomBar.actions.onKeyboard = [this]
+    {
+        LOG("bottom bar: keyboard");
+        raiseKeyboard();
+    };
     bottomBar.actions.onOpenMenu = [this] { openMenu(); };
-    bottomBar.actions.onOverview = [this] { actions.onOverview(); };
+    touchSurface.onSwipeFromTheLeftEdge = [this]
+    {
+        LOG("pane screen: back swipe from the left edge");
+        actions.onOverview();
+    };
+    bottomBar.actions.onOverview = [this]
+    {
+        LOG("bottom bar: overview");
+        actions.onOverview();
+    };
     pill.onReturnToBottom = [this] { returnToLiveBottom(); };
     menu.onClose = [this] { closeMenu(); };
     typing.onLayoutChanged = [this] { layOutParts(); };
@@ -191,48 +213,7 @@ bool PaneScreen::isLive() const
 void PaneScreen::setSoftwareKeyboardChange(const Graphics::SoftwareKeyboardChange& change)
 {
     softwareKeyboardCoveredHeight = change.coveredHeight;
-
-    // The tallest keyboard seen, so moving between the composer's keyboard and
-    // raw mode's, which has no suggestion bar, never resizes the shell.
-    if (change.coveredHeight > 0.0f && !isLandscape())
-    {
-        portraitSoftwareKeyboardHeight =
-            std::max(portraitSoftwareKeyboardHeight.value_or(0.0f), change.coveredHeight);
-    }
-
     layOutParts();
-}
-
-bool PaneScreen::isLandscape() const
-{
-    return getLocalBounds().w > getLocalBounds().h;
-}
-
-// In landscape the keyboard, composer and key row leave about four rows, too
-// few to fix a shell at, so there the grid follows the pane instead.
-void PaneScreen::fixGridAtKeyboardUpSize()
-{
-    const auto paneWidth = terminal->getLocalBounds().w;
-
-    if (paneWidth <= 0.0f)
-        return;
-
-    if (isLandscape())
-    {
-        terminal->setFixedGridSize(std::nullopt);
-        return;
-    }
-
-    auto heights = KeyboardUpHeights {};
-    heights.screenHeight = getLocalBounds().h;
-    heights.safeAreaTop = getSafeAreaInsets().top;
-    heights.softwareKeyboardHeight =
-        portraitSoftwareKeyboardHeight.value_or(defaultSoftwareKeyboardHeight);
-
-    const auto keyboardUpHeight = calculateKeyboardUpPaneHeight(heights);
-    const auto grid = terminal->calculateGridSizeFor({paneWidth, keyboardUpHeight});
-    LOG("pane grid ", grid.cols, " x ", grid.rows, " (keyboard-up height ", keyboardUpHeight, ")");
-    terminal->setFixedGridSize(grid);
 }
 
 void PaneScreen::resized()
@@ -293,7 +274,6 @@ void PaneScreen::layOutParts()
     touchSurface.setBounds(paneArea);
     pillHost.setBounds(calculateNewLinesPillBounds(paneArea, pillWidth));
     menuHost.setBounds(bounds.inset(getSafeAreaInsets()));
-    fixGridAtKeyboardUpSize();
 
     // A new width rewraps the screen with no output to say so: read it again.
     outputArrived->hasArrived = true;

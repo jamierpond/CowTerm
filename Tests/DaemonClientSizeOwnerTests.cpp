@@ -237,6 +237,29 @@ auto tDaemonWithSizeOwnersGetsNoSizeBack =
     check(phone.recorded.sent == std::vector {proto::make("release", {paneId})});
 };
 
+auto tPhoneNeverClaimsAGridNotLaidOut = test("DaemonClientSizeOwner/phoneNeverClaimsAGridNotLaidOut") = []
+{
+    constexpr auto columnsBeforeLayout = 11;
+    constexpr auto rowsBeforeLayout = 5;
+    auto phone = PhoneHoldingDeskPane {protocolBeforeSizeOwners};
+    phone.recorded.client->resize(paneId, {columnsBeforeLayout, rowsBeforeLayout});
+
+    check(phone.recorded.sent.empty());
+};
+
+auto tSqueezedPaneIsNotTakenForTheDesksSize = test("DaemonClientSizeOwner/squeezedPaneIsNotTakenForTheDesksSize") = []
+{
+    constexpr auto squeezedColumns = 11;
+    constexpr auto squeezedRows = 5;
+    DaemonClient::setClaimsSizeOfEveryPaneItShows(true);
+    auto recorded = ClientWithRecordedLink {};
+    recorded.client->spawn({paneId, {phoneColumns, rows}, "/tmp", "Grazer", {}}, {});
+    recorded.link->deliver(makeStateMessage(squeezedColumns, squeezedRows));
+    DaemonClient::setClaimsSizeOfEveryPaneItShows(false);
+
+    check(!recorded.client->findBorrowedSize(paneId));
+};
+
 auto tPhoneClaimsOnlyOnceTheListedPaneIsOpened =
     test("DaemonClientSizeOwner/phoneClaimsOnlyOnceTheListedPaneIsOpened") = []
 {

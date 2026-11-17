@@ -27,7 +27,6 @@ inline constexpr auto stopButtonWidth = 52.0f;
 // The iPhone 17e's keyboard in portrait with its suggestion bar, as the
 // composer brings it up, measured in the simulator: the keyboard-up row count
 // until the real keyboard has shown once.
-inline constexpr auto defaultSoftwareKeyboardHeight = 328.0f;
 
 struct PaneScreenRects
 {
@@ -55,19 +54,6 @@ TypingRects calculateTypingRects(Rect bounds, Insets insetsAroundParts, bool sho
 
 // The pill's place: centred, just above the bottom of the pane.
 Rect calculateNewLinesPillBounds(Rect pane, float pillWidth);
-
-struct KeyboardUpHeights
-{
-    float screenHeight = 0.0f;
-    float safeAreaTop = 0.0f;
-    float softwareKeyboardHeight = defaultSoftwareKeyboardHeight;
-};
-
-// The pane's height with the keyboard up: between the top line and the
-// composer and key row. The pane keeps the rows this height holds with the
-// keyboard down too, so showing the keyboard never resizes the shell's
-// terminal.
-float calculateKeyboardUpPaneHeight(const KeyboardUpHeights& heights);
 
 enum class BottomBarControl
 {
@@ -118,6 +104,15 @@ BottomBarGesture classifyBottomBarRelease(Point start, Point end);
 // Whether a finger has moved far enough from where it went down to be a drag
 // rather than a tap or a long press.
 bool hasMovedBeyondTapSlop(Point start, Point current);
+
+// A finger that started on the screen's left edge and travelled right: the
+// iOS back gesture, which takes the pane screen back to the overview.
+bool isStartingAtTheLeftEdge(Point start);
+bool isSwipeFromTheLeftEdge(Point start, Point end);
+
+// A finger on the bar below its row of controls, over the home indicator,
+// means the control above it.
+Point moveOntoTheBarsRow(Point position);
 
 // The pane after a sideways swipe or a dot tap, kept within the session.
 int choosePaneAfterSwipe(int activePane, int paneCount, BottomBarGesture gesture);

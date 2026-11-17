@@ -3,6 +3,7 @@
 #include "Multiplexer/TextLayout.h"
 
 #include <eacp/Core/Threads/EventLoop.h>
+#include <eacp/Core/Utils/Logging.h>
 
 #include <algorithm>
 #include <chrono>
@@ -210,8 +211,9 @@ void BottomBar::paint(UI::Graphics& g)
     g.drawText(gitLabel, layout.git, UI::Justification::Centred);
 }
 
-void BottomBar::mouseDown(const UI::MouseEvent&)
+void BottomBar::mouseDown(const UI::MouseEvent& event)
 {
+    LOG("bottom bar: finger down at ", event.position.x, ", ", event.position.y);
     isFingerDown = true;
     hasLongPressFired = false;
     ++pressGeneration;
@@ -276,7 +278,7 @@ void BottomBar::mouseUp(const UI::MouseEvent& event)
 
 void BottomBar::pressControlAt(Point position)
 {
-    const auto hit = findBottomBarControlAt(calculateLayout(), position);
+    const auto hit = findBottomBarControlAt(calculateLayout(), moveOntoTheBarsRow(position));
 
     switch (hit.control)
     {

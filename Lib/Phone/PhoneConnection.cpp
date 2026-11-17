@@ -23,6 +23,8 @@ constexpr auto lastInputAnswerWait = Milliseconds {2000};
 // slow host names late, under a finger already choosing a row.
 constexpr auto launchPaneChoiceWindow = Milliseconds {10000};
 constexpr auto storeIntervalWhileLive = Milliseconds {10000};
+constexpr auto heldPaneFileName = "held-pane.json";
+constexpr auto quietBeforeOutputIsReported = Milliseconds {1000};
 
 std::vector<std::string> listOverviewHosts(const PhoneSettings& settings)
 {
@@ -87,6 +89,8 @@ PhoneConnection::PhoneConnection(PhoneSettings settingsToUse,
     , host(makeHostLabel(settings.destination))
     , overviewHosts(listOverviewHosts(settings))
     , overview(overviewHosts)
+    , heldPanePath(settings.storedScreenPath.parent_path() / heldPaneFileName)
+    , heldByEarlierRun(loadHeldPane(heldPanePath))
     , startedAt(readClock())
 {
     DaemonClient::setClientName(phoneClientName);
@@ -139,7 +143,13 @@ std::unique_ptr<Shell> PhoneConnection::makeShell(const std::string& paneId)
 {
     shownPaneId = paneId;
     mirror = std::make_shared<PaneMirror>();
+    mirror->onOutput = [this, guard = std::weak_ptr<bool> {alive}](std::size_t bytes)
+    {
+        if (!guard.expired())
+            noteShownPaneOutput(bytes);
+    };
     hasReportedShownPaneDrawn = false;
+    lastShownPaneOutputAt.reset();
     auto sessionName = std::string {};
 
     if (chosenPane && chosenPane->paneId == paneId)
@@ -172,11 +182,14 @@ void PhoneConnection::handleBackground()
 
     for (const auto& overviewHost: overviewHosts)
         returnBorrowedSizes(overviewHost);
+
+    forgetHeldPane(heldPanePath);
 }
 
 void PhoneConnection::handleWake()
 {
     claimReturnedSizesAgain();
+    rememberHeldPane();
 
     for (auto& [watchedHost, watch]: watches)
         watch.noteWokeUp(readClock());
@@ -191,6 +204,37 @@ void PhoneConnection::returnBorrowedSizes(const std::string& onHost)
 
     if (!returned.empty())
         onSizesReturned(onHost, returned);
+}
+
+void PhoneConnection::rememberHeldPane()
+{
+    if (shownPaneId.empty())
+        return;
+
+    const auto& shownHost = findShownHost();
+
+    if (const auto borrowed = getShownRemoteHost().getDaemon().findBorrowedSize(shownPaneId))
+        saveHeldPane(heldPanePath, {shownHost, shownPaneId, *borrowed});
+}
+
+// The daemon-hello says whether this daemon keeps size owners; one that does
+// not still has the pane an earlier run was killed holding at phone size.
+void PhoneConnection::returnSizeHeldByEarlierRun(const std::string& fromHost, const std::string& daemonHello)
+{
+    if (!heldByEarlierRun || heldByEarlierRun->host != fromHost)
+        return;
+
+    const auto hello = proto::parse(daemonHello);
+    const auto held = *std::exchange(heldByEarlierRun, std::nullopt);
+    forgetHeldPane(heldPanePath);
+
+    if (hello.args.empty() || std::stoi(hello.args[0]) >= proto::sizeOwnerProtocolVersion)
+        return;
+
+    const auto& size = held.sizeBeforeThePhone;
+    auto& daemon = RemoteHosts::find(fromHost)->getDaemon();
+    daemon.send(proto::make("resize", {held.paneId, std::to_string(size.cols), std::to_string(size.rows)}));
+    onSizesReturned(fromHost, {{held.paneId, size}});
 }
 
 void PhoneConnection::claimReturnedSizesAgain()
@@ -309,6 +353,9 @@ void PhoneConnection::handleUnhandledMessage(const std::string& fromHost,
 {
     if (verb == "activity")
         return overview.handleActivity(fromHost, proto::parse(body).payload);
+
+    if (verb == "daemon-hello")
+        return returnSizeHeldByEarlierRun(fromHost, body);
 
     if (verb != "last-input")
         return;
@@ -460,7 +507,18 @@ void PhoneConnection::reportShownPaneDrawn()
     const auto& screen = mirror->model.screen;
     const auto borrowed =
         getShownRemoteHost().getDaemon().findBorrowedSize(shownPaneId);
+    rememberHeldPane();
     onPaneDrawn(*chosenPane, {screen.columns(), screen.rows()}, borrowed);
+}
+
+void PhoneConnection::noteShownPaneOutput(std::size_t bytes)
+{
+    const auto now = readClock();
+    const auto wasQuiet = !lastShownPaneOutputAt || now - *lastShownPaneOutputAt >= quietBeforeOutputIsReported;
+    lastShownPaneOutputAt = now;
+
+    if (wasQuiet && chosenPane)
+        onPaneOutputAfterQuiet(*chosenPane, bytes);
 }
 
 void PhoneConnection::storeShownScreen()

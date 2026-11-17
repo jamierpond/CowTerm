@@ -80,6 +80,10 @@ ios-pair phone="pond":
 ios-unpair phone="pond":
     scripts/unpair-ios-device.sh "{{phone}}"
 
+# Type into a throwaway pane on this Mac and measure how soon it shows on the phone
+ios-device-test-live-output phone="pond":
+    scripts/check-ios-device-live-output.sh "{{phone}}"
+
 # Print the log the app wrote on the phone on its last launch, or with "previous" the one before
 ios-device-log phone="pond" which="":
     scripts/read-ios-device-log.sh "{{phone}}" {{which}}

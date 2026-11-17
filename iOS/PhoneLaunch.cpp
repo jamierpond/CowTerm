@@ -240,6 +240,9 @@ void PhoneLaunch::logWhatTheConnectionHears()
             borrowed ? describeSize(*borrowed) : std::string {"unknown"});
     };
 
+    connection.onPaneOutputAfterQuiet = [](const ChosenPane& pane, std::size_t bytes)
+    { LOG("phone: output from pane ", pane.paneId, " on ", pane.host, ", ", bytes, " bytes"); };
+
     connection.onSizesReturned = [](const std::string& host, const std::vector<term::DaemonClient::ReturnedSize>& returned)
     {
         for (const auto& given: returned)

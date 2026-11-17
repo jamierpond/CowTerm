@@ -6,6 +6,8 @@
 #include "Multiplexer/HostColours.h"
 #include "Multiplexer/RemoteLocation.h"
 
+#include <eacp/Core/Utils/Logging.h>
+
 #include <algorithm>
 
 namespace cowterm::mobile
@@ -196,6 +198,7 @@ void OverviewList::paintUnreachableHost(UI::Graphics& g, const UnreachableHost& 
 
 void OverviewList::mouseDown(const UI::MouseEvent& event)
 {
+    LOG("overview list: finger down at ", event.position.x, ", ", event.position.y);
     pressStoppedACoast = momentum.isMoving();
     momentum.stop();
     stopAnimating();
@@ -285,7 +288,11 @@ OverviewPanel::OverviewPanel(const term::Theme& themeToUse)
     searchField.setColour(term::toColor(theme.foreground));
     searchField.setAccentColour(term::toColor(theme.ansi[ansiBlue]));
     searchField.setPlaceholder(searchPlaceholder);
-    searchField.onTextChange = [this](const std::string& query) { showSearchResults(query); };
+    searchField.onTextChange = [this](const std::string& query)
+    {
+        LOG("overview search: typed, now ", query.size(), " characters");
+        showSearchResults(query);
+    };
     searchField.onReturnKey = [this](const std::string&) { openBestMatch(); };
 
     addChildren({list, searchField});

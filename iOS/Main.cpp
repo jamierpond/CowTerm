@@ -247,6 +247,48 @@ std::string getPaneId(const std::unique_ptr<cowterm::mobile::PhoneLaunch>& phone
     return {};
 }
 
+// The window's one content view: the pane screen and the overview both live
+// in it, and it shows one. On a real phone a view swapped in with
+// Window::setContentView drew but never received a touch.
+class ScreenStack final : public Graphics::View
+{
+public:
+    ScreenStack(Graphics::View& paneScreenToUse, Graphics::View& overviewToUse, bool showsOverviewFirst)
+        : paneScreen(paneScreenToUse)
+        , overview(overviewToUse)
+    {
+        addChildren({paneScreen, overview});
+        show(chooseScreen(showsOverviewFirst));
+    }
+
+    void showPaneScreen() { show(paneScreen); }
+    void showOverview() { show(overview); }
+
+    void resized() override
+    {
+        paneScreen.setBounds(getLocalBounds());
+        overview.setBounds(getLocalBounds());
+    }
+
+private:
+    Graphics::View& chooseScreen(bool showsOverviewFirst)
+    {
+        if (showsOverviewFirst)
+            return overview;
+
+        return paneScreen;
+    }
+
+    void show(Graphics::View& screen)
+    {
+        paneScreen.setVisible(&screen == &paneScreen);
+        overview.setVisible(&screen == &overview);
+    }
+
+    Graphics::View& paneScreen;
+    Graphics::View& overview;
+};
+
 struct CowTermMobileApp
 {
     explicit CowTermMobileApp(const LaunchOptions& launchOptionsToUse)
@@ -278,7 +320,7 @@ struct CowTermMobileApp
         };
 
         if (phone != nullptr)
-            phoneBinding.emplace(*phone, screen, [this] { window.setContentView(screen); });
+            phoneBinding.emplace(*phone, screen, [this] { screens.showPaneScreen(); });
         else if (launchOptions.showsSamples)
             showSamplePane();
 
@@ -357,7 +399,7 @@ struct CowTermMobileApp
 
         if (phone != nullptr)
         {
-            phoneOverview.emplace(*phone, overview, [this] { window.setContentView(screen); });
+            phoneOverview.emplace(*phone, overview, [this] { screens.showPaneScreen(); });
             phoneOverview->openSessionOnceListed(launchOptions.sessionToOpen);
             phoneOverview->setShown(isShowingOverviewFirst());
             return;
@@ -370,16 +412,17 @@ struct CowTermMobileApp
         overview.onOpenSession = [this](const term::overview::OverviewRow& session)
         {
             LOG("overview: open ", session.host, "/", session.sessionName);
-            window.setContentView(screen);
+            screens.showPaneScreen();
         };
     }
 
     void showOverview()
     {
+        LOG("overview: shown");
         if (phoneOverview)
             phoneOverview->setShown(true);
 
-        window.setContentView(overview);
+        screens.showOverview();
     }
 
     // The pane screen comes first only with a pane to show: a named one, or the sample.
@@ -392,14 +435,6 @@ struct CowTermMobileApp
             return false;
 
         return !isOpeningAPhonePane(phone);
-    }
-
-    Graphics::View& chooseRootView()
-    {
-        if (isShowingOverviewFirst())
-            return overview;
-
-        return screen;
     }
 
     // A picture taken twelve seconds before launch, so a pane that is not
@@ -416,7 +451,8 @@ struct CowTermMobileApp
     std::optional<cowterm::mobile::PhonePaneBinding> phoneBinding;
     std::optional<cowterm::mobile::PhoneOverviewBinding> phoneOverview;
     cowterm::mobile::OverviewScreen overview;
-    Graphics::Window window {chooseRootView(), makeWindowOptions()};
+    ScreenStack screens {screen, overview, isShowingOverviewFirst()};
+    Graphics::Window window {screens, makeWindowOptions()};
 };
 } // namespace
 

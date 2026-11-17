@@ -138,6 +138,24 @@ auto quietHostIsNotRedialledWhileNoPaneIsShown = test("PhoneConnection/quietHost
     check(phone.factory.requestedHosts.size() == 1, "the overview asks no host every second");
 };
 
+auto paneHeldWhenKilledGetsItsSizeBackNextLaunch =
+    test("PhoneConnection/paneHeldWhenKilledGetsItsSizeBackNextLaunch") = []
+{
+    constexpr auto deskColumns = 150;
+    constexpr auto deskRows = 41;
+    const auto settings = makeSettings({});
+    const auto heldPanePath = settings.storedScreenPath.parent_path() / "held-pane.json";
+    saveHeldPane(heldPanePath, {"jamie@tamby", "pane-held", {deskColumns, deskRows}});
+
+    auto phone = PhoneOnRecordedHost {settings};
+    phone.bringLinkUp();
+    phone.answer(proto::make("daemon-hello", {std::to_string(proto::sizeOwnerProtocolVersion - 1)}));
+
+    check(phone.hasSentMessageStartingWith(
+        proto::make("resize", {"pane-held", std::to_string(deskColumns), std::to_string(deskRows)})));
+    check(!loadHeldPane(heldPanePath), "given back once");
+};
+
 auto quietPhoneLinkStallsThenRedials =
     test("PhoneConnection/quietLinkStallsThenRedials") = []
 {
