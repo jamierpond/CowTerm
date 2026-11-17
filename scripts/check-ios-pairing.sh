@@ -30,24 +30,6 @@ trap 'kill "$(cat "$work/sshd.pid" 2> /dev/null)" 2> /dev/null || true; rm -rf "
 
 cmake --build build-ios-sim --config "$configuration" --target CowTermMobile -- -sdk iphonesimulator -quiet
 
-# The build is unsigned, and an unsigned app gets no keychain, where the phone
-# keeps its key: sign a copy ad hoc (no identity, no keychain on this Mac) with
-# the application identifier a team-signed build would have.
-cp -R "$app" "$work/"
-app="$work/CowTermMobile.app"
-cat > "$work/entitlements.plist" << ENTITLEMENTS
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>application-identifier</key>
-    <string>SIMULATOR.$bundle_id</string>
-    <key>keychain-access-groups</key>
-    <array><string>SIMULATOR.$bundle_id</string></array>
-</dict>
-</plist>
-ENTITLEMENTS
-codesign --force --sign - --entitlements "$work/entitlements.plist" "$app"
 
 find_or_create_simulator() {
     name="$1"

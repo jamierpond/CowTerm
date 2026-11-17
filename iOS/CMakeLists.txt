@@ -58,6 +58,14 @@ target_include_directories(CowTermMobile PRIVATE ${PROJECT_SOURCE_DIR}/Terminal)
 target_sources(CowTermMobile PRIVATE Resources/Assets.xcassets)
 set_source_files_properties(Resources/Assets.xcassets PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
 
+# A simulator build is not signed, so it has no keychain, where the phone keeps
+# its ssh key. Xcode gives a simulator app its entitlements in this section of
+# the binary; a device build's come from its signature instead.
+if (CMAKE_OSX_SYSROOT MATCHES "iphonesimulator")
+    target_link_options(CowTermMobile PRIVATE
+            "LINKER:-sectcreate,__TEXT,__entitlements,${CMAKE_CURRENT_SOURCE_DIR}/Simulator.entitlements")
+endif ()
+
 # An Xcode archive keeps only the app, never the libraries it links.
 set_target_properties(CowTermMobile PROPERTIES
         MACOSX_BUNDLE TRUE
