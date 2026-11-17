@@ -29,6 +29,10 @@ constexpr auto samplePaneCount = 3;
 constexpr auto streamedLinesPerSecond = 10;
 constexpr auto scrollBackDelay = Time::MS {5000};
 
+// Long enough for a link to a host to come up and its session to be listed.
+constexpr auto paneSwitchDelay = Time::MS {10000};
+constexpr auto secondPaneIndex = 1;
+
 // Long enough for the keyboard to have come up, so the composer is on screen.
 constexpr auto composeDelay = Time::MS {1500};
 
@@ -120,6 +124,7 @@ struct LaunchOptions
     bool streamsOutput = false;
     bool scrollsBack = false;
     bool typesRaw = false;
+    bool switchesToSecondPane = false;
     std::string composedText;
     bool showsOverview = false;
     cowterm::mobile::LinkState linkState = cowterm::mobile::LinkState::Live;
@@ -156,6 +161,7 @@ constexpr LaunchSwitch launchSwitches[] = {
     {"--stream", &LaunchOptions::streamsOutput},
     {"--scroll-back", &LaunchOptions::scrollsBack},
     {"--raw", &LaunchOptions::typesRaw},
+    {"--switch-to-second-pane", &LaunchOptions::switchesToSecondPane},
     {"--overview", &LaunchOptions::showsOverview},
 };
 
@@ -349,6 +355,12 @@ struct CowTermMobileApp
 
         if (launchOptions.raisesSoftwareKeyboard)
             screen.raiseKeyboard();
+
+        if (launchOptions.switchesToSecondPane)
+        {
+            Threads::callAfter(paneSwitchDelay,
+                               [this] { screen.actions.onChoosePane(secondPaneIndex); });
+        }
 
         if (!launchOptions.composedText.empty())
         {
