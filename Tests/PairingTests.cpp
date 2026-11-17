@@ -112,6 +112,11 @@ auto fingerprintMatchesSshKeygen = test("Pairing/fingerprintMatchesSshKeygen") =
     check(formatHostKeyFingerprint(makeExampleKeyBlob()) == exampleFingerprint);
 };
 
+auto hostKeyCheckCommandNamesTheKeyFile = test("Pairing/hostKeyCheckCommandNamesTheKeyFile") = []
+{
+    check(makeHostKeyCheckCommand(makeExampleKeyBlob()) == "ssh-keygen -lf /etc/ssh/ssh_host_ecdsa_key.pub");
+};
+
 auto typedHostForgivesSpacesAndSsh = test("Pairing/typedHostForgivesSpacesAndSsh") = []
 {
     constexpr auto otherPort = 2222;

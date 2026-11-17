@@ -134,6 +134,18 @@ nano_add_executable(CowTermPaneScreenTests
         TARGETS eacp-graphics eacp-ui CowTerm::Phone CowTerm::TerminalView)
 
 target_include_directories(CowTermPaneScreenTests PRIVATE ../iOS)
+
+# Where the phone's pairing screen puts its QR code, in every orientation, and
+# how the app's edge uses the phone's own key.
+nano_add_executable(CowTermPairingScreenTests
+        SOURCES
+            PairingLayoutTests.cpp
+            PhonePairingTests.cpp
+            ../iOS/PairingLayout.cpp
+            ../iOS/PhonePairing.cpp
+        TARGETS eacp-graphics CowTerm::Phone CowTerm::Pairing)
+
+target_include_directories(CowTermPairingScreenTests PRIVATE ../iOS)
 endif ()
 
 # forkpty/openpty live in libutil on Linux; on Apple they are in libSystem.

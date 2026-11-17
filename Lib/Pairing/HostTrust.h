@@ -16,6 +16,10 @@ std::optional<SshDestination> parseTypedHost(std::string_view typed);
 // "SHA256:" and the unpadded base64 of the key's SHA-256.
 std::string formatHostKeyFingerprint(std::string_view keyBlob);
 
+// The command that prints, on the computer itself, the fingerprint of its host
+// key of this type: "ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub".
+std::string makeHostKeyCheckCommand(std::string_view keyBlob);
+
 // The known_hosts line that trusts keyBlob for the destination: the host
 // alone on port 22, "[host]:port" otherwise, as OpenSSH writes it.
 std::string makeKnownHostsLine(const SshDestination& destination, std::string_view keyBlob);

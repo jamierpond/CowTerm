@@ -329,3 +329,7 @@ ios-release *arguments:
 # App Store Connect for the iPhone app: check, testflight (the note, the internal group), invite <email>; --write sends
 ios-asc *arguments:
     {{asc}} scripts/app-store-connect.py {{arguments}}
+
+# Walk the pairing screen's states in a Release simulator build against a throwaway sshd, and screenshot each
+ios-check-pairing folder="build-ios-sim/pairing-screenshots":
+    scripts/check-ios-pairing.sh {{folder}}

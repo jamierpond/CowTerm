@@ -9,9 +9,9 @@ using term::overview::OverviewRow;
 namespace
 {
 constexpr auto oneMinute = std::int64_t {60'000};
-constexpr auto laptop = "jamiepond@tamby";
-constexpr auto rack = "jamiepond@macprorack";
-constexpr auto desk = "jamiepond@big-cow";
+constexpr auto laptop = "you@laptop";
+constexpr auto rack = "you@build-server";
+constexpr auto desk = "you@mac-mini";
 constexpr auto sampleHostCount = 3;
 
 struct SampleSession
@@ -66,7 +66,7 @@ OverviewInputs makeSampleOverviewInputs()
     auto inputs = OverviewInputs {};
     inputs.nowMilliseconds = getMillisecondsSinceEpochNow();
     inputs.hostCount = sampleHostCount + 1;
-    inputs.unreachableHosts = {{"jamie@thinkpad", "ssh: connect timed out after 5 s"}};
+    inputs.unreachableHosts = {{"you@linux-box", "ssh: connect timed out after 5 s"}};
 
     for (const auto& sample: sampleSessions)
         inputs.sessions.push_back(makeRow(sample, inputs.nowMilliseconds));

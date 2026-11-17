@@ -15,6 +15,33 @@ namespace
 constexpr auto sshCommandPrefix = std::string_view {"ssh "};
 constexpr auto fingerprintPrefix = "SHA256:";
 constexpr auto hashedHostMarker = '|';
+constexpr auto hostKeyCheckCommandStart = "ssh-keygen -lf /etc/ssh/ssh_host_";
+constexpr auto hostKeyCheckCommandEnd = "_key.pub";
+
+struct HostKeyFileName
+{
+    std::string_view keyType;
+    std::string_view fileKind;
+};
+
+constexpr HostKeyFileName hostKeyFileNames[] = {
+    {"ssh-ed25519", "ed25519"},
+    {"ecdsa-sha2-nistp256", "ecdsa"},
+    {"ecdsa-sha2-nistp384", "ecdsa"},
+    {"ecdsa-sha2-nistp521", "ecdsa"},
+    {"ssh-rsa", "rsa"},
+};
+
+std::string_view findHostKeyFileKind(const std::string& keyType)
+{
+    for (const auto& entry: hostKeyFileNames)
+    {
+        if (entry.keyType == keyType)
+            return entry.fileKind;
+    }
+
+    return "*";
+}
 
 std::string describeHostField(const SshDestination& destination)
 {
@@ -91,6 +118,12 @@ std::string formatHostKeyFingerprint(std::string_view keyBlob)
     auto encoded = eacp::Base64::encode(digestBytes);
     std::erase(encoded, '=');
     return fingerprintPrefix + encoded;
+}
+
+std::string makeHostKeyCheckCommand(std::string_view keyBlob)
+{
+    const auto fileKind = findHostKeyFileKind(readKeyTypeName(keyBlob));
+    return hostKeyCheckCommandStart + std::string {fileKind} + hostKeyCheckCommandEnd;
 }
 
 std::string makeKnownHostsLine(const SshDestination& destination, std::string_view keyBlob)

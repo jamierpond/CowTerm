@@ -123,7 +123,7 @@ std::optional<PhoneSettings> parsePhoneSettings(const std::vector<std::string>& 
     auto settings = PhoneSettings {};
     settings.destination = destinations->front();
     settings.overviewDestinations = *destinations;
-    settings.credentials = {text.agentSocketPath, text.privateKeyPath, text.knownHostsPath, text.publicKeyPath};
+    settings.credentials = {text.agentSocketPath, text.privateKeyPath, text.knownHostsPath, text.publicKeyPath, {}};
     settings.explicitPaneId = text.paneId;
     settings.storedScreenPath = storedScreenPath;
 

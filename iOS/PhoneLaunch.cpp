@@ -151,7 +151,7 @@ std::optional<PhoneSettings> PhoneLaunch::readSettings(int argc, char* argv[])
         return fromLaunch;
     }
 
-    const auto pairingFolder = term::getDataDirectory() / pairingFolderName;
+    const auto pairingFolder = getPairingFolder();
     auto paired = parsePhoneSettings(arguments, makePairedSetupReader(pairingFolder), storedScreenPath);
 
     if (paired)
@@ -160,6 +160,11 @@ std::optional<PhoneSettings> PhoneLaunch::readSettings(int argc, char* argv[])
         LOG("phone: no hosts set up in ", pairingFolder.string());
 
     return paired;
+}
+
+std::filesystem::path PhoneLaunch::getPairingFolder()
+{
+    return term::getDataDirectory() / pairingFolderName;
 }
 
 std::string PhoneLaunch::describeHostList(const PhoneSettings& settings)

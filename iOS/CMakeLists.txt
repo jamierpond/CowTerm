@@ -24,6 +24,11 @@ eacp_add_app(CowTermMobile
         Typing.cpp
         TypingControls.cpp
         ClaudePrompt.cpp
+        DeviceKey-iOS.mm
+        PairingLayout.cpp
+        PairingScreen.cpp
+        PhonePairing.cpp
+        QrCode-iOS.mm
         OutputWatchingShell.cpp
         ScreenAwake-iOS.mm
         ${PROJECT_SOURCE_DIR}/Terminal/NotifyUserPrompt.cpp
@@ -45,7 +50,8 @@ target_sources(CowTermMobile PRIVATE Resources/PrivacyInfo.xcprivacy)
 set_source_files_properties(Resources/PrivacyInfo.xcprivacy PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
 
 target_link_libraries(CowTermMobile PRIVATE
-        CowTerm::TerminalView CowTerm::Multiplexer CowTerm::Phone eacp-ui "-framework Network")
+        CowTerm::TerminalView CowTerm::Multiplexer CowTerm::Phone CowTerm::Pairing eacp-ui
+        "-framework Network" "-framework Security" "-framework CoreImage")
 # The Mac's paste confirmation, reused as it is.
 target_include_directories(CowTermMobile PRIVATE ${PROJECT_SOURCE_DIR}/Terminal)
 # The cow icon in every iPhone size, from scripts/make-ios-app-icon.sh.

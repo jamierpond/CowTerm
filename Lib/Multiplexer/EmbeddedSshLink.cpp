@@ -13,6 +13,7 @@
 #include <atomic>
 #include <cerrno>
 #include <charconv>
+#include <cstdlib>
 #include <cstring>
 #include <fcntl.h>
 #include <mutex>
@@ -241,6 +242,25 @@ public:
         return pumpChannel();
     }
 
+    // Connects and exchanges keys, nothing more, and gives the host's key.
+    std::variant<SshHostKey, std::string> readHostKey()
+    {
+        for (const auto step: {&SshSessionRunner::connectSocket, &SshSessionRunner::startSession})
+        {
+            if (auto failure = (this->*step)())
+                return std::move(*failure);
+        }
+
+        auto keyLength = std::size_t {0};
+        auto sessionKeyType = 0;
+        const auto* key = libssh2_session_hostkey(session.get(), &keyLength, &sessionKeyType);
+
+        if (key == nullptr)
+            return std::string {"ssh: "} + destination.host + " offered no host key";
+
+        return SshHostKey {std::string {key, keyLength}};
+    }
+
 private:
     std::optional<std::string> connectSocket()
     {
@@ -376,8 +396,13 @@ private:
 
     std::optional<std::string> authenticate()
     {
-        if (authenticateWithAgent() || authenticateWithKeyFile())
-            return std::nullopt;
+        for (const auto method: {&SshSessionRunner::authenticateWithAgent,
+                                 &SshSessionRunner::authenticateWithKeyFile,
+                                 &SshSessionRunner::authenticateWithSigningKey})
+        {
+            if ((this->*method)())
+                return std::nullopt;
+        }
 
         return destination.user + "@" + destination.host + ": Permission denied (publickey)." + describeKeyFileFailure();
     }
@@ -435,6 +460,47 @@ private:
                                                       credentials.privateKeyPath.c_str(),
                                                       nullptr)
                == 0;
+    }
+
+    bool authenticateWithSigningKey()
+    {
+        if (!credentials.signingKey)
+            return false;
+
+        const auto& key = *credentials.signingKey;
+        const auto* publicKey = reinterpret_cast<const unsigned char*>(key.publicKeyBlob.data());
+        auto* signingKeyForCallback = const_cast<SshSigningKey*>(&key);
+        auto* abstract = static_cast<void*>(signingKeyForCallback);
+        return libssh2_userauth_publickey(session.get(),
+                                          destination.user.c_str(),
+                                          publicKey,
+                                          key.publicKeyBlob.size(),
+                                          &signWithSigningKey,
+                                          &abstract)
+               == 0;
+    }
+
+    // libssh2's sign callback, its arguments fixed by libssh2; it frees the
+    // signature with its allocator, which is malloc's here.
+    static int signWithSigningKey(LIBSSH2_SESSION*,
+                                  unsigned char** signature,
+                                  size_t* signatureLength,
+                                  const unsigned char* data,
+                                  size_t dataLength,
+                                  void** abstract)
+    {
+        const auto* key = static_cast<const SshSigningKey*>(*abstract);
+        const auto dataText = std::string_view {reinterpret_cast<const char*>(data), dataLength};
+        const auto signatureBlob = key->sign(dataText);
+
+        if (!signatureBlob)
+            return -1;
+
+        auto* buffer = static_cast<unsigned char*>(std::malloc(signatureBlob->size()));
+        std::memcpy(buffer, signatureBlob->data(), signatureBlob->size());
+        *signature = buffer;
+        *signatureLength = signatureBlob->size();
+        return 0;
     }
 
     std::optional<std::string> openBridgeChannel()
@@ -625,6 +691,13 @@ std::optional<SshDestination> parseSshDestination(const std::string& text)
         return std::nullopt;
 
     return destination;
+}
+
+std::variant<SshHostKey, std::string> readSshHostKey(const SshDestination& destination)
+{
+    auto connection = EmbeddedSshConnection {};
+    auto runner = SshSessionRunner {connection, {destination, {}, {}}, [](std::string) {}};
+    return runner.readHostKey();
 }
 
 EmbeddedSshLink::EmbeddedSshLink(const SshDestination& destination,

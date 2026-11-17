@@ -13,14 +13,14 @@ using namespace eacp;
 namespace
 {
 constexpr std::string_view sampleScreenText =
-    "\x1b[1;32mjamie@tamby\x1b[0m:\x1b[1;34m~/projects/CowTerm\x1b[0m$ git status\r\n"
+    "\x1b[1;32myou@laptop\x1b[0m:\x1b[1;34m~/projects/CowTerm\x1b[0m$ git status\r\n"
     "On branch \x1b[1mjp/ios-app\x1b[0m\r\n"
     "Changes not staged for commit:\r\n"
     "  \x1b[31mmodified:   Lib/Shell/CMakeLists.txt\x1b[0m\r\n"
     "\x1b[32mUntracked files:\x1b[0m\r\n"
     "  \x1b[32miOS/\x1b[0m\r\n"
     "\r\n"
-    "\x1b[1;32mjamie@tamby\x1b[0m:\x1b[1;34m~/projects/CowTerm\x1b[0m$ ls\r\n"
+    "\x1b[1;32myou@laptop\x1b[0m:\x1b[1;34m~/projects/CowTerm\x1b[0m$ ls\r\n"
     "\x1b[1;34mDaemon\x1b[0m  \x1b[1;34mLib\x1b[0m  \x1b[1;34mRemote\x1b[0m  "
     "\x1b[1;34mTerminal\x1b[0m  \x1b[1;34miOS\x1b[0m  CMakeLists.txt\r\n"
     "\r\n"
@@ -31,7 +31,7 @@ constexpr std::string_view sampleScreenText =
     "\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80"
     "\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x98\r\n"
     "\r\n"
-    "\x1b[1;32mjamie@tamby\x1b[0m:\x1b[1;34m~/projects/CowTerm\x1b[0m$ ";
+    "\x1b[1;32myou@laptop\x1b[0m:\x1b[1;34m~/projects/CowTerm\x1b[0m$ ";
 
 // Claude Code asking to run a command, as its permission prompt draws.
 constexpr std::string_view sampleClaudePromptText =

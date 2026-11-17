@@ -58,6 +58,7 @@ public:
     HostPairingStep getStep() const { return step; }
     const std::optional<SshDestination>& getDestination() const { return destination; }
     const std::string& getFingerprint() const { return fingerprint; }
+    const std::string& getOfferedKeyBlob() const { return offeredKeyBlob; }
     const std::string& getMessage() const { return message; }
 
 private:

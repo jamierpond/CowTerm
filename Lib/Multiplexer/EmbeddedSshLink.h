@@ -3,9 +3,12 @@
 #include "BridgeLink.h"
 #include "RemoteLocation.h"
 
+#include <functional>
 #include <memory>
 #include <optional>
 #include <string>
+#include <string_view>
+#include <variant>
 
 namespace term
 {
@@ -24,6 +27,15 @@ struct SshDestination
 // Empty when text has no user, no host, or a port that is not a number.
 std::optional<SshDestination> parseSshDestination(const std::string& text);
 
+// A key whose private half the app cannot read, such as one in the iOS
+// keychain: its public key in ssh's wire form, and a function that signs data
+// with it and gives ssh's signature blob, empty when it cannot.
+struct SshSigningKey
+{
+    std::string publicKeyBlob;
+    std::function<std::optional<std::string>(std::string_view data)> sign;
+};
+
 // What the link authenticates and checks the host with. The app reads these
 // at its edge; the link never looks at the environment or the home folder.
 struct SshCredentials
@@ -41,7 +53,20 @@ struct SshCredentials
     // derive it only from an RSA key, so an ECDSA key file needs it; empty
     // lets libssh2 derive it.
     std::string publicKeyPath;
+
+    // Tried after the key file; empty skips it.
+    std::optional<SshSigningKey> signingKey;
 };
+
+// The key a host offers, in ssh's wire form, from a connection that goes no
+// further than the key exchange: for showing its fingerprint before trusting it.
+struct SshHostKey
+{
+    std::string keyBlob;
+};
+
+// Blocks for up to the link's setup timeout; the failure reads like OpenSSH's.
+std::variant<SshHostKey, std::string> readSshHostKey(const SshDestination& destination);
 
 // A remote session daemon reached by running `ct bridge` on an ssh exec
 // channel opened inside this process (libssh2), for platforms that cannot

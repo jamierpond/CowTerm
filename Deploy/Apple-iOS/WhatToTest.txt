@@ -1,5 +1,7 @@
-CowTerm shows your terminal sessions on the computers you reach over ssh, and lets you read and type in their panes.
+CowTerm shows the terminal sessions on your computers and lets you read and type in their panes over ssh.
 
-To set it up, open the app and tap Add a computer. Copy the key it shows into ~/.ssh/authorized_keys on that computer, then enter user@computer. The first time it connects, compare the fingerprint it shows with the computer's own host key (ssh-keygen -lf /etc/ssh/ssh_host_ecdsa_key.pub) before you tap Trust.
+The computer needs CowTerm's ct and its session daemon installed, and the phone must reach it over ssh, for example on Tailscale.
 
-Each computer needs CowTerm's ct and its session daemon installed. The phone opens your existing sessions there; it cannot start a shell on its own.
+On first launch the app shows "Add a computer". Add the key it shows to ~/.ssh/authorized_keys on that computer: scan the code, or tap Copy key and send it there. Then type the computer as user@computer and tap Connect. The first time, compare the fingerprint the app shows with what the command under it prints on the computer, and tap Trust only if they match.
+
+This beta pairs one computer. To start again, delete and reinstall the app.

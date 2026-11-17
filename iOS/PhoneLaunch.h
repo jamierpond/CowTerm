@@ -6,6 +6,7 @@
 #include "Phone/SessionOpenings.h"
 #include "TerminalView/TerminalView.h"
 
+#include <filesystem>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -26,6 +27,10 @@ public:
     // else from the setup `just ios-pair` copied into the app's container.
     // Empty when neither has a host.
     static std::optional<term::phone::PhoneSettings> readSettings(int argc, char* argv[]);
+
+    // Where `just ios-pair`, and the app's own pairing screen, keep the hosts,
+    // known_hosts and any key file.
+    static std::filesystem::path getPairingFolder();
 
     // The pane view's config: its shell is the daemon's pane on the host.
     term::TerminalConfig makeTerminalConfig();

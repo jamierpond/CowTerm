@@ -3,11 +3,13 @@
 #include "NoPaneYetShell.h"
 #include "OverviewSamples.h"
 #include "OverviewScreen.h"
+#include "PairingScreen.h"
 #include "PaneScreen.h"
 #include "PhoneDiffViewBinding.h"
 #include "PhoneLaunch.h"
 #include "PhoneOverviewBinding.h"
 #include "PhonePaneBinding.h"
+#include "PhonePairing.h"
 #include "SampleShell.h"
 
 #include "Multiplexer/DataDirectories.h"
@@ -16,12 +18,14 @@
 #include "TerminalView/TerminalView.h"
 
 #include <eacp/Core/App/App.h>
+#include <eacp/Core/App/AppEnvironment.h>
 #include <eacp/Core/Threads/EventLoop.h>
 #include <eacp/Core/Threads/Timer.h>
 #include <eacp/Core/Utils/Logging.h>
 #include <eacp/Graphics/Window/Window.h>
 
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cstdlib>
 #include <filesystem>
@@ -184,7 +188,7 @@ LaunchOptions parseLaunchOptions(int argc, char* argv[])
 cowterm::mobile::PaneDescription makeSamplePaneDescription(int paneCount)
 {
     auto pane = cowterm::mobile::PaneDescription {};
-    pane.hostName = "tamby";
+    pane.hostName = "laptop";
     pane.sessionName = "Grazer";
     pane.previousSessionName = "CowTerm";
     pane.paneCount = std::max(paneCount, 1);
@@ -224,7 +228,7 @@ std::string describeSampleStatusNote(cowterm::mobile::LinkState state)
     if (state == cowterm::mobile::LinkState::Live)
         return {};
 
-    return "tamby: connection lost; reconnecting\xe2\x80\xa6";
+    return "laptop: connection lost; reconnecting\xe2\x80\xa6";
 }
 
 std::unique_ptr<cowterm::mobile::PhoneLaunch> makePhoneLaunch(const LaunchOptions& launchOptions)
@@ -265,61 +269,82 @@ std::string getPaneId(const std::unique_ptr<cowterm::mobile::PhoneLaunch>& phone
     return {};
 }
 
-// The window's one content view: the pane screen and the overview both live
-// in it, and it shows one. eacp sends every touch to the window's root view
-// and hit-tests from there, so the root never changes.
-class ScreenStack final : public Graphics::View
+enum class FirstScreen
 {
-public:
-    ScreenStack(Graphics::View& paneScreenToUse,
-                Graphics::View& overviewToUse,
-                Graphics::View& diffViewToUse,
-                bool showsOverviewFirst)
-        : paneScreen(paneScreenToUse)
-        , overview(overviewToUse)
-        , diffView(diffViewToUse)
-    {
-        addChildren({paneScreen, overview, diffView});
-        show(chooseScreen(showsOverviewFirst));
-    }
+    PaneScreen,
+    Overview,
+    Pairing
+};
 
-    void showPaneScreen() { show(paneScreen); }
-    void showOverview() { show(overview); }
-    void showDiffView() { show(diffView); }
-
-    void resized() override
-    {
-        paneScreen.setBounds(getLocalBounds());
-        overview.setBounds(getLocalBounds());
-        diffView.setBounds(getLocalBounds());
-    }
-
-private:
-    Graphics::View& chooseScreen(bool showsOverviewFirst)
-    {
-        if (showsOverviewFirst)
-            return overview;
-
-        return paneScreen;
-    }
-
-    void show(Graphics::View& screen)
-    {
-        paneScreen.setVisible(&screen == &paneScreen);
-        overview.setVisible(&screen == &overview);
-        diffView.setVisible(&screen == &diffView);
-    }
-
+// The views ScreenStack switches between.
+struct StackedScreens
+{
     Graphics::View& paneScreen;
     Graphics::View& overview;
     Graphics::View& diffView;
+    Graphics::View& pairing;
+};
+
+// The window's one content view: the pane screen, the overview, the diff view
+// and the pairing screen all live in it, and it shows one. eacp sends every
+// touch to the window's root view and hit-tests from there, so the root never
+// changes.
+class ScreenStack final : public Graphics::View
+{
+public:
+    ScreenStack(StackedScreens screensToUse, FirstScreen firstScreen)
+        : screens(screensToUse)
+    {
+        addChildren({screens.paneScreen, screens.overview, screens.diffView, screens.pairing});
+        show(chooseScreen(firstScreen));
+    }
+
+    void showPaneScreen() { show(screens.paneScreen); }
+    void showOverview() { show(screens.overview); }
+    void showDiffView() { show(screens.diffView); }
+
+    void resized() override
+    {
+        for (auto* screen: listScreens())
+            screen->setBounds(getLocalBounds());
+    }
+
+private:
+    std::array<Graphics::View*, 4> listScreens()
+    {
+        return {&screens.paneScreen, &screens.overview, &screens.diffView, &screens.pairing};
+    }
+
+    Graphics::View& chooseScreen(FirstScreen firstScreen)
+    {
+        switch (firstScreen)
+        {
+            case FirstScreen::Overview:
+                return screens.overview;
+            case FirstScreen::Pairing:
+                return screens.pairing;
+            case FirstScreen::PaneScreen:
+                break;
+        }
+
+        return screens.paneScreen;
+    }
+
+    void show(Graphics::View& shown)
+    {
+        for (auto* screen: listScreens())
+            screen->setVisible(screen == &shown);
+    }
+
+    StackedScreens screens;
 };
 
 struct CowTermMobileApp
 {
     explicit CowTermMobileApp(const LaunchOptions& launchOptionsToUse)
         : launchOptions(launchOptionsToUse)
-        , phone(makePhoneLaunch(launchOptions))
+        , deviceKey(cowterm::mobile::loadOrCreateDeviceKey())
+        , phone(makePhoneLaunch(useDeviceKey(launchOptions, deviceKey)))
         , screen(makePaneTerminalConfig(phone, launchOptions), getPaneId(phone))
     {
         Apps::setSuspendHandler(
@@ -344,20 +369,81 @@ struct CowTermMobileApp
                 " s");
             screen.setSoftwareKeyboardChange(change);
             overview.setSoftwareKeyboardCoveredHeight(change.coveredHeight);
+            pairing.setSoftwareKeyboardCoveredHeight(change.coveredHeight);
         };
 
         if (phone != nullptr)
-        {
-            phoneBinding.emplace(*phone, screen, [this] { screens.showPaneScreen(); });
-            auto switches = cowterm::mobile::ScreenSwitches {[this] { screens.showDiffView(); },
-                                                             [this] { screens.showPaneScreen(); }};
-            diffViewBinding.emplace(*phone, screen, diffView, std::move(switches));
-        }
+            bindPaneScreenToPhone();
         else if (launchOptions.showsSamples)
             showSamplePane();
 
         connectOverview();
+        connectPairing();
         applyLaunchOptions();
+    }
+
+    // With no host set up, the pairing screen comes first; once a computer is
+    // added the phone starts on the hosts it now has.
+    void connectPairing()
+    {
+        pairing.getPanel().onPaired = [this] { startPhoneAfterPairing(); };
+        LOG("pairing: this phone's key: ", cowterm::mobile::describeDeviceKeyLine(deviceKey));
+
+        const auto& launchArguments = Apps::commandLineArgs();
+        const auto arguments = std::vector<std::string> {launchArguments.begin(), launchArguments.end()};
+        const auto flags = cowterm::mobile::parsePairingLaunchFlags(arguments);
+
+        if (flags.trustsOfferedHostKey)
+            pairing.getPanel().trustOfferedHostKeyOnceShown();
+
+        if (!flags.hostToPairWith.empty())
+            pairing.getPanel().connectTo(flags.hostToPairWith);
+    }
+
+    void startPhoneAfterPairing()
+    {
+        auto programName = std::string {"CowTermMobile"};
+        auto* arguments = programName.data();
+        auto settings = cowterm::mobile::PhoneLaunch::readSettings(1, &arguments);
+        settings = cowterm::mobile::useDeviceKeyWithoutKeyFile(std::move(settings), deviceKey);
+
+        if (!settings)
+            return LOG("pairing: paired, but no host could be read back from the pairing folder");
+
+        phoneOverview.reset();
+        diffViewBinding.reset();
+        phoneBinding.reset();
+        phone = std::make_unique<cowterm::mobile::PhoneLaunch>(std::move(*settings));
+        bindPaneScreenToPhone();
+        phoneOverview.emplace(*phone, overview, [this] { screens.showPaneScreen(); });
+        showOverview();
+    }
+
+    void bindPaneScreenToPhone()
+    {
+        phoneBinding.emplace(*phone, screen, [this] { screens.showPaneScreen(); });
+        auto switches = cowterm::mobile::ScreenSwitches {[this] { screens.showDiffView(); },
+                                                         [this] { screens.showPaneScreen(); }};
+        diffViewBinding.emplace(*phone, screen, diffView, std::move(switches));
+    }
+
+    static LaunchOptions useDeviceKey(LaunchOptions options, const std::optional<cowterm::mobile::DeviceKey>& key)
+    {
+        options.phoneSettings = cowterm::mobile::useDeviceKeyWithoutKeyFile(std::move(options.phoneSettings), key);
+        return options;
+    }
+
+    bool isWaitingForPairing() const { return phone == nullptr && !launchOptions.showsSamples; }
+
+    FirstScreen chooseFirstScreen() const
+    {
+        if (isWaitingForPairing())
+            return FirstScreen::Pairing;
+
+        if (isShowingOverviewFirst())
+            return FirstScreen::Overview;
+
+        return FirstScreen::PaneScreen;
     }
 
     void showSamplePane()
@@ -491,6 +577,7 @@ struct CowTermMobileApp
     }
 
     LaunchOptions launchOptions;
+    std::optional<cowterm::mobile::DeviceKey> deviceKey;
     std::unique_ptr<cowterm::mobile::PhoneLaunch> phone;
     cowterm::mobile::PaneScreen screen;
     std::optional<cowterm::mobile::PhonePaneBinding> phoneBinding;
@@ -498,7 +585,11 @@ struct CowTermMobileApp
     std::optional<cowterm::mobile::PhoneDiffViewBinding> diffViewBinding;
     cowterm::mobile::OverviewScreen overview;
     cowterm::mobile::DiffViewScreen diffView;
-    ScreenStack screens {screen, overview, diffView, isShowingOverviewFirst()};
+    term::pairing::PairedHosts pairedHosts {cowterm::mobile::PhoneLaunch::getPairingFolder()};
+    cowterm::mobile::PairingScreen pairing {pairedHosts,
+                                            cowterm::mobile::describeDeviceKeyLine(deviceKey),
+                                            cowterm::mobile::fetchHostKeyInBackground};
+    ScreenStack screens {{screen, overview, diffView, pairing}, chooseFirstScreen()};
     Graphics::Window window {screens, makeWindowOptions()};
 };
 } // namespace
@@ -515,6 +606,7 @@ void startLogFile()
 
 int main(int argc, char* argv[])
 {
+    Apps::setCommandLineArgs(argc, argv);
     startLogFile();
     term::registerEmbeddedFonts();
 
