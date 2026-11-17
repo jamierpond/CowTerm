@@ -283,6 +283,10 @@ ios-device-test-live-output phone="pond":
 ios-device-test-key-row destination="jamiepond@macprorack" phone="pond":
     scripts/check-ios-device-key-row.sh "{{destination}}" "{{phone}}"
 
+# Install this checkout's headless ct and cowtermd on a host; its running daemon keeps running
+install-headless-on-host host:
+    scripts/install-headless-on-host.sh {{host}}
+
 # Show on a separate daemon instance on a host what an update does to running shells
 check-update-keeps-shells destination folder:
     scripts/check-update-keeps-shells.sh {{destination}} {{folder}}
