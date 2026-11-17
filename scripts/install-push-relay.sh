@@ -47,17 +47,18 @@ $relay_folder/ct version"
 
 echo "[push-relay] installing 1Password CLI $op_version there"
 run_there "set -e
-if [ \"\$($relay_folder/op --version 2>/dev/null)\" = \"$op_version\" ]; then echo already there; exit 0; fi
-download=\$(mktemp -d)
-cd \$download
-curl -sSfLo op.zip https://cache.agilebits.com/dist/1P/op2/pkg/v$op_version/op_linux_amd64_v$op_version.zip
-unzip -q op.zip op op.sig
-export GNUPGHOME=\$download/gnupg
-mkdir -m 700 \$GNUPGHOME
-curl -sSfL https://downloads.1password.com/linux/keys/1password.asc | gpg -q --import
-gpg --status-fd 1 --verify op.sig op 2>/dev/null | grep -q \"VALIDSIG $op_signing_key\"
-install -m 755 op $relay_folder/op
-rm -rf \$download
+if [ \"\$($relay_folder/op --version 2>/dev/null)\" != \"$op_version\" ]; then
+    download=\$(mktemp -d)
+    cd \$download
+    curl -sSfLo op.zip https://cache.agilebits.com/dist/1P/op2/pkg/v$op_version/op_linux_amd64_v$op_version.zip
+    unzip -q op.zip op op.sig
+    export GNUPGHOME=\$download/gnupg
+    mkdir -m 700 \$GNUPGHOME
+    curl -sSfL https://downloads.1password.com/linux/keys/1password.asc | gpg -q --import
+    gpg --status-fd 1 --verify op.sig op 2>/dev/null | grep -q \"VALIDSIG $op_signing_key\"
+    install -m 755 op $relay_folder/op
+    rm -rf \$download
+fi
 $relay_folder/op --version"
 
 echo "[push-relay] installing the service"
