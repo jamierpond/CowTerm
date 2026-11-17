@@ -10,7 +10,7 @@ eacp_add_app(CowTermMobile
         PaneScreen.cpp
         PaneScreenChrome.cpp
         PaneScreenLayout.cpp
-        PhoneLaunch.cpp
+        PhoneLaunch.cpp PhoneOverviewBinding.cpp
         PhonePaneBinding.cpp
         StoredScreenShell.cpp
         Typing.cpp

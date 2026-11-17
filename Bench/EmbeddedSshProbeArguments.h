@@ -14,7 +14,8 @@ enum class ProbeMode
     // Print an existing pane read only and release it.
     AdoptPane,
 
-    // Open a pane with this id running `seq 1 300` and leave it running.
+    // Open a pane with this id running `seq 1 300`, in a session of the same
+    // name, and leave it running.
     LeavePaneRunning,
 
     // Kill this pane (one LeavePaneRunning made).

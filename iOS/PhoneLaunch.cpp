@@ -89,6 +89,11 @@ bool PhoneLaunch::choosePaneOfSession(const std::string& paneId)
     return connection.choosePaneOfSession(paneId);
 }
 
+std::optional<std::string> PhoneLaunch::openSession(const term::overview::OverviewRow& row)
+{
+    return connection.openSession(row);
+}
+
 void PhoneLaunch::handleSuspended(bool isSuspended)
 {
     if (isSuspended)

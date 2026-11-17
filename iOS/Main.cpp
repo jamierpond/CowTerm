@@ -3,6 +3,7 @@
 #include "OverviewScreen.h"
 #include "PaneScreen.h"
 #include "PhoneLaunch.h"
+#include "PhoneOverviewBinding.h"
 #include "PhonePaneBinding.h"
 
 #include "TerminalView/GlyphAtlas.h"
@@ -350,7 +351,28 @@ struct CowTermMobileApp
             LOG("overview: open ", session.host, "/", session.sessionName);
             window.setContentView(screen);
         };
-        screen.actions.onOverview = [this] { window.setContentView(overview); };
+        screen.actions.onOverview = [this] { showOverview(); };
+
+        if (phone != nullptr)
+        {
+            phoneOverview.emplace(*phone,
+                                  overview,
+                                  [this](const std::string& paneId)
+                                  {
+                                      screen.showPane(phone->makeTerminalConfig(), paneId);
+                                      window.setContentView(screen);
+                                  });
+
+            phoneOverview->setShown(launchOptions.showsOverview);
+        }
+    }
+
+    void showOverview()
+    {
+        if (phoneOverview)
+            phoneOverview->setShown(true);
+
+        window.setContentView(overview);
     }
 
     Graphics::View& chooseRootView()
@@ -373,6 +395,7 @@ struct CowTermMobileApp
     std::unique_ptr<cowterm::mobile::PhoneLaunch> phone;
     cowterm::mobile::PaneScreen screen;
     std::optional<cowterm::mobile::PhonePaneBinding> phoneBinding;
+    std::optional<cowterm::mobile::PhoneOverviewBinding> phoneOverview;
     cowterm::mobile::OverviewScreen overview;
     Graphics::Window window {chooseRootView(), makeWindowOptions()};
 };

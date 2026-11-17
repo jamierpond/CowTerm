@@ -230,7 +230,7 @@ private:
             paneId = arguments.paneId;
 
         std::printf("opening throwaway pane %s\n", paneId.c_str());
-        sendSpawn(probeSession, probeDirectory);
+        sendSpawn(findSessionName(), probeDirectory);
     }
 
     void confirmPaneIsGone(const std::vector<ListedPane>& panes)
@@ -264,6 +264,15 @@ private:
         paneId = pane->id;
         std::printf("adopting pane %s read only\n", paneId.c_str());
         sendSpawn(pane->session, {});
+    }
+
+    // A pane left running is its own session, so each shows as one overview row.
+    std::string findSessionName() const
+    {
+        if (arguments.mode == ProbeMode::LeavePaneRunning)
+            return paneId;
+
+        return probeSession;
     }
 
     void sendSpawn(const std::string& session, const std::string& directory)
@@ -349,7 +358,7 @@ private:
             return finish({});
         }
 
-        sendSpawn(probeSession, probeDirectory);
+        sendSpawn(findSessionName(), probeDirectory);
     }
 
     // The watcher also hears the state the daemon sends whoever adopts its pane.

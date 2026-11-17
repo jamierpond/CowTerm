@@ -34,6 +34,13 @@ public:
     // Another pane of the shown session; false when it is not one.
     bool choosePaneOfSession(const std::string& paneId);
 
+    // The overview's rows from every host the launch named.
+    term::phone::PhoneOverview& getOverview() { return connection.getOverview(); }
+
+    // The pane to show for an overview row, or empty when its daemon lists
+    // none of its panes; see PhoneConnection::openSession.
+    std::optional<std::string> openSession(const term::overview::OverviewRow& row);
+
     // From Apps::setSuspendHandler.
     void handleSuspended(bool isSuspended);
 
