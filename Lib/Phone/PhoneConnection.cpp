@@ -16,7 +16,6 @@ using namespace eacp;
 namespace
 {
 constexpr auto phoneClientName = "iPhone";
-constexpr auto remoteHomeDirectory = "~";
 constexpr auto tickInterval = Time::MS {500};
 constexpr auto lastInputAnswerWait = Milliseconds {2000};
 
@@ -43,14 +42,25 @@ std::vector<std::string> listOverviewHosts(const PhoneSettings& settings)
     return hosts;
 }
 
+// The phone has no cowterm.json, so each host is searched where the Mac
+// searches with none: ~/projects and ~.
 std::vector<std::string> makeSearchDirs(const std::vector<std::string>& hosts)
 {
     auto searchDirs = std::vector<std::string> {};
 
     for (const auto& host: hosts)
-        searchDirs.push_back(remote::makeRemoteProjectDir(host, remoteHomeDirectory));
+    {
+        for (const auto& defaultSearchDir: AppConfig {}.searchDirs)
+            searchDirs.push_back(remote::makeRemoteProjectDir(host, defaultSearchDir));
+    }
 
     return searchDirs;
+}
+
+std::uint64_t makeRandomNumber()
+{
+    auto randomNumbers = std::mt19937_64 {std::random_device {}()};
+    return randomNumbers();
 }
 } // namespace
 
@@ -169,7 +179,12 @@ std::unique_ptr<Shell> PhoneConnection::makeShell(const std::string& paneId)
             onPaneStatus(status);
     };
 
-    return std::make_unique<MirroredShell>(makeRemoteShell(paneId, paneHost, sessionName), mirror, noteStatus);
+    auto paneShell = makeRemoteShell(paneId, paneHost, sessionName);
+
+    if (const auto starting = projectSessionsStarting.extract(paneId))
+        paneShell = std::make_unique<ProjectShell>(std::move(paneShell), starting.mapped());
+
+    return std::make_unique<MirroredShell>(std::move(paneShell), mirror, noteStatus);
 }
 
 DiffViewOpening PhoneConnection::openDiffView()
@@ -179,8 +194,7 @@ DiffViewOpening PhoneConnection::openDiffView()
 
     const auto& shownHost = findShownHost();
     const auto folder = getShownRemoteHost().getDaemon().infoFor(shownPaneId).workingDirectory;
-    auto randomNumbers = std::mt19937_64 {std::random_device {}()};
-    auto pane = makeDiffViewPane(shownHost, folder, randomNumbers());
+    auto pane = makeDiffViewPane(shownHost, folder, makeRandomNumber());
 
     if (!pane)
         return {std::nullopt, "The phone does not know this pane's folder yet."};
@@ -351,6 +365,26 @@ std::optional<std::string> PhoneConnection::openSession(const overview::Overview
     onPaneChosen(*chosenPane);
     updateLinkState();
     return paneId;
+}
+
+std::optional<std::string> PhoneConnection::openProject(const overview::OverviewRow& row)
+{
+    auto* remote = RemoteHosts::find(row.host);
+
+    if (!row.isProject || remote == nullptr)
+        return std::nullopt;
+
+    const auto session = makeProjectSession(row.host, remote->getLastScan(), row.projectFolder, makeRandomNumber());
+
+    if (!session)
+        return std::nullopt;
+
+    remote->getDaemon().allowLoginShellInNewPane({session->paneId, session->folder});
+    projectSessionsStarting[session->paneId] = *session;
+    chosenPane = ChosenPane {row.host, session->paneId, session->sessionName, {session->paneId}};
+    onPaneChosen(*chosenPane);
+    updateLinkState();
+    return session->paneId;
 }
 
 std::unique_ptr<BridgeLink>

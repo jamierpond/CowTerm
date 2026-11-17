@@ -53,6 +53,9 @@ public:
     // none of its panes; see PhoneConnection::openSession.
     std::optional<std::string> openSession(const term::overview::OverviewRow& row);
 
+    // A new session for a tapped project row; see PhoneConnection::openProject.
+    std::optional<std::string> openProject(const term::overview::OverviewRow& row);
+
     // From Apps::setSuspendHandler.
     void handleSuspended(bool isSuspended);
 

@@ -11,6 +11,7 @@ add_library(CowTermPhone STATIC
         PhoneConnection.cpp
         PhoneOverview.cpp
         PhoneSettings.cpp
+        ProjectSession.cpp
         SessionOpenings.cpp
         StoredScreen.cpp)
 

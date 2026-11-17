@@ -2,6 +2,8 @@
 
 #include <NanoTest/NanoTest.h>
 
+#include <optional>
+
 using namespace nano;
 using namespace term;
 using namespace term::phone;
@@ -218,4 +220,101 @@ auto quietShownHostStallsThenRedials = test("PhoneLinkState/quietShownHostStalls
     shown.phone.connection.handleTick();
     check(countLinksMadeFor(shown.phone.factory, rack) == 2);
     check(countLinksMadeFor(shown.phone.factory, laptop) == 1);
+};
+
+namespace
+{
+constexpr auto scannedFolder = "/home/jamiepond/projects/iac";
+constexpr auto folderNotScanned = "/home/jamiepond/secrets";
+constexpr auto ticksPastEveryLaunchWait = 40;
+constexpr auto tickLength = Milliseconds {500};
+constexpr auto sessionNameArgument = 3;
+
+struct OverviewWithAScannedProject
+{
+    OverviewWithAScannedProject()
+    {
+        shown.phone.answerFrom(rack, proto::make("scan-result", {}, std::string {scannedFolder} + "\n"));
+    }
+
+    std::optional<overview::OverviewRow> findProjectRow() const
+    {
+        for (const auto& row: shown.lastReport.sessions)
+        {
+            if (row.isProject && row.projectFolder == scannedFolder)
+                return row;
+        }
+
+        return std::nullopt;
+    }
+
+    std::optional<std::string> findSpawnSentToRack()
+    {
+        for (const auto& message: shown.phone.readSentMessages(rack))
+        {
+            if (message.starts_with("spawn"))
+                return message;
+        }
+
+        return std::nullopt;
+    }
+
+    ShownOverview shown;
+};
+} // namespace
+
+auto shownOverviewAsksForProjects = test("PhoneOverview/shownOverviewAsksEveryHostForItsProjects") = []
+{
+    auto shown = ShownOverview {};
+
+    check(shown.phone.hasSentTo(rack, proto::make("scan", {}, "~/projects\n~\n")));
+};
+
+auto projectRowStartsNothingOnItsOwn = test("PhoneOverview/aProjectRowStartsNothingUntilItIsTapped") = []
+{
+    auto overview = OverviewWithAScannedProject {};
+
+    for (auto tick = 0; tick < ticksPastEveryLaunchWait; ++tick)
+    {
+        overview.shown.phone.now += tickLength;
+        overview.shown.phone.connection.handleTick();
+    }
+
+    check(overview.findProjectRow().has_value());
+    check(!overview.findSpawnSentToRack(), "listing a project starts no shell");
+};
+
+auto tappedProjectStartsALoginShellThere = test("PhoneOverview/aTappedProjectStartsOneLoginShellInItsFolder") = []
+{
+    auto overview = OverviewWithAScannedProject {};
+    const auto paneId = overview.shown.phone.connection.openProject(*overview.findProjectRow());
+
+    check(paneId.has_value());
+    overview.shown.phone.openPaneView(paneId.value_or(""));
+
+    const auto spawn = overview.findSpawnSentToRack();
+    check(spawn.has_value());
+
+    if (!spawn)
+        return;
+
+    const auto message = proto::parse(*spawn);
+    const auto payload = proto::parseSpawnPayload(message.payload);
+    check(message.args[0] == *paneId);
+    check(proto::decodeArgument(message.args[sessionNameArgument]) == "macprorack/iac", "named as the Mac names it");
+    check(payload.command.empty(), "the login shell");
+    check(payload.workingDirectory == scannedFolder);
+};
+
+auto projectNotScannedStartsNothing = test("PhoneOverview/aProjectItsHostDidNotScanStartsNothing") = []
+{
+    auto overview = OverviewWithAScannedProject {};
+    auto notScanned = *overview.findProjectRow();
+    notScanned.projectFolder = folderNotScanned;
+    auto session = *overview.findProjectRow();
+    session.isProject = false;
+
+    check(!overview.shown.phone.connection.openProject(notScanned));
+    check(!overview.shown.phone.connection.openProject(session), "a session row is not a project");
+    check(!overview.findSpawnSentToRack());
 };

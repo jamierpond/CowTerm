@@ -376,6 +376,9 @@ Answers that change the design:
    Answered while building: yes (`"tui": "fullscreen"`), so it goes over the
    network. See "Results of the risk tests".
 3. Should the phone start new sessions and panes, or only steer existing ones?
+   Answered while building: it starts a session for a project that has none
+   ("Projects with no session" under "Decisions made while building"), and
+   otherwise only steers.
 4. Which iPhone?
 
 Things only a finger can judge:
@@ -676,6 +679,51 @@ phone's size.
   killed app gone after the next launch. The probe gained `--list-panes` and a
   folder for `--leave-pane`. On 17 November it passed on macprorack. big-cow
   and tamby refused the simulator's ssh key, so neither was checked there.
+
+### Projects with no session
+
+Jamie could not find macprorack's `~/projects/iac` on the phone: the list
+showed only sessions that had panes on a daemon. The Mac's palette also lists
+each host's projects that are not open, and the phone now does too.
+
+- Each host's project scan (`scan`, the bridge's `answerLocally`) is the same
+  one the Mac's palette uses. The phone has no cowterm.json, so it searches
+  each host where the Mac searches with none: `~/projects` and `~`. It asks
+  again each time the list comes on screen.
+- Below every session come the projects with no session open, as rows filled
+  with their host's colour. A project counts as open when a session on its
+  host has the name the Mac gives it (`macprorack/iac`) or its folder's name
+  alone (a protocol 4 daemon's own panes).
+- Every row starts with the palette's mark, so the two kinds differ without
+  colour: `●` a session, `✳` a Claude session, `▸` a project. A project's
+  second line says "not open · ~/projects/iac".
+- Search covers both kinds with the palette's `rankPaletteItems`. With nothing
+  typed, sessions come first and projects after, each by frecency. A project's
+  openings are recorded under the key of the session it opens, so they carry
+  over once it is open.
+- A tap on a project starts a new session there and shows its pane: one login
+  shell in that folder, under a new 16-hex-digit pane id, named as the Mac
+  names that project's session (`getSessionNameForProject`, moved from
+  `Terminal/Session.cpp` into `Projects`), so the daemon lists it as
+  `macprorack/iac`.
+- This is the second thing the phone starts, after dv, with the same care.
+  `makeProjectSession` makes a session only for a folder in that host's last
+  scan. DaemonClient sends the spawn of an unlisted pane only after
+  `allowLoginShellInNewPane` named that pane and folder, only with no command,
+  and only once. The pane's `ProjectShell` starts nothing but the login shell
+  in that folder. Only a tap on the row (or `--open-project`, which takes the
+  same path) calls `PhoneConnection::openProject`.
+- The Mac app does not show the new session. It lists only sessions it opened
+  or adopted from a published layout, and the phone publishes none: the
+  phone's host name (`jamiepond@macprorack`) is not the Mac's ssh alias
+  (`macprorack`), so an adopted layout would point at a host the Mac does not
+  know.
+- `just ios-test-project-opening <user@host>` makes a throwaway folder in
+  `~/projects` on the host, screenshots the list showing its row, opens it
+  with `--open-project=<user@host>/<folder name>` (ten seconds after launch),
+  screenshots the pane, and lists the host's panes in that folder before,
+  while open, and after it kills the pane and removes the folder. On 17
+  November it passed on macprorack.
 
 ### Pairing a phone
 

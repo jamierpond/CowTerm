@@ -7,6 +7,7 @@
 #include "PaneChoice.h"
 #include "PhoneOverview.h"
 #include "PhoneSettings.h"
+#include "ProjectSession.h"
 #include "StoredScreen.h"
 
 #include "Multiplexer/DaemonClient.h"
@@ -81,6 +82,13 @@ public:
     // else its first, and only one the host's daemon lists. The pane to show
     // through makeShell, or empty when the daemon lists none of its panes.
     std::optional<std::string> openSession(const overview::OverviewRow& row);
+
+    // A tap on a project row: a new session for it, one login shell in its
+    // folder, named as the Mac names it, chosen and shown like a session's
+    // pane. The pane to show through makeShell, or empty for a row that is
+    // not a project its host's last scan listed. Nothing else on the phone
+    // starts a shell but dv.
+    std::optional<std::string> openProject(const overview::OverviewRow& row);
 
     // The pane the phone showed last time (the stored screen's), opened at
     // launch when no daemon says which pane was typed into last.
@@ -190,6 +198,7 @@ private:
     std::optional<HeldPane> heldByEarlierRun;
     std::filesystem::path temporaryPanesPath;
     std::vector<TemporaryPane> temporaryPanesOfEarlierRuns;
+    std::map<std::string, ProjectSession> projectSessionsStarting;
     std::optional<Milliseconds> firstAskedForLastInputAt;
     Milliseconds startedAt = 0;
     std::string shownPaneId;

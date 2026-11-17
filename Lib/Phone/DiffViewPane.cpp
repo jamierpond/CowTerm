@@ -1,12 +1,13 @@
 #include "DiffViewPane.h"
 
+#include "ProjectSession.h"
+
 #include <eacp/Core/Utils/FilePath.h>
 #include <eacp/Core/Utils/Files.h>
 
 #include <Miro/Reflect.h>
 
 #include <algorithm>
-#include <cstdio>
 
 namespace term::phone
 {
@@ -86,11 +87,7 @@ std::optional<DiffViewPane> makeDiffViewPane(const std::string& host,
 
 std::string makeDiffViewPaneId(std::uint64_t randomNumber)
 {
-    constexpr auto hexDigitsWithTerminator = 17;
-    char digits[hexDigitsWithTerminator];
-    const auto randomNumberForPrinting = static_cast<unsigned long long>(randomNumber);
-    std::snprintf(digits, sizeof(digits), "%016llx", randomNumberForPrinting);
-    return diffViewPaneIdPrefix + std::string {digits};
+    return diffViewPaneIdPrefix + makePaneIdFromRandomNumber(randomNumber);
 }
 
 bool isDiffViewPaneId(const std::string& paneId)

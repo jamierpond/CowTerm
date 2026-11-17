@@ -1,5 +1,8 @@
 #include "SessionOverview.h"
 
+#include "Projects.h"
+#include "RemoteLocation.h"
+
 #include <eacp/Core/Utils/Strings.h>
 
 #include <algorithm>
@@ -16,6 +19,7 @@ constexpr auto activityColumnCount = 6;
 constexpr auto waitingState = "waiting";
 constexpr auto workingState = "working";
 constexpr auto finishedState = "finished";
+constexpr auto notOpenProjectPrefix = "not open \xc2\xb7 ";
 
 std::int64_t readMilliseconds(const std::string& text)
 {
@@ -88,6 +92,47 @@ OverviewRow makeRow(const SessionPanes& session, std::int64_t now)
     return row;
 }
 
+bool isProjectOpen(const std::string& host,
+                   const std::string& folder,
+                   const std::vector<OverviewRow>& sessions)
+{
+    const auto macSessionName = getSessionNameForProject(remote::makeRemoteProjectDir(host, folder));
+    const auto folderName = sessionNameFor(folder);
+
+    return std::ranges::any_of(sessions,
+                               [&](const OverviewRow& session)
+                               {
+                                   const auto isNamedAfterProject = session.sessionName == macSessionName
+                                                                    || session.sessionName == folderName;
+                                   return session.host == host && isNamedAfterProject;
+                               });
+}
+
+OverviewRow makeProjectRow(const std::string& host, const std::string& folder)
+{
+    auto row = OverviewRow {};
+    row.host = host;
+    row.sessionName = sessionNameFor(folder);
+    row.stateLine = notOpenProjectPrefix + compactRemoteHomePath(folder);
+    row.isProject = true;
+    row.projectFolder = folder;
+    return row;
+}
+
+void addProjectsWithNoSessionOpen(const std::vector<HostPanes>& hosts, std::vector<OverviewRow>& rows)
+{
+    const auto sessions = rows;
+
+    for (const auto& host: hosts)
+    {
+        for (const auto& folder: host.projectFolders)
+        {
+            if (!isProjectOpen(host.host, folder, sessions))
+                rows.push_back(makeProjectRow(host.host, folder));
+        }
+    }
+}
+
 bool shouldRowComeFirst(const OverviewRow& first, const OverviewRow& second)
 {
     if (first.isWaiting != second.isWaiting)
@@ -156,6 +201,7 @@ std::vector<OverviewRow> buildOverviewRows(const std::vector<HostPanes>& hosts,
     }
 
     std::ranges::stable_sort(rows, shouldRowComeFirst);
+    addProjectsWithNoSessionOpen(hosts, rows);
     return rows;
 }
 } // namespace term::overview

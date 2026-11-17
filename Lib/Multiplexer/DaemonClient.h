@@ -136,6 +136,20 @@ public:
     void reportLinkLost(const std::string& reason);
 
     void spawn(const SpawnRequest& request, Routes routes);
+
+    // A pane the phone may start a login shell in, and the only folder it may.
+    struct LoginShellPane
+    {
+        std::string paneId;
+        std::string folder;
+    };
+
+    // The phone's one way to start a shell, from a tap on a project: the next
+    // spawn of the pane is sent though the daemon does not list it, if it asks
+    // for the login shell (no command) in exactly that folder. Used once; a
+    // spawn of the pane in any other folder gets onGone.
+    void allowLoginShellInNewPane(const LoginShellPane& pane);
+
     void write(const std::string& id, std::string_view data);
     void writeUserInput(const std::string& id, std::string_view data);
     void resize(const std::string& id, const PtySize& size);
@@ -206,6 +220,7 @@ private:
     void sendSpawnOnceListed(const SpawnRequest& request);
     void openListedPanesOrReportGone();
     void sendCommandSpawnIfAllowed(const SpawnRequest& request);
+    void sendLoginShellSpawnIfAllowed(const SpawnRequest& request);
     void reportPaneGone(const std::string& id);
     void sendResizeAndClaim(const std::string& id, const PtySize& size);
     void rememberSizeFoundOnAdopt(const std::string& id,
@@ -232,6 +247,7 @@ private:
     std::unordered_map<std::string, ShellInfo> info;
     std::unordered_set<std::string> panesHeldElsewhere;
     std::vector<std::string> spawnsWaitingForInfo;
+    std::unordered_map<std::string, std::string> foldersOfLoginShellsAllowedToStart;
     std::unordered_map<std::string, PtySize> borrowedSizes;
     std::unordered_set<std::string> panesWithSizeReturned;
     std::optional<int> answeredProtocolVersion;

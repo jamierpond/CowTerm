@@ -254,6 +254,10 @@ ios-test-stored-screen *arguments:
 ios-test-diff-view *arguments:
     scripts/check-ios-diff-view.sh {{arguments}}
 
+[doc("Open a throwaway project that has no session on <user@host> from the phone's list, screenshot the list and the pane, and check the pane is gone after cleanup")]
+ios-test-project-opening destination prefix=(screenshot_folder / "project") device="iPhone 17 Pro":
+    scripts/check-ios-project-opening.sh {{destination}} {{prefix}} "{{device}}"
+
 # Send the running app to the background and back, and print the lifecycle lines it logged
 ios-test-lifecycle *arguments:
     scripts/check-ios-lifecycle.sh {{arguments}}

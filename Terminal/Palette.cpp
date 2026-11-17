@@ -53,17 +53,6 @@ bool isOpenSession(const PaletteItem& item)
     return isSessionItem(item) && item.session != nullptr;
 }
 
-std::string getItemIcon(const PaletteItem& item)
-{
-    if (item.claude)
-        return "✳";
-
-    if (isSessionItem(item))
-        return "●";
-
-    return "▸";
-}
-
 // The host suffix takes room the detail would have had.
 std::size_t calculateDetailLength(const PaletteItem& item)
 {
@@ -81,28 +70,6 @@ std::string describeItem(const PaletteItem& item)
         return truncateWithEllipsis(item.status, calculateDetailLength(item));
 
     return truncateWithEllipsis(item.detail, calculateDetailLength(item));
-}
-
-// "/home/jamie/projects/x", "/Users/jamie/x" or "C:/Users/jamie/x" with the
-// home part as ~, the way local rows show theirs.
-std::string compactRemoteHomePath(const std::string& path)
-{
-    for (const auto* homesRoot: {"/home/", "/Users/", "C:/Users/"})
-    {
-        const auto root = std::string {homesRoot};
-
-        if (!path.starts_with(root))
-            continue;
-
-        const auto userEnd = path.find('/', root.size());
-
-        if (userEnd == std::string::npos)
-            return "~";
-
-        return "~" + path.substr(userEnd);
-    }
-
-    return path;
 }
 
 bool isOrderedForEmptyQuery(const PaletteItem& a, const PaletteItem& b)
@@ -425,7 +392,7 @@ void Palette::paintRow(UI::Graphics& g, const PaletteItem& item, Rect rowArea, c
     auto x = rowArea.x + iconLeft;
 
     g.setColour(toColor(colours.text));
-    drawTextInFont(g, getItemIcon(item), {x, baseline}, rowFont);
+    drawTextInFont(g, getPaletteItemIcon(item), {x, baseline}, rowFont);
     x += labelAfterIcon;
 
     const auto label = truncateWithEllipsis(item.label, labelLength);

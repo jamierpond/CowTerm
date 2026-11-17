@@ -128,3 +128,71 @@ auto tSessionNameWinsOverFolder =
           == "Grazer");
     check(nameSessionOfPane("", "/").empty());
 };
+
+namespace
+{
+constexpr auto rack = "jamiepond@macprorack";
+constexpr auto laptop = "jamie@tamby";
+constexpr auto iacFolder = "/home/jamiepond/projects/iac";
+constexpr auto grazerFolder = "/home/jamiepond/projects/Grazer";
+constexpr auto cowtermFolder = "/home/jamiepond/projects/CowTerm";
+
+std::vector<std::string> listNamesAndKinds(const std::vector<OverviewRow>& rows)
+{
+    auto names = std::vector<std::string> {};
+
+    for (const auto& row: rows)
+    {
+        const auto kind = std::string {row.isProject ? "project " : "session "};
+        names.push_back(kind + row.sessionName);
+    }
+
+    return names;
+}
+} // namespace
+
+auto tProjectsFollowEverySession = test("SessionOverview/projectsWithNoSessionFollowEverySession") = []
+{
+    auto host = HostPanes {rack, {makePane("pane-a", "macprorack/Grazer", "zsh", {})}, {iacFolder, grazerFolder}};
+    auto other = HostPanes {laptop, {makePane("pane-b", "notes", "zsh", {})}, {}};
+
+    const auto rows = buildOverviewRows({host, other}, now);
+
+    check(listNamesAndKinds(rows)
+          == std::vector<std::string> {"session macprorack/Grazer", "session notes", "project iac"});
+};
+
+auto tProjectRowSaysItIsNotOpen = test("SessionOverview/projectRowSaysItIsNotOpenAndWhere") = []
+{
+    const auto rows = buildOverviewRows({HostPanes {rack, {}, {iacFolder}}}, now);
+
+    check(rows.size() == 1);
+
+    if (rows.size() == 1)
+    {
+        check(rows[0].isProject && rows[0].projectFolder == iacFolder);
+        check(rows[0].paneIds.empty());
+        check(rows[0].stateLine == "not open \xc2\xb7 ~/projects/iac");
+    }
+};
+
+auto tProjectOpenByFolderNameIsLeftOut = test("SessionOverview/projectWhoseFolderNamesASessionIsLeftOut") = []
+{
+    auto pane = makePane("pane-a", {}, "zsh", {});
+    pane.workingDirectory = cowtermFolder;
+
+    const auto rows = buildOverviewRows({HostPanes {rack, {pane}, {cowtermFolder}}}, now);
+
+    check(listNamesAndKinds(rows) == std::vector<std::string> {"session CowTerm"},
+          "a protocol 4 daemon's own panes are named after their folder");
+};
+
+auto tSessionOnAnotherHostDoesNotHideProject = test("SessionOverview/sessionOnAnotherHostDoesNotHideAProject") = []
+{
+    auto host = HostPanes {rack, {}, {iacFolder}};
+    auto other = HostPanes {laptop, {makePane("pane-b", "macprorack/iac", "zsh", {})}, {}};
+
+    const auto rows = buildOverviewRows({host, other}, now);
+
+    check(listNamesAndKinds(rows) == std::vector<std::string> {"session macprorack/iac", "project iac"});
+};

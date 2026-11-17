@@ -3,8 +3,11 @@
 #include "Phone/MirroredShell.h"
 #include "Phone/PaneChoice.h"
 #include "Phone/PhoneSettings.h"
+#include "Phone/ProjectSession.h"
 #include "Phone/SessionOpenings.h"
 #include "Phone/StoredScreen.h"
+
+#include "Multiplexer/RemoteLocation.h"
 
 #include <NanoTest/NanoTest.h>
 
@@ -47,6 +50,7 @@ public:
                std::function<void()>) override
     {
         startedSize = options.size;
+        startedFolder = options.workingDirectory;
         onOutput = std::move(onOutputToUse);
         return true;
     }
@@ -60,6 +64,7 @@ public:
 
     std::function<void(std::string)> onOutput;
     PtySize startedSize;
+    std::string startedFolder;
     PtySize resizedTo;
 };
 
@@ -416,4 +421,54 @@ auto diffViewShellStartsOnlyDiffViewInItsFolder = test("DiffViewPane/shellStarts
     check(!startWith("bash", repositoryFolder), "no other command");
     check(!startWith({}, repositoryFolder), "no interactive shell");
     check(!startWith(diffViewCommand, "/"), "no other folder");
+};
+
+namespace
+{
+constexpr auto scannedHost = "jamiepond@macprorack";
+constexpr auto scannedProjectFolder = "/home/jamiepond/projects/iac";
+constexpr auto folderNotScanned = "/home/jamiepond/secrets";
+
+std::vector<ProjectDir> makeLastScan()
+{
+    return {{remote::makeRemoteProjectDir(scannedHost, scannedProjectFolder), "iac"}};
+}
+} // namespace
+
+auto projectSessionIsNamedAsTheMacNamesIt = test("ProjectSession/isNamedAsTheMacNamesTheProjectsSession") = []
+{
+    const auto session = makeProjectSession(scannedHost, makeLastScan(), scannedProjectFolder, someRandomNumber);
+
+    check(session && session->sessionName == "macprorack/iac");
+    check(session && session->folder == scannedProjectFolder);
+    check(session && session->paneId == "0000000000abcdef");
+};
+
+auto projectSessionOnlyForAScannedFolder = test("ProjectSession/onlyForAFolderTheHostsScanListed") = []
+{
+    check(!makeProjectSession(scannedHost, makeLastScan(), folderNotScanned, someRandomNumber));
+    check(!makeProjectSession("jamie@tamby", makeLastScan(), scannedProjectFolder, someRandomNumber),
+          "the folder must be in that host's scan");
+    check(!makeProjectSession(scannedHost, {}, scannedProjectFolder, someRandomNumber), "no scan yet, no session");
+};
+
+auto projectShellStartsOnlyTheLoginShellInItsFolder = test("ProjectSession/shellStartsOnlyTheLoginShellInItsFolder") = []
+{
+    const auto session = *makeProjectSession(scannedHost, makeLastScan(), scannedProjectFolder, someRandomNumber);
+    auto startedFolder = std::string {};
+    const auto startWith = [&](const std::string& command, const std::string& folder)
+    {
+        auto inner = std::make_unique<ScriptedShell>();
+        auto& scripted = *inner;
+        auto shell = ProjectShell {std::move(inner), session};
+        const auto started = shell.start({{}, folder, command, {}}, [](std::string) {}, [] {});
+        startedFolder = scripted.startedFolder;
+        return started && scripted.onOutput != nullptr;
+    };
+
+    check(startWith({}, {}));
+    check(startedFolder == scannedProjectFolder, "a view that names no folder gets the project's");
+    check(startWith({}, scannedProjectFolder));
+    check(!startWith("bash -c 'rm -rf ~'", scannedProjectFolder), "no command");
+    check(!startWith({}, folderNotScanned), "no other folder");
 };

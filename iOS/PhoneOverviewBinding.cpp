@@ -123,9 +123,17 @@ void PhoneOverviewBinding::setShown(bool isShown)
     phone.getOverview().setShown(isShown);
 }
 
+std::optional<std::string> PhoneOverviewBinding::openRow(const term::overview::OverviewRow& row)
+{
+    if (row.isProject)
+        return phone.openProject(row);
+
+    return phone.openSession(row);
+}
+
 void PhoneOverviewBinding::openSession(const term::overview::OverviewRow& row)
 {
-    const auto paneId = phone.openSession(row);
+    const auto paneId = openRow(row);
 
     if (!paneId)
         return LOG("overview: ", row.host, "/", row.sessionName, " has no pane its daemon lists");

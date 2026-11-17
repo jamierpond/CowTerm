@@ -24,6 +24,7 @@ add_library(CowTermMultiplexer STATIC
         HostColours.cpp
         NotifyUserClient.cpp
         NotifyUserProtocol.cpp
+        PaletteItem.cpp
         PaletteRanking.cpp
         PaneSizeOwner.cpp
         PaneStateCommand.cpp

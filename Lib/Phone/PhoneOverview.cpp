@@ -4,6 +4,7 @@
 
 #include "Multiplexer/Protocol.h"
 #include "Multiplexer/RemoteHosts.h"
+#include "Multiplexer/RemoteLocation.h"
 
 #include <eacp/Core/Threads/Async.h>
 
@@ -20,6 +21,30 @@ constexpr auto overviewRefreshInterval = Time::MS {3000};
 bool isConnected(const RemoteHost& remote)
 {
     return remote.getStatus() == RemoteHost::Status::Connected;
+}
+
+std::vector<std::string> listScannedFolders(const RemoteHost& remote)
+{
+    auto folders = std::vector<std::string> {};
+
+    for (const auto& project: remote.getLastScan())
+    {
+        if (const auto location = remote::parseRemoteSearchDir(project.path))
+            folders.push_back(location->path);
+    }
+
+    return folders;
+}
+
+void askConnectedHostsToScan(const std::vector<std::string>& hosts)
+{
+    for (const auto& host: hosts)
+    {
+        auto* remote = RemoteHosts::find(host);
+
+        if (remote != nullptr && isConnected(*remote))
+            remote->requestScan();
+    }
 }
 } // namespace
 
@@ -48,6 +73,7 @@ void PhoneOverview::setShown(bool isShownNow)
     if (!shown)
         return;
 
+    askConnectedHostsToScan(hosts);
     refresh();
     refreshTimer = std::make_unique<Threads::Timer>(
         [this, guard = std::weak_ptr<bool> {alive}]
@@ -142,8 +168,9 @@ OverviewReport PhoneOverview::buildReport() const
 
 overview::HostPanes PhoneOverview::collectHostPanes(const std::string& host) const
 {
-    auto& daemon = RemoteHosts::find(host)->getDaemon();
-    auto hostPanes = overview::HostPanes {host, {}};
+    auto& remote = *RemoteHosts::find(host);
+    auto& daemon = remote.getDaemon();
+    auto hostPanes = overview::HostPanes {host, {}, listScannedFolders(remote)};
 
     for (const auto& paneId: removeDiffViewPaneIds(daemon.listShellIds()))
     {

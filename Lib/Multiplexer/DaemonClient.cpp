@@ -487,6 +487,9 @@ void DaemonClient::sendSpawnOnceListed(const SpawnRequest& request)
     if (!request.command.empty())
         return sendCommandSpawnIfAllowed(request);
 
+    if (foldersOfLoginShellsAllowedToStart.contains(request.id))
+        return sendLoginShellSpawnIfAllowed(request);
+
     if (std::ranges::find(spawnsWaitingForInfo, request.id) == spawnsWaitingForInfo.end())
         spawnsWaitingForInfo.push_back(request.id);
 
@@ -497,6 +500,22 @@ void DaemonClient::sendSpawnOnceListed(const SpawnRequest& request)
 void DaemonClient::sendCommandSpawnIfAllowed(const SpawnRequest& request)
 {
     if (request.command == getOnlyCommandItMayStart())
+        return sendSpawn(request);
+
+    reportPaneGone(request.id);
+}
+
+void DaemonClient::allowLoginShellInNewPane(const LoginShellPane& pane)
+{
+    foldersOfLoginShellsAllowedToStart[pane.paneId] = pane.folder;
+}
+
+// A project's new pane is not listed before its spawn either.
+void DaemonClient::sendLoginShellSpawnIfAllowed(const SpawnRequest& request)
+{
+    const auto allowedFolder = foldersOfLoginShellsAllowedToStart.extract(request.id).mapped();
+
+    if (request.workingDirectory == allowedFolder)
         return sendSpawn(request);
 
     reportPaneGone(request.id);

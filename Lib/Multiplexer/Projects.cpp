@@ -21,6 +21,36 @@ std::string sessionNameFor(const std::string& path)
     return name;
 }
 
+std::string getSessionNameForProject(const std::string& projectDir)
+{
+    const auto remote = remote::parseRemoteSearchDir(projectDir);
+
+    if (!remote)
+        return sessionNameFor(projectDir);
+
+    return remote::getHostLabel(remote->host) + "/" + sessionNameFor(remote->path);
+}
+
+std::string compactRemoteHomePath(const std::string& path)
+{
+    for (const auto* homesRoot: {"/home/", "/Users/", "C:/Users/"})
+    {
+        const auto root = std::string {homesRoot};
+
+        if (!path.starts_with(root))
+            continue;
+
+        const auto userEnd = path.find('/', root.size());
+
+        if (userEnd == std::string::npos)
+            return "~";
+
+        return "~" + path.substr(userEnd);
+    }
+
+    return path;
+}
+
 std::vector<ProjectDir> scanProjects(const AppConfig& config)
 {
     auto roots = std::vector<std::string> {};

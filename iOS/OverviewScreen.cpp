@@ -4,6 +4,7 @@
 
 #include "Multiplexer/Config.h"
 #include "Multiplexer/HostColours.h"
+#include "Multiplexer/PaletteItem.h"
 #include "Multiplexer/RemoteLocation.h"
 #include "Multiplexer/TextLayout.h"
 
@@ -44,20 +45,29 @@ constexpr auto pressedBlend = term::Rgb {0x000000};
 constexpr auto ansiRed = 1;
 constexpr auto ansiBlue = 4;
 
-constexpr auto claudeMark = "\xe2\x9c\xb3 ";
-constexpr auto searchPlaceholder = "Search sessions";
+constexpr auto searchPlaceholder = "Search sessions and projects";
 
 UI::Font makeFont(float size)
 {
     return UI::Font {fontFamily, size};
 }
 
-std::string describeSessionName(const OverviewRow& session)
+term::PaletteItem::Kind findPaletteItemKind(const OverviewRow& row)
 {
-    if (session.isClaude)
-        return claudeMark + session.sessionName;
+    if (row.isProject)
+        return term::PaletteItem::Kind::Project;
 
-    return session.sessionName;
+    return term::PaletteItem::Kind::Session;
+}
+
+// The Mac palette's mark, so an open session and a project differ without
+// colour: ✳ Claude, ● a session, ▸ a project with none open.
+std::string describeSessionName(const OverviewRow& row)
+{
+    auto item = term::PaletteItem {};
+    item.kind = findPaletteItemKind(row);
+    item.claude = row.isClaude;
+    return term::getPaletteItemIcon(item) + " " + row.sessionName;
 }
 
 term::HostRowColours darkenForPress(term::HostRowColours colours)
@@ -120,7 +130,8 @@ void paintSessionText(UI::Graphics& g, const OverviewItem& item, Rect area)
     auto nameArea = nameLine;
     nameArea.removeFromRight(g.measureText(host) + lineGap);
     g.setFont(makeFont(nameFontSize));
-    g.drawText(describeSessionName(session), nameArea);
+    const auto measure = [&g](const std::string& part) { return g.measureText(part); };
+    g.drawText(term::truncateTextToWidth(describeSessionName(session), nameArea.w, measure), nameArea);
 }
 } // namespace
 

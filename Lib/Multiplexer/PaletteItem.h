@@ -30,4 +30,7 @@ struct PaletteItem
     std::int64_t lastUsed = 0;
     TermSession* session = nullptr;
 };
+
+// The mark before a row's name: ✳ for Claude, ● for a session, ▸ for a project.
+std::string getPaletteItemIcon(const PaletteItem& item);
 } // namespace term

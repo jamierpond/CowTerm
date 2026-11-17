@@ -219,6 +219,18 @@ std::optional<std::string> PhoneLaunch::openSession(const term::overview::Overvi
     return connection.openSession(row);
 }
 
+std::optional<std::string> PhoneLaunch::openProject(const term::overview::OverviewRow& row)
+{
+    const auto paneId = connection.openProject(row);
+
+    if (paneId)
+        LOG("phone: project ", row.projectFolder, " on ", row.host, " starts a login shell in pane ", *paneId);
+    else
+        LOG("phone: project ", row.projectFolder, " on ", row.host, " is not in its host's last scan");
+
+    return paneId;
+}
+
 void PhoneLaunch::handleSuspended(bool isSuspended)
 {
     if (isSuspended)

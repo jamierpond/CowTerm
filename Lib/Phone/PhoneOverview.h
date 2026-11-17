@@ -21,7 +21,8 @@ struct UnreachableHostReport
 };
 
 // What the overview screen draws: every session on every host that answers,
-// and every host that does not, with why.
+// then each such host's projects with no session open, and every host that
+// does not answer, with why.
 struct OverviewReport
 {
     std::vector<overview::OverviewRow> sessions;
@@ -30,14 +31,16 @@ struct OverviewReport
     std::int64_t nowMillisecondsSinceEpoch = 0;
 };
 
-// The row named "<host>/<session>" ("jamiepond@macprorack/Grazer"); the host
-// ends at the first '/', since session names may hold one.
+// The row named "<host>/<session>" ("jamiepond@macprorack/Grazer"), or
+// "<host>/<project>"; the host ends at the first '/', since session names may
+// hold one.
 std::optional<overview::OverviewRow> findRowByName(const std::vector<overview::OverviewRow>& rows,
                                                    const std::string& hostAndSession);
 
 // The overview's rows, from each host's daemon (RemoteHosts): while the
 // overview is shown it asks every connected daemon for `info` and `activity`
-// every few seconds and reports the rows each time. A daemon from before
+// every few seconds and reports the rows each time. Each host lists its
+// projects again each time the overview comes on screen. A daemon from before
 // `activity` still gives rows from `info`, with no state line. Main-thread object.
 class PhoneOverview
 {

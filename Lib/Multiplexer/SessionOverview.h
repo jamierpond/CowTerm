@@ -5,8 +5,9 @@
 #include <vector>
 
 // The phone's overview, without drawing: every session on every machine as one
-// row, waiting ones first, then by most recent typing. Built from what each
-// daemon answers to `info` and `activity`.
+// row, waiting ones first, then by most recent typing, then every project
+// folder with no session open. Built from what each daemon answers to `info`
+// and `activity`, and each host's project scan.
 namespace term::overview
 {
 // One line of a daemon's `activity` answer.
@@ -43,6 +44,9 @@ struct HostPanes
 {
     std::string host;
     std::vector<PaneOnHost> panes;
+
+    // The folders the host's project scan listed, as paths on the host.
+    std::vector<std::string> projectFolders;
 };
 
 struct OverviewRow
@@ -53,13 +57,22 @@ struct OverviewRow
     bool isClaude = false;
     bool isWaiting = false;
 
-    // "waiting: <what it asked>", "working, 4 min", "finished 12 min ago".
+    // "waiting: <what it asked>", "working, 4 min", "finished 12 min ago";
+    // "not open · ~/projects/iac" for a project.
     std::string stateLine;
     std::int64_t lastUsedMilliseconds = 0;
+
+    // A folder the host's scan found with no session open in it: sessionName
+    // is the folder's name, and the row has no panes.
+    bool isProject = false;
+    std::string projectFolder;
 };
 
 // Panes with no session name are grouped by the folder they are in; a pane
-// with neither is left out.
+// with neither is left out. Each host's project folders follow every session,
+// except those a session on that host is already named after: by the name the
+// Mac gives the project's session ("macprorack/iac"), or by the folder's name
+// alone (a protocol 4 daemon's own panes).
 std::vector<OverviewRow> buildOverviewRows(const std::vector<HostPanes>& hosts,
                                            std::int64_t nowMilliseconds);
 } // namespace term::overview

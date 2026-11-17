@@ -43,6 +43,10 @@ constexpr auto secondPaneIndex = 1;
 constexpr auto diffViewOpenDelay = Time::MS {10000};
 constexpr auto diffViewCloseDelay = Time::MS {20000};
 
+// Long enough for the host's project scan to answer and the list to be
+// screenshotted before the project opens.
+constexpr auto projectOpenDelay = Time::MS {10000};
+
 // Long enough for the keyboard to have come up, so the composer is on screen.
 constexpr auto composeDelay = Time::MS {1500};
 
@@ -71,6 +75,7 @@ struct LaunchOptions
     std::string composedText;
     bool showsOverview = false;
     std::string sessionToOpen;
+    std::string projectToOpen;
     std::string searchQuery;
     cowterm::mobile::LinkState linkState = cowterm::mobile::LinkState::Live;
     int paneCount = samplePaneCount;
@@ -136,6 +141,7 @@ void applyLaunchValue(LaunchOptions& options, std::string_view argument)
     constexpr auto panesPrefix = std::string_view {"--panes="};
     constexpr auto composePrefix = std::string_view {"--compose="};
     constexpr auto openSessionPrefix = std::string_view {"--open-session="};
+    constexpr auto openProjectPrefix = std::string_view {"--open-project="};
     constexpr auto searchPrefix = std::string_view {"--search="};
 
     if (argument.starts_with(linkPrefix))
@@ -151,6 +157,10 @@ void applyLaunchValue(LaunchOptions& options, std::string_view argument)
     else if (argument.starts_with(openSessionPrefix))
     {
         options.sessionToOpen = std::string {argument.substr(openSessionPrefix.size())};
+    }
+    else if (argument.starts_with(openProjectPrefix))
+    {
+        options.projectToOpen = std::string {argument.substr(openProjectPrefix.size())};
     }
     else if (argument.starts_with(searchPrefix))
     {
@@ -414,6 +424,12 @@ struct CowTermMobileApp
         {
             Threads::callAfter(paneSwitchDelay,
                                [this] { screen.actions.onChoosePane(secondPaneIndex); });
+        }
+
+        if (!launchOptions.projectToOpen.empty() && phoneOverview)
+        {
+            Threads::callAfter(projectOpenDelay,
+                               [this] { phoneOverview->openSessionOnceListed(launchOptions.projectToOpen); });
         }
 
         if (launchOptions.opensDiffView)

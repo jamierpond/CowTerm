@@ -46,17 +46,6 @@ std::string getStartDirectory(const std::string& projectDir, const std::string& 
     return projectDir;
 }
 
-// "Grazer", or "tamby/Grazer" for a project on tamby.
-std::string getSessionNameForProject(const std::string& projectDir)
-{
-    const auto remote = remote::parseRemoteSearchDir(projectDir);
-
-    if (!remote)
-        return sessionNameFor(projectDir);
-
-    return getHostLabel(remote->host) + "/" + sessionNameFor(remote->path);
-}
-
 std::string normalizedDir(const std::string& dir)
 {
     auto path = expandHome(dir);

@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -363,4 +364,97 @@ auto tClientThatOpensAnyPaneStartsAnyCommand = test("DaemonClientSizeOwner/macSt
     recorded.client->spawn({diffViewPaneId, {phoneColumns, rows}, repositoryFolder, {}, "lazygit"}, {});
 
     check(std::ranges::any_of(recorded.sent, [](const std::string& message) { return message.starts_with("spawn"); }));
+};
+
+namespace
+{
+constexpr auto projectPaneId = "00000000000000ab";
+constexpr auto projectFolder = "/home/jamie/projects/iac";
+constexpr auto projectSessionName = "macprorack/iac";
+constexpr auto folderNotAllowed = "/home/jamie";
+
+std::optional<proto::SpawnPayload> findSpawnPayload(const std::vector<std::string>& sent)
+{
+    const auto spawn = std::ranges::find_if(sent, [](const std::string& message) { return message.starts_with("spawn"); });
+
+    if (spawn == sent.end())
+        return std::nullopt;
+
+    return proto::parseSpawnPayload(proto::parse(*spawn).payload);
+}
+
+DaemonClient::Routes makeRoutesThatNoteRefusal(bool& wasRefused)
+{
+    auto routes = DaemonClient::Routes {};
+    routes.onGone = [&wasRefused] { wasRefused = true; };
+    return routes;
+}
+} // namespace
+
+auto tPhoneStartsNoShellInAnUnlistedPane = test("DaemonClientSizeOwner/phoneStartsNoLoginShellItWasNotAllowed") = []
+{
+    auto phone = PhoneClientWithRecordedLink {};
+    auto wasRefused = false;
+
+    phone.recorded.client->spawn({projectPaneId, {phoneColumns, rows}, projectFolder, projectSessionName, {}},
+                                 makeRoutesThatNoteRefusal(wasRefused));
+    phone.recorded.link->deliver(proto::make("info", {}, ""));
+
+    check(wasRefused);
+    check(!phone.hasSentSpawn());
+};
+
+auto tPhoneStartsTheAllowedLoginShell = test("DaemonClientSizeOwner/phoneStartsTheLoginShellAProjectTapAllowed") = []
+{
+    auto phone = PhoneClientWithRecordedLink {};
+    phone.recorded.client->allowLoginShellInNewPane({projectPaneId, projectFolder});
+
+    phone.recorded.client->spawn({projectPaneId, {phoneColumns, rows}, projectFolder, projectSessionName, {}}, {});
+
+    const auto payload = findSpawnPayload(phone.recorded.sent);
+    check(payload && payload->command.empty(), "the login shell, no command");
+    check(payload && payload->workingDirectory == projectFolder);
+};
+
+auto tPhoneStartsNoShellInAnotherFolder = test("DaemonClientSizeOwner/phoneStartsNoLoginShellOutsideTheAllowedFolder") = []
+{
+    auto phone = PhoneClientWithRecordedLink {};
+    auto wasRefused = false;
+    phone.recorded.client->allowLoginShellInNewPane({projectPaneId, projectFolder});
+
+    phone.recorded.client->spawn({projectPaneId, {phoneColumns, rows}, folderNotAllowed, projectSessionName, {}},
+                                 makeRoutesThatNoteRefusal(wasRefused));
+
+    check(wasRefused);
+    check(!phone.hasSentSpawn());
+};
+
+auto tPhoneStartsNoCommandInTheAllowedPane = test("DaemonClientSizeOwner/phoneStartsNoCommandInAProjectsPane") = []
+{
+    auto phone = PhoneClientWithRecordedLink {};
+    auto wasRefused = false;
+    phone.recorded.client->allowLoginShellInNewPane({projectPaneId, projectFolder});
+
+    phone.recorded.client->spawn({projectPaneId, {phoneColumns, rows}, projectFolder, projectSessionName, "rm -rf ~"},
+                                 makeRoutesThatNoteRefusal(wasRefused));
+
+    check(wasRefused);
+    check(!phone.hasSentSpawn());
+};
+
+auto tAllowedLoginShellStartsOnce = test("DaemonClientSizeOwner/aProjectTapAllowsOneLoginShellOnly") = []
+{
+    auto phone = PhoneClientWithRecordedLink {};
+    auto wasRefused = false;
+    phone.recorded.client->allowLoginShellInNewPane({projectPaneId, projectFolder});
+    phone.recorded.client->spawn({projectPaneId, {phoneColumns, rows}, projectFolder, projectSessionName, {}}, {});
+    phone.recorded.client->release(projectPaneId);
+    phone.recorded.sent.clear();
+
+    phone.recorded.client->spawn({projectPaneId, {phoneColumns, rows}, projectFolder, projectSessionName, {}},
+                                 makeRoutesThatNoteRefusal(wasRefused));
+    phone.recorded.link->deliver(proto::make("info", {}, ""));
+
+    check(wasRefused, "a second spawn of the pane waits for the list like any other");
+    check(!phone.hasSentSpawn());
 };
