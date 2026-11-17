@@ -87,7 +87,8 @@ PhoneConnection::PhoneConnection(PhoneSettings settingsToUse,
     DaemonClient::setClientName(phoneClientName);
     DaemonClient::setClaimsSizeOfEveryPaneItShows(true);
     DaemonClient::setOpensOnlyListedPanes(true);
-    watch.noteReconnecting(readClock());
+    for (const auto& overviewHost: overviewHosts)
+        watches[overviewHost].noteReconnecting(readClock());
 
     auto config = AppConfig {};
     config.searchDirs = makeSearchDirs(overviewHosts);
@@ -122,7 +123,11 @@ PhoneConnection::PhoneConnection(PhoneSettings settingsToUse,
 
 void PhoneConnection::connectOverviewHost(RemoteHost& remote)
 {
-    remote.onChanged = [this] { overview.handleInfoChanged(); };
+    remote.onChanged = [this]
+    {
+        overview.handleInfoChanged();
+        updateLinkState();
+    };
     remote.getDaemon().onInfoChanged = [this] { overview.handleInfoChanged(); };
     remote.onUnhandledMessage = [this](RemoteHost& from, const std::string& verb, const std::string& body)
     { handleUnhandledMessage(from.getHost(), verb, body); };
@@ -156,7 +161,7 @@ std::unique_ptr<Shell> PhoneConnection::makeShell(const std::string& paneId)
 
 std::string PhoneConnection::getFailureReason() const
 {
-    return getRemoteHost().getFailureReason();
+    return getShownRemoteHost().getFailureReason();
 }
 
 void PhoneConnection::handleBackground()
@@ -166,21 +171,40 @@ void PhoneConnection::handleBackground()
 
 void PhoneConnection::handleWake()
 {
-    watch.noteWokeUp(readClock());
-    redialUnreachableOverviewHosts();
+    for (auto& [watchedHost, watch]: watches)
+        watch.noteWokeUp(readClock());
+
     handleTick();
 }
 
-// The shown host has the link watch; the others only need waking from backoff.
-void PhoneConnection::redialUnreachableOverviewHosts()
+void PhoneConnection::redialHosts(Milliseconds now)
 {
     for (const auto& overviewHost: overviewHosts)
     {
-        auto& remote = *RemoteHosts::find(overviewHost);
+        if (!shouldRedial(overviewHost, now))
+            continue;
 
-        if (overviewHost != host && remote.getStatus() == RemoteHost::Status::Unreachable)
-            remote.reconnectNow();
+        watches[overviewHost].noteReconnecting(now);
+        RemoteHosts::find(overviewHost)->reconnectNow();
     }
+}
+
+// Only the shown pane's host is asked something every second, so only its
+// silence means a stall; the others are redialled from backoff when the app wakes.
+bool PhoneConnection::shouldRedial(const std::string& overviewHost, Milliseconds now) const
+{
+    const auto status = RemoteHosts::find(overviewHost)->getStatus();
+    const auto& watch = watches.at(overviewHost);
+
+    if (overviewHost == findShownHost())
+        return watch.shouldReconnect(status, now);
+
+    return status == RemoteHost::Status::Unreachable && watch.shouldReconnect(status, now);
+}
+
+RemoteHost& PhoneConnection::getShownRemoteHost() const
+{
+    return *RemoteHosts::find(findShownHost());
 }
 
 const std::string& PhoneConnection::findShownHost() const
@@ -200,6 +224,7 @@ std::optional<std::string> PhoneConnection::openSession(const overview::Overview
 
     chosenPane = ChosenPane {row.host, *paneId, row.sessionName, row.paneIds};
     onPaneChosen(*chosenPane);
+    updateLinkState();
     return paneId;
 }
 
@@ -211,10 +236,7 @@ RemoteHost& PhoneConnection::getRemoteHost() const
 std::unique_ptr<BridgeLink> PhoneConnection::makeWatchedLink(const std::string& requestedHost)
 {
     auto link = makeLink(requestedHost);
-
-    if (requestedHost == host)
-        link->onBytesReceived = [this] { watch.noteBytesHeard(readClock()); };
-
+    link->onBytesReceived = [this, requestedHost] { watches[requestedHost].noteBytesHeard(readClock()); };
     return link;
 }
 
@@ -270,7 +292,6 @@ void PhoneConnection::handleUnhandledMessage(const std::string& fromHost,
 void PhoneConnection::handleTick()
 {
     const auto now = readClock();
-    auto& remote = getRemoteHost();
 
     if (hasGivenUpOnLastInput(now))
     {
@@ -278,12 +299,7 @@ void PhoneConnection::handleTick()
         choosePaneWhenKnown();
     }
 
-    if (watch.shouldReconnect(remote.getStatus(), now))
-    {
-        watch.noteReconnecting(now);
-        remote.reconnectNow();
-    }
-
+    redialHosts(now);
     updateLinkState();
     storeShownScreenWhileLive(now);
 }
@@ -359,7 +375,8 @@ void PhoneConnection::storeShownScreen()
 
 void PhoneConnection::updateLinkState()
 {
-    const auto current = watch.classify(getRemoteHost().getStatus(), readClock());
+    const auto& shownHost = findShownHost();
+    const auto current = watches.at(shownHost).classify(getShownRemoteHost().getStatus(), readClock());
 
     if (current == linkState)
         return;

@@ -10,6 +10,7 @@
 #include <eacp/Core/Threads/Timer.h>
 
 #include <functional>
+#include <map>
 #include <memory>
 #include <optional>
 #include <string>
@@ -88,8 +89,10 @@ private:
     void connectOverviewHost(RemoteHost& remote);
     void handleHostChanged();
     void handleUnhandledMessage(const std::string& fromHost, const std::string& verb, const std::string& body);
-    void redialUnreachableOverviewHosts();
+    void redialHosts(Milliseconds now);
+    bool shouldRedial(const std::string& overviewHost, Milliseconds now) const;
     const std::string& findShownHost() const;
+    RemoteHost& getShownRemoteHost() const;
     bool isWaitingToAskForLastInput() const;
     bool hasGivenUpOnLastInput(Milliseconds now) const;
     void storeShownScreenWhileLive(Milliseconds now);
@@ -105,7 +108,7 @@ private:
     std::string host;
     std::vector<std::string> overviewHosts;
     PhoneOverview overview;
-    LinkWatch watch;
+    std::map<std::string, LinkWatch> watches;
     PhoneLinkState linkState = PhoneLinkState::Connecting;
     std::shared_ptr<PaneMirror> mirror = std::make_shared<PaneMirror>();
     std::optional<ChosenPane> chosenPane;

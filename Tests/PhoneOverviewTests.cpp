@@ -143,3 +143,66 @@ auto openedPaneOnAnotherHostIsSpawnedThere = test("PhoneOverview/openedPaneOnAno
     check(shown.phone.hasSentTo(rack, "spawn c "));
     check(!shown.phone.hasSentTo(laptop, "spawn"));
 };
+
+namespace
+{
+constexpr auto pastTheStall = Milliseconds {4000};
+constexpr auto pastTheRedialSilence = Milliseconds {9000};
+
+long countLinksMadeFor(const RecordingLinkFactory& factory, const std::string& host)
+{
+    return std::ranges::count(factory.requestedHosts, host);
+}
+
+// The overview's rack session opened on the pane screen.
+void openRackSession(ShownOverview& shown)
+{
+    shown.phone.answerFrom(rack, proto::make("info", {}, makeInfoLine("c", "macprorack/Miro")));
+    shown.phone.connection.openSession(shown.findRow("macprorack/Miro"));
+}
+} // namespace
+
+auto linkStateFollowsTheShownPanesHost = test("PhoneLinkState/followsTheShownPanesHost") = []
+{
+    constexpr auto reason = "unreachable (ssh: connect to host macprorack port 22: Operation timed out)";
+    auto shown = ShownOverview {};
+    openRackSession(shown);
+    shown.phone.connection.handleTick();
+    check(shown.phone.connection.getLinkState() == PhoneLinkState::Live);
+
+    shown.phone.factory.getLinkFor(rack).failTransport(reason);
+
+    check(shown.phone.connection.getLinkState() == PhoneLinkState::Unreachable);
+    check(shown.phone.connection.getFailureReason() == reason);
+};
+
+auto quietHostThatIsNotShownNeitherStallsNorRedials = test("PhoneLinkState/quietHostThatIsNotShownNeitherStallsNorRedials") = []
+{
+    auto phone = PhoneOnRecordedHost {makeTwoHostSettings()};
+    phone.bringLinkUpFor(laptop);
+    phone.bringLinkUpFor(rack);
+
+    phone.now += pastTheRedialSilence;
+    phone.answerFrom(laptop, proto::make("info", {}, makeInfoLine("a", "tamby/CowTerm")));
+    phone.connection.handleTick();
+
+    check(phone.connection.getLinkState() == PhoneLinkState::Live);
+    check(countLinksMadeFor(phone.factory, rack) == 1);
+};
+
+auto quietShownHostStallsThenRedials = test("PhoneLinkState/quietShownHostStallsThenRedials") = []
+{
+    auto shown = ShownOverview {};
+    openRackSession(shown);
+
+    shown.phone.now += pastTheStall;
+    shown.phone.answerFrom(laptop, proto::make("info", {}, makeInfoLine("a", "tamby/CowTerm")));
+    shown.phone.connection.handleTick();
+    check(shown.phone.connection.getLinkState() == PhoneLinkState::Stalled);
+
+    shown.phone.now += pastTheRedialSilence;
+    shown.phone.answerFrom(laptop, proto::make("info", {}, makeInfoLine("a", "tamby/CowTerm")));
+    shown.phone.connection.handleTick();
+    check(countLinksMadeFor(shown.phone.factory, rack) == 2);
+    check(countLinksMadeFor(shown.phone.factory, laptop) == 1);
+};
