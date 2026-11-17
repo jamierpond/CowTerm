@@ -7,12 +7,16 @@
 #include "PhoneSettings.h"
 #include "StoredScreen.h"
 
+#include "Multiplexer/DaemonClient.h"
+#include "Multiplexer/RemoteHosts.h"
+
 #include <eacp/Core/Threads/Timer.h>
 
 #include <functional>
 #include <map>
 #include <memory>
 #include <optional>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -69,11 +73,16 @@ public:
     // through makeShell, or empty when the daemon lists none of its panes.
     std::optional<std::string> openSession(const overview::OverviewRow& row);
 
-    // The app went to the background: store the shown screen now.
+    // The pane the phone showed last time (the stored screen's), opened at
+    // launch when no daemon says which pane was typed into last.
+    void setPaneShownLastTime(const PaneOnHostId& pane);
+
+    // The app went to the background: store the shown screen now, and give a
+    // protocol 4 daemon back the size of the pane the phone holds.
     void handleBackground();
 
     // The app is back, or the network path changed: check the link at once
-    // instead of waiting for it to time out.
+    // instead of waiting for it to time out, and claim again any size given back.
     void handleWake();
 
     std::function<void(PhoneLinkState)> onLinkStateChanged = [](PhoneLinkState) {};
@@ -83,23 +92,50 @@ public:
     // device holds the pane's size ("on Mac, 150 columns; ...").
     std::function<void(const std::string&)> onPaneStatus = [](const std::string&) {};
 
+    // A host's link came up, dropped or failed; reason says why when it failed.
+    std::function<void(const std::string& host,
+                       RemoteHost::Status status,
+                       const std::string& reason)>
+        onHostStatusChanged =
+            [](const std::string&, RemoteHost::Status, const std::string&) {};
+
+    // The shown pane's first screen arrived from its daemon, at size; borrowed is
+    // the size the pane had before the phone took it, when its daemon said.
+    std::function<void(
+        const ChosenPane& pane, PtySize size, std::optional<PtySize> borrowed)>
+        onPaneDrawn = [](const ChosenPane&, PtySize, std::optional<PtySize>) {};
+
+    // Sizes given back to a protocol 4 daemon (background, a stalled link).
+    std::function<void(const std::string& host,
+                       const std::vector<DaemonClient::ReturnedSize>&)>
+        onSizesReturned = [](const std::string&,
+                             const std::vector<DaemonClient::ReturnedSize>&) {};
+
 private:
-    RemoteHost& getRemoteHost() const;
     std::unique_ptr<BridgeLink> makeWatchedLink(const std::string& requestedHost);
     void connectOverviewHost(RemoteHost& remote);
-    void handleHostChanged();
-    void handleUnhandledMessage(const std::string& fromHost, const std::string& verb, const std::string& body);
+    void handleHostChanged(const std::string& changedHost);
+    void reportHostStatus(const std::string& changedHost);
+    void handleUnhandledMessage(const std::string& fromHost,
+                                const std::string& verb,
+                                const std::string& body);
     void redialHosts(Milliseconds now);
     bool shouldRedial(const std::string& overviewHost, Milliseconds now) const;
     const std::string& findShownHost() const;
     RemoteHost& getShownRemoteHost() const;
-    bool isWaitingToAskForLastInput() const;
-    bool hasGivenUpOnLastInput(Milliseconds now) const;
-    void storeShownScreenWhileLive(Milliseconds now);
-    void askForLastInput();
+    void askForLastInput(const std::string& askedHost);
+    bool isReadyToChooseLaunchPane() const;
+    std::optional<PaneOnHostId> findLaunchPane() const;
+    bool isPaneListed(const PaneOnHostId& pane) const;
     void choosePaneWhenKnown();
+    void updateChosenPanesSession();
     std::vector<ListedPane> listPanes(const std::string& onHost) const;
+    void storeShownScreenWhileLive(Milliseconds now);
     void storeShownScreen();
+    bool isShownPaneDrawnButNotReported() const;
+    void reportShownPaneDrawn();
+    void returnBorrowedSizes(const std::string& onHost);
+    void claimReturnedSizesAgain();
     void updateLinkState();
 
     PhoneSettings settings;
@@ -112,10 +148,15 @@ private:
     PhoneLinkState linkState = PhoneLinkState::Connecting;
     std::shared_ptr<PaneMirror> mirror = std::make_shared<PaneMirror>();
     std::optional<ChosenPane> chosenPane;
-    std::optional<std::string> lastInputPane;
-    std::optional<Milliseconds> askedForLastInputAt;
-    bool hasLastInputAnswer = false;
+    std::map<std::string, RemoteHost::Status> reportedHostStatus;
+    std::set<std::string> hostsAskedForLastInput;
+    std::set<std::string> hostsThatAnsweredLastInput;
+    std::vector<LastInput> lastInputs;
+    std::optional<PaneOnHostId> paneShownLastTime;
+    std::optional<Milliseconds> firstAskedForLastInputAt;
+    Milliseconds startedAt = 0;
     std::string shownPaneId;
+    bool hasReportedShownPaneDrawn = false;
     Milliseconds lastStoredAt = 0;
     std::unique_ptr<eacp::Threads::Timer> tickTimer;
     std::shared_ptr<bool> alive = std::make_shared<bool>(true);

@@ -104,8 +104,27 @@ auto tPanesOfASessionMakeOneRow = test("SessionOverview/panesOfASessionMakeOneRo
     }
 };
 
-auto tPanesWithoutASessionAreLeftOut = test("SessionOverview/panesWithoutASessionAreLeftOut") = []
+auto tPanesWithoutASessionGroupByFolder =
+    test("SessionOverview/panesWithoutASessionGroupByFolder") = []
 {
-    const auto rows = buildOverviewRows({{"tamby", {makePane("p1", "", "zsh", {})}}}, now);
-    check(rows.empty());
+    auto shell = makePane("p1", "", "zsh", {});
+    shell.workingDirectory = "/Users/jamiepond/projects/CowTerm";
+    auto claude = makePane("p2", "", "claude", {});
+    claude.workingDirectory = "/Users/jamiepond/projects/CowTerm/";
+    const auto nowhere = makePane("p3", "", "zsh", {});
+
+    const auto rows =
+        buildOverviewRows({{"big-cow", {shell, claude, nowhere}}}, now);
+
+    check(rows.size() == 1 && rows[0].sessionName == "CowTerm");
+    check(rows.size() == 1 && rows[0].paneIds.size() == 2,
+          "a pane with no session and no folder is left out");
+};
+
+auto tSessionNameWinsOverFolder =
+    test("SessionOverview/sessionNameWinsOverFolder") = []
+{
+    check(nameSessionOfPane("Grazer", "/Users/jamiepond/projects/CowTerm")
+          == "Grazer");
+    check(nameSessionOfPane("", "/").empty());
 };

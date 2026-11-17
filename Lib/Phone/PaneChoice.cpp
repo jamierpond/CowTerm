@@ -2,32 +2,46 @@
 
 #include "Multiplexer/Protocol.h"
 
+#include <algorithm>
+#include <charconv>
+
 namespace term::phone
 {
-std::optional<std::string> parseLastInputPane(const std::string& message)
+std::optional<LastInput> parseLastInput(const std::string& host,
+                                        const std::string& message)
 {
+    constexpr auto timeArgument = std::size_t {1};
     const auto parsed = proto::parse(message);
 
-    if (parsed.verb != "last-input" || parsed.args.empty())
+    if (parsed.verb != "last-input" || parsed.args.size() <= timeArgument)
         return std::nullopt;
 
-    return parsed.args[0];
+    const auto& timeText = parsed.args[timeArgument];
+    auto answer = LastInput {{host, parsed.args[0]}, 0};
+    const auto [end, error] = std::from_chars(timeText.data(),
+                                              timeText.data() + timeText.size(),
+                                              answer.millisecondsSinceEpoch);
+
+    if (error != std::errc {})
+        return std::nullopt;
+
+    return answer;
 }
 
-std::optional<std::string> choosePaneToOpen(const std::string& explicitPaneId,
-                                            const std::optional<std::string>& lastInputPane,
-                                            const std::vector<ListedPane>& listedPanes)
+std::optional<PaneOnHostId>
+    chooseLaunchPane(const std::vector<LastInput>& lastInputs,
+                     const std::optional<PaneOnHostId>& shownLastTime,
+                     const IsPaneListed& isListed)
 {
-    if (!explicitPaneId.empty())
-        return explicitPaneId;
+    if (!lastInputs.empty())
+        return std::ranges::max_element(
+                   lastInputs, {}, &LastInput::millisecondsSinceEpoch)
+            ->pane;
 
-    if (lastInputPane)
-        return lastInputPane;
+    if (shownLastTime && isListed(*shownLastTime))
+        return shownLastTime;
 
-    if (listedPanes.empty())
-        return std::nullopt;
-
-    return listedPanes.front().id;
+    return std::nullopt;
 }
 
 std::vector<std::string> listPanesOfSession(const std::vector<ListedPane>& listedPanes,

@@ -1,5 +1,6 @@
 #include <Multiplexer/DaemonClient.h>
 #include <Multiplexer/Protocol.h>
+#include <Emulator/TermState.h>
 
 #include <NanoTest/NanoTest.h>
 
@@ -129,4 +130,129 @@ auto tSpawnCarriesTheSessionName = test("DaemonClientSizeOwner/spawnCarriesTheSe
 
     check(recorded.hasSent(proto::make(
         "spawn", {paneId, std::to_string(phoneColumns), std::to_string(rows), "my%20session"}, "/tmp")));
+};
+
+namespace
+{
+constexpr auto deskColumns = 150;
+constexpr auto deskRows = 40;
+constexpr auto protocolBeforeSizeOwners = proto::sizeOwnerProtocolVersion - 1;
+
+std::string makeStateMessage(int columns, int rowCount)
+{
+    auto state = TerminalState {};
+    state.screen.columns = columns;
+    state.screen.rows = rowCount;
+    return proto::make("state", {paneId}, serializeTerminalState(state));
+}
+
+std::string makeDaemonHello(int version)
+{
+    return proto::make("daemon-hello", {std::to_string(version)});
+}
+
+std::string makeResizeMessage(int columns, int rowCount)
+{
+    return proto::make("resize",
+                       {paneId, std::to_string(columns), std::to_string(rowCount)});
+}
+
+std::string makeClaimMessage(int columns, int rowCount)
+{
+    return proto::make("claim-size",
+                       {paneId, std::to_string(columns), std::to_string(rowCount)});
+}
+
+// The phone adopting a desk-sized pane on a daemon that answered hello with version.
+struct PhoneHoldingDeskPane
+{
+    explicit PhoneHoldingDeskPane(int version)
+    {
+        DaemonClient::setClaimsSizeOfEveryPaneItShows(true);
+        recorded.link->deliver(makeDaemonHello(version));
+        recorded.client->spawn({paneId, {phoneColumns, rows}, "/tmp", "Grazer", {}},
+                               {});
+        recorded.link->deliver(makeStateMessage(deskColumns, deskRows));
+        recorded.sent.clear();
+    }
+
+    ~PhoneHoldingDeskPane() { DaemonClient::setClaimsSizeOfEveryPaneItShows(false); }
+
+    PhoneHoldingDeskPane(const PhoneHoldingDeskPane&) = delete;
+    PhoneHoldingDeskPane& operator=(const PhoneHoldingDeskPane&) = delete;
+
+    ClientWithRecordedLink recorded;
+};
+} // namespace
+
+auto tPhoneRemembersTheSizeItAdopted =
+    test("DaemonClientSizeOwner/phoneRemembersTheSizeItAdopted") = []
+{
+    auto phone = PhoneHoldingDeskPane {protocolBeforeSizeOwners};
+    phone.recorded.link->deliver(makeStateMessage(phoneColumns, rows));
+
+    const auto borrowed = phone.recorded.client->findBorrowedSize(paneId);
+    check(borrowed && borrowed->cols == deskColumns && borrowed->rows == deskRows,
+          "the first state's size, not the one after a reconnect");
+};
+
+auto tPhoneGivesTheSizeBackOnRelease =
+    test("DaemonClientSizeOwner/phoneGivesTheSizeBackOnRelease") = []
+{
+    auto phone = PhoneHoldingDeskPane {protocolBeforeSizeOwners};
+    phone.recorded.client->release(paneId);
+
+    const auto& sent = phone.recorded.sent;
+    check(sent.size() == 2 && sent[0] == makeResizeMessage(deskColumns, deskRows));
+    check(sent.size() == 2 && sent[1] == proto::make("release", {paneId}));
+    check(!phone.recorded.client->findBorrowedSize(paneId));
+};
+
+auto tPhoneGivesSizesBackOnceAndClaimsThemAgain =
+    test("DaemonClientSizeOwner/phoneGivesSizesBackOnceAndClaimsThemAgain") = []
+{
+    auto phone = PhoneHoldingDeskPane {protocolBeforeSizeOwners};
+    const auto returned = phone.recorded.client->returnBorrowedSizes();
+    const auto returnedAgain = phone.recorded.client->returnBorrowedSizes();
+
+    check(returned.size() == 1 && returned[0].size.cols == deskColumns);
+    check(returnedAgain.empty());
+    check(phone.recorded.sent
+          == std::vector {makeResizeMessage(deskColumns, deskRows)});
+
+    phone.recorded.sent.clear();
+    phone.recorded.client->claimReturnedSizesAgain();
+    check(phone.recorded.sent
+          == std::vector {makeResizeMessage(phoneColumns, rows),
+                          makeClaimMessage(phoneColumns, rows)});
+};
+
+auto tDaemonWithSizeOwnersGetsNoSizeBack =
+    test("DaemonClientSizeOwner/daemonWithSizeOwnersGetsNoSizeBack") = []
+{
+    auto phone = PhoneHoldingDeskPane {proto::sizeOwnerProtocolVersion};
+
+    check(phone.recorded.client->returnBorrowedSizes().empty());
+    phone.recorded.client->release(paneId);
+    check(phone.recorded.sent == std::vector {proto::make("release", {paneId})});
+};
+
+auto tPhoneClaimsOnlyOnceTheListedPaneIsOpened =
+    test("DaemonClientSizeOwner/phoneClaimsOnlyOnceTheListedPaneIsOpened") = []
+{
+    DaemonClient::setClaimsSizeOfEveryPaneItShows(true);
+    DaemonClient::setOpensOnlyListedPanes(true);
+    auto recorded = ClientWithRecordedLink {};
+    recorded.client->spawn({paneId, {phoneColumns, rows}, "/tmp", "Grazer", {}}, {});
+    recorded.client->resize(paneId, {phoneColumns, rows});
+    const auto sentBeforeInfo = recorded.sent;
+    recorded.link->deliver(
+        proto::make("info", {}, std::string {paneId} + "\tzsh\t/tmp"));
+    DaemonClient::setOpensOnlyListedPanes(false);
+    DaemonClient::setClaimsSizeOfEveryPaneItShows(false);
+
+    check(std::ranges::find(sentBeforeInfo, makeResizeMessage(phoneColumns, rows))
+              == sentBeforeInfo.end(),
+          "no resize reaches the pane before the daemon's first state");
+    check(recorded.hasSent(makeClaimMessage(phoneColumns, rows)));
 };

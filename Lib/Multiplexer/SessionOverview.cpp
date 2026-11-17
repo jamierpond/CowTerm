@@ -3,6 +3,7 @@
 #include <eacp/Core/Utils/Strings.h>
 
 #include <algorithm>
+#include <filesystem>
 #include <map>
 #include <utility>
 
@@ -118,6 +119,20 @@ std::vector<PaneActivityReport> parseActivityReport(const std::string& payload)
     return reports;
 }
 
+std::string nameSessionOfPane(const std::string& sessionName,
+                              const std::string& workingDirectory)
+{
+    if (!sessionName.empty())
+        return sessionName;
+
+    auto folder = std::filesystem::path {workingDirectory};
+
+    if (!folder.has_filename())
+        folder = folder.parent_path();
+
+    return folder.filename().string();
+}
+
 std::vector<OverviewRow> buildOverviewRows(const std::vector<HostPanes>& hosts,
                                            std::int64_t nowMilliseconds)
 {
@@ -129,8 +144,11 @@ std::vector<OverviewRow> buildOverviewRows(const std::vector<HostPanes>& hosts,
 
         for (const auto& pane: host.panes)
         {
-            if (!pane.sessionName.empty())
-                panesBySession[pane.sessionName].push_back(&pane);
+            const auto sessionName =
+                nameSessionOfPane(pane.sessionName, pane.workingDirectory);
+
+            if (!sessionName.empty())
+                panesBySession[sessionName].push_back(&pane);
         }
 
         for (const auto& [sessionName, panes]: panesBySession)

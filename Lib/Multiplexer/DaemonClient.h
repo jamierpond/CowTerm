@@ -9,6 +9,7 @@
 
 #include <functional>
 #include <memory>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -74,6 +75,13 @@ public:
         bool operator==(const ShellInfo&) const = default;
     };
 
+    // A pane given back the size it had when this client adopted it.
+    struct ReturnedSize
+    {
+        std::string paneId;
+        PtySize size;
+    };
+
     struct SpawnRequest
     {
         std::string id;
@@ -132,6 +140,26 @@ public:
 
     // Takes back every pane another client holds, at this client's sizes.
     void reclaimSizes();
+
+    // A daemon from before size owners (protocol 4) never gives a pane back to
+    // the client that held it before. So a client that claims sizes keeps each
+    // pane's size from the first state the daemon sent for it, and puts it back
+    // by hand: on release, and here, when the app leaves the foreground or the
+    // link stalls. Nothing for a daemon that keeps size owners itself.
+    std::vector<ReturnedSize> returnBorrowedSizes();
+
+    // Claims again, at this client's size, each pane returnBorrowedSizes gave back.
+    void claimReturnedSizesAgain();
+
+    // The size the pane had when this client adopted it; empty when it has none.
+    std::optional<PtySize> findBorrowedSize(const std::string& id) const;
+
+    // From the daemon's "daemon-hello"; empty until it answers.
+    std::optional<int> getDaemonProtocolVersion() const
+    {
+        return answeredProtocolVersion;
+    }
+
     bool hasPanesHeldElsewhere() const;
     void kill(const std::string& id);
     void release(const std::string& id);
@@ -170,7 +198,15 @@ private:
     void sendSpawnOnceListed(const SpawnRequest& request);
     void openListedPanesOrReportGone();
     void sendResizeAndClaim(const std::string& id, const PtySize& size);
+    void rememberSizeFoundOnAdopt(const std::string& id,
+                                  const std::string& serializedState);
+    bool doesDaemonKeepSizeOwners() const;
+    bool hasSizeToReturn(const std::string& id) const;
+    std::optional<ReturnedSize> returnBorrowedSize(const std::string& id);
+    void forgetBorrowedSize(const std::string& id);
     void handleMessage(const std::string& body);
+    void handleClientMessage(const proto::Message& message, const std::string& body);
+    void handlePaneMessage(proto::Message message);
     void handleOutput(const std::string& id, std::string payload);
     void handleState(const std::string& id, const std::string& payload);
     void handleExit(const std::string& id);
@@ -185,6 +221,9 @@ private:
     std::unordered_map<std::string, ShellInfo> info;
     std::unordered_set<std::string> panesHeldElsewhere;
     std::vector<std::string> spawnsWaitingForInfo;
+    std::unordered_map<std::string, PtySize> borrowedSizes;
+    std::unordered_set<std::string> panesWithSizeReturned;
+    std::optional<int> answeredProtocolVersion;
     std::unique_ptr<eacp::Threads::Timer> infoTimer;
 };
 } // namespace term

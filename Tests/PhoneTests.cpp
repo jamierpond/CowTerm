@@ -120,19 +120,40 @@ auto settingsNeedADestination = test("PhoneSettings/needADestination") = []
 
 auto lastInputAnswerNamesThePane = test("PaneChoice/lastInputAnswerNamesThePane") = []
 {
-    check(parseLastInputPane("last-input abc 1794906370945") == std::optional<std::string> {"abc"});
-    check(!parseLastInputPane("last-input").has_value());
-    check(!parseLastInputPane("info\nabc").has_value());
+    constexpr auto typedAt = std::int64_t {1794906370945};
+    const auto answer = parseLastInput("tamby", "last-input abc " + std::to_string(typedAt));
+
+    check(answer && answer->pane == PaneOnHostId {"tamby", "abc"});
+    check(answer && answer->millisecondsSinceEpoch == typedAt);
+    check(!parseLastInput("tamby", "last-input").has_value());
+    check(!parseLastInput("tamby", "info\nabc").has_value());
 };
 
-auto explicitPaneWinsOverLastInput = test("PaneChoice/explicitPaneWinsOverLastInput") = []
+auto latestTypingAcrossHostsWins =
+    test("PaneChoice/latestTypingAcrossHostsWins") = []
 {
-    const auto listed = std::vector<ListedPane> {{"a", "s"}, {"b", "s"}};
+    constexpr auto earlier = std::int64_t {1000};
+    constexpr auto later = std::int64_t {2000};
+    const auto answers = std::vector<LastInput> {{{"tamby", "a"}, earlier},
+                                                 {{"macprorack", "b"}, later}};
+    const auto listsEverything = [](const PaneOnHostId&) { return true; };
 
-    check(choosePaneToOpen("explicit", std::string {"b"}, listed) == std::optional<std::string> {"explicit"});
-    check(choosePaneToOpen({}, std::string {"b"}, listed) == std::optional<std::string> {"b"});
-    check(choosePaneToOpen({}, std::nullopt, listed) == std::optional<std::string> {"a"});
-    check(!choosePaneToOpen({}, std::nullopt, {}).has_value());
+    check(chooseLaunchPane(answers, PaneOnHostId {"tamby", "c"}, listsEverything)
+          == std::optional {PaneOnHostId {"macprorack", "b"}});
+};
+
+auto lastShownPaneOnlyWhenStillListed =
+    test("PaneChoice/lastShownPaneOnlyWhenStillListed") = []
+{
+    const auto shownLastTime = PaneOnHostId {"tamby", "c"};
+    const auto listsEverything = [](const PaneOnHostId&) { return true; };
+    const auto listsNothing = [](const PaneOnHostId&) { return false; };
+
+    check(chooseLaunchPane({}, shownLastTime, listsEverything)
+          == std::optional {shownLastTime});
+    check(!chooseLaunchPane({}, shownLastTime, listsNothing).has_value());
+    check(!chooseLaunchPane({}, std::nullopt, listsEverything).has_value(),
+          "never the first listed pane");
 };
 
 auto sessionPanesKeepTheirOrder = test("PaneChoice/sessionPanesKeepTheirOrder") = []

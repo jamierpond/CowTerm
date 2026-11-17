@@ -5,6 +5,7 @@
 
 #include "DaemonDialer.h"
 
+#include "Emulator/TermState.h"
 #include "Shell/Shell.h"
 
 #include <algorithm>
@@ -163,15 +164,27 @@ void DaemonClient::handleMessage(const std::string& body)
 {
     auto message = proto::parse(body);
 
+    if (!isPaneMessage(message.verb))
+        return handleClientMessage(message, body);
+
+    if (!message.args.empty())
+        handlePaneMessage(std::move(message));
+}
+
+void DaemonClient::handleClientMessage(const proto::Message& message,
+                                       const std::string& body)
+{
     if (message.verb == "info")
         return handleInfo(message.payload);
 
-    if (!isPaneMessage(message.verb))
-        return onOtherMessage(message.verb, body);
+    if (message.verb == "daemon-hello" && !message.args.empty())
+        answeredProtocolVersion = std::stoi(message.args[0]);
 
-    if (message.args.empty())
-        return;
+    onOtherMessage(message.verb, body);
+}
 
+void DaemonClient::handlePaneMessage(proto::Message message)
+{
     if (message.verb == "size-owner")
         handleSizeOwner(message);
     else if (message.verb == "output")
@@ -193,7 +206,82 @@ void DaemonClient::handleOutput(const std::string& id, std::string payload)
 void DaemonClient::handleState(const std::string& id, const std::string& payload)
 {
     if (auto found = routes.find(id); found != routes.end())
+    {
+        rememberSizeFoundOnAdopt(id, payload);
         found->second.routes.onState(payload);
+    }
+}
+
+// Only the first state counts: after a reconnect the daemon's state already
+// has this client's size.
+void DaemonClient::rememberSizeFoundOnAdopt(const std::string& id,
+                                            const std::string& serializedState)
+{
+    if (!getClaimsSizeOfEveryPaneItShows() || borrowedSizes.contains(id))
+        return;
+
+    if (const auto state = parseTerminalState(serializedState))
+        borrowedSizes[id] = {state->screen.columns, state->screen.rows};
+}
+
+bool DaemonClient::doesDaemonKeepSizeOwners() const
+{
+    return answeredProtocolVersion.value_or(0) >= proto::sizeOwnerProtocolVersion;
+}
+
+bool DaemonClient::hasSizeToReturn(const std::string& id) const
+{
+    const auto isHeldByThisClient =
+        borrowedSizes.contains(id) && !panesWithSizeReturned.contains(id);
+    return isHeldByThisClient && !doesDaemonKeepSizeOwners();
+}
+
+std::optional<DaemonClient::ReturnedSize>
+    DaemonClient::returnBorrowedSize(const std::string& id)
+{
+    if (!hasSizeToReturn(id))
+        return std::nullopt;
+
+    const auto& size = borrowedSizes.at(id);
+    send(proto::make("resize", {id, toString(size.cols), toString(size.rows)}));
+    panesWithSizeReturned.insert(id);
+    return ReturnedSize {id, size};
+}
+
+std::vector<DaemonClient::ReturnedSize> DaemonClient::returnBorrowedSizes()
+{
+    auto returned = std::vector<ReturnedSize> {};
+
+    for (const auto& [id, size]: borrowedSizes)
+    {
+        if (const auto given = returnBorrowedSize(id))
+            returned.push_back(*given);
+    }
+
+    return returned;
+}
+
+void DaemonClient::claimReturnedSizesAgain()
+{
+    for (const auto& id: std::exchange(panesWithSizeReturned, {}))
+    {
+        if (auto found = routes.find(id); found != routes.end())
+            sendResizeAndClaim(id, found->second.request.size);
+    }
+}
+
+std::optional<PtySize> DaemonClient::findBorrowedSize(const std::string& id) const
+{
+    if (const auto found = borrowedSizes.find(id); found != borrowedSizes.end())
+        return found->second;
+
+    return std::nullopt;
+}
+
+void DaemonClient::forgetBorrowedSize(const std::string& id)
+{
+    borrowedSizes.erase(id);
+    panesWithSizeReturned.erase(id);
 }
 
 // size-owner <id> <cols> <rows> <1 when this client owns it> [owner's name]
@@ -223,6 +311,8 @@ void DaemonClient::handleSizeOwner(const proto::Message& message)
 
 void DaemonClient::handleExit(const std::string& id)
 {
+    forgetBorrowedSize(id);
+
     if (auto found = routes.find(id); found != routes.end())
     {
         auto route = std::move(found->second);
@@ -360,6 +450,13 @@ void DaemonClient::claimSize(const std::string& id, const PtySize& size)
     if (auto found = routes.find(id); found != routes.end())
         found->second.request.size = size;
 
+    panesWithSizeReturned.erase(id);
+
+    // The spawn claims it once sent; a resize before it would reach the
+    // pane before the daemon's first state, which then holds this size.
+    if (std::ranges::find(spawnsWaitingForInfo, id) != spawnsWaitingForInfo.end())
+        return;
+
     sendResizeAndClaim(id, size);
 }
 
@@ -386,6 +483,7 @@ void DaemonClient::resize(const std::string& id, const PtySize& size)
 
 void DaemonClient::kill(const std::string& id)
 {
+    forgetBorrowedSize(id);
     routes.erase(id);
     panesHeldElsewhere.erase(id);
     send(proto::make("kill", {id}));
@@ -393,6 +491,8 @@ void DaemonClient::kill(const std::string& id)
 
 void DaemonClient::release(const std::string& id)
 {
+    returnBorrowedSize(id);
+    forgetBorrowedSize(id);
     routes.erase(id);
     panesHeldElsewhere.erase(id);
     send(proto::make("release", {id}));

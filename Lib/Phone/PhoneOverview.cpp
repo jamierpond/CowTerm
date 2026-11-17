@@ -148,7 +148,11 @@ overview::HostPanes PhoneOverview::collectHostPanes(const std::string& host) con
     for (const auto& paneId: daemon.listShellIds())
     {
         const auto info = daemon.infoFor(paneId);
-        hostPanes.panes.push_back({paneId, info.foregroundProcess, info.sessionName, findActivity(host, paneId)});
+        hostPanes.panes.push_back({paneId,
+                                   info.foregroundProcess,
+                                   info.sessionName,
+                                   findActivity(host, paneId),
+                                   info.workingDirectory});
     }
 
     return hostPanes;
