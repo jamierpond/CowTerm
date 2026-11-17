@@ -417,6 +417,15 @@ accepts only Jamie's ed25519 key, so the probe signs through a private
 ssh-agent for that run. The phone's planned Secure Enclave key is P-256, which
 works.
 
+### The phone holding a pane, end to end
+
+`scripts/run-ios-size-owner-test.sh jamiepond@macprorack
+'$HOME/tmp/cowterm-ios-phone-test' <png>` builds this branch's headless ct and
+daemon in that folder on the host, runs them as a separate instance, and has a
+desk stand-in hold a 150 × 40 pane. The phone opens it in the simulator and
+takes it at 48 × 21 (keyboard-up rows), and when the phone quits the desk gets
+150 × 40 back. Jamie's own daemons run protocol 4 and were not used.
+
 ### CowTerm's libraries on the iOS Simulator
 
 The four libraries build for the simulator with eacp's own iOS CI flags
@@ -480,6 +489,29 @@ launched with `--landscape`, which is how landscape screenshots are taken.
   hooks; reading the screen was not tried. The daemon's `activity` answer
   carries each pane's state, last typing and last output, and
   `SessionOverview` turns it into the overview's rows.
+- The phone never starts a shell. Before opening a pane, its daemon client
+  asks `info` and opens only a listed pane; otherwise the pane says it no longer
+  exists. A pane that dies between that answer and the open would still get a
+  fresh shell; only a daemon-side "adopt, never create" message would close
+  that, and it is not built.
+- The phone chooses its pane by an explicit id, else the daemon's
+  `last-input`, else the first pane `info` lists (alphabetical, since `info`
+  carries no recency). It waits 2 s for `last-input`, which older daemons never
+  answer.
+- Link state: stalled after 3 s with no bytes (the daemon answers `info` every
+  second), dialled again after 8 s, and at once on returning to the foreground
+  or a network change if the link stays quiet for 2 s. eacp has no
+  network-change event, so `iOS/NetworkPathWatch-iOS.mm` wraps NWPathMonitor in
+  CowTerm.
+- The stored last screen is the daemon's own terminal-state JSON, saved every
+  10 s while live and on going to the background.
+- In landscape the keyboard leaves about 4 rows, too few to fix a shell at, so
+  there the grid follows the pane and the keyboard does resize the shell.
+- The phone's search counts a session's last typing as one pick; it has no
+  learned picks, because emberstore, where the Mac keeps them, does not build
+  for iOS. The palette's ranking moved into `CowTerm::Multiplexer` with
+  `git mv`.
+- A tap on a link opens it on the phone without a modifier key.
 
 ## What eacp lacks on iOS
 
