@@ -287,6 +287,14 @@ ios-device-test-key-row destination="jamiepond@macprorack" phone="pond":
 install-headless-on-host host:
     scripts/install-headless-on-host.sh {{host}}
 
+# Restart a host's CowTerm daemon on the installed build: ends programs running in its panes (ask first)
+restart-daemon-on-host host:
+    scripts/restart-daemon-on-host.sh {{host}}
+
+# Restart this Mac's CowTerm app and daemon, detached from every pane: ends programs running in its panes (ask first)
+restart-cowterm-on-this-mac:
+    scripts/restart-cowterm-on-this-mac.sh
+
 # Show on a separate daemon instance on a host what an update does to running shells
 check-update-keeps-shells destination folder:
     scripts/check-update-keeps-shells.sh {{destination}} {{folder}}
