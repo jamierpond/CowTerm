@@ -63,7 +63,7 @@ tidy: configure
 run: build
     @echo "[run] resetting Accessibility for CowTerm"
     -@"{{build_dir}}/Terminal/CowTerm.app/Contents/MacOS/CowTerm" --reset-permissions Accessibility
-    open "{{build_dir}}/Terminal/CowTerm.app"
+    scripts/open-cowterm-cleanly.sh "{{build_dir}}/Terminal/CowTerm.app"
 
 [doc('Build, then launch the app')]
 [windows]
@@ -187,7 +187,7 @@ rebuild: clean build
 [doc('Build and run with popup tracing on')]
 [macos]
 debug-popup: build
-    open -n --env COWTERM_POPUP_DEBUG=1 "{{build_dir}}/Terminal/CowTerm.app"
+    scripts/open-cowterm-cleanly.sh "{{build_dir}}/Terminal/CowTerm.app" -n --env COWTERM_POPUP_DEBUG=1
 
 [doc('clang-format every tracked source in place')]
 [unix]
@@ -290,6 +290,10 @@ ios-device-test-key-row destination="jamiepond@macprorack" phone="pond":
 # Install this checkout's headless ct and cowtermd on a host; its running daemon keeps running
 install-headless-on-host host:
     scripts/install-headless-on-host.sh {{host}}
+
+# Open a CowTerm app with the environment the Dock gives it, never the caller's
+open-cowterm-cleanly app *open_arguments:
+    scripts/open-cowterm-cleanly.sh "{{app}}" {{open_arguments}}
 
 # Restart a host's CowTerm daemon on the installed build: ends programs running in its panes (ask first)
 restart-daemon-on-host host:

@@ -81,5 +81,30 @@ PYTHON
     say_when "the daemon saved its panes and quit"
 fi
 
-open "$app"
-say_when "opened $app; daemon now pid $(pgrep -x CowTermDaemon | head -1 || echo none)"
+"$(dirname "$0")/open-cowterm-cleanly.sh" "$app"
+
+# Names only, never values: a token must not reach the log.
+find_inherited_session_variables() {
+    ps eww -o command= -p "$1" | tr ' ' '\n' | grep -E '^(CLAUDE[A-Z_]*|CLAUDECODE|COWTERM_PANE)=' | cut -d= -f1 | tr '\n' ' '
+}
+
+waited=0
+while ! pgrep -x CowTermDaemon > /dev/null; do
+    if [ "$waited" -ge "$seconds_to_wait" ]; then
+        say_when "FAILED: the daemon did not start"
+        exit 1
+    fi
+    sleep 1
+    waited=$((waited + 1))
+done
+
+new_app_pid=$(pgrep -x CowTerm | head -1)
+new_daemon_pid=$(pgrep -x CowTermDaemon | head -1)
+inherited="$(find_inherited_session_variables "$new_app_pid")$(find_inherited_session_variables "$new_daemon_pid")"
+
+if [ -n "$inherited" ]; then
+    say_when "FAILED: the new app or daemon inherited $inherited; every pane's shell would start with them"
+    exit 1
+fi
+
+say_when "opened $app: app pid $new_app_pid, daemon pid $new_daemon_pid, no CLAUDE* or COWTERM_PANE in either environment"

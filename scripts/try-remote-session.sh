@@ -29,7 +29,7 @@ cat > "$store/sessions.json" <<JSON
   "panes": [ { "cwd": "$remote_directory", "first": -1, "second": -1, "horizontal": false, "ratio": 0.5, "split": false, "shellId": "$shell_id" } ] } ] }
 JSON
 
-open -n --env COWTERM_INSTANCE="$instance" "$app"
+scripts/open-cowterm-cleanly.sh "$app" -n --env COWTERM_INSTANCE="$instance"
 sleep 8
 
 echo "look at the screenshot: the pane should show $alias_name's prompt in $remote_directory"
