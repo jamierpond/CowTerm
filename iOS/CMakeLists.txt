@@ -71,7 +71,8 @@ set_target_properties(CowTermMobile PROPERTIES
         MACOSX_BUNDLE TRUE
         XCODE_ATTRIBUTE_ASSETCATALOG_COMPILER_APPICON_NAME AppIcon
         XCODE_ATTRIBUTE_TARGETED_DEVICE_FAMILY "1"
-        XCODE_ATTRIBUTE_SKIP_INSTALL NO)
+        XCODE_ATTRIBUTE_SKIP_INSTALL NO
+        XCODE_ATTRIBUTE_INSTALL_PATH "$(LOCAL_APPS_DIR)")
 
 # The Mac app's JetBrains Mono, embedded the same way.
 res_embed_add(CowTermMobile DIRECTORY ${PROJECT_SOURCE_DIR}/Terminal/Resources)
