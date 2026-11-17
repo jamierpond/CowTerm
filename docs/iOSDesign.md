@@ -203,7 +203,8 @@ thumb reaches.
   to the next one, and tapping a dot does the same. 64% of his sessions have
   one pane, and then there are no dots.
 - `⌨` opens the keyboard and composer.
-- `git` shows this pane's repository (next section).
+- `diff` opens dv on this pane's folder ("dv from the bar", under
+  "Decisions made while building"; it replaced lazygit, next section).
 - `☰` opens the overview. Swiping up on the bar does the same.
 
 The bar sits above the home indicator, as Safari's does, so its swipes do not
@@ -620,6 +621,49 @@ launched with `--landscape`, which is how landscape screenshots are taken.
   screen's top line is a word ("live", "connecting", "stalled", "unreachable");
   a waiting card says "waiting:" and is taller than a row; a latched Ctrl and
   a lit "compose" key also get a bar under the label.
+
+### dv from the bar
+
+The bar's `git` button was greyed out and did nothing. It is now `diff`, and
+opens dv (DiffView) on the folder of the pane on screen, full screen at the
+phone's size.
+
+- It is the Mac's popup path: a TerminalView with a command, whose command
+  shell is `makeRemoteShell`, so DaemonClient sends the daemon a `spawn` with
+  a command payload. No second way to start a command pane was added.
+- The phone otherwise never starts a shell. DaemonClient now also takes the
+  one command such a client may start (`setOnlyCommandItMayStart`, `dv` on the
+  phone); a spawn of any other command is refused like an unlisted pane. The
+  pane's shell (`DiffViewShell`) starts only `dv`, only in the folder the
+  daemon's `info` gave for the shown pane, and the phone builds that request in
+  one place (`makeDiffViewPane`).
+- The dv pane is the phone's alone, so it claims its size like any pane it
+  shows. Its id starts `phone-dv-`, and the overview and the session's dots
+  leave such panes out. The Mac app never lists panes it did not open.
+- dv quitting, the "‹ Back to the pane" bar, or a swipe from the left edge
+  returns to the pane he was in, and the phone sends `kill` for the dv pane.
+- Never left behind: before the spawn is sent the phone adds the pane's host
+  and id to `temporary-panes.json` beside `held-pane.json`, and removes it
+  when it kills the pane. If the app is killed with dv open (a reinstall, a
+  crash), the next launch sends `kill` for every pane in that file as soon as
+  its host's daemon answers `daemon-hello`, and forgets it. If the record
+  cannot be written, dv does not start. The pane stays alive between the kill
+  and the next launch, and forever if the phone is never launched again or
+  that host leaves its host list.
+- When dv cannot start, a sentence says why in place of the pane: "dv is not
+  installed on macprorack." (the daemon's `missing-command`, now also passed
+  to `Shell::onCommandNotInstalled`), or "/tmp/x is not in a git repository."
+  (dv prints "not inside a git work tree" and exits 1). Any other text dv
+  leaves when it ends is shown as "dv stopped: " and its last line. A blank
+  screen at exit is dv quitting.
+- A tap reaches dv as a left click and a drag as wheel through the pane
+  screen's `PaneTouchSurface`, unchanged.
+- `just ios-test-diff-view <user@host> <screenshot-prefix>` checks it on
+  throwaway panes in throwaway `/tmp` folders: dv open, the "not in a git
+  repository" sentence, the pane gone after closing, and a pane left by a
+  killed app gone after the next launch. The probe gained `--list-panes` and a
+  folder for `--leave-pane`. On 17 November it passed on macprorack. big-cow
+  and tamby refused the simulator's ssh key, so neither was checked there.
 
 ### Pairing a phone
 

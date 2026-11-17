@@ -175,3 +175,113 @@ auto quietPhoneLinkStallsThenRedials =
     check(phone.factory.requestedHosts.size() == 2);
     check(phone.connection.getLinkState() == PhoneLinkState::Connecting);
 };
+
+namespace
+{
+std::filesystem::path findTemporaryPanesPath(const PhoneSettings& settings)
+{
+    return settings.storedScreenPath.parent_path() / "temporary-panes.json";
+}
+
+// pane-1 on screen, listed in the folder makeInfoLine gives every pane.
+struct PhoneShowingAPane
+{
+    PhoneShowingAPane()
+    {
+        std::filesystem::remove(findTemporaryPanesPath(settings));
+        phone.openPaneView("pane-1");
+        phone.bringLinkUp();
+        phone.answerInfo(makeInfoLine("pane-1", "tamby/x"));
+    }
+
+    PhoneSettings settings = makeSettings("pane-1");
+    PhoneOnRecordedHost phone {settings};
+};
+
+constexpr auto shownPanesFolder = "/tmp";
+constexpr auto randomNumberOfAnEarlierLaunch = std::uint64_t {42};
+} // namespace
+
+auto diffViewOpensInTheShownPanesFolder = test("PhoneConnection/diffViewOpensInTheShownPanesFolder") = []
+{
+    auto showing = PhoneShowingAPane {};
+    const auto opening = showing.phone.connection.openDiffView();
+
+    check(opening.pane && opening.pane->workingDirectory == shownPanesFolder);
+    check(opening.pane && opening.pane->host == showing.phone.connection.getHost());
+    check(loadTemporaryPanes(findTemporaryPanesPath(showing.settings)).size() == 1,
+          "the record is on disk before dv starts");
+
+    auto shell = showing.phone.connection.makeDiffViewShell(*opening.pane);
+    shell->start({{}, shownPanesFolder, diffViewCommand, {}}, [](const std::string&) {}, [] {});
+
+    const auto spawn = proto::make("spawn", {opening.pane->paneId});
+    const auto sent = showing.phone.readSentMessages(showing.phone.connection.getHost());
+    const auto found = std::ranges::find_if(sent, [&](const std::string& message) { return message.starts_with(spawn); });
+    check(found != sent.end());
+    check(found != sent.end() && proto::parseSpawnPayload(proto::parse(*found).payload).command == diffViewCommand);
+};
+
+auto closingDiffViewKillsItsPane = test("PhoneConnection/closingDiffViewKillsItsPane") = []
+{
+    auto showing = PhoneShowingAPane {};
+    const auto pane = *showing.phone.connection.openDiffView().pane;
+
+    showing.phone.connection.closeDiffView(pane);
+
+    check(showing.phone.hasSentMessageStartingWith(proto::make("kill", {pane.paneId})));
+    check(loadTemporaryPanes(findTemporaryPanesPath(showing.settings)).empty());
+};
+
+auto diffViewWaitsForThePanesFolder = test("PhoneConnection/diffViewWaitsForThePanesFolder") = []
+{
+    auto phone = PhoneOnRecordedHost {makeSettings("pane-1")};
+    phone.openPaneView("pane-1");
+
+    const auto opening = phone.connection.openDiffView();
+    check(!opening.pane);
+    check(!opening.whyNot.empty());
+};
+
+auto diffViewPaneIsNotOneOfTheSessionsPanes = test("PhoneConnection/diffViewPaneIsNotOneOfTheSessionsPanes") = []
+{
+    auto showing = PhoneShowingAPane {};
+    const auto pane = *showing.phone.connection.openDiffView().pane;
+
+    showing.phone.answerInfo(makeInfoLine("pane-1", "tamby/x") + makeInfoLine(pane.paneId, "tamby/x"));
+
+    check(showing.phone.connection.getChosenPane()->sessionPaneIds == std::vector<std::string> {"pane-1"});
+};
+
+auto diffViewLeftByAKilledAppIsKilledNextLaunch =
+    test("PhoneConnection/diffViewLeftByAKilledAppIsKilledNextLaunch") = []
+{
+    const auto settings = makeSettings({});
+    const auto path = findTemporaryPanesPath(settings);
+    std::filesystem::remove(path);
+    const auto leftBehind = TemporaryPane {"jamie@tamby", makeDiffViewPaneId(randomNumberOfAnEarlierLaunch)};
+    addTemporaryPane(path, leftBehind);
+
+    auto phone = PhoneOnRecordedHost {settings};
+    phone.bringLinkUp();
+    check(!phone.hasSentMessageStartingWith("kill"), "not before the daemon answers");
+
+    phone.answer(proto::make("daemon-hello", {std::to_string(proto::sizeOwnerProtocolVersion - 1)}));
+
+    check(phone.hasSentMessageStartingWith(proto::make("kill", {leftBehind.paneId})));
+    check(loadTemporaryPanes(path).empty());
+};
+
+auto diffViewSaysWhenItIsNotInstalled = test("PhoneConnection/diffViewSaysWhenItIsNotInstalled") = []
+{
+    auto showing = PhoneShowingAPane {};
+    const auto pane = *showing.phone.connection.openDiffView().pane;
+    auto missingProgram = std::string {};
+    auto shell = showing.phone.connection.makeDiffViewShell(pane);
+    shell->onCommandNotInstalled = [&](const std::string& program) { missingProgram = program; };
+    shell->start({{}, shownPanesFolder, diffViewCommand, {}}, [](const std::string&) {}, [] {});
+
+    showing.phone.answer(proto::make("missing-command", {pane.paneId}, diffViewCommand));
+
+    check(missingProgram == diffViewCommand);
+};

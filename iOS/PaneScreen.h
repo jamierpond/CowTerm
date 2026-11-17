@@ -47,6 +47,9 @@ struct PaneScreenActions
     std::function<void()> onPreviousSession = [] {};
     std::function<void(int paneIndex)> onChoosePane = [](int) {};
     std::function<void()> onOverview = [] {};
+
+    // diff: dv for this pane's folder.
+    std::function<void()> onDiffView = [] {};
 };
 
 class PaneScreen final : public eacp::Graphics::View

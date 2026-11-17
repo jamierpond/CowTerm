@@ -176,6 +176,31 @@ term::TerminalConfig PhoneLaunch::makeTerminalConfig()
     return config;
 }
 
+DiffViewOpening PhoneLaunch::openDiffView()
+{
+    auto opening = connection.openDiffView();
+
+    if (opening.pane)
+        LOG("phone: dv pane ", opening.pane->paneId, " on ", opening.pane->host, " in ", opening.pane->workingDirectory);
+    else
+        LOG("phone: no dv: ", opening.whyNot);
+
+    return opening;
+}
+
+term::TerminalConfig PhoneLaunch::makeDiffViewConfig(const DiffViewPane& pane)
+{
+    auto config = term::TerminalConfig {};
+    config.makeCommandShell = [this, pane](const std::string&) { return connection.makeDiffViewShell(pane); };
+    return config;
+}
+
+void PhoneLaunch::closeDiffView(const DiffViewPane& pane)
+{
+    LOG("phone: killed dv pane ", pane.paneId, " on ", pane.host);
+    connection.closeDiffView(pane);
+}
+
 std::string PhoneLaunch::getPaneToOpen() const
 {
     return settings.explicitPaneId;
@@ -241,6 +266,9 @@ void PhoneLaunch::logWhatTheConnectionHears()
             ", its size before the phone took it ",
             borrowed ? describeSize(*borrowed) : std::string {"unknown"});
     };
+
+    connection.onEarlierTemporaryPaneKilled = [](const TemporaryPane& pane)
+    { LOG("phone: killed dv pane ", pane.paneId, " on ", pane.host, ", left by an earlier launch"); };
 
     connection.onPaneOutputAfterQuiet = [](const ChosenPane& pane, std::size_t bytes)
     { LOG("phone: output from pane ", pane.paneId, " on ", pane.host, ", ", bytes, " bytes"); };

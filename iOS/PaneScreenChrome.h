@@ -40,12 +40,12 @@ struct BottomBarActions
     std::function<void()> onPreviousSession = [] {};
     std::function<void(int paneIndex)> onChoosePane = [](int) {};
     std::function<void()> onKeyboard = [] {};
-    std::function<void()> onGit = [] {};
+    std::function<void()> onDiffView = [] {};
     std::function<void()> onOverview = [] {};
     std::function<void()> onOpenMenu = [] {};
 };
 
-// ‹ previous session, the pane dots, ⌨, git and ☰. A tap presses a control,
+// ‹ previous session, the pane dots, ⌨, diff and ☰. A tap presses a control,
 // a sideways swipe moves between panes, a swipe up opens the overview and a
 // long press opens the menu.
 class BottomBar final : public eacp::UI::Component

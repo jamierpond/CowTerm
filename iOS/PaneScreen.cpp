@@ -126,6 +126,11 @@ PaneScreen::PaneScreen(const term::TerminalConfig& config, const std::string& pa
         raiseKeyboard();
     };
     bottomBar.actions.onOpenMenu = [this] { openMenu(); };
+    bottomBar.actions.onDiffView = [this]
+    {
+        LOG("bottom bar: diff");
+        actions.onDiffView();
+    };
     touchSurface.onSwipeFromTheLeftEdge = [this]
     {
         LOG("pane screen: back swipe from the left edge");
@@ -395,7 +400,7 @@ std::vector<MenuAction> PaneScreen::listMenuActions()
         {"Select", "long press", false},
         {"Search", "", false},
         {"Text size", "pinch", false},
-        {"git", "git", false},
+        {"Diff", "diff", true, [this] { actions.onDiffView(); }},
         {"Close pane", "", false},
     };
 }

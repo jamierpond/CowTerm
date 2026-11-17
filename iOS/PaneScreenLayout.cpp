@@ -98,7 +98,7 @@ BottomBarLayout calculateBottomBarLayout(Rect bar,
         layout.previousSession = room.removeFromLeft(*previousSessionWidth);
 
     layout.overview = room.removeFromRight(barButtonWidth);
-    layout.git = room.removeFromRight(barButtonWidth);
+    layout.diff = room.removeFromRight(barButtonWidth);
     layout.keyboard = room.removeFromRight(barButtonWidth);
     layout.paneDots = calculatePaneDots(room, paneCount);
     return layout;
@@ -118,8 +118,8 @@ BottomBarHit findBottomBarControlAt(const BottomBarLayout& layout, Point positio
     if (layout.keyboard.contains(position))
         return {BottomBarControl::Keyboard};
 
-    if (layout.git.contains(position))
-        return {BottomBarControl::Git};
+    if (layout.diff.contains(position))
+        return {BottomBarControl::Diff};
 
     if (layout.overview.contains(position))
         return {BottomBarControl::Overview};

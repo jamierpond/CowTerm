@@ -26,16 +26,20 @@ enum class ProbeMode
     WatchPane,
 
     // Ask the daemon to quit (a test instance, never the user's own).
-    QuitServer
+    QuitServer,
+
+    // Print the daemon's panes and change nothing.
+    ListPanes
 };
 
 // CowTermEmbeddedSshProbe's command line:
 //   <user@host[:port]>                       ThrowawayPane
 //   <user@host[:port]> --adopt [pane]        AdoptPane
-//   <user@host[:port]> --leave-pane <pane> [session]   LeavePaneRunning
+//   <user@host[:port]> --leave-pane <pane> [session] [folder]   LeavePaneRunning
 //   <user@host[:port]> --kill-pane <pane>    KillPane
 //   <user@host[:port]> --watch-pane <pane>   WatchPane
 //   <user@host[:port]> --quit-server         QuitServer
+//   <user@host[:port]> --list-panes          ListPanes
 struct ProbeArguments
 {
     term::SshDestination destination;
@@ -46,6 +50,9 @@ struct ProbeArguments
 
     // --leave-pane's session; empty puts the pane in a session of its own name.
     std::string sessionName;
+
+    // --leave-pane's folder on the host; empty starts the pane in /tmp.
+    std::string folder;
 };
 
 // Empty when the arguments don't match the usage above.

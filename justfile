@@ -251,6 +251,10 @@ ios-test-pane-switching *arguments:
 ios-test-stored-screen *arguments:
     scripts/check-ios-stored-screen.sh {{arguments}}
 
+# Press the diff button on throwaway panes in throwaway /tmp folders on a host: dv, the sentence when it cannot run, and its pane killed
+ios-test-diff-view *arguments:
+    scripts/check-ios-diff-view.sh {{arguments}}
+
 # Send the running app to the background and back, and print the lifecycle lines it logged
 ios-test-lifecycle *arguments:
     scripts/check-ios-lifecycle.sh {{arguments}}

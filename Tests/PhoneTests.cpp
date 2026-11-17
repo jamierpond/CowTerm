@@ -1,3 +1,4 @@
+#include "Phone/DiffViewPane.h"
 #include "Phone/LinkWatch.h"
 #include "Phone/MirroredShell.h"
 #include "Phone/PaneChoice.h"
@@ -336,4 +337,83 @@ auto openingsAreKeptAndDecay = test("SessionOpenings/openingsAreKeptAcrossLaunch
     check(reopened.getUsage("jamie@tamby/CowTerm", now + aMonth) < reopened.getUsage("jamie@tamby/CowTerm", now),
           "older openings count for less");
     std::filesystem::remove(path);
+};
+
+namespace
+{
+constexpr auto repositoryFolder = "/tmp/cowterm-dv-repo";
+constexpr auto someRandomNumber = std::uint64_t {0xabcdef};
+constexpr auto anotherRandomNumber = std::uint64_t {0x123456};
+} // namespace
+
+auto diffViewRunsInTheShownPanesFolder = test("DiffViewPane/runsInTheShownPanesFolder") = []
+{
+    const auto pane = makeDiffViewPane("macprorack", repositoryFolder, someRandomNumber);
+
+    check(pane && pane->host == "macprorack");
+    check(pane && pane->workingDirectory == repositoryFolder);
+    check(pane && pane->paneId == "phone-dv-0000000000abcdef");
+    check(pane && isDiffViewPaneId(pane->paneId));
+    check(!makeDiffViewPane("macprorack", {}, someRandomNumber), "no folder known yet, no dv");
+};
+
+auto diffViewPanesAreLeftOutOfLists = test("DiffViewPane/panesAreLeftOutOfLists") = []
+{
+    const auto listed = std::vector<std::string> {"pane-a", makeDiffViewPaneId(someRandomNumber), "pane-b"};
+    check(removeDiffViewPaneIds(listed) == std::vector<std::string> {"pane-a", "pane-b"});
+};
+
+auto diffViewSaysWhyItEnded = test("DiffViewPane/saysWhyItEnded") = []
+{
+    const auto outsideARepository =
+        std::string {"diffview: "} + repositoryFolder + " is not inside a git work tree\n";
+
+    const auto cutAcrossRows = std::string {"diffview: "} + repositoryFolder + " is no\nt inside a git work tree\n";
+
+    check(describeDiffViewFailure(outsideARepository, repositoryFolder)
+          == std::string {repositoryFolder} + " is not in a git repository.");
+    check(describeDiffViewFailure(cutAcrossRows, repositoryFolder)
+          == std::string {repositoryFolder} + " is not in a git repository.");
+    const auto brokenWhereTheRowEnds = std::string {"diffview: "} + repositoryFolder + " is no\nt inside a git work tree\n";
+    check(describeDiffViewFailure(brokenWhereTheRowEnds, repositoryFolder)
+          == std::string {repositoryFolder} + " is not in a git repository.");
+    check(describeDiffViewFailure("\n  \n", repositoryFolder).empty(), "a blank screen is dv quitting");
+    check(describeDiffViewFailure("fatal: bad object\n", repositoryFolder) == "dv stopped: fatal: bad object");
+    check(describeDiffViewNotInstalled("macprorack") == "dv is not installed on macprorack.");
+};
+
+auto temporaryPanesAreKeptUntilKilled = test("DiffViewPane/temporaryPanesAreKeptUntilKilled") = []
+{
+    const auto path = makeScratchDirectory() / "temporary-panes.json";
+    const auto first = TemporaryPane {"macprorack", makeDiffViewPaneId(someRandomNumber)};
+    const auto second = TemporaryPane {"big-cow", makeDiffViewPaneId(anotherRandomNumber)};
+
+    check(loadTemporaryPanes(path).empty());
+    check(addTemporaryPane(path, first));
+    check(addTemporaryPane(path, second));
+    check(loadTemporaryPanes(path) == std::vector<TemporaryPane> {first, second});
+
+    removeTemporaryPane(path, first);
+    check(loadTemporaryPanes(path) == std::vector<TemporaryPane> {second});
+
+    removeTemporaryPane(path, second);
+    check(!std::filesystem::exists(path), "no panes left, no file");
+};
+
+auto diffViewShellStartsOnlyDiffViewInItsFolder = test("DiffViewPane/shellStartsOnlyDiffViewInItsFolder") = []
+{
+    const auto pane = *makeDiffViewPane("macprorack", repositoryFolder, someRandomNumber);
+    const auto startWith = [&](const std::string& command, const std::string& folder)
+    {
+        auto inner = std::make_unique<ScriptedShell>();
+        auto& scripted = *inner;
+        auto shell = DiffViewShell {std::move(inner), pane};
+        const auto started = shell.start({{}, folder, command, {}}, [](std::string) {}, [] {});
+        return started && scripted.onOutput != nullptr;
+    };
+
+    check(startWith(diffViewCommand, repositoryFolder));
+    check(!startWith("bash", repositoryFolder), "no other command");
+    check(!startWith({}, repositoryFolder), "no interactive shell");
+    check(!startWith(diffViewCommand, "/"), "no other folder");
 };

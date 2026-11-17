@@ -48,6 +48,12 @@ bool& getOpensOnlyListedPanes()
     return opensOnlyListed;
 }
 
+std::string& getOnlyCommandItMayStart()
+{
+    static auto command = std::string {};
+    return command;
+}
+
 bool isPaneMessage(const std::string& verb)
 {
     return verb == "output" || verb == "state" || verb == "exit" || verb == "missing-command"
@@ -88,6 +94,11 @@ void DaemonClient::setClaimsSizeOfEveryPaneItShows(bool claims)
 void DaemonClient::setOpensOnlyListedPanes(bool opensOnlyListed)
 {
     getOpensOnlyListedPanes() = opensOnlyListed;
+}
+
+void DaemonClient::setOnlyCommandItMayStart(const std::string& command)
+{
+    getOnlyCommandItMayStart() = command;
 }
 
 DaemonClient* DaemonClient::get()
@@ -401,10 +412,20 @@ void DaemonClient::openListedPanesOrReportGone()
             continue;
         }
 
-        auto route = std::move(found->second);
-        routes.erase(found);
-        route.routes.onGone();
+        reportPaneGone(id);
     }
+}
+
+void DaemonClient::reportPaneGone(const std::string& id)
+{
+    auto found = routes.find(id);
+
+    if (found == routes.end())
+        return;
+
+    auto route = std::move(found->second);
+    routes.erase(found);
+    route.routes.onGone();
 }
 
 void DaemonClient::readInfoLine(const std::string& line)
@@ -462,10 +483,22 @@ void DaemonClient::sendSpawnOnceListed(const SpawnRequest& request)
     if (!getOpensOnlyListedPanes())
         return sendSpawn(request);
 
+    if (!request.command.empty())
+        return sendCommandSpawnIfAllowed(request);
+
     if (std::ranges::find(spawnsWaitingForInfo, request.id) == spawnsWaitingForInfo.end())
         spawnsWaitingForInfo.push_back(request.id);
 
     send(proto::make("info"));
+}
+
+// A command pane is new, so the daemon never lists it before the spawn.
+void DaemonClient::sendCommandSpawnIfAllowed(const SpawnRequest& request)
+{
+    if (request.command == getOnlyCommandItMayStart())
+        return sendSpawn(request);
+
+    reportPaneGone(request.id);
 }
 
 void DaemonClient::write(const std::string& id, std::string_view data)
@@ -648,6 +681,7 @@ public:
         {
             closeOnNextKey = std::move(exitAfterNotice);
             onOutput(describeMissingCommand(program));
+            onCommandNotInstalled(program);
         };
         exitAfterNotice = std::move(onExit);
 

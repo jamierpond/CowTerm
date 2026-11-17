@@ -61,8 +61,8 @@ auto tBarWithEverything = test("PaneScreenLayout/barPlacesChipDotsAndButtons") =
     check(layout.paneDots.size() == 3);
     check(layout.previousSession->right() <= layout.paneDots.front().x);
     check(layout.paneDots.back().right() <= layout.keyboard.x);
-    check(layout.keyboard.right() <= layout.git.x);
-    check(layout.git.right() <= layout.overview.x);
+    check(layout.keyboard.right() <= layout.diff.x);
+    check(layout.diff.right() <= layout.overview.x);
     check(layout.overview.right() <= iPhone17eWidth);
 };
 
@@ -208,7 +208,7 @@ auto tIPhone12MiniBarHits = test("PaneScreenLayout/everyBarControlTakesAFingerOn
     check(layout.overview.right() <= iPhone12MiniWidth);
     check(findBottomBarControlAt(layout, layout.overview.center()).control == BottomBarControl::Overview);
     check(findBottomBarControlAt(layout, layout.keyboard.center()).control == BottomBarControl::Keyboard);
-    check(findBottomBarControlAt(layout, layout.git.center()).control == BottomBarControl::Git);
+    check(findBottomBarControlAt(layout, layout.diff.center()).control == BottomBarControl::Diff);
     check(findBottomBarControlAt(layout, layout.previousSession->center()).control
           == BottomBarControl::PreviousSession);
 

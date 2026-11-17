@@ -18,10 +18,12 @@ constexpr auto modeFlags = std::array {
     ModeFlag {"--kill-pane", ProbeMode::KillPane, true},
     ModeFlag {"--watch-pane", ProbeMode::WatchPane, true},
     ModeFlag {"--quit-server", ProbeMode::QuitServer, false},
+    ModeFlag {"--list-panes", ProbeMode::ListPanes, false},
 };
 
-constexpr auto mostArguments = std::size_t {4};
+constexpr auto mostArguments = std::size_t {5};
 constexpr auto sessionArgument = std::size_t {2};
+constexpr auto folderArgument = std::size_t {3};
 
 std::optional<ModeFlag> findModeFlag(const std::string& text)
 {
@@ -34,11 +36,11 @@ std::optional<ModeFlag> findModeFlag(const std::string& text)
     return std::nullopt;
 }
 
-// Only --leave-pane takes a session name, and the pane modes need a pane id.
+// Only --leave-pane takes a session name and a folder, and the pane modes need a pane id.
 bool areModeArgumentsComplete(const ModeFlag& flag, const ProbeArguments& parsed)
 {
-    const auto hasSessionNameWhereNotAllowed =
-        !parsed.sessionName.empty() && flag.mode != ProbeMode::LeavePaneRunning;
+    const auto hasSessionOrFolder = !parsed.sessionName.empty() || !parsed.folder.empty();
+    const auto hasSessionNameWhereNotAllowed = hasSessionOrFolder && flag.mode != ProbeMode::LeavePaneRunning;
     const auto isMissingPaneId = flag.needsPaneId && parsed.paneId.empty();
     return !hasSessionNameWhereNotAllowed && !isMissingPaneId;
 }
@@ -62,6 +64,9 @@ std::optional<ProbeArguments> parseModeArguments(const term::SshDestination& des
 
     if (modeArguments.size() > sessionArgument)
         parsed.sessionName = modeArguments[sessionArgument];
+
+    if (modeArguments.size() > folderArgument)
+        parsed.folder = modeArguments[folderArgument];
 
     if (!areModeArgumentsComplete(*flag, parsed))
         return std::nullopt;

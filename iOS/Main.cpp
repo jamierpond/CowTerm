@@ -1,8 +1,10 @@
+#include "DiffViewScreen.h"
 #include "InterfaceOrientation.h"
 #include "NoPaneYetShell.h"
 #include "OverviewSamples.h"
 #include "OverviewScreen.h"
 #include "PaneScreen.h"
+#include "PhoneDiffViewBinding.h"
 #include "PhoneLaunch.h"
 #include "PhoneOverviewBinding.h"
 #include "PhonePaneBinding.h"
@@ -37,6 +39,10 @@ constexpr auto scrollBackDelay = Time::MS {5000};
 constexpr auto paneSwitchDelay = Time::MS {10000};
 constexpr auto secondPaneIndex = 1;
 
+// The diff button pressed after the pane is on screen, and dv closed once it has drawn.
+constexpr auto diffViewOpenDelay = Time::MS {10000};
+constexpr auto diffViewCloseDelay = Time::MS {20000};
+
 // Long enough for the keyboard to have come up, so the composer is on screen.
 constexpr auto composeDelay = Time::MS {1500};
 
@@ -59,6 +65,8 @@ struct LaunchOptions
     bool showsComposer = false;
     bool showsKeyRowSecondPage = false;
     bool switchesToSecondPane = false;
+    bool opensDiffView = false;
+    bool closesDiffView = false;
     bool showsClaudePrompt = false;
     std::string composedText;
     bool showsOverview = false;
@@ -102,6 +110,8 @@ constexpr LaunchSwitch launchSwitches[] = {
     {"--composer", &LaunchOptions::showsComposer},
     {"--key-row-symbols", &LaunchOptions::showsKeyRowSecondPage},
     {"--switch-to-second-pane", &LaunchOptions::switchesToSecondPane},
+    {"--open-diff-view", &LaunchOptions::opensDiffView},
+    {"--close-diff-view", &LaunchOptions::closesDiffView},
     {"--claude-prompt", &LaunchOptions::showsClaudePrompt},
     {"--overview", &LaunchOptions::showsOverview},
 };
@@ -261,21 +271,27 @@ std::string getPaneId(const std::unique_ptr<cowterm::mobile::PhoneLaunch>& phone
 class ScreenStack final : public Graphics::View
 {
 public:
-    ScreenStack(Graphics::View& paneScreenToUse, Graphics::View& overviewToUse, bool showsOverviewFirst)
+    ScreenStack(Graphics::View& paneScreenToUse,
+                Graphics::View& overviewToUse,
+                Graphics::View& diffViewToUse,
+                bool showsOverviewFirst)
         : paneScreen(paneScreenToUse)
         , overview(overviewToUse)
+        , diffView(diffViewToUse)
     {
-        addChildren({paneScreen, overview});
+        addChildren({paneScreen, overview, diffView});
         show(chooseScreen(showsOverviewFirst));
     }
 
     void showPaneScreen() { show(paneScreen); }
     void showOverview() { show(overview); }
+    void showDiffView() { show(diffView); }
 
     void resized() override
     {
         paneScreen.setBounds(getLocalBounds());
         overview.setBounds(getLocalBounds());
+        diffView.setBounds(getLocalBounds());
     }
 
 private:
@@ -291,10 +307,12 @@ private:
     {
         paneScreen.setVisible(&screen == &paneScreen);
         overview.setVisible(&screen == &overview);
+        diffView.setVisible(&screen == &diffView);
     }
 
     Graphics::View& paneScreen;
     Graphics::View& overview;
+    Graphics::View& diffView;
 };
 
 struct CowTermMobileApp
@@ -329,7 +347,12 @@ struct CowTermMobileApp
         };
 
         if (phone != nullptr)
+        {
             phoneBinding.emplace(*phone, screen, [this] { screens.showPaneScreen(); });
+            auto switches = cowterm::mobile::ScreenSwitches {[this] { screens.showDiffView(); },
+                                                             [this] { screens.showPaneScreen(); }};
+            diffViewBinding.emplace(*phone, screen, diffView, std::move(switches));
+        }
         else if (launchOptions.showsSamples)
             showSamplePane();
 
@@ -392,6 +415,12 @@ struct CowTermMobileApp
             Threads::callAfter(paneSwitchDelay,
                                [this] { screen.actions.onChoosePane(secondPaneIndex); });
         }
+
+        if (launchOptions.opensDiffView)
+            Threads::callAfter(diffViewOpenDelay, [this] { screen.actions.onDiffView(); });
+
+        if (launchOptions.closesDiffView)
+            Threads::callAfter(diffViewCloseDelay, [this] { diffView.close(); });
 
         if (!launchOptions.composedText.empty())
         {
@@ -466,8 +495,10 @@ struct CowTermMobileApp
     cowterm::mobile::PaneScreen screen;
     std::optional<cowterm::mobile::PhonePaneBinding> phoneBinding;
     std::optional<cowterm::mobile::PhoneOverviewBinding> phoneOverview;
+    std::optional<cowterm::mobile::PhoneDiffViewBinding> diffViewBinding;
     cowterm::mobile::OverviewScreen overview;
-    ScreenStack screens {screen, overview, isShowingOverviewFirst()};
+    cowterm::mobile::DiffViewScreen diffView;
+    ScreenStack screens {screen, overview, diffView, isShowingOverviewFirst()};
     Graphics::Window window {screens, makeWindowOptions()};
 };
 } // namespace

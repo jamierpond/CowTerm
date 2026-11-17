@@ -54,6 +54,11 @@ public:
     // showing it): the pane is drawn at that grid until it is empty again.
     std::function<void(std::optional<PtySize>)> onGridSetElsewhere = [](std::optional<PtySize>) {};
 
+    // Set before start(). A command pane's program is not installed where it
+    // would run, named here; the pane's text says so too. Local shells never
+    // call it.
+    std::function<void(const std::string& program)> onCommandNotInstalled = [](const std::string&) {};
+
     // The user asked for the pane back from whoever holds its size (a click
     // on the note that says so). Nothing for a shell no one else can hold.
     virtual void takeSizeBack() {}

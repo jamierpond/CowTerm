@@ -88,6 +88,17 @@ auto probeLeavesAPaneInANamedSession = test("EmbeddedSshProbe/leavesAPaneInAName
     check(leave->sessionName == "phone-two-panes");
 };
 
+auto probeLeavesAPaneInAFolderAndListsPanes = test("EmbeddedSshProbe/leavesAPaneInAFolderAndListsPanes") = []
+{
+    const auto leave =
+        parseProbeArguments({"jamie@tamby", "--leave-pane", "phone-dv-test", "phone-dv-test", "/tmp/cowterm-dv-test"});
+    const auto list = parseProbeArguments({"jamie@tamby", "--list-panes"});
+
+    check(leave.has_value() && leave->folder == "/tmp/cowterm-dv-test");
+    check(list.has_value() && list->mode == ProbeMode::ListPanes);
+    check(!parseProbeArguments({"jamie@tamby", "--kill-pane", "phone-dv-test", "session", "/tmp"}).has_value());
+};
+
 auto probeWatchesAPaneAndQuitsADaemon = test("EmbeddedSshProbe/watchesAPaneAndQuitsADaemon") = []
 {
     const auto watch = parseProbeArguments({"jamie@tamby", "--watch-pane", "phone-test"});
@@ -106,5 +117,5 @@ auto probeRefusesOtherArguments = test("EmbeddedSshProbe/refusesOtherArguments")
     check(!parseProbeArguments({"tamby"}).has_value());
     check(!parseProbeArguments({"jamie@tamby", "pane-7"}).has_value());
     check(!parseProbeArguments({"jamie@tamby", "--adopt", "pane-7", "extra"}).has_value());
-    check(!parseProbeArguments({"jamie@tamby", "--leave-pane", "a", "session", "extra"}).has_value());
+    check(!parseProbeArguments({"jamie@tamby", "--leave-pane", "a", "session", "/tmp", "extra"}).has_value());
 };

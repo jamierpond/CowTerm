@@ -3,6 +3,7 @@
 # EmbeddedSshLink. No UI and nothing iOS-only, so it builds and is tested on
 # the Mac too. Where libssh2 is built.
 add_library(CowTermPhone STATIC
+        DiffViewPane.cpp
         HeldPane.cpp
         LinkWatch.cpp
         MirroredShell.cpp

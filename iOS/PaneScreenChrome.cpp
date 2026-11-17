@@ -67,7 +67,7 @@ constexpr auto ansiBlue = 4;
 
 constexpr auto previousSessionArrow = "\xe2\x80\xb9 ";
 constexpr auto keyboardGlyph = "\xe2\x8c\xa8";
-constexpr auto gitLabel = "git";
+constexpr auto diffLabel = "diff";
 constexpr auto menuGlyph = "\xe2\x98\xb0";
 
 std::int64_t calculateMillisecondsSince(std::chrono::steady_clock::time_point then)
@@ -224,8 +224,7 @@ void BottomBar::paint(UI::Graphics& g)
     g.drawText(menuGlyph, layout.overview, UI::Justification::Centred);
 
     g.setFont(font);
-    g.setColour(foreground.withAlpha(mutedTextAlpha));
-    g.drawText(gitLabel, layout.git, UI::Justification::Centred);
+    g.drawText(diffLabel, layout.diff, UI::Justification::Centred);
 }
 
 void BottomBar::mouseDown(const UI::MouseEvent& event)
@@ -308,8 +307,8 @@ void BottomBar::pressControlAt(Point position)
         case BottomBarControl::Keyboard:
             actions.onKeyboard();
             break;
-        case BottomBarControl::Git:
-            actions.onGit();
+        case BottomBarControl::Diff:
+            actions.onDiffView();
             break;
         case BottomBarControl::Overview:
             actions.onOverview();

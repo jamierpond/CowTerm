@@ -5,7 +5,8 @@
 // screen instead and releases it, never writing to it. --leave-pane opens a
 // pane running `seq 1 300` and leaves it for the phone to open; --kill-pane
 // ends it. --watch-pane opens such a pane at 150 columns, holds its size and
-// prints each size-owner notice; --quit-server stops a test daemon.
+// prints each size-owner notice; --quit-server stops a test daemon;
+// --list-panes only prints the panes.
 // COWTERM_BRIDGE_COMMAND replaces what runs `ct bridge` on the host.
 // Run by scripts/probe-embedded-ssh.sh, run-ios-against-host.sh and
 // run-ios-size-owner-test.sh.
@@ -221,6 +222,9 @@ private:
         for (const auto& pane: panes)
             std::printf("  %s\n", pane.infoLine.c_str());
 
+        if (arguments.mode == ProbeMode::ListPanes)
+            return finish({});
+
         if (arguments.mode == ProbeMode::AdoptPane)
             return adoptPane(findPaneToAdopt(panes));
 
@@ -230,7 +234,7 @@ private:
             paneId = arguments.paneId;
 
         std::printf("opening throwaway pane %s\n", paneId.c_str());
-        sendSpawn(findSessionName(), probeDirectory);
+        sendSpawn(findSessionName(), findPaneFolder());
     }
 
     void confirmPaneIsGone(const std::vector<ListedPane>& panes)
@@ -277,6 +281,14 @@ private:
             return paneId;
 
         return probeSession;
+    }
+
+    std::string findPaneFolder() const
+    {
+        if (arguments.folder.empty())
+            return probeDirectory;
+
+        return arguments.folder;
     }
 
     void sendSpawn(const std::string& session, const std::string& directory)

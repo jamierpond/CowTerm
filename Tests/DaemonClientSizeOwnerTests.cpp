@@ -4,6 +4,7 @@
 
 #include <NanoTest/NanoTest.h>
 
+#include <algorithm>
 #include <memory>
 #include <string>
 #include <vector>
@@ -296,4 +297,70 @@ auto tMacSendsNoSizeWhilePhoneHolds = test("DaemonClientSizeOwner/macSendsNoSize
     recorded.link->deliver(makeSizeOwnerMessage(true, "Mac"));
     recorded.client->resize(paneId, {deskColumns, rows});
     check(!recorded.sent.empty());
+};
+
+namespace
+{
+constexpr auto diffViewPaneId = "phone-dv-0000000000000001";
+constexpr auto allowedCommand = "dv";
+constexpr auto repositoryFolder = "/tmp/repo";
+
+// A client that opens only listed panes and may start allowedCommand, as the phone is.
+struct PhoneClientWithRecordedLink
+{
+    PhoneClientWithRecordedLink()
+    {
+        DaemonClient::setOpensOnlyListedPanes(true);
+        DaemonClient::setOnlyCommandItMayStart(allowedCommand);
+    }
+
+    ~PhoneClientWithRecordedLink()
+    {
+        DaemonClient::setOnlyCommandItMayStart({});
+        DaemonClient::setOpensOnlyListedPanes(false);
+    }
+
+    bool hasSentSpawn() const
+    {
+        return std::ranges::any_of(recorded.sent, [](const std::string& message) { return message.starts_with("spawn"); });
+    }
+
+    ClientWithRecordedLink recorded;
+};
+} // namespace
+
+auto tPhoneStartsItsOneCommandWithoutWaitingForTheList =
+    test("DaemonClientSizeOwner/phoneStartsItsOneCommandWithoutWaitingForTheList") = []
+{
+    auto phone = PhoneClientWithRecordedLink {};
+    phone.recorded.client->spawn({diffViewPaneId, {phoneColumns, rows}, repositoryFolder, {}, allowedCommand}, {});
+
+    const auto spawn = std::ranges::find_if(phone.recorded.sent,
+                                            [](const std::string& message) { return message.starts_with("spawn"); });
+    check(spawn != phone.recorded.sent.end());
+    const auto payload = proto::parseSpawnPayload(proto::parse(*spawn).payload);
+    check(payload.command == allowedCommand);
+    check(payload.workingDirectory == repositoryFolder);
+};
+
+auto tPhoneStartsNoOtherCommand = test("DaemonClientSizeOwner/phoneStartsNoOtherCommand") = []
+{
+    auto phone = PhoneClientWithRecordedLink {};
+    auto wasRefused = false;
+    auto routes = DaemonClient::Routes {};
+    routes.onGone = [&] { wasRefused = true; };
+
+    phone.recorded.client->spawn({diffViewPaneId, {phoneColumns, rows}, repositoryFolder, {}, "dv; rm -rf ~"}, routes);
+    phone.recorded.link->deliver(proto::make("info", {}, std::string {diffViewPaneId} + "\tzsh\t/tmp"));
+
+    check(wasRefused);
+    check(!phone.hasSentSpawn());
+};
+
+auto tClientThatOpensAnyPaneStartsAnyCommand = test("DaemonClientSizeOwner/macStartsAnyCommand") = []
+{
+    auto recorded = ClientWithRecordedLink {};
+    recorded.client->spawn({diffViewPaneId, {phoneColumns, rows}, repositoryFolder, {}, "lazygit"}, {});
+
+    check(std::ranges::any_of(recorded.sent, [](const std::string& message) { return message.starts_with("spawn"); }));
 };

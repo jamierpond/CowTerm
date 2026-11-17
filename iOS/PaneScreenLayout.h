@@ -61,7 +61,7 @@ enum class BottomBarControl
     PreviousSession,
     PaneDot,
     Keyboard,
-    Git,
+    Diff,
     Overview
 };
 
@@ -70,7 +70,7 @@ struct BottomBarLayout
     std::optional<Rect> previousSession;
     std::vector<Rect> paneDots;
     Rect keyboard;
-    Rect git;
+    Rect diff;
     Rect overview;
 };
 

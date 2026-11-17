@@ -145,7 +145,7 @@ overview::HostPanes PhoneOverview::collectHostPanes(const std::string& host) con
     auto& daemon = RemoteHosts::find(host)->getDaemon();
     auto hostPanes = overview::HostPanes {host, {}};
 
-    for (const auto& paneId: daemon.listShellIds())
+    for (const auto& paneId: removeDiffViewPaneIds(daemon.listShellIds()))
     {
         const auto info = daemon.infoFor(paneId);
         hostPanes.panes.push_back({paneId,

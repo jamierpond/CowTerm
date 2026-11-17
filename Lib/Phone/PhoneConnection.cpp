@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <random>
 
 namespace term::phone
 {
@@ -24,6 +25,7 @@ constexpr auto lastInputAnswerWait = Milliseconds {2000};
 constexpr auto launchPaneChoiceWindow = Milliseconds {10000};
 constexpr auto storeIntervalWhileLive = Milliseconds {10000};
 constexpr auto heldPaneFileName = "held-pane.json";
+constexpr auto temporaryPanesFileName = "temporary-panes.json";
 constexpr auto quietBeforeOutputIsReported = Milliseconds {1000};
 
 std::vector<std::string> listOverviewHosts(const PhoneSettings& settings)
@@ -91,11 +93,15 @@ PhoneConnection::PhoneConnection(PhoneSettings settingsToUse,
     , overview(overviewHosts)
     , heldPanePath(settings.storedScreenPath.parent_path() / heldPaneFileName)
     , heldByEarlierRun(loadHeldPane(heldPanePath))
+    , temporaryPanesPath(settings.storedScreenPath.parent_path() / temporaryPanesFileName)
+    , temporaryPanesOfEarlierRuns(loadTemporaryPanes(temporaryPanesPath))
     , startedAt(readClock())
 {
     DaemonClient::setClientName(phoneClientName);
     DaemonClient::setClaimsSizeOfEveryPaneItShows(true);
     DaemonClient::setOpensOnlyListedPanes(true);
+    DaemonClient::setOnlyCommandItMayStart(diffViewCommand);
+
     for (const auto& overviewHost: overviewHosts)
         watches[overviewHost].noteReconnecting(readClock());
 
@@ -164,6 +170,57 @@ std::unique_ptr<Shell> PhoneConnection::makeShell(const std::string& paneId)
     };
 
     return std::make_unique<MirroredShell>(makeRemoteShell(paneId, paneHost, sessionName), mirror, noteStatus);
+}
+
+DiffViewOpening PhoneConnection::openDiffView()
+{
+    if (shownPaneId.empty())
+        return {std::nullopt, "No pane is on screen."};
+
+    const auto& shownHost = findShownHost();
+    const auto folder = getShownRemoteHost().getDaemon().infoFor(shownPaneId).workingDirectory;
+    auto randomNumbers = std::mt19937_64 {std::random_device {}()};
+    auto pane = makeDiffViewPane(shownHost, folder, randomNumbers());
+
+    if (!pane)
+        return {std::nullopt, "The phone does not know this pane's folder yet."};
+
+    if (!addTemporaryPane(temporaryPanesPath, {pane->host, pane->paneId}))
+        return {std::nullopt, "dv did not start: the phone could not save the note it needs to close it."};
+
+    return {pane, {}};
+}
+
+std::unique_ptr<Shell> PhoneConnection::makeDiffViewShell(const DiffViewPane& pane)
+{
+    return std::make_unique<DiffViewShell>(makeRemoteShell(pane.paneId, pane.host, {}), pane);
+}
+
+void PhoneConnection::closeDiffView(const DiffViewPane& pane)
+{
+    if (auto* remote = RemoteHosts::find(pane.host))
+        remote->getDaemon().kill(pane.paneId);
+
+    removeTemporaryPane(temporaryPanesPath, {pane.host, pane.paneId});
+}
+
+// A reinstall or a crash kills the app with dv open, and nothing kills dv's
+// pane then; the next launch kills it once its host answers.
+void PhoneConnection::killTemporaryPanesOfEarlierRuns(const std::string& fromHost)
+{
+    auto& daemon = RemoteHosts::find(fromHost)->getDaemon();
+
+    for (const auto& pane: temporaryPanesOfEarlierRuns)
+    {
+        if (pane.host != fromHost)
+            continue;
+
+        daemon.send(proto::make("kill", {pane.paneId}));
+        removeTemporaryPane(temporaryPanesPath, pane);
+        onEarlierTemporaryPaneKilled(pane);
+    }
+
+    std::erase_if(temporaryPanesOfEarlierRuns, [&](const TemporaryPane& pane) { return pane.host == fromHost; });
 }
 
 std::string PhoneConnection::getFailureReason() const
@@ -355,7 +412,10 @@ void PhoneConnection::handleUnhandledMessage(const std::string& fromHost,
         return overview.handleActivity(fromHost, proto::parse(body).payload);
 
     if (verb == "daemon-hello")
+    {
+        killTemporaryPanesOfEarlierRuns(fromHost);
         return returnSizeHeldByEarlierRun(fromHost, body);
+    }
 
     if (verb != "last-input")
         return;
@@ -415,7 +475,7 @@ bool PhoneConnection::isPaneListed(const PaneOnHostId& pane) const
     if (remote == nullptr)
         return false;
 
-    const auto listed = remote->getDaemon().listShellIds();
+    const auto listed = removeDiffViewPaneIds(remote->getDaemon().listShellIds());
     return std::ranges::find(listed, pane.paneId) != listed.end();
 }
 
@@ -471,7 +531,7 @@ std::vector<ListedPane> PhoneConnection::listPanes(const std::string& onHost) co
     auto& daemon = RemoteHosts::find(onHost)->getDaemon();
     auto panes = std::vector<ListedPane> {};
 
-    for (const auto& id: daemon.listShellIds())
+    for (const auto& id: removeDiffViewPaneIds(daemon.listShellIds()))
     {
         const auto info = daemon.infoFor(id);
         panes.push_back(

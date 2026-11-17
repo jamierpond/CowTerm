@@ -111,6 +111,11 @@ public:
     // a pane the daemon does not list gets onGone instead of a spawn. Set once
     // at startup.
     static void setOpensOnlyListedPanes(bool opensOnlyListed);
+
+    // The one command such a client may still start, in a new pane of its
+    // own (the phone's dv); a spawn of any other command gets onGone. Empty,
+    // the default, allows none. Set once at startup.
+    static void setOnlyCommandItMayStart(const std::string& command);
     static DaemonClient* get();
     static void teardown();
 
@@ -199,6 +204,8 @@ private:
     void sendSpawn(const SpawnRequest& request);
     void sendSpawnOnceListed(const SpawnRequest& request);
     void openListedPanesOrReportGone();
+    void sendCommandSpawnIfAllowed(const SpawnRequest& request);
+    void reportPaneGone(const std::string& id);
     void sendResizeAndClaim(const std::string& id, const PtySize& size);
     void rememberSizeFoundOnAdopt(const std::string& id,
                                   const std::string& serializedState);

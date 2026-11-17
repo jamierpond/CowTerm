@@ -30,6 +30,14 @@ public:
     // The pane view's config: its shell is the daemon's pane on the host.
     term::TerminalConfig makeTerminalConfig();
 
+    // dv for the pane on screen; see PhoneConnection::openDiffView.
+    term::phone::DiffViewOpening openDiffView();
+
+    // The dv pane's config: its command shell starts only dv, in the pane's folder.
+    term::TerminalConfig makeDiffViewConfig(const term::phone::DiffViewPane& pane);
+
+    void closeDiffView(const term::phone::DiffViewPane& pane);
+
     const std::string& getHost() const { return connection.getHost(); }
 
     // The pane to open at once; empty until the daemon has chosen one.

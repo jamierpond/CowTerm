@@ -1,5 +1,6 @@
 #pragma once
 
+#include "DiffViewPane.h"
 #include "HeldPane.h"
 #include "LinkWatch.h"
 #include "MirroredShell.h"
@@ -30,6 +31,13 @@ struct ChosenPane
     std::string paneId;
     std::string sessionName;
     std::vector<std::string> sessionPaneIds;
+};
+
+// dv for the pane on screen, or the sentence that says why it cannot start.
+struct DiffViewOpening
+{
+    std::optional<DiffViewPane> pane;
+    std::string whyNot;
 };
 
 // The phone's one link to one host's daemon, through EmbeddedSshLink: it
@@ -78,6 +86,17 @@ public:
     // launch when no daemon says which pane was typed into last.
     void setPaneShownLastTime(const PaneOnHostId& pane);
 
+    // dv for the pane on screen, in its folder, as a new temporary pane. Its
+    // record is on disk before the daemon is asked anything.
+    DiffViewOpening openDiffView();
+
+    // The dv pane's shell (TerminalConfig::makeCommandShell).
+    std::unique_ptr<Shell> makeDiffViewShell(const DiffViewPane& pane);
+
+    // dv quit, or the phone left it: the pane is killed, which does nothing
+    // once dv has ended, and its record forgotten.
+    void closeDiffView(const DiffViewPane& pane);
+
     // The app went to the background: store the shown screen now, and give a
     // protocol 4 daemon back the size of the pane the phone holds.
     void handleBackground();
@@ -113,6 +132,9 @@ public:
         onSizesReturned = [](const std::string&,
                              const std::vector<DaemonClient::ReturnedSize>&) {};
 
+    // A dv pane an earlier run started was killed once its host answered.
+    std::function<void(const TemporaryPane&)> onEarlierTemporaryPaneKilled = [](const TemporaryPane&) {};
+
     // Output from the shown pane after a second or more of quiet: how soon
     // what is typed on the Mac shows on the phone.
     std::function<void(const ChosenPane& pane, std::size_t bytes)> onPaneOutputAfterQuiet =
@@ -146,6 +168,7 @@ private:
     void claimReturnedSizesAgain();
     void rememberHeldPane();
     void returnSizeHeldByEarlierRun(const std::string& fromHost, const std::string& daemonHello);
+    void killTemporaryPanesOfEarlierRuns(const std::string& fromHost);
     void updateLinkState();
 
     PhoneSettings settings;
@@ -165,6 +188,8 @@ private:
     std::optional<PaneOnHostId> paneShownLastTime;
     std::filesystem::path heldPanePath;
     std::optional<HeldPane> heldByEarlierRun;
+    std::filesystem::path temporaryPanesPath;
+    std::vector<TemporaryPane> temporaryPanesOfEarlierRuns;
     std::optional<Milliseconds> firstAskedForLastInputAt;
     Milliseconds startedAt = 0;
     std::string shownPaneId;
