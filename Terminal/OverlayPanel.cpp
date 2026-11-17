@@ -1,5 +1,6 @@
 #include "OverlayPanel.h"
 
+#include "Multiplexer/LocalHostName.h"
 #include "Multiplexer/TextLayout.h"
 
 #include <algorithm>
@@ -23,8 +24,8 @@ constexpr auto cardBorderAlpha = 0.8f;
 constexpr auto cardBorderThickness = 1.0f;
 constexpr auto dividerInset = 12.0f;
 constexpr auto dividerRaise = 2.0f;
-constexpr auto selectedRowAlpha = 0.85f;
-constexpr auto selectedRowCornerRadius = 6.0f;
+constexpr auto hostStripeWidth = 4.0f;
+constexpr auto highlightOutlineThickness = 2.0f;
 constexpr auto blockCaretAlpha = 0.55f;
 constexpr auto modeLabelGap = 12.0f;
 constexpr auto searchPrompt = "› ";
@@ -114,6 +115,21 @@ float measureTextInFont(UI::Graphics& g, const std::string& text, const UI::Font
     return g.measureText(text);
 }
 
+void paintHostFill(UI::Graphics& g, const HostRowColours& colours, Rect area, float cornerRadius)
+{
+    g.setColour(toColor(colours.background));
+    g.fillRoundedRect(area, cornerRadius);
+    g.setColour(toColor(colours.stripe));
+    g.fillRect(area.fromLeft(hostStripeWidth).inset(0.0f, cornerRadius));
+}
+
+void paintHighlightOutline(UI::Graphics& g, const HostRowColours& colours, Rect area, float cornerRadius)
+{
+    const auto outline = area.inset(highlightOutlineThickness / 2.0f);
+    g.setColour(toColor(colours.text));
+    g.drawRoundedRect(outline, cornerRadius, highlightOutlineThickness);
+}
+
 OverlayPanel::OverlayPanel(const AppConfig& configToUse,
                            SessionManager& sessionsToUse,
                            OverlayFontSizes fontSizes)
@@ -123,6 +139,7 @@ OverlayPanel::OverlayPanel(const AppConfig& configToUse,
     , headerFont({config.font, fontSizes.header})
     , rowFont({config.font, fontSizes.row})
     , detailFont({config.font, fontSizes.detail})
+    , localHostName(getShortLocalHostName())
 {
     setInterceptsMouseClicks(true);
     setWantsKeyboardFocus(true);
@@ -155,11 +172,14 @@ void OverlayPanel::paintHeaderDivider(UI::Graphics& g, Rect panel, float headerH
     g.drawLine({panel.x + dividerInset, y}, {panel.right() - dividerInset, y});
 }
 
-void OverlayPanel::paintSelectedRowHighlight(UI::Graphics& g, Rect row) const
+HostRowColours OverlayPanel::getHostRowColoursFor(const std::string& host) const
 {
-    g.setColour(toColor(theme.selection, selectedRowAlpha));
-    g.fillRoundedRect(row, selectedRowCornerRadius);
+    if (host.empty())
+        return getColourBlindSafeHostRowColours(config, localHostName);
+
+    return getColourBlindSafeHostRowColours(config, host);
 }
+
 bool SearchablePanel::handleSearchFieldKey(const UI::KeyEvent& event)
 {
     using searchkeys::Action;

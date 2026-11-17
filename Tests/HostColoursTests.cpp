@@ -9,8 +9,11 @@ auto hostColourDependsOnlyOnTheName = test("HostColours/hostColourDependsOnlyOnT
 {
     const auto config = AppConfig {};
 
-    check(getHostColour(config, "tamby") == getHostColour(config, "tamby"));
-    check(getHostColour(config, "jamiepond@tamby") == getHostColour(config, "tamby"));
+    const auto tambyByAlias = getColourBlindSafeHostRowColours(config, "tamby");
+    const auto tambyWithUser = getColourBlindSafeHostRowColours(config, "jamiepond@tamby");
+
+    check(tambyWithUser.background == tambyByAlias.background);
+    check(tambyWithUser.stripe == tambyByAlias.stripe);
 };
 
 auto configuredColourWins = test("HostColours/configuredColourWins") = []
@@ -18,7 +21,7 @@ auto configuredColourWins = test("HostColours/configuredColourWins") = []
     auto config = AppConfig {};
     config.hosts["tamby"].color = "#123456";
 
-    check(getHostColour(config, "jamiepond@tamby") == Rgb {0x123456});
+    check(getColourBlindSafeHostRowColours(config, "jamiepond@tamby").stripe == Rgb {0x123456});
 };
 
 auto hexColoursParseStrictly = test("HostColours/hexColoursParseStrictly") = []

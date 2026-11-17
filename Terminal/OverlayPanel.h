@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Multiplexer/Config.h"
+#include "Multiplexer/HostColours.h"
 #include "SearchField.h"
 #include "Session.h"
 
@@ -63,6 +64,17 @@ float measureTextInFont(eacp::UI::Graphics& g,
                         const std::string& text,
                         const eacp::UI::Font& font);
 
+// The host's colour across a whole row or card, at full strength down its left
+// edge, as the phone draws its session rows.
+void paintHostFill(eacp::UI::Graphics& g, const HostRowColours& colours, eacp::UI::Rect area, float cornerRadius);
+
+// The highlighted row or card gets an outline in its text colour, so it stands
+// out without telling one colour from another.
+void paintHighlightOutline(eacp::UI::Graphics& g,
+                           const HostRowColours& colours,
+                           eacp::UI::Rect area,
+                           float cornerRadius);
+
 // What the palette and switcher share: the session
 // list they drive, the theme, three fonts, and the dimmed backdrop and card
 // they paint over the terminal.
@@ -85,8 +97,9 @@ protected:
     void paintHeaderDivider(eacp::UI::Graphics& g,
                             eacp::UI::Rect panel,
                             float headerHeight) const;
-    void paintSelectedRowHighlight(eacp::UI::Graphics& g, eacp::UI::Rect row) const;
 
+    // A row's or card's colours for its host; an empty host is this machine.
+    HostRowColours getHostRowColoursFor(const std::string& host) const;
 
     virtual eacp::UI::Rect calculatePanelBounds() const = 0;
 
@@ -102,6 +115,8 @@ protected:
     eacp::UI::Font headerFont;
     eacp::UI::Font rowFont;
     eacp::UI::Font detailFont;
+
+    const std::string localHostName;
 
     int selected = 0;
 };

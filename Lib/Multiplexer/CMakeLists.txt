@@ -40,10 +40,10 @@ add_library(CowTermMultiplexer STATIC
         UsageLog.cpp)
 
 if (WIN32)
-    target_sources(CowTermMultiplexer PRIVATE StandardStreams-Windows.cpp)
+    target_sources(CowTermMultiplexer PRIVATE StandardStreams-Windows.cpp LocalHostName-Windows.cpp)
     target_compile_options(CowTermMultiplexer PRIVATE /utf-8)
 else ()
-    target_sources(CowTermMultiplexer PRIVATE StandardStreams-Posix.cpp)
+    target_sources(CowTermMultiplexer PRIVATE StandardStreams-Posix.cpp LocalHostName-Posix.cpp)
 endif ()
 
 # emberstore watches files with FSEvents, which iOS does not have, so it does

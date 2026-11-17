@@ -229,8 +229,9 @@ cards shows one card and two edges, and his ten most used sessions cover only
   the question itself with its answer buttons. He can answer from the card
   without opening the pane.
 - Below them, every session by most recent use, with the same ranking the
-  Mac's palette uses. Each row has the session name, a host-colour stripe, `✳`
-  for Claude, the branch and changed-file count, and one line of state:
+  Mac's palette uses. Each row is filled with its host's colour and has the
+  session name, the host's name, `✳` for Claude, the branch and changed-file
+  count, and one line of state:
   "working, 4 min", "finished 12 min ago", or Claude's last line.
 - The list is anchored at the bottom. Row 0 is nearest the thumb, since he
   picks row 0 53% of the time and rows 0 to 2 89% of the time.
@@ -579,13 +580,32 @@ launched with `--landscape`, which is how landscape screenshots are taken.
   picks the entry by FNV-1a, as on the Mac: big-cow gets orange, macprorack
   bluish green, tamby blue. A `hosts.<name>.color` in cowterm.json still wins,
   darkened only if white text would not read on it; the phone has no
-  cowterm.json today. The pane screen's host dot uses the same colour. The Mac
-  keeps its Rosé Pine host colours: whether it should switch is Jamie's call.
+  cowterm.json today. The pane screen's host dot uses the same colour.
+- The Mac uses the same host colours, from the same function, so a machine is
+  one colour on both. Its palette rows and switcher cards are filled with the
+  host's colour as the phone's rows are, with white text, in place of the
+  faint wash and thin stripe it had. The highlighted row or card gets a white
+  outline, so it is not told by colour alone. Local sessions and projects take
+  this Mac's own colour, picked by its short host name, because the app has
+  no other name for itself. On Jamie's Mac that name is `daily-driver`, while
+  the phone dials it as `big-cow`, so the two differ (reddish purple against
+  orange) unless `hosts.daily-driver.color` in cowterm.json says otherwise;
+  `daily-driver` also shares its entry with `tamby-windows`.
+- Inside a remote session, a pane that fills the window on its own (a single
+  pane or a zoomed one) has a 3-point edge in its host's colour, drawn in the
+  margin round the grid, so it takes no row or column and no program can draw
+  there. With splits the gutters and the active pane's ring carry the colour,
+  as before. Local sessions have no edge, so the edge alone says "remote". The
+  "on iPhone" note stays a filled gold box with text inside the edge.
+  `scripts/render-host-colours.sh` renders the palette, the switcher and a
+  session at narrow, normal and ultrawide sizes, with protanopia,
+  deuteranopia and greyscale views of each, into `build/renders/host-colours`.
 - `ColourBlindHostColoursTests` checks the palette as protanopia and
   deuteranopia (Machado 2009, severity 1.0) and greyscale see it: every pair
   at least CIE76 ΔE 10 apart in each simulation and 4.5 L* apart in greyscale,
-  and Jamie's three hosts at least ΔE 40 and 9.5 L* apart. Tritanopia is not
-  checked: two entries come within ΔE 8.2 of each other there.
+  and Jamie's three hosts at least ΔE 40 and 9.5 L* apart. For tritanopia only
+  Jamie's three hosts are checked, at ΔE 10 or more: two entries of the
+  palette come within ΔE 8.2 of each other there.
   `just simulate-colour-vision <png>` writes the same three views of a
   screenshot.
 - A pressed row darkens and gets a white outline, so a press shows without

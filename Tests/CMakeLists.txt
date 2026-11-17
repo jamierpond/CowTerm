@@ -269,6 +269,29 @@ target_include_directories(CowTermRenderPicker PRIVATE ../Terminal)
 target_link_libraries(CowTermRenderPicker PRIVATE
         CowTerm::TerminalView CowTerm::Multiplexer eacp-ui eacp-text emberstore FrecencySearch SearchKeys SessionLog PondApp)
 
+# Not a test: the palette, the switcher and a session's panes rendered off
+# screen to PNGs with sessions on Jamie's hosts and scripted shells
+# (scripts/render-host-colours.sh), to look at the host colours.
+add_executable(CowTermRenderHostColours
+        ../Bench/RenderHostColours.cpp
+        ../Terminal/Command.cpp
+        ../Terminal/OverlayPanel.cpp
+        ../Terminal/Palette.cpp
+        ../Terminal/PaletteUsageStore.cpp
+        ../Terminal/SearchField.cpp
+        ../Terminal/Session.cpp
+        ../Terminal/SessionView.cpp
+        ../Terminal/Switcher.cpp)
+if (WIN32)
+    target_sources(CowTermRenderHostColours PRIVATE ../Terminal/Command-Windows.cpp)
+    target_compile_options(CowTermRenderHostColours PRIVATE /utf-8)
+else ()
+    target_sources(CowTermRenderHostColours PRIVATE ../Terminal/Command-Posix.cpp)
+endif ()
+target_include_directories(CowTermRenderHostColours PRIVATE ../Terminal)
+target_link_libraries(CowTermRenderHostColours PRIVATE
+        CowTerm::TerminalView CowTerm::Multiplexer eacp-ui eacp-text emberstore FrecencySearch SearchKeys SessionLog PondApp)
+
 # Not a test: Ctrl+A i's popup for a pane on a remote host, opened with no
 # window so its trace shows what the command drew (scripts/run-remote-popup.sh).
 add_executable(CowTermRunRemotePopup

@@ -11,7 +11,8 @@
 #include <string>
 #include <vector>
 
-// The phone's host colours, seen as Jamie (protan or deutan) and greyscale see them.
+// The host colours the Mac and the phone share, seen as Jamie (protan or
+// deutan), a tritan eye and greyscale see them.
 
 using namespace nano;
 using namespace term;
@@ -27,6 +28,9 @@ constexpr auto protanopiaSimulation = Matrix {{{0.152286f, 1.052583f, -0.204868f
 constexpr auto deuteranopiaSimulation = Matrix {{{0.367322f, 0.860646f, -0.227968f},
                                                  {0.280085f, 0.672501f, 0.047413f},
                                                  {-0.011820f, 0.042940f, 0.968881f}}};
+constexpr auto tritanopiaSimulation = Matrix {{{1.255528f, -0.076749f, -0.178779f},
+                                               {-0.078411f, 0.930809f, 0.147602f},
+                                               {0.004733f, 0.691367f, 0.303900f}}};
 constexpr auto normalVision = Matrix {{{1.0f, 0.0f, 0.0f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f, 1.0f}}};
 
 // Linear sRGB to CIE XYZ, D65 white.
@@ -203,9 +207,10 @@ auto configuredColourWinsOnThePhone = test("ColourBlindHostColours/configuredCol
     check(calculateContrastRatio(colours.text, colours.background) >= minimumTextContrast);
 };
 
-auto theMacsHostColoursAreUnchanged = test("ColourBlindHostColours/theMacsHostColoursAreUnchanged") = []
+// Not every pair of the palette passes for tritanopia (two entries come within
+// ΔE 8.2), but Jamie's three hosts do.
+auto jamiesHostsStayApartForTritanopia = test("ColourBlindHostColours/jamiesThreeHostsStayApartForTritanopia") = []
 {
-    constexpr auto rosePineFoamThatTambyHashesTo = Rgb {0x9ccfd8};
-    const auto config = AppConfig {};
-    check(getHostColour(config, "jamiepond@tamby") == muteColour(rosePineFoamThatTambyHashesTo));
+    check(findSmallestDifference(listJamiesHostBackgrounds(), seenWith(tritanopiaSimulation))
+          >= minimumColourDifference);
 };

@@ -1,7 +1,5 @@
 #include "Switcher.h"
 
-#include "Multiplexer/HostColours.h"
-
 #include "Multiplexer/TextLayout.h"
 #include "Multiplexer/UsageLog.h"
 
@@ -36,15 +34,10 @@ constexpr auto modifierPollIntervalMs = 60;
 constexpr auto windowSideMargin = 120.0f;
 constexpr auto minimumAvailableWidth = 240.0f;
 constexpr auto cardCornerRadius = 8.0f;
-constexpr auto highlightedCardAlpha = 0.9f;
-constexpr auto plainCardAlpha = 0.06f;
-constexpr auto remoteCardTintAlpha = 0.14f;
 constexpr auto iconBaseline = 26.0f;
 constexpr auto nameBaseline = 50.0f;
 constexpr auto minimumNameLength = 4;
 constexpr auto averageNameCharacterWidth = 8.5f;
-constexpr auto highlightedNameAlpha = 1.0f;
-constexpr auto plainNameAlpha = 0.82f;
 constexpr auto detailLength = 72;
 constexpr auto detailBottomOffset = 14.0f;
 
@@ -269,49 +262,21 @@ void Switcher::paintCard(UI::Graphics& g, int index, Rect card)
 {
     const auto& session = *order[(std::size_t) index];
     const auto cx = card.x + card.w / 2.0f;
-    const auto highlighted = index == selected;
-    const auto claude = session.isClaude();
+    const auto colours = getHostRowColoursFor(session.host);
 
-    if (highlighted)
-        g.setColour(toColor(theme.selection, highlightedCardAlpha));
-    else
-        g.setColour(toColor(theme.foreground, plainCardAlpha));
+    paintHostFill(g, colours, card, cardCornerRadius);
 
-    g.fillRoundedRect(card, cardCornerRadius);
-    paintRemoteCardTint(g, session, card);
+    if (index == selected)
+        paintHighlightOutline(g, colours, card, cardCornerRadius);
 
-    const auto icon = claude ? "✳" : "●";
-    g.setColour(toColor(getCardIconColour(session)));
+    const auto icon = session.isClaude() ? "✳" : "●";
+    g.setColour(toColor(colours.text));
     drawCentered(g, icon, {cx, card.y + iconBaseline}, headerFont);
 
     const auto maxChars = (std::size_t) std::max(
         minimumNameLength, (int) (card.w / averageNameCharacterWidth));
-    const auto nameAlpha = highlighted ? highlightedNameAlpha : plainNameAlpha;
-    g.setColour(toColor(theme.foreground, nameAlpha));
     drawCentered(
         g, truncateWithEllipsis(session.name, maxChars), {cx, card.y + nameBaseline}, rowFont);
-}
-
-// A remote session's card carries a faint wash of its host's colour.
-void Switcher::paintRemoteCardTint(UI::Graphics& g, const TermSession& session, Rect card) const
-{
-    if (!session.isRemote())
-        return;
-
-    g.setColour(toColor(getHostColour(config, session.host), remoteCardTintAlpha));
-    g.fillRoundedRect(card, cardCornerRadius);
-}
-
-// Claude's colour, the host's for a remote session, green otherwise.
-Rgb Switcher::getCardIconColour(const TermSession& session) const
-{
-    if (session.isClaude())
-        return theme.ansi[5];
-
-    if (session.isRemote())
-        return getHostColour(config, session.host);
-
-    return theme.ansi[2];
 }
 
 // The highlight's conversation title (Claude) or cwd.

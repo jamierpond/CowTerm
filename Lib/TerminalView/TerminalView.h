@@ -150,6 +150,11 @@ public:
     // line arrives while it is scrolled back.
     std::function<void(ScrolledBackState)> onScrolledBackStateChanged = [](ScrolledBackState) {};
 
+    // A line of this colour round the view's edge, inside the margin the grid
+    // never draws in, so it costs no row or column; none by default.
+    void setEdgeColour(std::optional<Rgb> colour);
+    std::optional<Rgb> getEdgeColour() const { return edgeColour; }
+
     // Fixes the grid the shell draws in, whatever the view's size. A view
     // taller than the grid shows scrollback above it, the grid at the bottom.
     // Without one (the default) the grid follows the view's bounds.
@@ -282,6 +287,7 @@ private:
     float calculatePixelOffsetIntoTopRow() const;
     int countRowsToDraw() const;
     void drawScrollIndicator(GridPainter& painter);
+    void drawEdge(eacp::GPU::RenderPass& pass, GridPainter& painter);
 
     bool handleCopyModeKey(const eacp::Graphics::KeyEvent& event);
     void applyCopyModeCommand(const CopyModeCommand& command);
@@ -360,6 +366,7 @@ private:
     std::optional<eacp::Text::GlyphRenderer> glyphs;
     std::string paneShellId;
     std::string shellStatus;
+    std::optional<Rgb> edgeColour;
     bool commandTerminal = false;
     std::unique_ptr<Shell> shell;
 

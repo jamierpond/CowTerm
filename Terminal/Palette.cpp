@@ -41,8 +41,7 @@ constexpr auto labelLength = 32;
 constexpr auto labelToDetailGap = 14.0f;
 constexpr auto detailLength = 48;
 constexpr auto badgeRightPadding = 12.0f;
-constexpr auto remoteRowTintAlpha = 0.10f;
-constexpr auto remoteRowStripeWidth = 3.0f;
+constexpr auto rowCornerRadius = 6.0f;
 
 bool isSessionItem(const PaletteItem& item)
 {
@@ -63,20 +62,6 @@ std::string getItemIcon(const PaletteItem& item)
         return "●";
 
     return "▸";
-}
-
-Rgb getItemIconColour(const PaletteItem& item, const Theme& theme)
-{
-    if (item.unavailable)
-        return theme.ansi[8];
-
-    if (item.claude)
-        return theme.ansi[5];
-
-    if (isSessionItem(item))
-        return theme.ansi[2];
-
-    return theme.ansi[8];
 }
 
 // The host suffix takes room the detail would have had.
@@ -213,6 +198,7 @@ PaletteItem Palette::makeUnreachableItem(const RemoteHost& remote) const
 {
     auto item = PaletteItem {};
     item.kind = PaletteItem::Kind::Project;
+    item.host = remote.getHost();
     item.label = getHostLabel(remote.getHost()) + " — unreachable";
     item.detail = remote.getFailureReason();
     item.unavailable = true;
@@ -431,57 +417,40 @@ void Palette::mouseMove(const MouseEvent& event)
     }
 }
 
-void Palette::paintRow(UI::Graphics& g, const PaletteItem& item, Rect rowArea)
+// Every piece of text takes the row's text colour, which reads on every host's
+// fill; the host's name says in words what the fill says in colour.
+void Palette::paintRow(UI::Graphics& g, const PaletteItem& item, Rect rowArea, const HostRowColours& colours)
 {
     const auto baseline = rowArea.y + listMetrics.rowHeight * baselineFraction;
     auto x = rowArea.x + iconLeft;
 
-    g.setColour(toColor(getItemIconColour(item, theme)));
+    g.setColour(toColor(colours.text));
     drawTextInFont(g, getItemIcon(item), {x, baseline}, rowFont);
     x += labelAfterIcon;
 
     const auto label = truncateWithEllipsis(item.label, labelLength);
-    g.setColour(toColor(item.unavailable ? theme.ansi[8] : theme.foreground));
     drawTextInFont(g, label, {x, baseline}, rowFont);
     x += measureTextInFont(g, label, rowFont);
 
     if (!item.host.empty() && !item.unavailable)
     {
         const auto hostSuffix = " · " + getHostLabel(item.host);
-        g.setColour(toColor(getHostColour(config, item.host)));
         drawTextInFont(g, hostSuffix, {x, baseline}, detailFont);
         x += measureTextInFont(g, hostSuffix, detailFont);
     }
 
     x += labelToDetailGap;
-
-    g.setColour(toColor(theme.ansi[8]));
     drawTextInFont(g, describeItem(item), {x, baseline}, detailFont);
 
     if (item.claude)
     {
         const auto badge = std::string {"claude"};
         const auto badgeWidth = measureTextInFont(g, badge, detailFont);
-        g.setColour(toColor(theme.ansi[5]));
         drawTextInFont(g,
                        badge,
                        {rowArea.right() - badgeWidth - badgeRightPadding, baseline},
                        detailFont);
     }
-}
-
-// A remote row sits on a faint wash of its host's colour, with a stripe of it
-// at the left edge that stays visible under the selection highlight.
-void Palette::paintRemoteRowTint(UI::Graphics& g, const PaletteItem& item, Rect rowArea) const
-{
-    if (item.host.empty() || item.unavailable)
-        return;
-
-    const auto hostColour = getHostColour(config, item.host);
-    g.setColour(toColor(hostColour, remoteRowTintAlpha));
-    g.fillRect(rowArea);
-    g.setColour(toColor(hostColour));
-    g.fillRect({rowArea.x, rowArea.y, remoteRowStripeWidth, rowArea.h});
 }
 
 void Palette::paint(UI::Graphics& g)
@@ -503,12 +472,14 @@ void Palette::paint(UI::Graphics& g)
                                    panel.w - 2.0f * rowSideInset,
                                    listMetrics.rowHeight - rowGap};
 
-        paintRemoteRowTint(g, visible[(std::size_t) i], rowArea);
+        const auto& item = visible[(std::size_t) i];
+        const auto colours = getHostRowColoursFor(item.host);
+        paintHostFill(g, colours, rowArea, rowCornerRadius);
 
         if (i == selected)
-            paintSelectedRowHighlight(g, rowArea);
+            paintHighlightOutline(g, colours, rowArea, rowCornerRadius);
 
-        paintRow(g, visible[(std::size_t) i], rowArea);
+        paintRow(g, item, rowArea, colours);
     }
 
     if (visible.empty())

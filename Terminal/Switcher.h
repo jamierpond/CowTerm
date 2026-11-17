@@ -53,8 +53,6 @@ private:
     void paintCard(eacp::UI::Graphics& g, int index, eacp::UI::Rect card);
     void paintSelectedDetail(eacp::UI::Graphics& g, eacp::UI::Rect panel);
     std::string describeSession(const TermSession& session) const;
-    Rgb getCardIconColour(const TermSession& session) const;
-    void paintRemoteCardTint(eacp::UI::Graphics& g, const TermSession& session, eacp::UI::Rect card) const;
 
     // Frozen MRU snapshot taken on begin(); index 0 is the current session.
     std::vector<TermSession*> order;

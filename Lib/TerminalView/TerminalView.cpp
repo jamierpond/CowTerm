@@ -635,6 +635,9 @@ void TerminalView::render(GPU::Frame& frame)
         sprites->flush();
     }
 
+    if (edgeColour)
+        drawEdge(pass, painter);
+
     renderedVersion = screen.version();
 }
 

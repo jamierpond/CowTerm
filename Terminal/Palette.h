@@ -56,8 +56,10 @@ private:
     int findRowAt(eacp::UI::Point pos) const override;
     eacp::UI::Rect calculatePanelBounds() const override;
 
-    void paintRow(eacp::UI::Graphics& g, const PaletteItem& item, eacp::UI::Rect rowArea);
-    void paintRemoteRowTint(eacp::UI::Graphics& g, const PaletteItem& item, eacp::UI::Rect rowArea) const;
+    void paintRow(eacp::UI::Graphics& g,
+                  const PaletteItem& item,
+                  eacp::UI::Rect rowArea,
+                  const HostRowColours& colours);
 
     std::vector<PaletteItem> allItems;
     std::vector<PaletteItem> visible;

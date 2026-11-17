@@ -95,6 +95,20 @@ bool TerminalView::isOnShellStatusNote(Graphics::Point position) const
     return calculateBadgeBounds(shellStatus, metrics).contains(position);
 }
 
+void TerminalView::setEdgeColour(std::optional<Rgb> colour)
+{
+    edgeColour = colour;
+    repaintIfShown();
+}
+
+void TerminalView::drawEdge(GPU::RenderPass& pass, GridPainter& painter)
+{
+    constexpr auto edgeThickness = 3.0f;
+    sprites->begin(pass);
+    painter.drawEdge(getLocalBounds(), std::min(edgeThickness, marginY), *edgeColour);
+    sprites->flush();
+}
+
 void TerminalView::showShellStatus(const std::string& status)
 {
     {

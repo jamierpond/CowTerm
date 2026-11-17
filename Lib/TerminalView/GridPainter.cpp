@@ -308,6 +308,20 @@ void GridPainter::drawCopyModeBadge(const std::string& indicator, float viewWidt
     }
 }
 
+std::array<Rect, 4> calculateEdgeStrips(Rect view, float thickness)
+{
+    return {view.fromTop(thickness),
+            view.fromBottom(thickness),
+            view.fromLeft(thickness),
+            view.fromRight(thickness)};
+}
+
+void GridPainter::drawEdge(Rect view, float thickness, Rgb colour)
+{
+    for (const auto& strip: calculateEdgeStrips(view, thickness))
+        tools.sprites.fillRect(strip, toColor(colour));
+}
+
 void GridPainter::drawScrollIndicator(const Rect& thumb, float opacity)
 {
     constexpr auto scrollIndicatorAlpha = 0.5f;
