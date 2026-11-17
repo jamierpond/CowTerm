@@ -17,15 +17,36 @@ using namespace eacp;
 
 namespace
 {
-constexpr auto knownStates = std::array<std::string_view, 3> {"working", "waiting", "finished"};
+constexpr auto knownStates =
+    std::array {std::string_view {"working"}, std::string_view {"waiting"}, std::string_view {"finished"}};
 constexpr auto dialTimeout = Time::MS {1500};
 constexpr int exitOk = 0;
 constexpr int exitUsage = 2;
 constexpr int exitDaemonUnreachable = 4;
 
+struct ValueOption
+{
+    std::string_view flag;
+    std::string PaneStateReport::*field;
+};
+
+const auto valueOptions = std::array {ValueOption {"--message", &PaneStateReport::message},
+                                      ValueOption {"--pane", &PaneStateReport::paneId}};
+
 bool isKnownState(const std::string& state)
 {
     return std::ranges::find(knownStates, state) != knownStates.end();
+}
+
+std::optional<std::string> findProblemWithReport(const PaneStateReport& report)
+{
+    if (!isKnownState(report.state))
+        return "the state is one of working, waiting, finished";
+
+    if (report.paneId.empty())
+        return "no pane: run it inside a CowTerm pane or pass --pane <id>";
+
+    return std::nullopt;
 }
 
 // Sends the report, then a hello: the daemon answers messages in order, so its
@@ -70,23 +91,23 @@ ParsedPaneStateReport parsePaneStateArguments(const std::vector<std::string>& ar
 
     for (auto index = std::size_t {0}; index < args.size(); ++index)
     {
+        const auto option = std::ranges::find(valueOptions, args[index], &ValueOption::flag);
         const auto hasValue = index + 1 < args.size();
 
-        if (args[index] == "--message" && hasValue)
-            report.message = args[++index];
-        else if (args[index] == "--pane" && hasValue)
-            report.paneId = args[++index];
-        else if (report.state.empty())
-            report.state = args[index];
-        else
+        if (option != valueOptions.end() && hasValue)
+        {
+            report.*(option->field) = args[++index];
+            continue;
+        }
+
+        if (!report.state.empty())
             return {std::nullopt, "unexpected argument: " + args[index]};
+
+        report.state = args[index];
     }
 
-    if (!isKnownState(report.state))
-        return {std::nullopt, "the state is one of working, waiting, finished"};
-
-    if (report.paneId.empty())
-        return {std::nullopt, "no pane: run it inside a CowTerm pane or pass --pane <id>"};
+    if (const auto problem = findProblemWithReport(report))
+        return {std::nullopt, *problem};
 
     return {report, {}};
 }
