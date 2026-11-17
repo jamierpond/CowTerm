@@ -14,14 +14,6 @@ namespace
 // as one pick.
 constexpr auto usageOfTheLastTyping = 1.0;
 
-// One row per session per machine, so the machine makes the key unique. Its
-// last path component is the session name, the Mac's key for a session with
-// no project directory, so the key adds nothing searchable.
-std::string makeOverviewRowKey(const OverviewRow& row)
-{
-    return row.host + "/" + row.sessionName;
-}
-
 PaletteItem makePaletteItem(const OverviewRow& row)
 {
     auto item = PaletteItem {};
@@ -43,26 +35,46 @@ const OverviewRow& findRowWithKey(const std::vector<OverviewRow>& rows, const st
                          [&key](const OverviewRow& row) { return makeOverviewRowKey(row) == key; });
 }
 
-PaletteUsage makeUsageFromLastTyping(const std::vector<OverviewRow>& rows,
-                                     std::int64_t nowMilliseconds)
+PaletteUsage makeUsage(const std::vector<OverviewRow>& rows,
+                       std::int64_t nowMilliseconds,
+                       const SessionOpeningUsage& openingUsage)
 {
-    auto usage = [&rows, nowMilliseconds](const std::string& key)
+    auto usage = [&rows, nowMilliseconds, openingUsage](const std::string& key)
     {
         const auto& row = findRowWithKey(rows, key);
-        return frecencysearch::calculateDecayedUsage(
+        const auto typing = frecencysearch::calculateDecayedUsage(
             usageOfTheLastTyping, row.lastUsedMilliseconds, nowMilliseconds);
+        return openingUsage(key) + typing;
     };
 
     return {usage, {}};
 }
 } // namespace
 
+// One row per session per machine, so the machine makes the key unique. Its
+// last path component is the session name, the Mac's key for a session with
+// no project directory, so the key adds nothing searchable.
+std::string makeOverviewRowKey(const OverviewRow& row)
+{
+    return row.host + "/" + row.sessionName;
+}
+
 std::vector<OverviewRow> searchOverviewRows(const std::vector<OverviewRow>& rows,
                                             const std::string& query,
-                                            std::int64_t nowMilliseconds)
+                                            std::int64_t nowMilliseconds,
+                                            const SessionOpeningUsage& openingUsage)
 {
+    const auto usage = makeUsage(rows, nowMilliseconds, openingUsage);
+
+    // Every row matches nothing typed, so the order is the usage alone.
     if (query.empty())
-        return rows;
+    {
+        auto ordered = rows;
+        std::ranges::stable_sort(ordered,
+                                 [&usage](const OverviewRow& first, const OverviewRow& second)
+                                 { return usage.usage(makeOverviewRowKey(first)) > usage.usage(makeOverviewRowKey(second)); });
+        return ordered;
+    }
 
     auto items = std::vector<PaletteItem> {};
 
@@ -70,7 +82,7 @@ std::vector<OverviewRow> searchOverviewRows(const std::vector<OverviewRow>& rows
         items.push_back(makePaletteItem(row));
 
     const auto ranked =
-        rankPaletteItems(items, query, makeUsageFromLastTyping(rows, nowMilliseconds));
+        rankPaletteItems(items, query, usage);
     auto matchingRows = std::vector<OverviewRow> {};
 
     for (const auto& item: ranked)

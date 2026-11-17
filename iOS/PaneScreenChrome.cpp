@@ -30,6 +30,10 @@ constexpr auto hostMarkGap = 8.0f;
 constexpr auto chipPadding = 10.0f;
 constexpr auto chipCornerRadius = 8.0f;
 constexpr auto keyGap = 3.0f;
+
+// iOS's own key repeat: a pause before the first repeat, then about twelve a second.
+constexpr auto keyRepeatDelay = eacp::Time::MS {400};
+constexpr auto keyRepeatInterval = eacp::Time::MS {80};
 constexpr auto stopLabel = "Esc";
 constexpr auto paneDotSize = 8.0f;
 constexpr auto ringThickness = 1.5f;
@@ -363,15 +367,51 @@ void KeyRow::paint(UI::Graphics& g)
     }
 }
 
-void KeyRow::mouseUp(const UI::MouseEvent& event)
+std::optional<KeyRowKey> KeyRow::findKeyAt(Point position) const
 {
-    if (hasMovedBeyondTapSlop(event.downPosition, event.position))
+    return findKeyRowKeyAt(calculateKeyRowLayout(getLocalBounds(), page), position);
+}
+
+void KeyRow::mouseDown(const UI::MouseEvent& event)
+{
+    ++pressGeneration;
+    const auto key = findKeyAt(event.position);
+    isRepeating = key && isRepeatingKeyRowKey(*key);
+
+    if (!isRepeating)
         return;
 
-    const auto slots = calculateKeyRowLayout(getLocalBounds(), page);
+    onKey(*key);
+    repeatAfter(keyRepeatDelay, *key, pressGeneration);
+}
 
-    if (const auto key = findKeyRowKeyAt(slots, event.position))
+void KeyRow::repeatAfter(Time::MS delay, KeyRowKey key, int generation)
+{
+    Threads::callAfter(delay,
+                       [this, guard = std::weak_ptr<bool> {alive}, key, generation]
+                       {
+                           if (guard.expired() || generation != pressGeneration)
+                               return;
+
+                           onKey(key);
+                           repeatAfter(keyRepeatInterval, key, generation);
+                       });
+}
+
+void KeyRow::mouseUp(const UI::MouseEvent& event)
+{
+    ++pressGeneration;
+
+    if (isRepeating || hasMovedBeyondTapSlop(event.downPosition, event.position))
+        return;
+
+    if (const auto key = findKeyAt(event.position))
         onKey(*key);
+}
+
+void KeyRow::mouseCancel(const UI::MouseEvent&)
+{
+    ++pressGeneration;
 }
 
 PromptButtons::PromptButtons(const term::Theme& themeToUse)

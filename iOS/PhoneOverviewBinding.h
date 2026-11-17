@@ -37,5 +37,6 @@ private:
     std::string loggedHostsAnswering;
 };
 
-OverviewInputs makeOverviewInputs(const term::phone::OverviewReport& report);
+OverviewInputs makeOverviewInputs(const term::phone::OverviewReport& report,
+                                  const term::phone::SessionOpenings& openings);
 } // namespace cowterm::mobile

@@ -3,6 +3,7 @@
 #include "NetworkPathWatch.h"
 
 #include "Phone/PhoneConnection.h"
+#include "Phone/SessionOpenings.h"
 #include "TerminalView/TerminalView.h"
 
 #include <functional>
@@ -53,6 +54,9 @@ public:
     std::function<void(const term::phone::ChosenPane&)> onPaneChosen =
         [](const term::phone::ChosenPane&) {};
 
+    // Sessions opened on the phone, which order the overview.
+    term::phone::SessionOpenings& getSessionOpenings() { return sessionOpenings; }
+
     // What the last launch stored, loaded before the link is up.
     const std::optional<term::phone::StoredScreen>& getStoredScreen() const { return storedScreen; }
 
@@ -62,6 +66,7 @@ private:
 
     term::phone::PhoneSettings settings;
     std::optional<term::phone::StoredScreen> storedScreen;
+    term::phone::SessionOpenings sessionOpenings;
     term::phone::PhoneConnection connection;
     NetworkPathWatch networkPathWatch;
 };

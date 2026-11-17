@@ -145,6 +145,12 @@ std::optional<std::string> ComposerHistory::recallNewer()
     return messages[*recalledIndex];
 }
 
+bool isRepeatingKeyRowKey(KeyRowKey key)
+{
+    return key == KeyRowKey::Up || key == KeyRowKey::Down || key == KeyRowKey::Left
+           || key == KeyRowKey::Right;
+}
+
 std::string_view getKeyRowLabel(KeyRowKey key)
 {
     return findKeyRowKeyInfo(key).label;

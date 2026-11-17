@@ -3,7 +3,8 @@
 # one of yours) running `cat -v`, which prints every byte it receives, opens it
 # on the phone, asks Jamie to press each key-row key, then prints what the pane
 # received and kills it. Expected, in order: ^[ (Esc), a tab, ^[[A ^[[B ^[[C
-# ^[[D (the arrows), ^A (Ctrl then a). The phone must be unlocked.
+# ^[[D (the arrows), ^A (Ctrl then a), abc, then one ^? for every delete the
+# held delete key sent. The phone must be unlocked.
 #
 #   scripts/check-ios-device-key-row.sh [jamiepond@macprorack] [pond]
 set -eu
@@ -48,8 +49,8 @@ xcrun devicectl device process launch --terminate-existing --device "$phone" "$b
 sleep "$seconds_for_the_phone_to_open_the_pane"
 
 ct notify-user --title "CowTerm · key row check" \
-    --content "pond now shows a test pane running cat -v. Tap the keyboard button, then on the key row press: Esc, Tab, ↑, ↓, →, ←, then Ctrl and type a. Answer when done." \
+    --content "pond now shows a test pane running cat -v. Tap the keyboard button, then on the key row press: Esc, Tab, ↑, ↓, →, ←, then Ctrl and type a, then type abc and hold the keyboard's delete key for three seconds. Answer when done." \
     --options "done" > /dev/null
 
 "$probe" "$destination" --adopt "$pane" | sed -n '/^screen of/,$p'
-scripts/read-ios-device-log.sh "$phone" | grep "key row:" || true
+scripts/read-ios-device-log.sh "$phone" | grep "key row:\|typing: delete" || true

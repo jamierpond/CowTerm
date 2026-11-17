@@ -29,6 +29,11 @@ OverviewRow makeRow(const std::string& host,
     return row;
 }
 
+double noOpenings(const std::string&)
+{
+    return 0.0;
+}
+
 std::vector<std::string> listHostsAndNames(const std::vector<OverviewRow>& rows)
 {
     auto names = std::vector<std::string> {};
@@ -40,13 +45,38 @@ std::vector<std::string> listHostsAndNames(const std::vector<OverviewRow>& rows)
 }
 } // namespace
 
-auto tEmptyQueryKeepsOrder = test("OverviewSearch/emptyTextKeepsTheOverviewsOrder") = []
+auto tEmptyQueryRanksByTyping = test("OverviewSearch/withNoOpeningsEmptyTextRanksByLastTyping") = []
 {
     const auto rows = std::vector {makeRow(laptop, "cowterm", now - oneDay),
                                    makeRow(laptop, "miro", now - oneMinute)};
 
-    check(listHostsAndNames(searchOverviewRows(rows, "", now)) == listHostsAndNames(rows),
-          "waiting first, then by typing, as the overview built it");
+    check(listHostsAndNames(searchOverviewRows(rows, "", now, noOpenings))
+          == std::vector<std::string> {"jamie@tamby miro", "jamie@tamby cowterm"});
+};
+
+auto tEmptyQueryRanksByOpenings = test("OverviewSearch/emptyTextRanksBySessionsOpenedOnThePhone") = []
+{
+    constexpr auto opensOfCowterm = 5.0;
+    const auto rows = std::vector {makeRow(laptop, "miro", now - oneMinute),
+                                   makeRow(laptop, "cowterm", now - oneDay),
+                                   makeRow(rack, "Grazer", 0)};
+    const auto openings = [](const std::string& key)
+    {
+        if (key == std::string {laptop} + "/cowterm")
+            return opensOfCowterm;
+
+        return 0.0;
+    };
+
+    check(listHostsAndNames(searchOverviewRows(rows, "", now, openings))
+          == std::vector<std::string> {"jamie@tamby cowterm", "jamie@tamby miro", "jamiepond@macprorack Grazer"});
+};
+
+auto tNoUsageKeepsTheOverviewsOrder = test("OverviewSearch/rowsNeverUsedKeepTheOverviewsOrder") = []
+{
+    const auto rows = std::vector {makeRow(rack, "Miro", 0), makeRow(laptop, "cowterm", 0), makeRow(laptop, "Grazer", 0)};
+
+    check(listHostsAndNames(searchOverviewRows(rows, "", now, noOpenings)) == listHostsAndNames(rows));
 };
 
 auto tNameMatches = test("OverviewSearch/onlyRowsWhoseNameMatchesAreKept") = []
@@ -55,7 +85,7 @@ auto tNameMatches = test("OverviewSearch/onlyRowsWhoseNameMatchesAreKept") = []
                                    makeRow(laptop, "miro", now - oneMinute),
                                    makeRow(laptop, "tamber-web", now - oneMinute)};
 
-    check(listHostsAndNames(searchOverviewRows(rows, "cow", now))
+    check(listHostsAndNames(searchOverviewRows(rows, "cow", now, noOpenings))
           == std::vector<std::string> {"jamie@tamby cowterm"});
 };
 
@@ -64,7 +94,7 @@ auto tRecentTypingFirst = test("OverviewSearch/equalMatchesPutTheMostRecentlyTyp
     const auto rows = std::vector {makeRow(laptop, "miro-old", now - oneDay),
                                    makeRow(laptop, "miro-new", now - oneMinute)};
 
-    check(listHostsAndNames(searchOverviewRows(rows, "miro", now))
+    check(listHostsAndNames(searchOverviewRows(rows, "miro", now, noOpenings))
           == std::vector<std::string> {"jamie@tamby miro-new", "jamie@tamby miro-old"});
 };
 
@@ -73,9 +103,9 @@ auto tHostAndName = test("OverviewSearch/theHostTypedWithTheNamePicksThatMachine
     const auto rows = std::vector {makeRow(laptop, "miro", now - oneMinute),
                                    makeRow(rack, "miro", now - oneDay)};
 
-    check(listHostsAndNames(searchOverviewRows(rows, "macprorackmiro", now))
+    check(listHostsAndNames(searchOverviewRows(rows, "macprorackmiro", now, noOpenings))
           == std::vector<std::string> {"jamiepond@macprorack miro"});
-    check(searchOverviewRows(rows, "miro", now).size() == 2,
+    check(searchOverviewRows(rows, "miro", now, noOpenings).size() == 2,
           "the same name on two machines is two rows");
 };
 
@@ -85,9 +115,9 @@ auto tStateLineAtWordStart = test("OverviewSearch/theStateLineMatchesOnlyWhereAW
     const auto workingRow = makeRow(laptop, "miro", now - oneMinute, "working, 4 min");
     const auto rows = std::vector {waitingRow, workingRow};
 
-    check(listHostsAndNames(searchOverviewRows(rows, "waiting", now))
+    check(listHostsAndNames(searchOverviewRows(rows, "waiting", now, noOpenings))
           == std::vector<std::string> {"jamie@tamby cowterm"});
-    check(searchOverviewRows(rows, "aiting", now).empty(), "not in the middle of a word");
+    check(searchOverviewRows(rows, "aiting", now, noOpenings).empty(), "not in the middle of a word");
 };
 
 auto tClaudeRows = test("OverviewSearch/claudeFindsTheRowsRunningClaude") = []
@@ -96,6 +126,6 @@ auto tClaudeRows = test("OverviewSearch/claudeFindsTheRowsRunningClaude") = []
     claudeRow.isClaude = true;
     const auto rows = std::vector {claudeRow, makeRow(laptop, "miro", now - oneMinute)};
 
-    check(listHostsAndNames(searchOverviewRows(rows, "claude", now))
+    check(listHostsAndNames(searchOverviewRows(rows, "claude", now, noOpenings))
           == std::vector<std::string> {"jamie@tamby cowterm"});
 };

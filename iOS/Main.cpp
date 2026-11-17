@@ -325,7 +325,7 @@ struct CowTermMobileApp
                 change.animationSeconds,
                 " s");
             screen.setSoftwareKeyboardChange(change);
-            overview.setSoftwareKeyboardChange(change);
+            overview.setSoftwareKeyboardCoveredHeight(change.coveredHeight);
         };
 
         if (phone != nullptr)
@@ -434,6 +434,7 @@ struct CowTermMobileApp
     void showOverview()
     {
         LOG("overview: shown");
+        overview.clearSearch();
         if (phoneOverview)
             phoneOverview->setShown(true);
 

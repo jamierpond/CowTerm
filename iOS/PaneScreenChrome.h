@@ -96,15 +96,18 @@ private:
 };
 
 // The key row above the keyboard: Esc, Tab, Ctrl and the arrows, the symbols
-// on a second page with the raw mode switch and the key that puts the
-// keyboard away. A latched Ctrl and raw mode are lit.
+// on a second page with the compose switch and the key that puts the
+// keyboard away. A latched Ctrl and the composer are lit. An arrow presses
+// when the finger lands and repeats while it stays; other keys press when it lifts.
 class KeyRow final : public eacp::UI::Component
 {
 public:
     explicit KeyRow(const term::Theme& themeToUse);
 
     void paint(eacp::UI::Graphics& g) override;
+    void mouseDown(const eacp::UI::MouseEvent& event) override;
     void mouseUp(const eacp::UI::MouseEvent& event) override;
+    void mouseCancel(const eacp::UI::MouseEvent& event) override;
 
     int page = 0;
     bool isControlLatched = false;
@@ -113,8 +116,13 @@ public:
 
 private:
     bool isLit(KeyRowKey key) const;
+    std::optional<KeyRowKey> findKeyAt(eacp::Graphics::Point position) const;
+    void repeatAfter(eacp::Time::MS delay, KeyRowKey key, int generation);
 
     term::Theme theme;
+    int pressGeneration = 0;
+    bool isRepeating = false;
+    std::shared_ptr<bool> alive = std::make_shared<bool>(true);
 };
 
 // A Claude permission prompt's options as buttons, one row each, tied to the

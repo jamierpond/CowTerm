@@ -17,6 +17,7 @@ using namespace term::phone;
 namespace
 {
 constexpr auto storedScreenFileName = "last-screen.json";
+constexpr auto sessionOpeningsFileName = "session-openings.json";
 
 // What `just ios-pair` copies into the app's container, under the data folder.
 constexpr auto pairingFolderName = "pairing";
@@ -123,6 +124,7 @@ void logStoredScreen(const std::optional<StoredScreen>& stored)
 PhoneLaunch::PhoneLaunch(PhoneSettings settingsToUse)
     : settings(std::move(settingsToUse))
     , storedScreen(loadStoredScreen(settings.storedScreenPath))
+    , sessionOpenings(settings.storedScreenPath.parent_path() / sessionOpeningsFileName)
     , connection(settings, makeEmbeddedSshLinkFactory(settings), readSteadyClock)
     , networkPathWatch(
           [this]

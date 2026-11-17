@@ -2,6 +2,7 @@
 #include "Phone/MirroredShell.h"
 #include "Phone/PaneChoice.h"
 #include "Phone/PhoneSettings.h"
+#include "Phone/SessionOpenings.h"
 #include "Phone/StoredScreen.h"
 
 #include <NanoTest/NanoTest.h>
@@ -295,4 +296,27 @@ auto mirrorSeesOutputSizeAndStatus = test("MirroredShell/seesOutputSizeAndStatus
 
     scripted.onStatusChanged("on Mac, 150 columns; type here to take it back");
     check(notes.size() == 1);
+};
+
+auto openingsAreKeptAndDecay = test("SessionOpenings/openingsAreKeptAcrossLaunchesAndDecay") = []
+{
+    constexpr auto now = std::int64_t {1'800'000'000'000};
+    constexpr auto aMonth = std::int64_t {30} * 24 * 60 * 60 * 1000;
+    const auto path = std::filesystem::temp_directory_path()
+                      / ("cowterm-session-openings-" + std::to_string(::getpid()) + ".json");
+    std::filesystem::remove(path);
+
+    {
+        auto openings = SessionOpenings {path};
+        openings.recordOpening("jamie@tamby/CowTerm", now);
+        openings.recordOpening("jamie@tamby/CowTerm", now);
+        openings.recordOpening("jamie@tamby/Grazer", now);
+    }
+
+    const auto reopened = SessionOpenings {path};
+    check(reopened.getUsage("jamie@tamby/CowTerm", now) > reopened.getUsage("jamie@tamby/Grazer", now));
+    check(reopened.getUsage("jamie@tamby/never", now) == 0.0);
+    check(reopened.getUsage("jamie@tamby/CowTerm", now + aMonth) < reopened.getUsage("jamie@tamby/CowTerm", now),
+          "older openings count for less");
+    std::filesystem::remove(path);
 };

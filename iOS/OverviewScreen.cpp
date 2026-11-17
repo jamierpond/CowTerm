@@ -341,6 +341,13 @@ void OverviewPanel::search(const std::string& query)
     showSearchResults(query);
 }
 
+void OverviewPanel::clearSearch()
+{
+    searchField.giveAwayKeyboardFocus();
+    searchField.setText({});
+    showSearchResults({});
+}
+
 void OverviewPanel::resized()
 {
     const auto areas = calculateOverviewAreas(getLocalBounds(), safeArea, keyboardCoveredHeight);
@@ -399,14 +406,19 @@ void OverviewScreen::search(const std::string& query)
     panel.search(query);
 }
 
+void OverviewScreen::clearSearch()
+{
+    panel.clearSearch();
+}
+
 void OverviewScreen::safeAreaInsetsChanged()
 {
     panel.setScreenInsets(getSafeAreaInsets(), keyboardCoveredHeight);
 }
 
-void OverviewScreen::setSoftwareKeyboardChange(const eacp::Graphics::SoftwareKeyboardChange& change)
+void OverviewScreen::setSoftwareKeyboardCoveredHeight(float coveredHeight)
 {
-    keyboardCoveredHeight = change.coveredHeight;
+    keyboardCoveredHeight = coveredHeight;
     panel.setScreenInsets(getSafeAreaInsets(), keyboardCoveredHeight);
 }
 } // namespace cowterm::mobile

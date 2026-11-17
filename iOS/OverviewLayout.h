@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Multiplexer/SessionOverview.h"
+#include "Multiplexer/SessionOverviewSearch.h"
 
 #include <eacp/Graphics/Primitives/Primitives.h>
 
@@ -50,6 +51,10 @@ struct OverviewInputs
     int hostCount = 0;
     std::string query;
     std::int64_t nowMilliseconds = 0;
+
+    // How often and how recently each session was opened on the phone; with
+    // the last typing it orders the rows, searched or not.
+    term::overview::SessionOpeningUsage openingUsage = [](const std::string&) { return 0.0; };
 };
 
 // With no query: the waiting sessions as cards nearest the thumb, then the

@@ -77,6 +77,12 @@ public:
     void setScreenInsets(eacp::Graphics::Insets safeAreaToUse, float keyboardCoveredHeightToUse);
     void search(const std::string& query);
 
+    // An empty field, the whole list, and the keyboard down.
+    void clearSearch();
+
+    const OverviewContent& getContent() const { return content; }
+    const std::string& getQuery() const { return inputs.query; }
+
     void paint(eacp::UI::Graphics& g) override;
     void resized() override;
 
@@ -104,10 +110,14 @@ public:
     // "one machine is down" from "nothing answers".
     void setInputs(OverviewInputs inputs);
 
-    void setSoftwareKeyboardChange(const eacp::Graphics::SoftwareKeyboardChange& change);
+    // From WindowEvents::onSoftwareKeyboardChanged.
+    void setSoftwareKeyboardCoveredHeight(float coveredHeight);
 
     // Types query into the search field with the keyboard up, as a finger would.
     void search(const std::string& query);
+
+    // Coming back to the list always shows all of it: the search is emptied.
+    void clearSearch();
 
     void resized() override;
     void safeAreaInsetsChanged() override;

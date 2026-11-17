@@ -51,6 +51,9 @@ enum class KeyRowKey
 
 std::string_view getKeyRowLabel(KeyRowKey key);
 
+// The arrows repeat while held, as a hardware keyboard's do; the others press once.
+bool isRepeatingKeyRowKey(KeyRowKey key);
+
 // The key a key row key presses, as a hardware keyboard would report it.
 // Empty for the row's own controls (Ctrl, the composer switch, hide, next page).
 std::optional<eacp::Graphics::KeyEvent> makeKeyRowKeyEvent(KeyRowKey key);

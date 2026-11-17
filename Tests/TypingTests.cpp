@@ -186,3 +186,11 @@ auto tKeyRowFitsEveryPhone = test("Typing/everyKeyFitsTheRowOnEveryPhoneBothWays
         }
     }
 };
+
+auto tOnlyArrowsRepeat = test("Typing/onlyTheArrowsRepeatWhileHeld") = []
+{
+    check(isRepeatingKeyRowKey(KeyRowKey::Up));
+    check(isRepeatingKeyRowKey(KeyRowKey::Left));
+    check(!isRepeatingKeyRowKey(KeyRowKey::Escape), "a held Esc must not interrupt Claude over and over");
+    check(!isRepeatingKeyRowKey(KeyRowKey::Control));
+};

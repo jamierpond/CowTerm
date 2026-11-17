@@ -62,7 +62,7 @@ float addItemHeightAndGap(float total, float height)
 std::vector<OverviewItem> listSearchResults(const OverviewInputs& inputs)
 {
     const auto matches = term::overview::searchOverviewRows(
-        inputs.sessions, inputs.query, inputs.nowMilliseconds);
+        inputs.sessions, inputs.query, inputs.nowMilliseconds, inputs.openingUsage);
     auto items = std::vector<OverviewItem> {};
 
     for (const auto& session: matches)
@@ -82,8 +82,10 @@ OverviewItemKind chooseSessionItemKind(const OverviewRow& session)
 std::vector<OverviewItem> listWholeOverview(const OverviewInputs& inputs)
 {
     auto items = std::vector<OverviewItem> {};
+    const auto ranked =
+        term::overview::searchOverviewRows(inputs.sessions, {}, inputs.nowMilliseconds, inputs.openingUsage);
 
-    for (const auto& session: inputs.sessions)
+    for (const auto& session: ranked)
         items.push_back(makeSessionItem(chooseSessionItemKind(session), session));
 
     std::stable_partition(items.begin(),

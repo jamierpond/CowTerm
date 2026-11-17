@@ -10,6 +10,7 @@ add_library(CowTermPhone STATIC
         PhoneConnection.cpp
         PhoneOverview.cpp
         PhoneSettings.cpp
+        SessionOpenings.cpp
         StoredScreen.cpp)
 
 target_include_directories(CowTermPhone PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/..)

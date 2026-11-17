@@ -81,6 +81,9 @@ void TypingControls::connectTerminal(term::TerminalView& terminal)
         const auto isTypedKey = key.type == Graphics::KeyEventType::Down
                                 && !key.characters.empty();
 
+        if (key.keyCode == Graphics::KeyCode::Delete && key.type == Graphics::KeyEventType::Down)
+            LOG("typing: delete");
+
         if (!controlLatch.isHeld() || !isTypedKey)
             return false;
 

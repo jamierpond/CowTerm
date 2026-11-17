@@ -234,7 +234,19 @@ cards shows one card and two edges, and his ten most used sessions cover only
   His median pick is three typed characters. While the keyboard is up the field
   sits directly on top of it, the list ends above the field with the best match
   nearest it, and a "hide" button beside the field lowers the keyboard. Return
-  opens the top match.
+  opens the top match. Coming back to the list always empties the field and
+  shows the whole list.
+- The list is ordered by frecency on the phone, searched or not: how often
+  and how recently each session was opened from the phone's list, decayed
+  with FrecencySearch's `calculateDecayedUsage` (an opening weighs 1, as a
+  palette pick does on the Mac), plus the session's last typing as one use.
+  The Mac's usage store needs emberstore, which does not build for iOS, so the
+  phone keeps its own record in `session-openings.json` beside `last-screen.json`
+  (`Library/Application Support/pond/CowTerm` in the container). A typed query
+  ranks with the Mac's `rankPaletteItems`; an empty one sorts by the same
+  usage. On a first launch with no openings the order is the daemons' last
+  typing, where they report it; Jamie's protocol 4 daemons do not, so it is by
+  host, then session name. Waiting sessions still come first as cards.
 - Thumbnails are the stored last screen, shown small on the waiting cards only.
   At card size a terminal is texture, not text, so the words carry the card.
 - An unreachable host is one row with the reason. If nothing on the tailnet

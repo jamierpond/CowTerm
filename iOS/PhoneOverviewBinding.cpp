@@ -11,9 +11,12 @@ namespace cowterm::mobile
 {
 using namespace eacp;
 
-OverviewInputs makeOverviewInputs(const term::phone::OverviewReport& report)
+OverviewInputs makeOverviewInputs(const term::phone::OverviewReport& report,
+                                  const term::phone::SessionOpenings& openings)
 {
     auto inputs = OverviewInputs {};
+    inputs.openingUsage = [&openings, now = report.nowMillisecondsSinceEpoch](const std::string& rowKey)
+    { return openings.getUsage(rowKey, now); };
     inputs.sessions = report.sessions;
     inputs.hostCount = report.hostCount;
     inputs.nowMilliseconds = report.nowMillisecondsSinceEpoch;
@@ -79,13 +82,13 @@ PhoneOverviewBinding::PhoneOverviewBinding(PhoneLaunch& phoneToUse,
     phone.getOverview().onRowsChanged = [this](const term::phone::OverviewReport& report) { showReport(report); };
 
     screen.onOpenSession = [this](const term::overview::OverviewRow& row) { openSession(row); };
-    screen.setInputs(makeOverviewInputs(phone.getOverview().buildReport()));
+    screen.setInputs(makeOverviewInputs(phone.getOverview().buildReport(), phone.getSessionOpenings()));
 }
 
 void PhoneOverviewBinding::showReport(const term::phone::OverviewReport& report)
 {
     logHostsAnsweringWhenChanged(report);
-    screen.setInputs(makeOverviewInputs(report));
+    screen.setInputs(makeOverviewInputs(report, phone.getSessionOpenings()));
 
     if (sessionToOpen.empty())
         return;
@@ -126,6 +129,8 @@ void PhoneOverviewBinding::openSession(const term::overview::OverviewRow& row)
         return LOG("overview: ", row.host, "/", row.sessionName, " has no pane its daemon lists");
 
     LOG("overview: open ", row.host, "/", row.sessionName, " on pane ", *paneId);
+    phone.getSessionOpenings().recordOpening(term::overview::makeOverviewRowKey(row),
+                                             term::phone::getMillisecondsSinceEpoch());
     setShown(false);
     showPaneScreen();
 }
