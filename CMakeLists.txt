@@ -101,23 +101,25 @@ lockstep_add_package(
         GIT_TAG main
         OPTIONS "RUDDER_CLIENT_ONLY ON")
 
-# An ssh client inside the process (Lib/Multiplexer/EmbeddedSshLink), for the
-# iPhone, which cannot run the system ssh. libssh2 does its crypto through
-# mbedTLS. The mbedtls-* tags carry the generated sources, so no Python is
+# mbedTLS signs the push relay's requests to Apple (Lib/PushRelay) in every
+# build, and does the in-process ssh client's crypto where libssh2 is built.
+# The mbedtls-* tags carry the generated sources, so no Python is
 # needed to build them. Python stays unfound: mbedTLS's optional configure check
 # would write __pycache__ into lockstep's cached copy, which then fails its hash
 # and is downloaded again on every configure. mbedTLS keeps its export set,
 # because libssh2's exported targets name mbedcrypto.
-if (APPLE AND NOT COWTERM_HEADLESS)
-    lockstep_add_package(
-            NAME mbedtls
-            GITHUB_REPOSITORY Mbed-TLS/mbedtls
-            GIT_TAG mbedtls-3.6.8
-            SYSTEM YES
-            OPTIONS "ENABLE_TESTING OFF" "ENABLE_PROGRAMS OFF" "MBEDTLS_FATAL_WARNINGS OFF"
-                    "USE_SHARED_MBEDTLS_LIBRARY OFF" "USE_STATIC_MBEDTLS_LIBRARY ON"
-                    "DISABLE_PACKAGE_CONFIG_AND_INSTALL OFF" "CMAKE_DISABLE_FIND_PACKAGE_Python3 ON")
+lockstep_add_package(
+        NAME mbedtls
+        GITHUB_REPOSITORY Mbed-TLS/mbedtls
+        GIT_TAG mbedtls-3.6.8
+        SYSTEM YES
+        OPTIONS "ENABLE_TESTING OFF" "ENABLE_PROGRAMS OFF" "MBEDTLS_FATAL_WARNINGS OFF"
+                "USE_SHARED_MBEDTLS_LIBRARY OFF" "USE_STATIC_MBEDTLS_LIBRARY ON"
+                "DISABLE_PACKAGE_CONFIG_AND_INSTALL OFF" "CMAKE_DISABLE_FIND_PACKAGE_Python3 ON")
 
+# An ssh client inside the process (Lib/Multiplexer/EmbeddedSshLink), for the
+# iPhone, which cannot run the system ssh. libssh2 does its crypto through mbedTLS.
+if (APPLE AND NOT COWTERM_HEADLESS)
     # lockstep answers libssh2's find_package(MbedTLS) with the mbedtls package
     # above, so FindMbedTLS.cmake never runs: its result variables are given
     # here. CMP0126 NEW keeps CRYPTO_BACKEND when libssh2 declares it a cache entry.

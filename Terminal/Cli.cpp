@@ -51,7 +51,10 @@ constexpr auto usage = R"(usage: ct <command>
   pane-state <working|waiting|finished> [--message <text>] [--pane <id>]
                                   tell this machine's daemon what the pane's
                                   program is doing (Claude Code's hooks), so
-                                  the phone lists waiting panes first
+                                  the phone lists waiting panes first and
+                                  the daemon can ring it
+  pane-state --claude-hook        the same, read from the JSON Claude Code
+                                  gives its hooks on stdin
 
   bridge                          relay this machine's session daemon over
                                   stdin/stdout (CowTerm runs it through ssh)

@@ -7,6 +7,10 @@
 #   CowTermMultiplexer   panes that outlive the app: the session daemon's
 #                        protocol and client, remote hosts over ssh, and what
 #                        the daemon, `ct` and the app share. Emulator + Shell.
+#   CowTermPush          when a Claude's finishing or asking rings the phone,
+#                        and the notification it becomes. Core only.
+#   CowTermPushRelay     `ct push-relay`: device tokens, ES256-signed requests
+#                        to Apple's push service. Push + mbedTLS.
 #   CowTermPhone         the phone's link to one host's daemon over the
 #                        in-process ssh client: pane choice, link state,
 #                        stored last screen. Multiplexer + EmbeddedSsh.
@@ -19,6 +23,10 @@
 add_subdirectory(Emulator)
 add_subdirectory(Shell)
 add_subdirectory(Multiplexer)
+add_subdirectory(Push)
+if (NOT IOS)
+    add_subdirectory(PushRelay)
+endif ()
 if (TARGET CowTerm::EmbeddedSsh)
     add_subdirectory(Phone)
 endif ()

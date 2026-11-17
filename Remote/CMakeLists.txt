@@ -1,6 +1,7 @@
 # The headless ct a remote machine installs; ssh carries the session daemon's
-# messages through its `ct bridge`. Everything it runs is in CowTerm::Multiplexer.
+# messages through its `ct bridge`. Everything it runs is in CowTerm::Multiplexer,
+# and `ct push-relay` in CowTerm::PushRelay.
 add_executable(CowTermCli CtMain.cpp)
-target_link_libraries(CowTermCli PRIVATE CowTerm::Multiplexer CowTermVersion)
+target_link_libraries(CowTermCli PRIVATE CowTerm::Multiplexer CowTerm::PushRelay CowTermVersion)
 set_target_properties(CowTermCli PROPERTIES OUTPUT_NAME ct)
 set_default_target_setting(CowTermCli)

@@ -4,12 +4,14 @@
 #include "Multiplexer/Bridge.h"
 #include "Multiplexer/CliParsing.h"
 #include "Multiplexer/Config.h"
+#include "Multiplexer/DataDirectories.h"
 #include "Multiplexer/NotifyUserClient.h"
 #include "Multiplexer/PaneStateCommand.h"
 #include "Multiplexer/Protocol.h"
 #include <PondVersion.h>
 #include "Multiplexer/RemoteCommands.h"
 #include "Multiplexer/RemoteLocation.h"
+#include "PushRelay/PushRelayCommand.h"
 
 #include <algorithm>
 #include <array>
@@ -37,7 +39,16 @@ constexpr auto usage = R"(usage: ct <command>    (headless: no CowTerm window on
   pane-state <working|waiting|finished> [--message <text>] [--pane <id>]
                           tell this machine's daemon what the pane's program
                           is doing (Claude Code's hooks), so the phone lists
-                          waiting panes first
+                          waiting panes first and the daemon can ring it
+  pane-state --claude-hook
+                          the same, read from the JSON Claude Code gives
+                          its hooks on stdin
+  push-relay --listen <address> [--port <n>] [--devices <file>]
+             [--topic <bundle id>] [--sound <name>]
+                          send the daemons' notices to the phones through
+                          Apple's push service; the key comes from
+                          COWTERM_PUSH_KEY_ID, COWTERM_PUSH_TEAM_ID and
+                          COWTERM_PUSH_PRIVATE_KEY (the .p8 text)
   install-remote <host>   build and install ct + cowtermd on host over ssh
   update-remotes          install-remote for every host in searchDirs
   version, --version      print ct's version and the commit it was built from
@@ -112,6 +123,36 @@ int updateRemotes(const Arguments&)
         term::remote::collectRemoteHosts(term::loadConfig().searchDirs));
 }
 
+std::string readEnvironmentVariable(const char* name)
+{
+    const auto* value = std::getenv(name);
+
+    if (value == nullptr)
+        return {};
+
+    return value;
+}
+
+int pushRelay(const Arguments& arguments)
+{
+    constexpr auto devicesFileName = "push-relay-devices.json";
+    auto parsed = term::push::parsePushRelayArguments(arguments);
+
+    if (!parsed.options)
+    {
+        std::fprintf(stderr, "ct push-relay: %s (see ct help)\n", parsed.usageError.c_str());
+        return exitFail;
+    }
+
+    if (parsed.options->deviceFile.empty())
+        parsed.options->deviceFile = term::getDataDirectory() / devicesFileName;
+
+    const auto signingKey = term::push::ApnsSigningKey {readEnvironmentVariable("COWTERM_PUSH_PRIVATE_KEY"),
+                                                        readEnvironmentVariable("COWTERM_PUSH_KEY_ID"),
+                                                        readEnvironmentVariable("COWTERM_PUSH_TEAM_ID")};
+    return term::push::runPushRelay(*parsed.options, signingKey);
+}
+
 struct Command
 {
     std::string_view verb;
@@ -129,6 +170,7 @@ constexpr auto commands = std::array {
     Command {"pane-state", paneState},
     Command {"install-remote", installRemote},
     Command {"update-remotes", updateRemotes},
+    Command {"push-relay", pushRelay},
 };
 } // namespace
 
