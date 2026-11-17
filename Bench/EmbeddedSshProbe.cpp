@@ -266,9 +266,13 @@ private:
         sendSpawn(pane->session, {});
     }
 
-    // A pane left running is its own session, so each shows as one overview row.
+    // A pane left running is its own session unless one is named, so each
+    // shows as one overview row.
     std::string findSessionName() const
     {
+        if (arguments.mode == ProbeMode::LeavePaneRunning && !arguments.sessionName.empty())
+            return arguments.sessionName;
+
         if (arguments.mode == ProbeMode::LeavePaneRunning)
             return paneId;
 
@@ -455,7 +459,7 @@ int main(int argc, char** argv)
     {
         std::fprintf(stderr,
                      "usage: CowTermEmbeddedSshProbe <user@host[:port]> "
-                     "[--adopt [pane id] | --leave-pane <pane id> | --kill-pane <pane id> "
+                     "[--adopt [pane id] | --leave-pane <pane id> [session] | --kill-pane <pane id> "
                      "| --watch-pane <pane id> | --quit-server]\n");
         return usageExitCode;
     }

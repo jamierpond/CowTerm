@@ -32,7 +32,7 @@ enum class ProbeMode
 // CowTermEmbeddedSshProbe's command line:
 //   <user@host[:port]>                       ThrowawayPane
 //   <user@host[:port]> --adopt [pane]        AdoptPane
-//   <user@host[:port]> --leave-pane <pane>   LeavePaneRunning
+//   <user@host[:port]> --leave-pane <pane> [session]   LeavePaneRunning
 //   <user@host[:port]> --kill-pane <pane>    KillPane
 //   <user@host[:port]> --watch-pane <pane>   WatchPane
 //   <user@host[:port]> --quit-server         QuitServer
@@ -43,6 +43,9 @@ struct ProbeArguments
 
     // Empty with --adopt: the first pane the daemon lists.
     std::string paneId;
+
+    // --leave-pane's session; empty puts the pane in a session of its own name.
+    std::string sessionName;
 };
 
 // Empty when the arguments don't match the usage above.

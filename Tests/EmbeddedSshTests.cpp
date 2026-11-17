@@ -80,6 +80,14 @@ auto probeLeavesAndKillsANamedPane = test("EmbeddedSshProbe/leavesAndKillsANamed
     check(!parseProbeArguments({"jamie@tamby", "--kill-pane"}).has_value());
 };
 
+auto probeLeavesAPaneInANamedSession = test("EmbeddedSshProbe/leavesAPaneInANamedSession") = []
+{
+    const auto leave = parseProbeArguments({"jamie@tamby", "--leave-pane", "phone-two-panes-a", "phone-two-panes"});
+
+    check(leave.has_value());
+    check(leave->sessionName == "phone-two-panes");
+};
+
 auto probeWatchesAPaneAndQuitsADaemon = test("EmbeddedSshProbe/watchesAPaneAndQuitsADaemon") = []
 {
     const auto watch = parseProbeArguments({"jamie@tamby", "--watch-pane", "phone-test"});
@@ -98,4 +106,5 @@ auto probeRefusesOtherArguments = test("EmbeddedSshProbe/refusesOtherArguments")
     check(!parseProbeArguments({"tamby"}).has_value());
     check(!parseProbeArguments({"jamie@tamby", "pane-7"}).has_value());
     check(!parseProbeArguments({"jamie@tamby", "--adopt", "pane-7", "extra"}).has_value());
+    check(!parseProbeArguments({"jamie@tamby", "--leave-pane", "a", "session", "extra"}).has_value());
 };

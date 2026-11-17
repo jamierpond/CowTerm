@@ -20,7 +20,8 @@ constexpr auto modeFlags = std::array {
     ModeFlag {"--quit-server", ProbeMode::QuitServer, false},
 };
 
-constexpr auto mostArguments = std::size_t {3};
+constexpr auto mostArguments = std::size_t {4};
+constexpr auto sessionArgument = std::size_t {2};
 
 std::optional<ModeFlag> findModeFlag(const std::string& text)
 {
@@ -49,6 +50,12 @@ std::optional<ProbeArguments> parseModeArguments(const term::SshDestination& des
 
     if (modeArguments.size() > 1)
         parsed.paneId = modeArguments[1];
+
+    if (modeArguments.size() > sessionArgument)
+        parsed.sessionName = modeArguments[sessionArgument];
+
+    if (!parsed.sessionName.empty() && flag->mode != ProbeMode::LeavePaneRunning)
+        return std::nullopt;
 
     if (flag->needsPaneId && parsed.paneId.empty())
         return std::nullopt;
