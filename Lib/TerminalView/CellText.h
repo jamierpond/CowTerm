@@ -13,9 +13,25 @@ namespace term
 // The line at an absolute row (see CellRef), scrollback or grid.
 const Line& findLineAtAbsoluteRow(const TermScreen& screen, long row);
 
+// The active screen's first row: the oldest scrollback line, or under a
+// full-screen program the top of its screen, which has no history.
+long findFirstAbsoluteRow(const TermScreen& screen);
+
 long findLastAbsoluteRow(const TermScreen& screen);
 
 bool isAbsoluteRowStored(const TermScreen& screen, long row);
+
+// The row is soft-wrapped and the row it runs on into is in the buffer.
+bool doesRowRunOntoNextRow(const TermScreen& screen, long row);
+
+struct RowSpan
+{
+    long first = 0;
+    long last = 0;
+};
+
+// The rows one soft-wrapped line covers.
+RowSpan findSoftWrappedLineRows(const TermScreen& screen, long row);
 
 // The cell's character, or its whole grapheme cluster, as UTF-8.
 void appendCellText(std::string& out, const TermScreen& screen, const Cell& cell);
@@ -42,4 +58,8 @@ struct WordSpan
 
 // The run of non-blank cells around `column`.
 WordSpan findWordAround(const Line& line, int column);
+
+// The run of non-blank cells around `cell`, carried across soft wraps; inactive
+// when the cell is blank.
+SelectionRange findWrappedWordAround(const TermScreen& screen, CellRef cell);
 } // namespace term

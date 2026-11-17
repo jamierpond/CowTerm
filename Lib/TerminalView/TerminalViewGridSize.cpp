@@ -49,6 +49,7 @@ void TerminalView::applyGridSize()
     syncScrollPositionWithScrollback();
     const auto linesFromBottom = calculateLinesFromBottom();
     screen.resize(cols, rows);
+    followScrollbackMovement();
     shell->resize({cols, rows});
     syncScrollPositionWithScrollback();
 

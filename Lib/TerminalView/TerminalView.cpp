@@ -176,6 +176,7 @@ void TerminalView::startOutputParserThread()
         {
             const auto lock = lockTerminal();
             terminal.feed(bytes);
+            followScrollbackMovement();
         },
         [this] { requestShowParsedOutput(); });
 }
@@ -393,6 +394,7 @@ void TerminalView::restoreTerminalState(const std::string& serialized)
     const auto lock = lockTerminal();
     terminal.restoreState(*state);
     scrollToLiveBottom();
+    followScrollbackMovement();
     title = terminal.getTitle();
     cwd = terminal.getWorkingDirectory();
 
@@ -647,6 +649,7 @@ void TerminalView::clearScreenAndScrollback()
     screen.eraseInDisplay(3);
     screen.setCursor(0, 0);
     scrollToLiveBottom();
+    followScrollbackMovement();
     send("\014");
     repaintIfShown();
 }
@@ -910,20 +913,26 @@ CellRef TerminalView::cellRefAt(Graphics::Point pos) const
     return {std::max(row, findFirstShownAbsoluteRow()), cell.column};
 }
 
-bool TerminalView::hasSelection() const
+std::string TerminalView::getSelectedText() const
 {
-    return selection.active && !(selection.start == selection.end && !selecting);
+    const auto lock = lockTerminal();
+
+    if (!selection.active)
+        return {};
+
+    return extractTextBetween(screen, selection.start, selection.end);
 }
 
 void TerminalView::copySelection()
 {
-    if (hasSelection())
-        Clipboard::copyText(extractTextBetween(screen, selection.start, selection.end));
+    if (selection.active)
+        Clipboard::copyText(getSelectedText());
 }
 
 void TerminalView::selectRow(CellRef cell)
 {
-    selection = {{cell.row, 0}, {cell.row, screen.columns() - 1}, true};
+    const auto rows = findSoftWrappedLineRows(screen, cell.row);
+    selection = {{rows.first, 0}, {rows.last, screen.columns() - 1}, true};
     rowDrawings.invalidateAllRows();
     selecting = false;
     repaintIfShown();
@@ -931,9 +940,7 @@ void TerminalView::selectRow(CellRef cell)
 
 void TerminalView::selectWordAt(CellRef cell)
 {
-    const auto word = findWordAround(findLineAtAbsoluteRow(screen, cell.row), cell.col);
-
-    selection = {{cell.row, word.firstColumn}, {cell.row, word.lastColumn}, word.isOnWord};
+    selection = findWrappedWordAround(screen, cell);
     rowDrawings.invalidateAllRows();
     selecting = false;
     repaintIfShown();
@@ -982,7 +989,15 @@ void TerminalView::exitCopyMode()
 
 void TerminalView::setCopyCursor(CellRef target)
 {
-    copyCursor.row = std::clamp(target.row, 0L, findLastAbsoluteRow(screen));
+    placeCopyCursor(target);
+    reportScrolledBackStateIfChanged();
+    repaintIfShown();
+}
+
+void TerminalView::placeCopyCursor(CellRef target)
+{
+    copyCursor.row =
+        std::clamp(target.row, findFirstAbsoluteRow(screen), findLastAbsoluteRow(screen));
     copyCursor.col = std::clamp(target.col, 0, screen.columns() - 1);
 
     syncScrollPositionWithScrollback();
@@ -995,8 +1010,6 @@ void TerminalView::setCopyCursor(CellRef target)
         scrollPosition.showTopRow(copyCursor.row - viewportRows + 1, calculateScrollRange());
 
     updateCopySelection();
-    reportScrolledBackStateIfChanged();
-    repaintIfShown();
 }
 
 void TerminalView::updateCopySelection()
@@ -1009,8 +1022,8 @@ void TerminalView::updateCopySelection()
 
     if (copyLineSelect)
     {
-        start.col = 0;
-        end.col = screen.columns() - 1;
+        start = {findSoftWrappedLineRows(screen, start.row).first, 0};
+        end = {findSoftWrappedLineRows(screen, end.row).last, screen.columns() - 1};
     }
 
     selection = {start, end, true};
@@ -1188,12 +1201,14 @@ void TerminalView::mouseDown(const MouseEvent& event)
 {
     const auto lock = lockTerminal();
     onFocused();
+    mousePressOwner = MousePressOwner::Nobody;
 
     if (openHyperlinkUnderPointer(event))
         return;
 
     if (isReportingMouseFor(event))
     {
+        mousePressOwner = MousePressOwner::Program;
         sendMouseReport(event, (int) event.button, true, false);
         return;
     }
@@ -1201,6 +1216,7 @@ void TerminalView::mouseDown(const MouseEvent& event)
     if (event.button != Graphics::MouseButton::Left)
         return;
 
+    mousePressOwner = MousePressOwner::Selection;
     const auto cell = cellRefAt(event.pos);
 
     if (event.clickCount >= 3)
@@ -1211,10 +1227,20 @@ void TerminalView::mouseDown(const MouseEvent& event)
         beginDragSelection(cell);
 }
 
+// A press the view saw decides; a drag or release with no press seen goes by
+// the modes and Shift, as it did before.
+bool TerminalView::isMouseGestureForProgram(const MouseEvent& event) const
+{
+    if (mousePressOwner == MousePressOwner::Nobody)
+        return isReportingMouseFor(event);
+
+    return mousePressOwner == MousePressOwner::Program;
+}
+
 void TerminalView::mouseDragged(const MouseEvent& event)
 {
     const auto lock = lockTerminal();
-    if (isReportingMouseFor(event))
+    if (isMouseGestureForProgram(event))
     {
         if (screen.modes.mouseDrag || screen.modes.mouseMotion)
             sendMouseReport(event, (int) event.button, true, true);
@@ -1234,7 +1260,10 @@ void TerminalView::mouseDragged(const MouseEvent& event)
 void TerminalView::mouseUp(const MouseEvent& event)
 {
     const auto lock = lockTerminal();
-    if (isReportingMouseFor(event))
+    const auto isForProgram = isMouseGestureForProgram(event);
+    mousePressOwner = MousePressOwner::Nobody;
+
+    if (isForProgram)
     {
         sendMouseReport(event, (int) event.button, false, false);
         return;

@@ -408,6 +408,7 @@ void TermScreen::restoreState(const ScreenState& state)
     grid = restoreLines<std::vector<Line>>(state.primary, ids);
     altGrid = restoreLines<std::vector<Line>>(state.alternate, ids);
     scrollback = restoreLines<std::deque<Line>>(state.scrollback, ids);
+    ++movement.renumberings;
     grid.resize((std::size_t) rowCount, blankLine());
     altGrid.resize((std::size_t) rowCount, blankLine());
     cursor = {state.cursor.x, state.cursor.y};

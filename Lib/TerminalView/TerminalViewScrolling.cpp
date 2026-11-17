@@ -1,6 +1,7 @@
 #include "TerminalView.h"
 
 #include <cmath>
+#include <utility>
 
 namespace term
 {
@@ -14,13 +15,71 @@ TouchSample makeTouchSample(const TouchEvent& touch)
 {
     return {FractionalSeconds {touch.timestamp}, touch.pos.y};
 }
+
+// The cell `rows` rows further up, or the buffer's first cell once it would
+// be above the top.
+CellRef moveCellUpWithinBuffer(CellRef cell, long rows)
+{
+    if (cell.row < rows)
+        return {};
+
+    return {cell.row - rows, cell.col};
+}
 } // namespace
 
 void TerminalView::syncScrollPositionWithScrollback()
 {
-    const auto totals = ScrollbackTotals {screen.countLinesEverAddedToScrollback(),
-                                          screen.countLinesEverDroppedFromScrollback()};
+    const auto& movement = screen.scrollbackMovement();
+    const auto totals = ScrollbackTotals {movement.linesAdded, movement.linesDropped};
     scrollPosition.applyScrollbackTotals(totals, calculateScrollRange());
+}
+
+// The output thread calls this, so it never repaints; showParsedOutput does.
+void TerminalView::followScrollbackMovement()
+{
+    syncScrollPositionWithScrollback();
+    const auto previous = std::exchange(seenScrollbackMovement, screen.scrollbackMovement());
+    const auto& current = seenScrollbackMovement;
+
+    if (current.renumberings != previous.renumberings)
+    {
+        forgetHeldRows();
+        return;
+    }
+
+    const auto dropped = (long) (current.linesDropped - previous.linesDropped);
+
+    if (dropped > 0)
+        moveHeldRowsUp(dropped);
+}
+
+void TerminalView::moveHeldRowsUp(long rows)
+{
+    const auto isSelectionGone = selection.end.row < rows;
+
+    selection.start = moveCellUpWithinBuffer(selection.start, rows);
+    selection.end = moveCellUpWithinBuffer(selection.end, rows);
+    selectionAnchor = moveCellUpWithinBuffer(selectionAnchor, rows);
+    copyAnchor = moveCellUpWithinBuffer(copyAnchor, rows);
+    copyCursor = moveCellUpWithinBuffer(copyCursor, rows);
+
+    if (isSelectionGone)
+        selection.active = false;
+
+    rowDrawings.invalidateAllRows();
+}
+
+void TerminalView::forgetHeldRows()
+{
+    selecting = false;
+    selection.active = false;
+    copySelecting = false;
+    copyLineSelect = false;
+
+    if (copyMode)
+        placeCopyCursor(copyCursor);
+
+    rowDrawings.invalidateAllRows();
 }
 
 void TerminalView::reportScrolledBackStateIfChanged()

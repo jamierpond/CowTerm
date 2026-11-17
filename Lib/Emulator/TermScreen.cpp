@@ -608,8 +608,9 @@ void TermScreen::eraseInDisplay(int mode)
 
     if (mode == eraseScreenAndScrollback)
     {
-        linesDroppedFromScrollback += scrollback.size();
+        movement.linesDropped += scrollback.size();
         scrollback.clear();
+        ++movement.renumberings;
         eraseInDisplay(eraseWholeScreen);
         return;
     }
@@ -741,12 +742,12 @@ void TermScreen::scrollUpRegion(int count, int top, int bottom)
         if (isScrollingIntoHistory(top))
         {
             scrollback.push_back(std::move(lines[(std::size_t) top]));
-            ++linesAddedToScrollback;
+            ++movement.linesAdded;
 
             if ((int) scrollback.size() > maxScrollback)
             {
                 scrollback.pop_front();
-                ++linesDroppedFromScrollback;
+                ++movement.linesDropped;
             }
         }
 
@@ -900,6 +901,7 @@ void TermScreen::reflowPrimaryScreen(int newRows)
     std::move(grid.begin(), grid.end(), std::back_inserter(rows));
     scrollback.clear();
     grid.clear();
+    ++movement.renumberings;
 
     const auto blank = blankCell();
     auto reflowed = reflowLines({rows, cursorRow, cursor.x, cols, blank});

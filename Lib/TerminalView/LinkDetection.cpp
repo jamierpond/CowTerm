@@ -61,16 +61,6 @@ bool isUrlByte(char byte)
            || urlPunctuation.find(byte) != std::string_view::npos;
 }
 
-bool isRowWrappedOnward(const TermScreen& screen, long row)
-{
-    return isAbsoluteRowStored(screen, row) && findLineAtAbsoluteRow(screen, row).wrapped;
-}
-
-bool doesRowRunOntoStoredRow(const TermScreen& screen, long row)
-{
-    return isRowWrappedOnward(screen, row) && isAbsoluteRowStored(screen, row + 1);
-}
-
 int measureIndent(const Line& line)
 {
     auto indent = 0;
@@ -170,7 +160,7 @@ bool doesRowContinueOnIndentedRow(const TermScreen& screen, long row)
 
 bool doesRowJoinNextRow(const TermScreen& screen, long row, RowJoining joining)
 {
-    if (doesRowRunOntoStoredRow(screen, row))
+    if (doesRowRunOntoNextRow(screen, row))
         return true;
 
     return joining == RowJoining::SoftWrapsAndIndentedContinuations

@@ -39,6 +39,19 @@ struct Pen
     HyperlinkId hyperlink = noHyperlink;
 };
 
+// How the scrollback has moved since the screen was made, for anything that
+// holds absolute rows (a selection) and wants to stay on its text.
+struct ScrollbackMovement
+{
+    std::uint64_t linesAdded = 0;
+
+    // Clearing the scrollback (ED 3) counts every cleared line as dropped.
+    std::uint64_t linesDropped = 0;
+
+    // Clearing, rewrapping or restoring the scrollback renumbers every row.
+    std::uint64_t renumberings = 0;
+};
+
 struct Modes
 {
     bool autowrap = true;
@@ -104,14 +117,7 @@ public:
     void resize(int newCols, int newRows);
 
     int scrollbackSize() const { return (int) scrollback.size(); }
-
-    // Running counts since the screen was made, for a view anchored to a
-    // scrollback row: lines dropped from the front renumber every row after.
-    std::uint64_t countLinesEverAddedToScrollback() const { return linesAddedToScrollback; }
-    std::uint64_t countLinesEverDroppedFromScrollback() const
-    {
-        return linesDroppedFromScrollback;
-    }
+    const ScrollbackMovement& scrollbackMovement() const { return movement; }
     const Line& lineAt(int visualRow, int scrollOffset) const;
 
     // OSC 8: cells printed from here on link to uri; an empty uri ends the link.
@@ -229,8 +235,6 @@ private:
     std::vector<Line> grid;
     std::vector<Line> altGrid;
     std::deque<Line> scrollback;
-    std::uint64_t linesAddedToScrollback = 0;
-    std::uint64_t linesDroppedFromScrollback = 0;
     CursorPos savedCursor;
     Pen savedPen;
     int scrollTop = 0;
@@ -251,6 +255,7 @@ private:
     KittyKeyboardStack primaryKittyKeyboard;
     KittyKeyboardStack alternateKittyKeyboard;
     std::uint64_t changeVersion = 1;
+    ScrollbackMovement movement;
     std::vector<bool> dirtyRows;
 };
 } // namespace term

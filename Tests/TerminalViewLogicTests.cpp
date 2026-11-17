@@ -291,6 +291,15 @@ auto tTextBetweenWide = test("ViewLogic/wideCharactersAppearOnce") = []
     check(extractTextBetween(parsed.screen, {0, 0}, {0, 5}) == "\xe4\xb8\xad!");
 };
 
+auto tTextFromRightHalf = test("ViewLogic/aSelectionStartingOnAWideCharactersRightHalfTakesIt") = []
+{
+    const auto parsed = ParsedScreen {"\xe4\xb8\xad!"};
+    constexpr auto rightHalf = CellRef {0, 1};
+    constexpr auto exclamation = CellRef {0, 2};
+
+    check(extractTextBetween(parsed.screen, rightHalf, exclamation) == "\xe4\xb8\xad!");
+};
+
 auto tTextAcrossSoftWrap = test("ViewLogic/copyJoinsSoftWrappedRowsWithoutANewline") = []
 {
     const auto parsed = ParsedScreen {"0123456789abcdefghij klmn\r\nnext"};
