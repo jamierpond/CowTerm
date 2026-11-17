@@ -114,6 +114,9 @@ public:
 
     void paste();
 
+    // What Cmd+C copies now: the highlighted text, or nothing.
+    std::string getSelectedText() const;
+
     // A paste isPasteSafe rejects: the host asks the user, and calls
     // pasteAnyway if they confirm. Without a host it pastes, as before.
     std::function<void(const std::string& text, const eacp::Callback& pasteAnyway)>
@@ -226,6 +229,7 @@ private:
     // Clamps to the buffer, scrolls the viewport to keep the cursor visible
     // and extends the live selection.
     void setCopyCursor(CellRef target);
+    void placeCopyCursor(CellRef target);
     void updateCopySelection();
     std::string describeCopyModePosition() const;
 
@@ -246,7 +250,14 @@ private:
     void selectRow(CellRef cell);
     void selectWordAt(CellRef cell);
     void beginDragSelection(CellRef cell);
-    bool hasSelection() const;
+    bool isMouseGestureForProgram(const eacp::Graphics::MouseEvent& event) const;
+
+    // Keeps the selection, the copy cursor and a view scrolled back to select
+    // on their text when the scrollback moves; called after every change to it.
+    void followScrollbackMovement();
+    void moveHeldRowsUp(long rows);
+    void forgetHeldRows();
+    bool isHoldingTheViewStill() const;
 
     long findTopVisibleAbsoluteRow() const;
     int calculateVisualRow(long absoluteRow) const;
@@ -291,8 +302,18 @@ private:
     int scrollOffset = 0;
     float wheelRemainder = 0;
 
+    // Who gets the mouse from a press to its release, whatever Shift does between.
+    enum class MousePressOwner
+    {
+        Nobody,
+        Selection,
+        Program
+    };
+
     bool selecting = false;
+    MousePressOwner mousePressOwner = MousePressOwner::Nobody;
     CellRef selectionAnchor;
+    ScrollbackMovement seenScrollbackMovement;
     SelectionRange selection;
     std::optional<LinkSpan> hoveredLink;
     RowDrawingCache rowDrawings;

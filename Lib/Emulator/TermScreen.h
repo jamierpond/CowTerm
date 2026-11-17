@@ -39,6 +39,17 @@ struct Pen
     HyperlinkId hyperlink = noHyperlink;
 };
 
+// How the scrollback has moved since the screen was made, for anything that
+// holds absolute rows (a selection) and wants to stay on its text.
+struct ScrollbackMovement
+{
+    std::uint64_t linesAdded = 0;
+    std::uint64_t linesDropped = 0;
+
+    // Clearing, rewrapping or restoring the scrollback renumbers every row.
+    std::uint64_t renumberings = 0;
+};
+
 struct Modes
 {
     bool autowrap = true;
@@ -104,6 +115,7 @@ public:
     void resize(int newCols, int newRows);
 
     int scrollbackSize() const { return (int) scrollback.size(); }
+    const ScrollbackMovement& scrollbackMovement() const { return movement; }
     const Line& lineAt(int visualRow, int scrollOffset) const;
 
     // OSC 8: cells printed from here on link to uri; an empty uri ends the link.
@@ -241,6 +253,7 @@ private:
     KittyKeyboardStack primaryKittyKeyboard;
     KittyKeyboardStack alternateKittyKeyboard;
     std::uint64_t changeVersion = 1;
+    ScrollbackMovement movement;
     std::vector<bool> dirtyRows;
 };
 } // namespace term

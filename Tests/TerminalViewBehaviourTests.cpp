@@ -1023,3 +1023,203 @@ auto tRestoredMouseModeReportsTheWheel = test("View/aRestoredMouseModeReportsThe
     pane.view->mouseWheel(wheelBy(1.f));
     check(pane.takeWritten() == "\033[<64;1;1M", "the wheel goes to the program, not the scrollback");
 };
+
+// ---- selecting and copying text ----------------------------------------------
+
+namespace
+{
+// More lines than the scrollback keeps, so each new line drops the oldest.
+constexpr auto linesBeyondTheScrollbackLimit = 10050;
+constexpr auto linesArrivingLater = 3;
+constexpr auto linesOfHistory = 100;
+constexpr auto linesScrolledBack = 20.f;
+
+std::string makeNumberedLines(int first, int count)
+{
+    auto lines = std::string {};
+
+    for (auto number = first; number < first + count; ++number)
+        lines += "line " + std::to_string(number) + "\r\n";
+
+    return lines;
+}
+
+int countVisibleColumns()
+{
+    return (int) ((viewWidth - 2 * marginX) / referenceAtlas().cellWidth());
+}
+
+Graphics::MouseEvent shiftMouseAtCell(int col, int row)
+{
+    auto event = mouseAtCell(col, row);
+    event.modifiers = shiftHeld();
+    return event;
+}
+
+Graphics::MouseEvent clicksAtCell(int col, int row, int clickCount)
+{
+    auto event = mouseAtCell(col, row);
+    event.clickCount = clickCount;
+    return event;
+}
+
+constexpr auto doubleClick = 2;
+constexpr auto tripleClick = 3;
+} // namespace
+
+auto tShiftReleasedMidDrag = test("Select/releasingShiftMidDragKeepsSelectingAndTellsTheProgramNothing") = []
+{
+    auto pane = TestPane {};
+    pane.showOutput("\033[?1002h\033[?1006h0123456789");
+    pane.takeWritten();
+
+    pane.view->mouseDown(shiftMouseAtCell(1, 0));
+    pane.view->mouseDragged(shiftMouseAtCell(3, 0));
+    pane.view->mouseDragged(mouseAtCell(5, 0));
+    pane.view->mouseUp(mouseAtCell(5, 0));
+
+    check(pane.takeWritten().empty(), "the program never saw the press, so it gets no drag or release");
+    check(pane.view->getSelectedText() == "12345");
+};
+
+auto tShiftPressedMidDrag = test("Select/aPressTheProgramGotIsReleasedToItEvenWithShiftHeld") = []
+{
+    auto pane = TestPane {};
+    pane.showOutput("\033[?1002h\033[?1006h0123456789");
+    pane.takeWritten();
+
+    pane.view->mouseDown(mouseAtCell(1, 0));
+    pane.view->mouseDragged(shiftMouseAtCell(3, 0));
+    pane.view->mouseUp(shiftMouseAtCell(3, 0));
+
+    check(pane.takeWritten() == "\033[<0;2;1M\033[<32;4;1M\033[<0;4;1m");
+    check(pane.view->getSelectedText().empty());
+};
+
+auto tSingleCharacterWord = test("Select/doubleClickOnAOneLetterWordCopiesIt") = []
+{
+    auto pane = TestPane {};
+    pane.showOutput("a b c");
+
+    pane.view->mouseDown(clicksAtCell(2, 0, doubleClick));
+    pane.view->mouseUp(clicksAtCell(2, 0, doubleClick));
+
+    check(pane.view->getSelectedText() == "b");
+};
+
+auto tWordAcrossSoftWrap = test("Select/doubleClickTakesAWordTheTerminalWrapped") = []
+{
+    auto pane = TestPane {};
+    constexpr auto wordColumnsOnTheFirstRow = 4;
+    const auto padding =
+        std::string ((std::size_t) (countVisibleColumns() - wordColumnsOnTheFirstRow), ' ');
+    const auto onTheFirstRow = countVisibleColumns() - wordColumnsOnTheFirstRow / 2;
+    pane.showOutput(padding + "/usr/local/bin done");
+
+    pane.view->mouseDown(clicksAtCell(2, 1, doubleClick));
+    pane.view->mouseUp(clicksAtCell(2, 1, doubleClick));
+    check(pane.view->getSelectedText() == "/usr/local/bin", "from the second row");
+
+    pane.view->mouseDown(clicksAtCell(onTheFirstRow, 0, doubleClick));
+    pane.view->mouseUp(clicksAtCell(onTheFirstRow, 0, doubleClick));
+    check(pane.view->getSelectedText() == "/usr/local/bin", "from the first row");
+};
+
+auto tRowAcrossSoftWrap = test("Select/tripleClickTakesTheWholeWrappedLine") = []
+{
+    auto pane = TestPane {};
+    constexpr auto columnsOnTheSecondRow = 5;
+    const auto longLine =
+        std::string ((std::size_t) (countVisibleColumns() + columnsOnTheSecondRow), 'x');
+    pane.showOutput("before\r\n" + longLine + "\r\nafter");
+
+    pane.view->mouseDown(clicksAtCell(1, 2, tripleClick));
+    pane.view->mouseUp(clicksAtCell(1, 2, tripleClick));
+
+    check(pane.view->getSelectedText() == longLine);
+};
+
+auto tSelectionFollowsDroppedLines = test("Select/aSelectionStaysOnItsTextWhenTheFullScrollbackDropsLines") = []
+{
+    auto pane = TestPane {};
+    pane.showOutput(makeNumberedLines(0, linesBeyondTheScrollbackLimit));
+
+    pane.view->mouseDown(mouseAtCell(0, 0));
+    pane.view->mouseDragged(mouseAtCell(3, 1));
+    pane.view->mouseUp(mouseAtCell(3, 1));
+    const auto selected = pane.view->getSelectedText();
+
+    pane.showOutput(makeNumberedLines(linesBeyondTheScrollbackLimit, linesArrivingLater));
+
+    check(pane.view->getSelectedText() == selected);
+};
+
+auto tClearedScrollbackDropsSelection = test("Select/clearingTheScrollbackDropsTheSelection") = []
+{
+    auto pane = TestPane {};
+    pane.showOutput(makeNumberedLines(0, linesOfHistory));
+    pane.view->mouseWheel(wheelBy((float) linesOfHistory));
+
+    pane.view->mouseDown(mouseAtCell(0, 0));
+    pane.view->mouseDragged(mouseAtCell(6, 0));
+    pane.view->mouseUp(mouseAtCell(6, 0));
+    check(pane.view->getSelectedText() == "line 0");
+
+    pane.showOutput("\033[3J\033[Hredrawn by the program");
+
+    check(pane.view->getSelectedText().empty(), "the rows it named now hold other text");
+};
+
+auto tDragInScrollbackWhileOutputArrives = test("Select/draggingInTheScrollbackHoldsTheViewStillAsOutputArrives") = []
+{
+    auto pane = TestPane {};
+    pane.showOutput(makeNumberedLines(0, linesOfHistory));
+    pane.view->mouseWheel(wheelBy(linesScrolledBack));
+
+    pane.view->mouseDown(mouseAtCell(0, 0));
+    pane.view->mouseDragged(mouseAtCell(5, 0));
+    const auto underThePointer = pane.view->getSelectedText();
+
+    pane.showOutput(makeNumberedLines(linesOfHistory, linesArrivingLater));
+    pane.view->mouseDragged(mouseAtCell(5, 0));
+    pane.view->mouseUp(mouseAtCell(5, 0));
+
+    check(pane.view->getSelectedText() == underThePointer);
+};
+
+auto tCopyModeSelectionFollowsDroppedLines = test("Select/aCopyModeSelectionStaysOnItsTextWhenTheFullScrollbackDropsLines") = []
+{
+    auto pane = TestPane {};
+    pane.showOutput(makeNumberedLines(0, linesBeyondTheScrollbackLimit));
+    pane.view->enterCopyMode();
+    pane.view->keyDown(typedKey("k"));
+    pane.view->keyDown(typedKey("V"));
+    const auto selected = pane.view->getSelectedText();
+
+    pane.showOutput(makeNumberedLines(linesBeyondTheScrollbackLimit, linesArrivingLater));
+
+    check(selected == "line " + std::to_string(linesBeyondTheScrollbackLimit - 1));
+    check(pane.view->getSelectedText() == selected);
+};
+
+auto tRewrapDropsSelection = test("Select/rewrappingForANewWidthDropsTheSelection") = []
+{
+    constexpr auto narrowerBy = 100.f;
+    constexpr auto settleTimeout = Time::MS {2000};
+
+    auto pane = TestPane {};
+    constexpr auto wrappedRows = 2;
+    pane.showOutput(std::string ((std::size_t) (countVisibleColumns() * wrappedRows), 'x')
+                    + "\r\nend");
+    pane.view->mouseDown(clicksAtCell(0, wrappedRows, tripleClick));
+    pane.view->mouseUp(clicksAtCell(0, wrappedRows, tripleClick));
+    check(pane.view->getSelectedText() == "end");
+
+    pane.recording->resizes.clear();
+    pane.view->setBounds({0.f, 0.f, viewWidth - narrowerBy, viewHeight});
+    pane.view->resized();
+    Threads::runEventLoopUntil([&] { return !pane.recording->resizes.empty(); },
+                               settleTimeout);
+
+    check(pane.view->getSelectedText().empty(), "the rows it named now hold other text");
+};
