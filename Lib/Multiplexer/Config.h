@@ -41,6 +41,11 @@ AppConfig loadConfig();
 // effort: an unwritable file loses the change but never interrupts typing.
 void saveConfig(const AppConfig& config);
 
+// The config as the text saveConfig writes over existingText: the fields this
+// build knows, plus every other top-level key existingText had, so a setting a
+// newer or other build added (pushRelay, pushHostName) survives a save.
+std::string writeConfigKeepingUnknownSettings(const AppConfig& config, const std::string& existingText);
+
 Theme themeByName(const std::string& name);
 
 // "~/x" -> "$HOME/x"

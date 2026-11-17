@@ -4,6 +4,8 @@
 #include <eacp/Core/Utils/FilePath.h>
 #include <eacp/Core/Utils/Files.h>
 
+#include <Miro/Json.h>
+
 namespace term
 {
 namespace
@@ -37,9 +39,34 @@ AppConfig loadConfig()
     return config;
 }
 
+std::string writeConfigKeepingUnknownSettings(const AppConfig& config, const std::string& existingText)
+{
+    constexpr auto indentSpaces = 4;
+    auto merged = Miro::Json::parse(Miro::toJSONString(config, indentSpaces));
+
+    try
+    {
+        const auto existing = Miro::Json::parse(existingText);
+
+        if (existing.isObject())
+        {
+            for (const auto& [key, value]: existing.asObject())
+            {
+                merged.asObject().emplace(key, value);
+            }
+        }
+    }
+    catch (const std::exception&)
+    {
+        // An unreadable file has nothing to keep; the known fields are written.
+    }
+
+    return Miro::Json::print(merged, indentSpaces);
+}
+
 void saveConfig(const AppConfig& config)
 {
-    const auto text = Miro::toJSONString(config, 4);
+    const auto text = writeConfigKeepingUnknownSettings(config, eacp::Files::readFile(configPath()));
 
     try
     {
