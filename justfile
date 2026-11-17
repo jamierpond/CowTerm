@@ -63,3 +63,7 @@ ios-test-resize-scrollback *arguments:
 # Reach a host's daemon through the in-app ssh link from the command line
 ios-probe-ssh *arguments:
     scripts/probe-embedded-ssh.sh {{arguments}}
+
+# Build the iPhone app for a real phone, install it and launch it (the phone plugged in and unlocked)
+ios-device phone="pond" *app_arguments:
+    EACP_SOURCE={{eacp_with_ios_branches}} scripts/install-ios-device.sh "{{phone}}" {{app_arguments}}
