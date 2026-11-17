@@ -1530,3 +1530,29 @@ auto tClickOnTheNoteTakesTheSizeBack = test("View/aClickOnTheOnIPhoneNoteTakesTh
     check(pane.recording->sizeTakeBacks == 1);
     check(pane.takeWritten().empty(), "the click reaches no program");
 };
+
+auto tTapIsALeftClickForAProgram = test("View/aTapOnAPhoneIsALeftClickOnTheCellUnderTheFinger") = []
+{
+    auto pane = TestPane {};
+    pane.showOutput("\033[?1000h\033[?1006h");
+    pane.takeWritten();
+
+    const auto grid = pane.recording->resizes.back();
+    const auto lastColumn = grid.cols - 1;
+    const auto lastRow = grid.rows - 1;
+
+    auto tap = Graphics::MouseEvent {};
+    tap.pos = centreOfCell(lastColumn, lastRow);
+    tap.downPos = tap.pos;
+    tap.button = Graphics::MouseButton::Left;
+    tap.fromTouch = true;
+    tap.clickCount = 1;
+    tap.type = Graphics::MouseEventType::Down;
+    pane.view->dispatchMouseEvent(tap);
+    tap.type = Graphics::MouseEventType::Up;
+    pane.view->dispatchMouseEvent(tap);
+
+    const auto cell = std::to_string(grid.cols) + ";" + std::to_string(grid.rows);
+    check(pane.takeWritten() == "\033[<0;" + cell + "M\033[<0;" + cell + "m",
+          "press and release at the last column of the last row");
+};
