@@ -31,6 +31,19 @@ constexpr auto samePromptOtherCommand =
     "   2. Yes, and don't ask again for rm commands\n"
     "   3. No, and tell Claude what to do differently (esc)\n";
 
+// The boxed prompt on a screen 46 columns wide: the third option runs on into
+// the next row, from its first column.
+constexpr auto wrappedPrompt =
+    " Bash command\n"
+    "   rm -rf build\n"
+    "   Remove the build folder\n"
+    " Do you want to proceed?\n"
+    " \xe2\x9d\xaf 1. Yes\n"
+    "   2. Yes, and don't ask again for rm commands\n"
+    "   3. No, and tell Claude what to do different\n"
+    "ly (esc)\n"
+    "\n";
+
 constexpr auto plainOutput = "$ ls\nDaemon  Lib  iOS\nAre you sure?\n$ \n";
 constexpr auto firstOption = 1;
 constexpr auto thirdOption = 3;
@@ -77,4 +90,28 @@ auto tTapAfterAnswered = test("ClaudePrompt/aTapAfterThePromptWentIsDropped") = 
     const auto onScreen = findPermissionPrompt(plainOutput);
 
     check(!chooseKeysForTappedOption(drawnFor, firstOption, onScreen).has_value());
+};
+
+auto tWrapped = test("ClaudePrompt/anOptionWrappedByTheScreenReadsWhole") = []
+{
+    const auto prompt = findPermissionPrompt(wrappedPrompt);
+
+    check(prompt.has_value());
+    check(prompt->options.size() == 3);
+    check(prompt->options[2].label == "No, and tell Claude what to do differently (esc)");
+};
+
+auto tWrappedIsSamePrompt = test("ClaudePrompt/aTapSurvivesTheScreenRewrappingThePrompt") = []
+{
+    const auto drawnFor = *findPermissionPrompt(wrappedPrompt);
+    const auto unwrapped = findPermissionPrompt(
+        " Bash command\n"
+        "   rm -rf build\n"
+        "   Remove the build folder\n"
+        " Do you want to proceed?\n"
+        " \xe2\x9d\xaf 1. Yes\n"
+        "   2. Yes, and don't ask again for rm commands\n"
+        "   3. No, and tell Claude what to do differently (esc)\n");
+
+    check(chooseKeysForTappedOption(drawnFor, firstOption, unwrapped) == "1");
 };

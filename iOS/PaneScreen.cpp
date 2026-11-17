@@ -294,6 +294,9 @@ void PaneScreen::layOutParts()
     pillHost.setBounds(calculateNewLinesPillBounds(paneArea, pillWidth));
     menuHost.setBounds(bounds.inset(getSafeAreaInsets()));
     fixGridAtKeyboardUpSize();
+
+    // A new width rewraps the screen with no output to say so: read it again.
+    outputArrived->hasArrived = true;
 }
 
 float PaneScreen::calculatePromptButtonsHeight() const

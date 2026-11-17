@@ -8,6 +8,8 @@ namespace cowterm::mobile
 namespace
 {
 constexpr auto boxSide = std::string_view {"\xe2\x94\x82"};
+constexpr auto boxDrawingLowerHalf = std::string_view {"\xe2\x94"};
+constexpr auto boxDrawingUpperHalf = std::string_view {"\xe2\x95"};
 constexpr auto selectionMarker = std::string_view {"\xe2\x9d\xaf"};
 constexpr auto whitespace = std::string_view {" \t"};
 
@@ -90,13 +92,37 @@ bool isQuestion(const std::string& line)
     return !line.empty() && line.back() == '?';
 }
 
+// Claude's box: its sides and corners are in Unicode's box drawing block,
+// U+2500 to U+257F, whose UTF-8 starts with one of these two pairs of bytes.
+bool startsWithBoxDrawing(std::string_view line)
+{
+    return line.starts_with(boxDrawingLowerHalf) || line.starts_with(boxDrawingUpperHalf);
+}
+
+// Every line of a prompt is indented inside Claude's box; a row that starts
+// at the first column is the rest of an option the screen's width cut short.
+bool isWrappedContinuation(const std::string& rawLine)
+{
+    if (rawLine.empty() || rawLine.find_first_of(whitespace) == 0)
+        return false;
+
+    return !startsWithBoxDrawing(rawLine);
+}
+
 std::vector<PromptOption> collectOptionsAfter(const std::vector<std::string>& lines,
+                                              const std::vector<std::string>& rawLines,
                                               std::size_t questionIndex)
 {
     auto options = std::vector<PromptOption> {};
 
     for (auto index = questionIndex + 1; index < lines.size(); ++index)
     {
+        if (!options.empty() && isWrappedContinuation(rawLines[index]))
+        {
+            options.back().label += lines[index];
+            continue;
+        }
+
         const auto option = parseOption(lines[index]);
 
         if (!option)
@@ -108,15 +134,20 @@ std::vector<PromptOption> collectOptionsAfter(const std::vector<std::string>& li
     return options;
 }
 
-std::string joinIdentityLines(const std::vector<std::string>& lines,
-                              std::size_t questionIndex,
-                              std::size_t optionCount)
+// The lines above the question, the question, and the options as read, so a
+// prompt reads the same however the screen's width wrapped it.
+std::string joinIdentity(const std::vector<std::string>& lines,
+                         std::size_t questionIndex,
+                         const std::vector<PromptOption>& options)
 {
     const auto first = questionIndex - std::min<std::size_t>(questionIndex, linesAboveQuestionInIdentity);
     auto identity = std::string {};
 
-    for (auto index = first; index <= questionIndex + optionCount; ++index)
+    for (auto index = first; index <= questionIndex; ++index)
         identity += lines[index] + "\n";
+
+    for (const auto& option: options)
+        identity += std::to_string(option.number) + ". " + option.label + "\n";
 
     return identity;
 }
@@ -124,9 +155,10 @@ std::string joinIdentityLines(const std::vector<std::string>& lines,
 
 std::optional<PermissionPrompt> findPermissionPrompt(std::string_view screenText)
 {
+    const auto rawLines = splitLines(screenText);
     auto lines = std::vector<std::string> {};
 
-    for (const auto& line: splitLines(screenText))
+    for (const auto& line: rawLines)
         lines.push_back(cleanLine(line));
 
     // The last prompt on screen is the one waiting for an answer.
@@ -135,14 +167,14 @@ std::optional<PermissionPrompt> findPermissionPrompt(std::string_view screenText
         if (!isQuestion(lines[index]))
             continue;
 
-        auto options = collectOptionsAfter(lines, index);
+        auto options = collectOptionsAfter(lines, rawLines, index);
 
         if ((int) options.size() < fewestOptions)
             continue;
 
         auto prompt = PermissionPrompt {};
         prompt.question = lines[index];
-        prompt.identity = joinIdentityLines(lines, index, options.size());
+        prompt.identity = joinIdentity(lines, index, options);
         prompt.options = std::move(options);
         return prompt;
     }
