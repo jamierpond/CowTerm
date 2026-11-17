@@ -40,14 +40,30 @@ TypingControls::TypingControls(const term::Theme& themeToUse,
         }
     };
 
+    composer.onKeyDown = [this](const Graphics::KeyEvent& key)
+    { return recallOnHardwareArrow(key); };
+
     keyRowHost.setBackgroundColour(term::toColor(theme.background));
     keyRowHost.setRootComponent(keyRow);
     keyRow.onKey = [this](KeyRowKey key) { pressKeyRowKey(key); };
+
+    stopButtonHost.setBackgroundColour(term::toColor(theme.background));
+    stopButtonHost.setRootComponent(stopButton);
+    stopButton.onStop = [this] { sendKeyToPane(*makeKeyRowKeyEvent(KeyRowKey::Escape)); };
+}
+
+void TypingControls::setShowsStopButton(bool showsStop)
+{
+    if (showsStopButton == showsStop)
+        return;
+
+    showsStopButton = showsStop;
+    onLayoutChanged();
 }
 
 void TypingControls::addTo(Graphics::View& screen)
 {
-    screen.addChildren({composer, keyRowHost});
+    screen.addChildren({composer, stopButtonHost, keyRowHost});
 }
 
 // A latched Ctrl takes the next key typed straight into the pane.
@@ -69,9 +85,16 @@ void TypingControls::connectTerminal(term::TerminalView& terminal)
 
 void TypingControls::layOut(const TypingRects& rects, bool isKeyboardUp)
 {
-    composer.setBounds(rects.composer);
+    auto composerArea = rects.composer;
+    const auto isComposerShown = isKeyboardUp && showsComposer();
+
+    if (showsStopButton)
+        stopButtonHost.setBounds(composerArea.removeFromLeft(stopButtonWidth));
+
+    composer.setBounds(composerArea);
     keyRowHost.setBounds(rects.keyRow);
-    composer.setVisible(isKeyboardUp && showsComposer());
+    composer.setVisible(isComposerShown);
+    stopButtonHost.setVisible(isComposerShown && showsStopButton);
     keyRowHost.setVisible(isKeyboardUp);
 }
 
@@ -146,6 +169,19 @@ bool TypingControls::recallFromHistory(KeyRowKey key)
 
     composer.setText(*recalled);
     return true;
+}
+
+// A hardware keyboard's up and down arrows walk the history the way the key
+// row's do.
+bool TypingControls::recallOnHardwareArrow(const Graphics::KeyEvent& key)
+{
+    if (key.keyCode == Graphics::KeyCode::UpArrow)
+        return recallFromHistory(KeyRowKey::Up);
+
+    if (key.keyCode == Graphics::KeyCode::DownArrow)
+        return recallFromHistory(KeyRowKey::Down);
+
+    return false;
 }
 
 bool TypingControls::canRecallIntoComposer() const

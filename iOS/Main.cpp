@@ -5,6 +5,7 @@
 #include "PhoneLaunch.h"
 #include "PhoneOverviewBinding.h"
 #include "PhonePaneBinding.h"
+#include "SampleShell.h"
 
 #include "TerminalView/GlyphAtlas.h"
 #include "TerminalView/TerminalView.h"
@@ -26,7 +27,6 @@ using namespace eacp;
 namespace
 {
 constexpr auto samplePaneCount = 3;
-constexpr auto streamedLinesPerSecond = 10;
 constexpr auto scrollBackDelay = Time::MS {5000};
 
 // Long enough for a link to a host to come up and its session to be listed.
@@ -35,84 +35,6 @@ constexpr auto secondPaneIndex = 1;
 
 // Long enough for the keyboard to have come up, so the composer is on screen.
 constexpr auto composeDelay = Time::MS {1500};
-
-constexpr std::string_view sampleScreenText =
-    "\x1b[1;32mjamie@tamby\x1b[0m:\x1b[1;34m~/projects/CowTerm\x1b[0m$ git status\r\n"
-    "On branch \x1b[1mjp/ios-app\x1b[0m\r\n"
-    "Changes not staged for commit:\r\n"
-    "  \x1b[31mmodified:   Lib/Shell/CMakeLists.txt\x1b[0m\r\n"
-    "\x1b[32mUntracked files:\x1b[0m\r\n"
-    "  \x1b[32miOS/\x1b[0m\r\n"
-    "\r\n"
-    "\x1b[1;32mjamie@tamby\x1b[0m:\x1b[1;34m~/projects/CowTerm\x1b[0m$ ls\r\n"
-    "\x1b[1;34mDaemon\x1b[0m  \x1b[1;34mLib\x1b[0m  \x1b[1;34mRemote\x1b[0m  "
-    "\x1b[1;34mTerminal\x1b[0m  \x1b[1;34miOS\x1b[0m  CMakeLists.txt\r\n"
-    "\r\n"
-    "\xe2\x94\x8c\xe2\x94\x80 CowTerm for iPhone \xe2\x94\x80\xe2\x94\x90\r\n"
-    "\xe2\x94\x82 \x1b[33mno network yet\x1b[0m       \xe2\x94\x82\r\n"
-    "\xe2\x94\x94\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80"
-    "\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80"
-    "\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80"
-    "\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x98\r\n"
-    "\r\n"
-    "\x1b[1;32mjamie@tamby\x1b[0m:\x1b[1;34m~/projects/CowTerm\x1b[0m$ ";
-
-// Stands in for the daemon until the ssh link exists: the pane shows
-// sampleScreenText, then, when asked to stream, a numbered line ten times a
-// second, and logs what is typed into it.
-class SampleTextShell final : public term::Shell
-{
-public:
-    SampleTextShell(bool streamsOutputToUse, std::string statusNoteToUse)
-        : streamsOutput(streamsOutputToUse)
-        , statusNote(std::move(statusNoteToUse))
-    {
-    }
-
-    bool start(const term::PtyOptions&,
-               std::function<void(std::string)> onOutputToUse,
-               std::function<void()>) override
-    {
-        onOutput = std::move(onOutputToUse);
-        onOutput(std::string {sampleScreenText});
-        onStatusChanged(statusNote);
-
-        if (streamsOutput)
-            streamTimer.emplace([this] { writeNextStreamedLine(); }, streamedLinesPerSecond);
-
-        return true;
-    }
-
-    void write(std::string_view data) override { LOG("typed ", data.size(), " bytes"); }
-    void resize(const term::PtySize&) override {}
-
-    std::string foregroundProcess() const override { return {}; }
-    std::string currentWorkingDirectory() const override { return {}; }
-
-    void terminate() override { streamTimer.reset(); }
-    void detach() override { streamTimer.reset(); }
-
-private:
-    void writeNextStreamedLine()
-    {
-        ++streamedLineCount;
-        onOutput("output line " + std::to_string(streamedLineCount) + "\r\n");
-    }
-
-    bool streamsOutput = false;
-    std::string statusNote;
-    int streamedLineCount = 0;
-    std::function<void(std::string)> onOutput = [](std::string) {};
-    std::optional<Threads::Timer> streamTimer;
-};
-
-term::TerminalConfig makeSampleTextTerminalConfig(bool streamsOutput, const std::string& statusNote)
-{
-    auto config = term::TerminalConfig {};
-    config.makeShell = [streamsOutput, statusNote](const std::string&)
-    { return std::make_unique<SampleTextShell>(streamsOutput, statusNote); };
-    return config;
-}
 
 // Test hooks, from the launch arguments, for what a headless simulator cannot
 // do by hand.
@@ -125,6 +47,7 @@ struct LaunchOptions
     bool scrollsBack = false;
     bool typesRaw = false;
     bool switchesToSecondPane = false;
+    bool showsClaudePrompt = false;
     std::string composedText;
     bool showsOverview = false;
     std::string sessionToOpen;
@@ -163,6 +86,7 @@ constexpr LaunchSwitch launchSwitches[] = {
     {"--scroll-back", &LaunchOptions::scrollsBack},
     {"--raw", &LaunchOptions::typesRaw},
     {"--switch-to-second-pane", &LaunchOptions::switchesToSecondPane},
+    {"--claude-prompt", &LaunchOptions::showsClaudePrompt},
     {"--overview", &LaunchOptions::showsOverview},
 };
 
@@ -290,8 +214,11 @@ term::TerminalConfig makePaneTerminalConfig(const std::unique_ptr<cowterm::mobil
     if (isOpeningAPhonePane(phone))
         return cowterm::mobile::PhonePaneBinding::makeFirstPaneConfig(*phone);
 
-    return makeSampleTextTerminalConfig(launchOptions.streamsOutput,
-                                        describeSampleStatusNote(launchOptions.linkState));
+    auto sample = cowterm::mobile::SampleShellOptions {};
+    sample.streamsOutput = launchOptions.streamsOutput;
+    sample.statusNote = describeSampleStatusNote(launchOptions.linkState);
+    sample.showsClaudePrompt = launchOptions.showsClaudePrompt;
+    return cowterm::mobile::makeSampleShellConfig(sample);
 }
 
 std::string getPaneId(const std::unique_ptr<cowterm::mobile::PhoneLaunch>& phone)

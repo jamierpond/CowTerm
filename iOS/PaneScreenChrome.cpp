@@ -1,5 +1,7 @@
 #include "PaneScreenChrome.h"
 
+#include "Multiplexer/TextLayout.h"
+
 #include <eacp/Core/Threads/EventLoop.h>
 
 #include <algorithm>
@@ -27,6 +29,7 @@ constexpr auto hostMarkGap = 8.0f;
 constexpr auto chipPadding = 10.0f;
 constexpr auto chipCornerRadius = 8.0f;
 constexpr auto keyGap = 3.0f;
+constexpr auto stopLabel = "Esc";
 constexpr auto paneDotSize = 8.0f;
 constexpr auto ringThickness = 1.5f;
 constexpr auto barDividerThickness = 1.0f;
@@ -367,6 +370,76 @@ void KeyRow::mouseUp(const UI::MouseEvent& event)
 
     if (const auto key = findKeyRowKeyAt(slots, event.position))
         onKey(*key);
+}
+
+PromptButtons::PromptButtons(const term::Theme& themeToUse)
+    : theme(themeToUse)
+{
+    setInterceptsMouseClicks(true);
+}
+
+void PromptButtons::paint(UI::Graphics& g)
+{
+    const auto foreground = term::toColor(theme.foreground);
+    g.setColour(term::toColor(theme.background));
+    g.fillAll();
+
+    if (!prompt)
+        return;
+
+    g.setFont(makeFont(barFontSize));
+    auto rows = getLocalBounds();
+
+    for (const auto& option: prompt->options)
+    {
+        const auto button = rows.removeFromTop(promptButtonHeight).inset(sidePadding, keyGap);
+        g.setColour(foreground.withAlpha(chipFillAlpha));
+        g.fillRoundedRect(button, chipCornerRadius);
+        const auto textArea = button.inset(chipPadding, 0.0f);
+        const auto label = term::truncateTextToWidth(
+            std::to_string(option.number) + "  " + option.label,
+            textArea.w,
+            [&g](const std::string& text) { return g.measureText(text); });
+
+        g.setColour(foreground);
+        g.drawText(label, textArea);
+    }
+}
+
+void PromptButtons::mouseUp(const UI::MouseEvent& event)
+{
+    if (!prompt || hasMovedBeyondTapSlop(event.downPosition, event.position))
+        return;
+
+    const auto row = (int) (event.position.y / promptButtonHeight);
+
+    if (row < 0 || row >= (int) prompt->options.size())
+        return;
+
+    onChoose(*prompt, prompt->options[(std::size_t) row].number);
+}
+
+StopButton::StopButton(const term::Theme& themeToUse)
+    : theme(themeToUse)
+{
+    setInterceptsMouseClicks(true);
+}
+
+void StopButton::paint(UI::Graphics& g)
+{
+    g.setColour(term::toColor(theme.background).brighter(barBrightening));
+    g.fillAll();
+    g.setColour(term::toColor(theme.ansi[ansiRed]));
+    g.fillRoundedRect(getLocalBounds().inset(keyGap * 2.0f), chipCornerRadius);
+    g.setColour(term::toColor(theme.background));
+    g.setFont(makeFont(barFontSize));
+    g.drawText(stopLabel, getLocalBounds(), UI::Justification::Centred);
+}
+
+void StopButton::mouseUp(const UI::MouseEvent& event)
+{
+    if (!hasMovedBeyondTapSlop(event.downPosition, event.position))
+        onStop();
 }
 
 ActionMenu::ActionMenu(const term::Theme& themeToUse)

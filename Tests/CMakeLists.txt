@@ -118,9 +118,11 @@ nano_add_executable(CowTermPaneScreenTests
         SOURCES
             PaneScreenLayoutTests.cpp
             TypingTests.cpp
+            ClaudePromptTests.cpp
             OverviewLayoutTests.cpp
             ../iOS/PaneScreenLayout.cpp
             ../iOS/Typing.cpp
+            ../iOS/ClaudePrompt.cpp
             ../iOS/OverviewLayout.cpp
         TARGETS eacp-graphics CowTerm::Phone CowTerm::TerminalView)
 

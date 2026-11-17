@@ -1,5 +1,7 @@
 #include "PaneScreen.h"
 
+#include "ScreenAwake.h"
+
 #include "Multiplexer/Config.h"
 #include "Multiplexer/HostColours.h"
 
@@ -16,6 +18,11 @@ namespace
 {
 constexpr auto notLiveOpacity = 0.45f;
 constexpr auto refreshesPerSecond = 1;
+constexpr auto outputWatchesPerSecond = 4;
+constexpr auto claudeProcessName = "claude";
+
+// How long after the last output the auto-lock stays off.
+constexpr auto keepAwakeAfterOutput = std::chrono::seconds {30};
 constexpr auto pillWidth = 132.0f;
 
 Graphics::MouseEvent makeTapMouseEvent(const TouchEvent& touch,
@@ -86,16 +93,20 @@ void PaneTouchSurface::clickTerminalAt(const TouchEvent& event)
 PaneScreen::PaneScreen(const term::TerminalConfig& config, const std::string& paneId)
     : theme(config.theme)
     , refreshTimer([this] { refreshWhatChangesOverTime(); }, refreshesPerSecond)
+    , outputWatchTimer([this] { watchPaneOutput(); }, outputWatchesPerSecond)
 {
     const auto background = term::toColor(theme.background);
 
-    for (auto* host: {&topLineHost, &bottomBarHost, &pillHost, &menuHost})
+    for (auto* host: {&topLineHost, &bottomBarHost, &pillHost, &promptHost, &menuHost})
         host->setBackgroundColour(background);
 
     topLineHost.setRootComponent(topLine);
     bottomBarHost.setRootComponent(bottomBar);
     pillHost.setRootComponent(pill);
     menuHost.setRootComponent(menu);
+    promptHost.setRootComponent(promptButtons);
+    promptButtons.onChoose = [this](const PermissionPrompt& drawnFor, int optionNumber)
+    { answerPrompt(drawnFor, optionNumber); };
 
     bottomBar.actions.onPreviousSession = [this] { actions.onPreviousSession(); };
     bottomBar.actions.onChoosePane = [this](int index) { actions.onChoosePane(index); };
@@ -125,17 +136,22 @@ void PaneScreen::showPane(const term::TerminalConfig& config, const std::string&
     for (auto* child: children)
         removeSubview(*child);
 
-    terminal = std::make_unique<term::TerminalView>(config, std::string {}, paneId);
+    auto watchedConfig = config;
+    watchedConfig.makeShell = [makePaneShell = config.makeShell, flag = outputArrived](const std::string& id)
+    { return std::make_unique<OutputWatchingShell>(makePaneShell(id), flag); };
+
+    terminal = std::make_unique<term::TerminalView>(watchedConfig, std::string {}, paneId);
     terminal->onScrolledBackStateChanged = [this](term::ScrolledBackState state)
     { showScrolledBackState(state); };
     terminal->confirmUnsafePaste = [this](const std::string& text, const Callback& paste)
     { pasteConfirmation.ask(text, paste); };
 
-    addChildren({*terminal, touchSurface, topLineHost, bottomBarHost, pillHost});
+    addChildren({*terminal, touchSurface, topLineHost, bottomBarHost, pillHost, promptHost});
     typing.addTo(*this);
     typing.connectTerminal(*terminal);
     addSubview(menuHost);
     pillHost.setVisible(false);
+    promptButtons.prompt.reset();
     showLinkStateOnPane();
     layOutParts();
 }
@@ -268,12 +284,71 @@ void PaneScreen::layOutParts()
         typing.layOut({}, false);
     }
 
+    promptHost.setBounds(paneArea.removeFromBottom(calculatePromptButtonsHeight()));
+    promptHost.setVisible(promptButtons.prompt.has_value());
     bottomBarHost.setVisible(!isKeyboardUp());
     terminal->setBounds(paneArea);
     touchSurface.setBounds(paneArea);
     pillHost.setBounds(calculateNewLinesPillBounds(paneArea, pillWidth));
     menuHost.setBounds(bounds.inset(getSafeAreaInsets()));
     fixGridAtKeyboardUpSize();
+}
+
+float PaneScreen::calculatePromptButtonsHeight() const
+{
+    if (!promptButtons.prompt)
+        return 0.0f;
+
+    return promptButtonHeight * (float) promptButtons.prompt->options.size();
+}
+
+// Output raises the flag on the shell's thread; here, on the main thread, the
+// screen looks for a Claude prompt again and holds the auto-lock off.
+void PaneScreen::watchPaneOutput()
+{
+    const auto now = std::chrono::steady_clock::now();
+
+    if (outputArrived->hasArrived.exchange(false))
+    {
+        lastOutputAt = now;
+        showClaudePrompt(findPermissionPrompt(terminal->captureVisibleText()));
+    }
+
+    setScreenKeptAwake(now - lastOutputAt < keepAwakeAfterOutput);
+    typing.setShowsStopButton(isClaudePane());
+}
+
+bool PaneScreen::isClaudePane() const
+{
+    return promptButtons.prompt.has_value()
+           || terminal->foregroundProcess().find(claudeProcessName) != std::string::npos;
+}
+
+// The layout changes only when buttons come, go or change in number.
+void PaneScreen::showClaudePrompt(std::optional<PermissionPrompt> prompt)
+{
+    const auto oldHeight = calculatePromptButtonsHeight();
+    promptButtons.prompt = std::move(prompt);
+    promptButtons.repaint();
+
+    if (calculatePromptButtonsHeight() != oldHeight)
+        layOutParts();
+}
+
+// A tap drawn for a prompt that is no longer on screen sends nothing; the
+// buttons change to the prompt that is.
+void PaneScreen::answerPrompt(const PermissionPrompt& drawnFor, int optionNumber)
+{
+    const auto onScreen = findPermissionPrompt(terminal->captureVisibleText());
+
+    if (const auto keys = chooseKeysForTappedOption(drawnFor, optionNumber, onScreen))
+    {
+        terminal->sendText(*keys);
+        return;
+    }
+
+    LOG("prompt changed before the tap landed; showing the new one");
+    showClaudePrompt(onScreen);
 }
 
 void PaneScreen::showScrolledBackState(term::ScrolledBackState state)

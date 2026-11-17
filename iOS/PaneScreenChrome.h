@@ -3,6 +3,7 @@
 #include "PaneScreenInputs.h"
 #include "PaneScreenLayout.h"
 #include "Typing.h"
+#include "ClaudePrompt.h"
 
 #include "Emulator/TermTypes.h"
 
@@ -113,6 +114,39 @@ public:
 private:
     bool isLit(KeyRowKey key) const;
 
+    term::Theme theme;
+};
+
+// A Claude permission prompt's options as buttons, one row each, tied to the
+// prompt they were drawn for.
+class PromptButtons final : public eacp::UI::Component
+{
+public:
+    explicit PromptButtons(const term::Theme& themeToUse);
+
+    void paint(eacp::UI::Graphics& g) override;
+    void mouseUp(const eacp::UI::MouseEvent& event) override;
+
+    std::optional<PermissionPrompt> prompt;
+    std::function<void(const PermissionPrompt& drawnFor, int optionNumber)> onChoose =
+        [](const PermissionPrompt&, int) {};
+
+private:
+    term::Theme theme;
+};
+
+// Claude's stop: sends Esc. Sits at the composer's left, away from send.
+class StopButton final : public eacp::UI::Component
+{
+public:
+    explicit StopButton(const term::Theme& themeToUse);
+
+    void paint(eacp::UI::Graphics& g) override;
+    void mouseUp(const eacp::UI::MouseEvent& event) override;
+
+    std::function<void()> onStop = [] {};
+
+private:
     term::Theme theme;
 };
 

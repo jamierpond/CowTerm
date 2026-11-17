@@ -1,6 +1,7 @@
 #pragma once
 
 #include "PaneScreenChrome.h"
+#include "OutputWatchingShell.h"
 #include "PaneScreenInputs.h"
 #include "TypingControls.h"
 
@@ -10,6 +11,7 @@
 #include <eacp/Core/Threads/Timer.h>
 #include <eacp/UI/UI.h>
 
+#include <chrono>
 #include <optional>
 
 // The phone's pane screen (docs/iOSDesign.md, "The pane screen"): one pane
@@ -91,6 +93,11 @@ private:
     eacp::Graphics::Insets calculateInsetsAroundParts() const;
     bool isLive() const;
     bool isKeyboardUp() const;
+    void watchPaneOutput();
+    void showClaudePrompt(std::optional<PermissionPrompt> prompt);
+    void answerPrompt(const PermissionPrompt& drawnFor, int optionNumber);
+    bool isClaudePane() const;
+    float calculatePromptButtonsHeight() const;
     void showLinkStateOnPane();
 
     term::Theme theme;
@@ -111,6 +118,12 @@ private:
     eacp::UI::ComponentHost pillHost;
     NewLinesPill pill {theme};
 
+    eacp::UI::ComponentHost promptHost;
+    PromptButtons promptButtons {theme};
+
+    std::shared_ptr<OutputArrivedFlag> outputArrived = std::make_shared<OutputArrivedFlag>();
+    std::chrono::steady_clock::time_point lastOutputAt;
+
     eacp::UI::ComponentHost menuHost;
     ActionMenu menu {theme};
 
@@ -120,5 +133,6 @@ private:
     term::PasteConfirmation pasteConfirmation {pasteConfig};
 
     eacp::Threads::Timer refreshTimer;
+    eacp::Threads::Timer outputWatchTimer;
 };
 } // namespace cowterm::mobile

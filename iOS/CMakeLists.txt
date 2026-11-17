@@ -12,9 +12,13 @@ eacp_add_app(CowTermMobile
         PaneScreenLayout.cpp
         PhoneLaunch.cpp PhoneOverviewBinding.cpp
         PhonePaneBinding.cpp
+        SampleShell.cpp
         StoredScreenShell.cpp
         Typing.cpp
         TypingControls.cpp
+        ClaudePrompt.cpp
+        OutputWatchingShell.cpp
+        ScreenAwake-iOS.mm
         ${PROJECT_SOURCE_DIR}/Terminal/NotifyUserPrompt.cpp
         ${PROJECT_SOURCE_DIR}/Terminal/PasteConfirmation.cpp
         BUNDLE_ID audio.pond.cowterm.mobile

@@ -44,6 +44,9 @@ public:
     // unsent, and goes when the link is live again.
     void setLinkLive(bool isLive);
 
+    // On a Claude pane a stop button (Esc) sits at the composer's left.
+    void setShowsStopButton(bool showsStop);
+
     // Raw mode changed, so the screen lays out again.
     std::function<void()> onLayoutChanged = [] {};
 
@@ -53,6 +56,7 @@ private:
     void sendComposedText();
     bool recallFromHistory(KeyRowKey key);
     bool canRecallIntoComposer() const;
+    bool recallOnHardwareArrow(const eacp::Graphics::KeyEvent& key);
     void sendKeyToPane(const eacp::Graphics::KeyEvent& key);
     void toggleRawMode();
     void lowerKeyboard();
@@ -65,6 +69,9 @@ private:
     eacp::Graphics::NativeTextView composer;
     eacp::UI::ComponentHost keyRowHost;
     KeyRow keyRow {theme};
+    eacp::UI::ComponentHost stopButtonHost;
+    StopButton stopButton {theme};
+    bool showsStopButton = false;
 
     ComposerHistory history;
     ControlLatch controlLatch;

@@ -21,6 +21,8 @@ inline constexpr auto topLineHeight = 28.0f;
 inline constexpr auto bottomBarHeight = 52.0f;
 inline constexpr auto keyRowHeight = 48.0f;
 inline constexpr auto composerHeight = 44.0f;
+inline constexpr auto promptButtonHeight = 40.0f;
+inline constexpr auto stopButtonWidth = 52.0f;
 
 // The iPhone 17e's keyboard in portrait with its suggestion bar, as the
 // composer brings it up, measured in the simulator: the keyboard-up row count
