@@ -9,7 +9,7 @@
 # quits. Saves a screenshot of the phone holding the pane.
 # Build the app first with scripts/build-ios-simulator.sh (EACP_SOURCE as it says).
 #
-#   scripts/run-ios-size-owner-test.sh <user@host> <folder there> <screenshot.png> ["iPhone 17 Pro"]
+#   scripts/run-ios-size-owner-test.sh <user@host> <folder there | installed> <screenshot.png> ["iPhone 17 Pro"]
 set -eu
 cd "$(dirname "$0")/.."
 destination="$1"
@@ -24,7 +24,13 @@ wait_seconds=60
 desk_size="150x40"
 seconds_for_the_phone_to_draw=3
 
-COWTERM_BRIDGE_COMMAND="COWTERM_INSTANCE=phone-test exec $folder/bin/ct bridge"
+# "installed" runs against the host's own daemon, with a throwaway pane only,
+# and leaves that daemon running.
+if [ "$folder" = installed ]; then
+    COWTERM_BRIDGE_COMMAND=""
+else
+    COWTERM_BRIDGE_COMMAND="COWTERM_INSTANCE=phone-test exec $folder/bin/ct bridge"
+fi
 export COWTERM_BRIDGE_COMMAND
 
 cmake --build build --target CowTermEmbeddedSshProbe > /dev/null
@@ -45,7 +51,10 @@ clean_up() {
     xcrun simctl terminate "$device" "$bundle_id" 2> /dev/null || true
     kill "$watcher" 2> /dev/null || true
     "$probe" "$destination" --kill-pane "$pane" | grep -v "^  "
-    "$probe" "$destination" --quit-server | grep -v "^  "
+
+    if [ "$folder" != installed ]; then
+        "$probe" "$destination" --quit-server | grep -v "^  "
+    fi
 }
 trap clean_up EXIT
 
