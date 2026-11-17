@@ -466,6 +466,20 @@ launched with `--landscape`, which is how landscape screenshots are taken.
 - Scrolling has no rubber band: it stops hard at the top and bottom. The
   scroll position keeps the hidden part of the top row as a fraction of a row,
   so a font size change needs no correction.
+- The scroll indicator shows on the Mac too, with no setting, since it behaves
+  like the scroll bars macOS draws over content.
+- The phone fixes the pane's grid at the keyboard-up height
+  (`TerminalView::setFixedGridSize`); a taller view shows scrollback above the
+  grid, and the alternate screen shows blank rows there.
+- Fractional cell widths (item 8) are not built. Cells are rounded up to whole
+  points today. Rounding them to whole screen pixels is small but changes the
+  Mac's column count at some font sizes, so it waits for Jamie's yes. The glyph
+  atlas drew at 2x on every screen, which made a 3x iPhone's text soft; it now
+  draws at the screen's own scale.
+- "Needs you" (daemon change 3) is `ct pane-state`, run from Claude Code's
+  hooks; reading the screen was not tried. The daemon's `activity` answer
+  carries each pane's state, last typing and last output, and
+  `SessionOverview` turns it into the overview's rows.
 
 ## What eacp lacks on iOS
 
