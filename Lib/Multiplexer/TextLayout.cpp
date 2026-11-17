@@ -69,7 +69,9 @@ void wrapParagraphToWidth(const std::string& paragraph,
         if (!line.empty())
             lines.push_back(line);
 
-        while (!fits(word))
+        // A width under one character (a view not laid out yet) still ends:
+        // each line takes at least one codepoint.
+        while (!word.empty() && !fits(word))
             lines.push_back(takeWidestFittingPrefix(word, width, measureWidth));
 
         line = word;

@@ -81,3 +81,13 @@ auto tWrapBreaksLongWords = test("TextLayout/wrapTextToWidthBreaksAWordWiderThan
     // the whole word breaks away, an empty line is left after it.
     check(wrapTextToWidth("éé", 1.f, oneUnitPerByte) == Lines {"é", "é", ""});
 };
+
+auto tWrapNarrowerThanACharacter = test("TextLayout/wrapTextToWidthEndsWhenNoCharacterFits") = []
+{
+    constexpr auto widthOfAViewNotLaidOut = 0.f;
+    constexpr auto widthLessThanNothing = -12.f;
+
+    // It returns, one codepoint a line, with the empty line a broken-away word leaves.
+    check(wrapTextToWidth("ab", widthOfAViewNotLaidOut, oneUnitPerByte) == Lines {"a", "b", ""});
+    check(wrapTextToWidth("ab cd", widthLessThanNothing, oneUnitPerByte) == Lines {"a", "b", "c", "d", ""});
+};
