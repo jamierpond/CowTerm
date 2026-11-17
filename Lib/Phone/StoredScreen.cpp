@@ -34,6 +34,7 @@ constexpr auto millisecondsPerSecond = std::int64_t {1000};
 constexpr auto millisecondsPerMinute = 60 * millisecondsPerSecond;
 constexpr auto millisecondsPerHour = 60 * millisecondsPerMinute;
 constexpr auto millisecondsPerDay = 24 * millisecondsPerHour;
+constexpr auto oldestAgeCalledYesterday = 2 * millisecondsPerDay;
 
 // Largest first: an age is told in the largest unit it has a whole one of.
 constexpr auto ageUnits = std::array {
@@ -113,5 +114,16 @@ std::string describeStoredScreenAge(std::int64_t ageMilliseconds)
     }
 
     return "just now";
+}
+
+std::string describeLastUseAge(std::int64_t ageMilliseconds)
+{
+    if (ageMilliseconds < millisecondsPerMinute)
+        return "just now";
+
+    if (ageMilliseconds >= millisecondsPerDay && ageMilliseconds < oldestAgeCalledYesterday)
+        return "yesterday";
+
+    return describeStoredScreenAge(ageMilliseconds);
 }
 } // namespace term::phone

@@ -70,6 +70,16 @@ double SessionOpenings::getUsage(const std::string& rowKey, std::int64_t nowMill
     return frecencysearch::calculateDecayedUsage(found->second.count, found->second.atMilliseconds, nowMilliseconds);
 }
 
+std::optional<std::int64_t> SessionOpenings::getLastOpeningMilliseconds(const std::string& rowKey) const
+{
+    const auto found = usageByRowKey.find(rowKey);
+
+    if (found == usageByRowKey.end())
+        return std::nullopt;
+
+    return found->second.atMilliseconds;
+}
+
 void SessionOpenings::save() const
 {
     auto file = SessionOpeningsFile {};

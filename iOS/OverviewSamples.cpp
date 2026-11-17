@@ -9,9 +9,9 @@ using term::overview::OverviewRow;
 namespace
 {
 constexpr auto oneMinute = std::int64_t {60'000};
-constexpr auto laptop = "jamie@tamby";
+constexpr auto laptop = "jamiepond@tamby";
 constexpr auto rack = "jamiepond@macprorack";
-constexpr auto desk = "jamiepond@daily-driver";
+constexpr auto desk = "jamiepond@big-cow";
 constexpr auto sampleHostCount = 3;
 
 struct SampleSession

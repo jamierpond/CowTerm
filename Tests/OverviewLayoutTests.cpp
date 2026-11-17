@@ -3,6 +3,7 @@
 #include <NanoTest/NanoTest.h>
 
 #include <array>
+#include <map>
 
 // The phone overview's arrangement and its bottom-anchored list, on the Mac.
 
@@ -70,6 +71,35 @@ auto tWaitingAreCards = test("Overview/waitingSessionsAreCardsNearestTheThumb") 
     check(content.itemsFromTheBottom.front().session.sessionName == "cowterm");
     check(content.itemsFromTheBottom.back().session.sessionName == "miro");
     check(!content.banner);
+};
+
+auto tLastUsePrefersTheDaemon = test("Overview/lastUseIsTheDaemonsTypingThenThePhonesOpening") = []
+{
+    constexpr auto threeHours = 180 * oneMinute;
+    auto typedOnTheMac = makeSession("cowterm", false);
+    typedOnTheMac.lastUsedMilliseconds = now - 2 * oneMinute;
+    auto openedOnThePhone = makeSession("miro", false);
+    openedOnThePhone.lastUsedMilliseconds = 0;
+    auto neverSeen = makeSession("emberstore", false);
+    neverSeen.lastUsedMilliseconds = 0;
+
+    auto inputs = makeInputs({typedOnTheMac, openedOnThePhone, neverSeen});
+    inputs.lastOpeningOnPhone = [](const std::string& rowKey) -> std::optional<std::int64_t>
+    {
+        if (rowKey == std::string {laptop} + "/emberstore")
+            return std::nullopt;
+
+        return now - threeHours;
+    };
+
+    auto lastUseByName = std::map<std::string, std::string> {};
+
+    for (const auto& item: arrangeOverview(inputs).itemsFromTheBottom)
+        lastUseByName[item.session.sessionName] = item.lastUse;
+
+    check(lastUseByName["cowterm"] == "2 min ago", "the daemon's last typing wins over the phone's opening");
+    check(lastUseByName["miro"] == "3 h ago", "a protocol 4 daemon reports no typing, so the phone's opening");
+    check(lastUseByName["emberstore"].empty(), "never an invented time");
 };
 
 auto tSearchHasNoCards = test("Overview/searchingShowsOnlyMatchingRows") = []

@@ -5,6 +5,7 @@
 #include "Multiplexer/Config.h"
 #include "Multiplexer/HostColours.h"
 #include "Multiplexer/RemoteLocation.h"
+#include "Multiplexer/TextLayout.h"
 
 #include <eacp/Core/Utils/Logging.h>
 
@@ -32,12 +33,15 @@ constexpr auto stripeGap = 10.0f;
 constexpr auto cardPadding = 12.0f;
 constexpr auto cornerRadius = 10.0f;
 
-constexpr auto mutedTextAlpha = 0.55f;
-constexpr auto cardBrightening = 0.06f;
-constexpr auto rowBrightening = 0.03f;
+constexpr auto lineGap = 8.0f;
+constexpr auto pressedOutlineThickness = 2.0f;
+
+// A pressed row darkens and gains an outline, so it shows without telling hue
+// from hue, and darker keeps the light text readable.
+constexpr auto pressedDarkening = 0.35f;
+constexpr auto pressedBlend = term::Rgb {0x000000};
 
 constexpr auto ansiRed = 1;
-constexpr auto ansiYellow = 3;
 constexpr auto ansiBlue = 4;
 
 constexpr auto claudeMark = "\xe2\x9c\xb3 ";
@@ -48,11 +52,6 @@ UI::Font makeFont(float size)
     return UI::Font {fontFamily, size};
 }
 
-Color getHostColour(const std::string& host)
-{
-    return term::toColor(term::getHostColour(term::AppConfig {}, host));
-}
-
 std::string describeSessionName(const OverviewRow& session)
 {
     if (session.isClaude)
@@ -61,24 +60,71 @@ std::string describeSessionName(const OverviewRow& session)
     return session.sessionName;
 }
 
-// The machine's colour down the left edge of a card or row.
-Rect paintHostStripe(UI::Graphics& g, const std::string& host, Rect bounds)
+term::HostRowColours darkenForPress(term::HostRowColours colours)
 {
-    g.setColour(getHostColour(host));
-    g.fillRect(bounds.removeFromLeft(stripeWidth));
+    colours.background = term::blendColours(colours.background, pressedBlend, pressedDarkening);
+    return colours;
+}
+
+void drawPressedOutline(UI::Graphics& g, const term::HostRowColours& colours, Rect bounds)
+{
+    g.setColour(term::toColor(colours.text));
+    g.drawRoundedRect(bounds, cornerRadius, pressedOutlineThickness);
+}
+
+// The machine's colour behind the whole card or row, at full strength down its
+// left edge; returns the area left for text.
+Rect paintHostBackground(UI::Graphics& g, const term::HostRowColours& colours, Rect bounds)
+{
+    g.setColour(term::toColor(colours.background));
+    g.fillRoundedRect(bounds, cornerRadius);
+    g.setColour(term::toColor(colours.stripe));
+    g.fillRect(bounds.removeFromLeft(stripeWidth).inset(0.0f, cornerRadius));
     bounds.removeFromLeft(stripeGap);
+    bounds.removeFromRight(sidePadding);
     return bounds;
 }
 
-// Shown only where a session name alone could be another machine's.
 std::string describeHost(const std::string& host)
 {
     return term::remote::getHostLabel(host);
 }
+
+struct TextLine
+{
+    std::string left;
+    std::string right;
+};
+
+// The left text is cut short where it would run into the right one.
+void drawTextLine(UI::Graphics& g, const TextLine& text, Rect line)
+{
+    const auto rightWidth = g.measureText(text.right);
+    g.drawText(text.right, line.fromRight(rightWidth), UI::Justification::Right);
+    line.removeFromRight(rightWidth + lineGap);
+    const auto measure = [&g](const std::string& part) { return g.measureText(part); };
+    g.drawText(term::truncateTextToWidth(text.left, line.w, measure), line);
+}
+
+// The name and host on the top half, the state and last use under them.
+void paintSessionText(UI::Graphics& g, const OverviewItem& item, Rect area)
+{
+    const auto nameLine = area.removeFromTop(area.h / 2.0f);
+    const auto& session = item.session;
+
+    g.setFont(makeFont(detailFontSize));
+    const auto host = describeHost(session.host);
+    g.drawText(host, nameLine.fromRight(g.measureText(host)), UI::Justification::Right);
+    drawTextLine(g, {session.stateLine, item.lastUse}, area);
+
+    auto nameArea = nameLine;
+    nameArea.removeFromRight(g.measureText(host) + lineGap);
+    g.setFont(makeFont(nameFontSize));
+    g.drawText(describeSessionName(session), nameArea);
+}
 } // namespace
 
-OverviewList::OverviewList(const term::Theme& themeToUse)
-    : theme(themeToUse)
+OverviewList::OverviewList()
 {
     setInterceptsMouseClicks(true);
 }
@@ -116,81 +162,44 @@ void OverviewList::paint(UI::Graphics& g)
     }
 }
 
+bool OverviewList::isPressed(const OverviewItem& item) const
+{
+    return pressedItemIndex && *pressedItemIndex < items.size() && &items[*pressedItemIndex] == &item;
+}
+
 void OverviewList::paintItem(UI::Graphics& g, const OverviewItem& item, Rect bounds)
 {
-    switch (item.kind)
-    {
-        case OverviewItemKind::WaitingCard:
-            paintWaitingCard(g, item.session, bounds);
-            return;
-        case OverviewItemKind::SessionRow:
-            paintSessionRow(g, item.session, bounds);
-            return;
-        case OverviewItemKind::UnreachableHostRow:
-            paintUnreachableHost(g, item.unreachable, bounds);
-            return;
-    }
-}
+    if (item.kind == OverviewItemKind::UnreachableHostRow)
+        return paintUnreachableHost(g, item.unreachable, bounds);
 
-void OverviewList::paintWaitingCard(UI::Graphics& g, const OverviewRow& session, Rect bounds)
-{
-    const auto foreground = term::toColor(theme.foreground);
-    g.setColour(term::toColor(theme.background).brighter(cardBrightening));
-    g.fillRoundedRect(bounds, cornerRadius);
+    auto colours = term::getColourBlindSafeHostRowColours(term::AppConfig {}, item.session.host);
 
-    auto area = paintHostStripe(g, session.host, bounds.inset(0.0f, cardPadding));
-    area.removeFromRight(cardPadding);
-    const auto nameLine = area.removeFromTop(area.h / 2.0f);
+    if (isPressed(item))
+        colours = darkenForPress(colours);
 
-    g.setFont(makeFont(detailFontSize));
-    g.setColour(foreground.withAlpha(mutedTextAlpha));
-    const auto host = describeHost(session.host);
-    g.drawText(host, nameLine.fromRight(g.measureText(host)), UI::Justification::Right);
+    auto area = paintHostBackground(g, colours, bounds);
 
-    g.setFont(makeFont(nameFontSize));
-    g.setColour(foreground);
-    g.drawText(describeSessionName(session), nameLine);
+    if (isPressed(item))
+        drawPressedOutline(g, colours, bounds);
 
-    g.setFont(makeFont(detailFontSize));
-    g.setColour(term::toColor(theme.ansi[ansiYellow]));
-    g.drawText(session.stateLine, area);
-}
+    if (item.kind == OverviewItemKind::WaitingCard)
+        area = area.inset(0.0f, cardPadding);
 
-void OverviewList::paintSessionRow(UI::Graphics& g, const OverviewRow& session, Rect bounds)
-{
-    const auto foreground = term::toColor(theme.foreground);
-    g.setColour(term::toColor(theme.background).brighter(rowBrightening));
-    g.fillRect(bounds);
-
-    auto area = paintHostStripe(g, session.host, bounds);
-    area.removeFromRight(sidePadding);
-    const auto nameLine = area.removeFromTop(area.h / 2.0f);
-
-    g.setFont(makeFont(detailFontSize));
-    g.setColour(foreground.withAlpha(mutedTextAlpha));
-    const auto host = describeHost(session.host);
-    g.drawText(host, nameLine.fromRight(g.measureText(host)), UI::Justification::Right);
-    g.drawText(session.stateLine, area);
-
-    g.setFont(makeFont(nameFontSize));
-    g.setColour(foreground);
-    g.drawText(describeSessionName(session), nameLine);
+    g.setColour(term::toColor(colours.text));
+    paintSessionText(g, item, area);
 }
 
 void OverviewList::paintUnreachableHost(UI::Graphics& g, const UnreachableHost& host, Rect bounds)
 {
-    g.setColour(term::toColor(theme.background).brighter(rowBrightening));
-    g.fillRect(bounds);
-
-    auto area = paintHostStripe(g, host.host, bounds);
+    const auto colours = term::getColourBlindSafeHostRowColours(term::AppConfig {}, host.host);
+    auto area = paintHostBackground(g, colours, bounds);
     const auto nameLine = area.removeFromTop(area.h / 2.0f);
 
+    g.setColour(term::toColor(colours.text));
     g.setFont(makeFont(nameFontSize));
-    g.setColour(term::toColor(theme.foreground).withAlpha(mutedTextAlpha));
     g.drawText(describeHost(host.host), nameLine);
 
     g.setFont(makeFont(detailFontSize));
-    g.setColour(term::toColor(theme.ansi[ansiRed]));
     g.drawText(host.reason, area);
 }
 
@@ -198,6 +207,7 @@ void OverviewList::mouseDown(const UI::MouseEvent& event)
 {
     LOG("overview list: finger down at ", event.position.x, ", ", event.position.y);
     pressStoppedACoast = momentum.isMoving();
+    showPressAt(event.position);
     momentum.stop();
     stopAnimating();
     isDragging = false;
@@ -209,7 +219,10 @@ void OverviewList::mouseDown(const UI::MouseEvent& event)
 void OverviewList::mouseDrag(const UI::MouseEvent& event)
 {
     if (!isDragging && hasMovedBeyondTapSlop(event.downPosition, event.position))
+    {
         isDragging = true;
+        clearPress();
+    }
 
     if (!isDragging)
         return;
@@ -221,6 +234,8 @@ void OverviewList::mouseDrag(const UI::MouseEvent& event)
 
 void OverviewList::mouseUp(const UI::MouseEvent& event)
 {
+    clearPress();
+
     if (!isDragging)
     {
         if (!pressStoppedACoast)
@@ -240,6 +255,23 @@ void OverviewList::mouseUp(const UI::MouseEvent& event)
 void OverviewList::mouseCancel(const UI::MouseEvent&)
 {
     isDragging = false;
+    clearPress();
+}
+
+void OverviewList::showPressAt(UI::Point position)
+{
+    pressedItemIndex.reset();
+
+    if (!pressStoppedACoast)
+        pressedItemIndex = findOverviewItemAt(layOutItems(), position);
+
+    repaint();
+}
+
+void OverviewList::clearPress()
+{
+    pressedItemIndex.reset();
+    repaint();
 }
 
 bool OverviewList::mouseWheelMove(const UI::MouseEvent& event)
@@ -279,8 +311,7 @@ void OverviewList::openItemAt(UI::Point position)
 }
 
 OverviewPanel::OverviewPanel(const term::Theme& themeToUse)
-    : list(themeToUse)
-    , theme(themeToUse)
+    : theme(themeToUse)
 {
     searchField.setFont(makeFont(searchFontSize));
     searchField.setColour(term::toColor(theme.foreground));

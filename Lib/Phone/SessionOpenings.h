@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <map>
+#include <optional>
 #include <string>
 
 namespace term::phone
@@ -22,6 +23,9 @@ public:
 
     // rowKey's usage decayed to now; 0 for a session never opened here.
     double getUsage(const std::string& rowKey, std::int64_t nowMilliseconds) const;
+
+    // When rowKey was last opened here; empty for a session never opened here.
+    std::optional<std::int64_t> getLastOpeningMilliseconds(const std::string& rowKey) const;
 
 private:
     struct Usage

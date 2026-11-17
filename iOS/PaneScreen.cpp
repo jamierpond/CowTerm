@@ -183,7 +183,7 @@ void PaneScreen::setPaneDescription(const PaneDescription& paneToShow)
 {
     pane = paneToShow;
     topLine.pane = pane;
-    topLine.hostColour = term::getHostColour(term::AppConfig {}, pane.hostName);
+    topLine.hostColour = term::getColourBlindSafeHostRowColours(term::AppConfig {}, pane.hostName).stripe;
     bottomBar.pane = pane;
     topLine.repaint();
     bottomBar.repaint();

@@ -238,6 +238,7 @@ nano_add_executable(CowTermRemoteTests
 nano_add_executable(CowTermRemoteAppTests
         SOURCES
             HostColoursTests.cpp
+            ColourBlindHostColoursTests.cpp
             SshBridgeLinkTests.cpp
             BridgeLinkTests.cpp
             RemoteHostLinkFactoryTests.cpp

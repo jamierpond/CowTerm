@@ -17,6 +17,8 @@ OverviewInputs makeOverviewInputs(const term::phone::OverviewReport& report,
     auto inputs = OverviewInputs {};
     inputs.openingUsage = [&openings, now = report.nowMillisecondsSinceEpoch](const std::string& rowKey)
     { return openings.getUsage(rowKey, now); };
+    inputs.lastOpeningOnPhone = [&openings](const std::string& rowKey)
+    { return openings.getLastOpeningMilliseconds(rowKey); };
     inputs.sessions = report.sessions;
     inputs.hostCount = report.hostCount;
     inputs.nowMilliseconds = report.nowMillisecondsSinceEpoch;

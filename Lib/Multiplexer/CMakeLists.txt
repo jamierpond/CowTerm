@@ -16,6 +16,7 @@ add_library(CowTermMultiplexer STATIC
         BridgeLink.cpp
         BridgeRelay.cpp
         CliParsing.cpp
+        ColourSpace.cpp
         Config.cpp
         DaemonClient.cpp
         DaemonDialer.cpp

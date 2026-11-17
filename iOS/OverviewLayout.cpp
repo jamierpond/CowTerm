@@ -1,6 +1,7 @@
 #include "OverviewLayout.h"
 
 #include "Multiplexer/SessionOverviewSearch.h"
+#include "Phone/StoredScreen.h"
 
 #include <algorithm>
 #include <numeric>
@@ -38,11 +39,30 @@ bool isEveryMachineUnreachable(const OverviewInputs& inputs)
     return unreachableCount >= inputs.hostCount;
 }
 
-OverviewItem makeSessionItem(OverviewItemKind kind, const OverviewRow& session)
+std::optional<std::int64_t> findLastUseMilliseconds(const OverviewRow& session, const OverviewInputs& inputs)
+{
+    if (session.lastUsedMilliseconds > 0)
+        return session.lastUsedMilliseconds;
+
+    return inputs.lastOpeningOnPhone(term::overview::makeOverviewRowKey(session));
+}
+
+std::string describeLastUse(const OverviewRow& session, const OverviewInputs& inputs)
+{
+    const auto lastUse = findLastUseMilliseconds(session, inputs);
+
+    if (!lastUse)
+        return {};
+
+    return term::phone::describeLastUseAge(inputs.nowMilliseconds - *lastUse);
+}
+
+OverviewItem makeSessionItem(OverviewItemKind kind, const OverviewRow& session, const OverviewInputs& inputs)
 {
     auto item = OverviewItem {};
     item.kind = kind;
     item.session = session;
+    item.lastUse = describeLastUse(session, inputs);
     return item;
 }
 
@@ -66,7 +86,7 @@ std::vector<OverviewItem> listSearchResults(const OverviewInputs& inputs)
     auto items = std::vector<OverviewItem> {};
 
     for (const auto& session: matches)
-        items.push_back(makeSessionItem(OverviewItemKind::SessionRow, session));
+        items.push_back(makeSessionItem(OverviewItemKind::SessionRow, session, inputs));
 
     return items;
 }
@@ -86,7 +106,7 @@ std::vector<OverviewItem> listWholeOverview(const OverviewInputs& inputs)
         term::overview::searchOverviewRows(inputs.sessions, {}, inputs.nowMilliseconds, inputs.openingUsage);
 
     for (const auto& session: ranked)
-        items.push_back(makeSessionItem(chooseSessionItemKind(session), session));
+        items.push_back(makeSessionItem(chooseSessionItemKind(session), session, inputs));
 
     std::stable_partition(items.begin(),
                           items.end(),

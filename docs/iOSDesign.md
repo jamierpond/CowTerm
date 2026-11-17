@@ -570,6 +570,36 @@ launched with `--landscape`, which is how landscape screenshots are taken.
   nothing useful.
 - With several hosts (`--destination a,b`), each host has its own link watch;
   only the shown pane's host counts silence as a stall.
+- Every row and card in the list is filled with its host's colour, so the list
+  reads as blocks by machine; the host's name stays in text on every row. Jamie
+  is mildly red-green colour blind, so the phone's host colours come from the
+  Okabe-Ito palette (`getColourBlindSafeHostRowColours`), each darkened in
+  linear light to its own lightness, CIE L* 18 to 48 in steps of 5, so hosts
+  also differ in greyscale and white text keeps 4.5:1 or better. The host name
+  picks the entry by FNV-1a, as on the Mac: big-cow gets orange, macprorack
+  bluish green, tamby blue. A `hosts.<name>.color` in cowterm.json still wins,
+  darkened only if white text would not read on it; the phone has no
+  cowterm.json today. The pane screen's host dot uses the same colour. The Mac
+  keeps its Rosé Pine host colours: whether it should switch is Jamie's call.
+- `ColourBlindHostColoursTests` checks the palette as protanopia and
+  deuteranopia (Machado 2009, severity 1.0) and greyscale see it: every pair
+  at least CIE76 ΔE 10 apart in each simulation and 4.5 L* apart in greyscale,
+  and Jamie's three hosts at least ΔE 40 and 9.5 L* apart. Tritanopia is not
+  checked: two entries come within ΔE 8.2 of each other there.
+  `just simulate-colour-vision <png>` writes the same three views of a
+  screenshot.
+- A pressed row darkens and gets a white outline, so a press shows without
+  telling one hue from another.
+- Each row shows when Jamie last used the session: "just now" under a minute,
+  "2 min ago", "3 h ago", "yesterday" (one to two days), "4 d ago". The time is
+  the daemon's last typing in the session's panes (protocol 5 `activity`), else
+  the last time he opened it from the phone's list (`session-openings.json`),
+  else nothing. His protocol 4 daemons report no typing, so today every age is
+  the phone's own record, and a session never opened on the phone shows none.
+- Nothing on the phone signals by colour alone. The link state on the pane
+  screen's top line is a word ("live", "connecting", "stalled", "unreachable");
+  a waiting card says "waiting:" and is taller than a row; a latched Ctrl and
+  a lit "compose" key also get a bar under the label.
 
 ### Pairing a phone
 

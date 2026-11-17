@@ -6,6 +6,7 @@
 #include <eacp/Graphics/Primitives/Primitives.h>
 
 #include <cstdint>
+#include <functional>
 #include <optional>
 #include <string>
 #include <vector>
@@ -33,7 +34,12 @@ struct OverviewItem
     OverviewItemKind kind = OverviewItemKind::SessionRow;
     term::overview::OverviewRow session;
     UnreachableHost unreachable;
+
+    // "2 min ago", "yesterday"; empty when nobody knows.
+    std::string lastUse;
 };
+
+using SessionLastOpening = std::function<std::optional<std::int64_t>(const std::string& rowKey)>;
 
 struct OverviewContent
 {
@@ -55,11 +61,16 @@ struct OverviewInputs
     // How often and how recently each session was opened on the phone; with
     // the last typing it orders the rows, searched or not.
     term::overview::SessionOpeningUsage openingUsage = [](const std::string&) { return 0.0; };
+
+    // When each session was last opened on the phone: a row's last use when
+    // its daemon does not report the last typing (protocol 4 does not).
+    SessionLastOpening lastOpeningOnPhone = [](const std::string&) { return std::optional<std::int64_t> {}; };
 };
 
 // With no query: the waiting sessions as cards nearest the thumb, then the
 // other sessions as rows in the overview's order (a waiting session is not
-// shown twice), then one row per unreachable machine. With a query: only the matching sessions, in the Mac palette's
+// shown twice), then one row per unreachable machine. A session's last use is
+// its daemon's last typing, else its last opening on the phone, else unknown. With a query: only the matching sessions, in the Mac palette's
 // order. When no host is set up, or every machine is unreachable: a banner
 // saying so and nothing else.
 OverviewContent arrangeOverview(const OverviewInputs& inputs);

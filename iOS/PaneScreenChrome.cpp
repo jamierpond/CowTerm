@@ -31,6 +31,12 @@ constexpr auto chipPadding = 10.0f;
 constexpr auto chipCornerRadius = 8.0f;
 constexpr auto keyGap = 3.0f;
 
+// A lit key (latched Ctrl, compose on) also gets a bar under its label, so it
+// is not told by its colour alone.
+constexpr auto litKeyBarWidth = 16.0f;
+constexpr auto litKeyBarHeight = 2.0f;
+constexpr auto litKeyBarBelowCentre = 10.0f;
+
 // iOS's own key repeat: a pause before the first repeat, then about twelve a second.
 constexpr auto keyRepeatDelay = eacp::Time::MS {400};
 constexpr auto keyRepeatInterval = eacp::Time::MS {80};
@@ -105,6 +111,13 @@ void drawHollowPaneDot(UI::Graphics& g, Point centre, RingColours colours)
 UI::Font makeFont(float size)
 {
     return UI::Font {fontFamily, size};
+}
+
+void drawLitKeyBar(UI::Graphics& g, Rect keyFace)
+{
+    const auto centre = keyFace.center();
+    const auto top = centre.y + litKeyBarBelowCentre;
+    g.fillRect({centre.x - litKeyBarWidth / 2.0f, top, litKeyBarWidth, litKeyBarHeight});
 }
 } // namespace
 
@@ -364,6 +377,9 @@ void KeyRow::paint(UI::Graphics& g)
         g.fillRoundedRect(keyFace, chipCornerRadius);
         g.setColour(foreground);
         g.drawText(getKeyRowLabel(slot.key), keyFace, UI::Justification::Centred);
+
+        if (isLit(slot.key))
+            drawLitKeyBar(g, keyFace);
     }
 }
 

@@ -8,6 +8,7 @@
 #include <eacp/UI/UI.h>
 
 #include <functional>
+#include <optional>
 
 // The phone's overview (docs/iOSDesign.md, "The overview"): waiting sessions
 // as cards and every session as a row, anchored at the bottom by the thumb,
@@ -22,7 +23,7 @@ using OpenSession = std::function<void(const term::overview::OverviewRow&)>;
 class OverviewList final : public eacp::UI::Component
 {
 public:
-    explicit OverviewList(const term::Theme& themeToUse);
+    OverviewList();
 
     void setItems(std::vector<OverviewItem> itemsToShow);
 
@@ -40,18 +41,14 @@ private:
     std::vector<eacp::UI::Rect> layOutItems() const;
     bool scrollByAndCheckIfStoppedAtEdge(float pixels);
     void openItemAt(eacp::UI::Point position);
+    bool isPressed(const OverviewItem& item) const;
     void paintItem(eacp::UI::Graphics& g, const OverviewItem& item, eacp::UI::Rect bounds);
-    void paintWaitingCard(eacp::UI::Graphics& g,
-                          const term::overview::OverviewRow& session,
-                          eacp::UI::Rect bounds);
-    void paintSessionRow(eacp::UI::Graphics& g,
-                         const term::overview::OverviewRow& session,
-                         eacp::UI::Rect bounds);
+    void showPressAt(eacp::UI::Point position);
+    void clearPress();
     void paintUnreachableHost(eacp::UI::Graphics& g,
                               const UnreachableHost& host,
                               eacp::UI::Rect bounds);
 
-    term::Theme theme;
     std::vector<OverviewItem> items;
     float scrollOffset = 0.0f;
     float lastFingerY = 0.0f;
@@ -59,6 +56,7 @@ private:
 
     // A press that stops a coasting list opens nothing, as on an iOS list.
     bool pressStoppedACoast = false;
+    std::optional<std::size_t> pressedItemIndex;
     term::ScrollMomentum momentum;
     term::TouchVelocityTracker fingerVelocity;
 };

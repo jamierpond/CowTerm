@@ -36,6 +36,10 @@ ios-screenshots:
     scripts/screenshot-ios-pane-screen.sh
     scripts/screenshot-ios-overview.sh {{screenshot_folder}}
 
+# Write protanopia, deuteranopia and greyscale versions of a screenshot beside it
+simulate-colour-vision screenshot:
+    scripts/simulate-colour-vision.py {{screenshot}}
+
 # Check the phone taking a pane's size and giving it back, on a test daemon on a host
 ios-test-size-owner destination folder:
     scripts/run-ios-size-owner-test.sh {{destination}} {{folder}}

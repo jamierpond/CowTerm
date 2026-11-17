@@ -268,6 +268,21 @@ auto storedScreenAgeReadsLikeAClock = test("StoredScreen/ageReadsLikeAClock") = 
     check(describeStoredScreenAge(twoDays) == "2 d ago");
 };
 
+auto lastUseReadsLikeAPerson = test("StoredScreen/lastUseReadsLikeAPerson") = []
+{
+    constexpr auto fortySeconds = std::int64_t {40 * 1000};
+    constexpr auto twoMinutes = std::int64_t {2 * 60 * 1000};
+    constexpr auto threeHours = std::int64_t {3 * 60 * 60 * 1000};
+    constexpr auto thirtyHours = std::int64_t {30 * 60 * 60 * 1000};
+    constexpr auto fourDays = std::int64_t {4 * 24 * 60 * 60 * 1000};
+
+    check(describeLastUseAge(fortySeconds) == "just now");
+    check(describeLastUseAge(twoMinutes) == "2 min ago");
+    check(describeLastUseAge(threeHours) == "3 h ago");
+    check(describeLastUseAge(thirtyHours) == "yesterday");
+    check(describeLastUseAge(fourDays) == "4 d ago");
+};
+
 auto mirrorSeesOutputSizeAndStatus = test("MirroredShell/seesOutputSizeAndStatus") = []
 {
     constexpr auto startColumns = 30;
@@ -316,6 +331,8 @@ auto openingsAreKeptAndDecay = test("SessionOpenings/openingsAreKeptAcrossLaunch
     const auto reopened = SessionOpenings {path};
     check(reopened.getUsage("jamie@tamby/CowTerm", now) > reopened.getUsage("jamie@tamby/Grazer", now));
     check(reopened.getUsage("jamie@tamby/never", now) == 0.0);
+    check(reopened.getLastOpeningMilliseconds("jamie@tamby/Grazer") == std::optional<std::int64_t> {now});
+    check(!reopened.getLastOpeningMilliseconds("jamie@tamby/never").has_value());
     check(reopened.getUsage("jamie@tamby/CowTerm", now + aMonth) < reopened.getUsage("jamie@tamby/CowTerm", now),
           "older openings count for less");
     std::filesystem::remove(path);
