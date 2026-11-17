@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Multiplexer/EmbeddedSshLink.h"
+#include "Multiplexer/RemoteLocation.h"
 
 #include <filesystem>
 #include <functional>
@@ -22,6 +23,9 @@ struct PhoneSettings
 
     // Where the shown pane's last screen is kept between launches.
     std::filesystem::path storedScreenPath;
+
+    // What runs `ct bridge` on the host; a test instance passes its own.
+    std::string bridgeCommand = remote::bridgeCommand;
 };
 
 using EnvironmentReader = std::function<std::string(const std::string& name)>;

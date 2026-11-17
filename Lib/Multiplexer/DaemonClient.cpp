@@ -30,6 +30,12 @@ bool& getClaimsSizeOfEveryPaneItShows()
     return claims;
 }
 
+bool& getOpensOnlyListedPanes()
+{
+    static auto opensOnlyListed = false;
+    return opensOnlyListed;
+}
+
 bool isPaneMessage(const std::string& verb)
 {
     return verb == "output" || verb == "state" || verb == "exit" || verb == "missing-command"
@@ -65,6 +71,11 @@ void DaemonClient::setClientName(const std::string& name)
 void DaemonClient::setClaimsSizeOfEveryPaneItShows(bool claims)
 {
     getClaimsSizeOfEveryPaneItShows() = claims;
+}
+
+void DaemonClient::setOpensOnlyListedPanes(bool opensOnlyListed)
+{
+    getOpensOnlyListedPanes() = opensOnlyListed;
 }
 
 DaemonClient* DaemonClient::get()
@@ -134,7 +145,7 @@ void DaemonClient::reattachPanes()
     sendHello();
 
     for (const auto& [id, route]: routes)
-        sendSpawn(route.request);
+        sendSpawnOnceListed(route.request);
 }
 
 bool DaemonClient::isConnected() const
@@ -244,8 +255,31 @@ void DaemonClient::handleInfo(const std::string& payload)
         start = end + 1;
     }
 
+    openListedPanesOrReportGone();
+
     if (info != previous)
         onInfoChanged();
+}
+
+void DaemonClient::openListedPanesOrReportGone()
+{
+    for (const auto& id: std::exchange(spawnsWaitingForInfo, {}))
+    {
+        auto found = routes.find(id);
+
+        if (found == routes.end())
+            continue;
+
+        if (info.contains(id))
+        {
+            sendSpawn(found->second.request);
+            continue;
+        }
+
+        auto route = std::move(found->second);
+        routes.erase(found);
+        route.routes.onGone();
+    }
 }
 
 void DaemonClient::readInfoLine(const std::string& line)
@@ -295,7 +329,18 @@ void DaemonClient::sendResizeAndClaim(const std::string& id, const PtySize& size
 void DaemonClient::spawn(const SpawnRequest& request, Routes routesToUse)
 {
     routes[request.id] = {std::move(routesToUse), request};
-    sendSpawn(request);
+    sendSpawnOnceListed(request);
+}
+
+void DaemonClient::sendSpawnOnceListed(const SpawnRequest& request)
+{
+    if (!getOpensOnlyListedPanes())
+        return sendSpawn(request);
+
+    if (std::ranges::find(spawnsWaitingForInfo, request.id) == spawnsWaitingForInfo.end())
+        spawnsWaitingForInfo.push_back(request.id);
+
+    send(proto::make("info"));
 }
 
 void DaemonClient::write(const std::string& id, std::string_view data)
@@ -452,6 +497,7 @@ public:
         };
         routes.onExit = onExit;
         routes.onLinkLost = onStatusChanged;
+        routes.onGone = [status = onStatusChanged, gone = describeGonePane()] { status(gone); };
         routes.onSizeOwnerChanged = [status = onStatusChanged](const DaemonClient::SizeOwnerNotice& notice)
         { status(describeSizeOwner(notice)); };
         routes.onMissingCommand = [this, onOutput](const std::string& program)
@@ -535,6 +581,8 @@ public:
     }
 
 private:
+    std::string describeGonePane() const { return "this pane no longer exists on " + machineLabel; }
+
     std::string describeMissingCommand(const std::string& program) const
     {
         return "\r\n  " + program + " is not installed on " + machineLabel

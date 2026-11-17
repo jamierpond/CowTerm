@@ -189,18 +189,25 @@ struct ResolvedAddresses
     addrinfo* first = nullptr;
 };
 
+struct SshSessionRequest
+{
+    SshDestination destination;
+    SshCredentials credentials;
+    std::string remoteCommand;
+};
+
 // Every ssh failure below reads like OpenSSH's own stderr, so
 // describeBridgeFailure words it exactly as it does for the system ssh.
 class SshSessionRunner
 {
 public:
     SshSessionRunner(EmbeddedSshConnection& connectionToUse,
-                     SshDestination destinationToUse,
-                     SshCredentials credentialsToUse,
+                     SshSessionRequest request,
                      std::function<void(std::string)> onBytesToUse)
         : connection(connectionToUse)
-        , destination(std::move(destinationToUse))
-        , credentials(std::move(credentialsToUse))
+        , destination(std::move(request.destination))
+        , credentials(std::move(request.credentials))
+        , remoteCommand(std::move(request.remoteCommand))
         , onBytes(std::move(onBytesToUse))
     {
     }
@@ -423,7 +430,7 @@ private:
     {
         channel.reset(libssh2_channel_open_session(session.get()));
 
-        if (channel == nullptr || libssh2_channel_exec(channel.get(), remote::bridgeCommand) != 0)
+        if (channel == nullptr || libssh2_channel_exec(channel.get(), remoteCommand.c_str()) != 0)
             return "ssh: could not start ct bridge on " + destination.host + ": " + describeLastError();
 
         return std::nullopt;
@@ -550,6 +557,7 @@ private:
     EmbeddedSshConnection& connection;
     SshDestination destination;
     SshCredentials credentials;
+    std::string remoteCommand;
     std::function<void(std::string)> onBytes;
     int socketHandle = -1;
     SessionHandle session;
@@ -608,7 +616,9 @@ std::optional<SshDestination> parseSshDestination(const std::string& text)
     return destination;
 }
 
-EmbeddedSshLink::EmbeddedSshLink(const SshDestination& destination, const SshCredentials& credentials)
+EmbeddedSshLink::EmbeddedSshLink(const SshDestination& destination,
+                                 const SshCredentials& credentials,
+                                 const std::string& remoteCommand)
     : BridgeLink(destination.user + "@" + destination.host)
     , connection(std::make_shared<EmbeddedSshConnection>())
 {
@@ -623,9 +633,9 @@ EmbeddedSshLink::EmbeddedSshLink(const SshDestination& destination, const SshCre
     };
 
     auto worker = std::thread(
-        [shared = connection, destination, credentials, deliverBytes, guard, this]
+        [shared = connection, request = SshSessionRequest {destination, credentials, remoteCommand}, deliverBytes, guard, this]
         {
-            auto ending = SshSessionRunner {*shared, destination, credentials, deliverBytes}.run();
+            auto ending = SshSessionRunner {*shared, request, deliverBytes}.run();
 
             if (shared->isStopping())
                 return;

@@ -34,7 +34,11 @@ struct ChosenPane
 class PhoneConnection
 {
 public:
-    explicit PhoneConnection(PhoneSettings settingsToUse);
+    using Clock = std::function<Milliseconds()>;
+
+    // makeLinkToUse dials the host (makeEmbeddedSshLinkFactory on the phone);
+    // readClock is a steady millisecond clock. Tests pass their own of both.
+    PhoneConnection(PhoneSettings settingsToUse, BridgeLinkFactory makeLinkToUse, Clock readClockToUse);
     ~PhoneConnection();
 
     // The shell for the pane view (TerminalConfig::makeShell): the daemon's
@@ -45,6 +49,10 @@ public:
     PhoneLinkState getLinkState() const { return linkState; }
     std::string getFailureReason() const;
     const std::optional<ChosenPane>& getChosenPane() const { return chosenPane; }
+
+    // The periodic check a timer runs every half second: stalls, redials, the
+    // last-input wait and storing the screen.
+    void handleTick();
 
     // The app went to the background: store the shown screen now.
     void handleBackground();
@@ -62,10 +70,9 @@ public:
 
 private:
     RemoteHost& getRemoteHost() const;
-    std::unique_ptr<BridgeLink> makeLink();
+    std::unique_ptr<BridgeLink> makeWatchedLink();
     void handleHostChanged();
     void handleUnhandledMessage(const std::string& verb, const std::string& body);
-    void handleTick();
     bool isWaitingToAskForLastInput() const;
     bool hasGivenUpOnLastInput(Milliseconds now) const;
     void storeShownScreenWhileLive(Milliseconds now);
@@ -76,6 +83,8 @@ private:
     void updateLinkState();
 
     PhoneSettings settings;
+    BridgeLinkFactory makeLink;
+    Clock readClock;
     std::string host;
     LinkWatch watch;
     PhoneLinkState linkState = PhoneLinkState::Connecting;
@@ -91,4 +100,9 @@ private:
 };
 
 Milliseconds getMillisecondsSinceEpoch();
+Milliseconds readSteadyClock();
+
+// The phone's link: EmbeddedSshLink to the settings' destination, running
+// their bridge command.
+BridgeLinkFactory makeEmbeddedSshLinkFactory(const PhoneSettings& settings);
 } // namespace term::phone

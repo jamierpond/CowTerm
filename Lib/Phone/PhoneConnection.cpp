@@ -19,12 +19,19 @@ constexpr auto tickInterval = Time::MS {500};
 constexpr auto lastInputAnswerWait = Milliseconds {2000};
 constexpr auto storeIntervalWhileLive = Milliseconds {10000};
 
-Milliseconds getSteadyMilliseconds()
+} // namespace
+
+Milliseconds readSteadyClock()
 {
     const auto sinceStart = std::chrono::steady_clock::now().time_since_epoch();
     return std::chrono::duration_cast<std::chrono::milliseconds>(sinceStart).count();
 }
-} // namespace
+
+BridgeLinkFactory makeEmbeddedSshLinkFactory(const PhoneSettings& settings)
+{
+    return [settings](const std::string&) -> std::unique_ptr<BridgeLink>
+    { return std::make_unique<EmbeddedSshLink>(settings.destination, settings.credentials, settings.bridgeCommand); };
+}
 
 Milliseconds getMillisecondsSinceEpoch()
 {
@@ -32,17 +39,22 @@ Milliseconds getMillisecondsSinceEpoch()
     return std::chrono::duration_cast<std::chrono::milliseconds>(sinceEpoch).count();
 }
 
-PhoneConnection::PhoneConnection(PhoneSettings settingsToUse)
+PhoneConnection::PhoneConnection(PhoneSettings settingsToUse,
+                                 BridgeLinkFactory makeLinkToUse,
+                                 Clock readClockToUse)
     : settings(std::move(settingsToUse))
+    , makeLink(std::move(makeLinkToUse))
+    , readClock(std::move(readClockToUse))
     , host(settings.destination.user + "@" + settings.destination.host)
 {
     DaemonClient::setClientName(phoneClientName);
     DaemonClient::setClaimsSizeOfEveryPaneItShows(true);
-    watch.noteReconnecting(getSteadyMilliseconds());
+    DaemonClient::setOpensOnlyListedPanes(true);
+    watch.noteReconnecting(readClock());
 
     auto config = AppConfig {};
     config.searchDirs = {remote::makeRemoteProjectDir(host, remoteHomeDirectory)};
-    RemoteHosts::configure(config, [this](const std::string&) { return makeLink(); });
+    RemoteHosts::configure(config, [this](const std::string&) { return makeWatchedLink(); });
 
     auto& remote = getRemoteHost();
     remote.onChanged = [this] { handleHostChanged(); };
@@ -98,7 +110,7 @@ void PhoneConnection::handleBackground()
 
 void PhoneConnection::handleWake()
 {
-    watch.noteWokeUp(getSteadyMilliseconds());
+    watch.noteWokeUp(readClock());
     handleTick();
 }
 
@@ -107,10 +119,10 @@ RemoteHost& PhoneConnection::getRemoteHost() const
     return *RemoteHosts::find(host);
 }
 
-std::unique_ptr<BridgeLink> PhoneConnection::makeLink()
+std::unique_ptr<BridgeLink> PhoneConnection::makeWatchedLink()
 {
-    auto link = std::make_unique<EmbeddedSshLink>(settings.destination, settings.credentials);
-    link->onBytesReceived = [this] { watch.noteBytesHeard(getSteadyMilliseconds()); };
+    auto link = makeLink(host);
+    link->onBytesReceived = [this] { watch.noteBytesHeard(readClock()); };
     return link;
 }
 
@@ -138,10 +150,14 @@ void PhoneConnection::handleHostChanged()
 
 void PhoneConnection::askForLastInput()
 {
-    askedForLastInputAt = getSteadyMilliseconds();
+    askedForLastInputAt = readClock();
 
-    if (settings.explicitPaneId.empty())
-        getRemoteHost().getDaemon().send(proto::make("last-input"));
+    if (!settings.explicitPaneId.empty())
+        return;
+
+    auto& daemon = getRemoteHost().getDaemon();
+    daemon.send(proto::make("last-input"));
+    daemon.send(proto::make("info"));
 }
 
 void PhoneConnection::handleUnhandledMessage(const std::string& verb, const std::string& body)
@@ -156,7 +172,7 @@ void PhoneConnection::handleUnhandledMessage(const std::string& verb, const std:
 
 void PhoneConnection::handleTick()
 {
-    const auto now = getSteadyMilliseconds();
+    const auto now = readClock();
     auto& remote = getRemoteHost();
 
     if (hasGivenUpOnLastInput(now))
@@ -231,7 +247,7 @@ void PhoneConnection::storeShownScreen()
 
 void PhoneConnection::updateLinkState()
 {
-    const auto current = watch.classify(getRemoteHost().getStatus(), getSteadyMilliseconds());
+    const auto current = watch.classify(getRemoteHost().getStatus(), readClock());
 
     if (current == linkState)
         return;

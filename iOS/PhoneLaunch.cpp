@@ -53,7 +53,7 @@ void logStoredScreen(const std::optional<StoredScreen>& stored)
 PhoneLaunch::PhoneLaunch(PhoneSettings settingsToUse)
     : settings(std::move(settingsToUse))
     , storedScreen(loadStoredScreen(settings.storedScreenPath))
-    , connection(settings)
+    , connection(settings, makeEmbeddedSshLinkFactory(settings), readSteadyClock)
     , networkPathWatch(
           [this]
           {

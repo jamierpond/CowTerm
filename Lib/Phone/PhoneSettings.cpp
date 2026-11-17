@@ -14,6 +14,7 @@ struct SettingsText
     std::string privateKeyPath;
     std::string knownHostsPath;
     std::string paneId;
+    std::string bridgeCommand;
 };
 
 struct SettingSource
@@ -29,6 +30,7 @@ constexpr auto settingSources = std::array {
     SettingSource {"--key-file", "COWTERM_KEY_FILE", &SettingsText::privateKeyPath},
     SettingSource {"--known-hosts", "COWTERM_KNOWN_HOSTS", &SettingsText::knownHostsPath},
     SettingSource {"--pane", "COWTERM_PANE", &SettingsText::paneId},
+    SettingSource {"--bridge-command", "COWTERM_BRIDGE_COMMAND", &SettingsText::bridgeCommand},
 };
 
 std::optional<std::string> findFlagValue(const std::vector<std::string>& arguments, std::string_view flag)
@@ -72,6 +74,9 @@ std::optional<PhoneSettings> parsePhoneSettings(const std::vector<std::string>& 
     settings.credentials = {text.agentSocketPath, text.privateKeyPath, text.knownHostsPath};
     settings.explicitPaneId = text.paneId;
     settings.storedScreenPath = storedScreenPath;
+
+    if (!text.bridgeCommand.empty())
+        settings.bridgeCommand = text.bridgeCommand;
     return settings;
 }
 } // namespace term::phone

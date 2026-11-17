@@ -1,6 +1,7 @@
 #pragma once
 
 #include "BridgeLink.h"
+#include "RemoteLocation.h"
 
 #include <memory>
 #include <optional>
@@ -44,7 +45,10 @@ struct SshCredentials
 class EmbeddedSshLink final : public BridgeLink
 {
 public:
-    EmbeddedSshLink(const SshDestination& destination, const SshCredentials& credentials);
+    // remoteCommand runs `ct bridge` there; a test instance passes its own.
+    EmbeddedSshLink(const SshDestination& destination,
+                    const SshCredentials& credentials,
+                    const std::string& remoteCommand = remote::bridgeCommand);
     ~EmbeddedSshLink() override;
 
 private:

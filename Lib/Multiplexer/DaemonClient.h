@@ -59,6 +59,10 @@ public:
 
         // Another client (or this one) now sets the pane's size.
         std::function<void(const SizeOwnerNotice&)> onSizeOwnerChanged = [](const SizeOwnerNotice&) {};
+
+        // The daemon does not list the pane, and this client opens only panes
+        // it lists (setOpensOnlyListedPanes): nothing was started.
+        eacp::Callback onGone = [] {};
     };
 
     struct ShellInfo
@@ -94,6 +98,11 @@ public:
     // The phone takes the size of every pane it opens or resizes, instead of
     // waiting for the Mac to let go. Set once at startup.
     static void setClaimsSizeOfEveryPaneItShows(bool claims);
+
+    // The phone never starts a shell: before each spawn it asks for info, and
+    // a pane the daemon does not list gets onGone instead of a spawn. Set once
+    // at startup.
+    static void setOpensOnlyListedPanes(bool opensOnlyListed);
     static DaemonClient* get();
     static void teardown();
 
@@ -158,6 +167,8 @@ private:
     void handleLinkDropped();
     void handleSizeOwner(const proto::Message& message);
     void sendSpawn(const SpawnRequest& request);
+    void sendSpawnOnceListed(const SpawnRequest& request);
+    void openListedPanesOrReportGone();
     void sendResizeAndClaim(const std::string& id, const PtySize& size);
     void handleMessage(const std::string& body);
     void handleOutput(const std::string& id, std::string payload);
@@ -173,6 +184,7 @@ private:
     std::unordered_map<std::string, Route> routes;
     std::unordered_map<std::string, ShellInfo> info;
     std::unordered_set<std::string> panesHeldElsewhere;
+    std::vector<std::string> spawnsWaitingForInfo;
     std::unique_ptr<eacp::Threads::Timer> infoTimer;
 };
 } // namespace term

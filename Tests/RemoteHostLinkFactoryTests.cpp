@@ -16,26 +16,6 @@ namespace
 {
 constexpr auto host = "jamie@tamby";
 
-// Hands RemoteHost a RecordingBridgeLink and keeps a handle on it.
-struct LinkFactory
-{
-    BridgeLinkFactory makeFactory()
-    {
-        return [this](const std::string& requestedHost)
-        {
-            requestedHosts.push_back(requestedHost);
-            auto link = std::make_unique<RecordingBridgeLink>(requestedHost);
-            lastLink = std::ref(*link);
-            return link;
-        };
-    }
-
-    RecordingBridgeLink& getLastLink() { return lastLink->get(); }
-
-    std::vector<std::string> requestedHosts;
-    std::optional<std::reference_wrapper<RecordingBridgeLink>> lastLink;
-};
-
 bool contains(const std::string& text, const std::string& part)
 {
     return text.find(part) != std::string::npos;
@@ -44,7 +24,7 @@ bool contains(const std::string& text, const std::string& part)
 
 auto connectAsksTheFactoryForTheHostsLink = test("RemoteHost/connectAsksTheFactoryForTheHostsLink") = []
 {
-    auto factory = LinkFactory {};
+    auto factory = RecordingLinkFactory {};
     auto remote = RemoteHost {host, {"~/projects"}, factory.makeFactory()};
 
     check(factory.requestedHosts == std::vector<std::string> {host});
@@ -53,7 +33,7 @@ auto connectAsksTheFactoryForTheHostsLink = test("RemoteHost/connectAsksTheFacto
 
 auto readyLinkConnectsAndScans = test("RemoteHost/readyLinkConnectsAndScans") = []
 {
-    auto factory = LinkFactory {};
+    auto factory = RecordingLinkFactory {};
     auto remote = RemoteHost {host, {"~/projects"}, factory.makeFactory()};
     auto& link = factory.getLastLink();
 
@@ -65,7 +45,7 @@ auto readyLinkConnectsAndScans = test("RemoteHost/readyLinkConnectsAndScans") = 
 
 auto failedLinkMarksTheHostUnreachable = test("RemoteHost/failedLinkMarksTheHostUnreachable") = []
 {
-    auto factory = LinkFactory {};
+    auto factory = RecordingLinkFactory {};
     auto remote = RemoteHost {host, {"~/projects"}, factory.makeFactory()};
     constexpr auto reason = "unreachable (ssh: connect to host tamby port 22: Operation timed out)";
 
@@ -77,7 +57,7 @@ auto failedLinkMarksTheHostUnreachable = test("RemoteHost/failedLinkMarksTheHost
 
 auto reconnectNowAsksForAFreshLink = test("RemoteHost/reconnectNowAsksForAFreshLink") = []
 {
-    auto factory = LinkFactory {};
+    auto factory = RecordingLinkFactory {};
     auto remote = RemoteHost {host, {"~/projects"}, factory.makeFactory()};
 
     remote.reconnectNow();
@@ -88,7 +68,7 @@ auto reconnectNowAsksForAFreshLink = test("RemoteHost/reconnectNowAsksForAFreshL
 
 auto messagesRemoteHostIgnoresReachTheApp = test("RemoteHost/messagesRemoteHostIgnoresReachTheApp") = []
 {
-    auto factory = LinkFactory {};
+    auto factory = RecordingLinkFactory {};
     auto remote = RemoteHost {host, {"~/projects"}, factory.makeFactory()};
     auto heardVerb = std::string {};
     remote.onUnhandledMessage = [&](RemoteHost&, const std::string& verb, const std::string&) { heardVerb = verb; };

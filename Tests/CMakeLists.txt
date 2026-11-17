@@ -282,9 +282,12 @@ if (TARGET CowTerm::EmbeddedSsh)
     target_include_directories(CowTermEmbeddedSshTests PRIVATE ../Bench)
 
     # The phone's connection layer without a phone or a host: settings, pane
-    # choice, link stalls, the stored last screen and the mirrored pane.
+    # choice, link stalls, the stored last screen, the mirrored pane, and
+    # PhoneConnection over a recorded link (it never spawns an unlisted pane).
     nano_add_executable(CowTermPhoneTests
-            SOURCES PhoneTests.cpp
+            SOURCES
+                PhoneTests.cpp
+                PhoneConnectionTests.cpp
             TARGETS CowTerm::Phone)
 endif ()
 
