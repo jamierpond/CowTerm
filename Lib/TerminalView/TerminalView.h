@@ -124,6 +124,11 @@ public:
 
     void paste();
 
+    // Sends composed text as a paste (bracketed when the program asked for
+    // it), then Enter, as typing, and returns to the live bottom: what the
+    // phone's composer sends.
+    void pasteThenPressEnter(const std::string& text);
+
     // Finger scrolling for a touch screen host, fed the finger's touch events.
     // The content tracks the finger and coasts after it lifts, at the speed
     // its last moves give or at one the host measured. On the alternate

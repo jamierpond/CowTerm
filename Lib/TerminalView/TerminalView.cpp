@@ -862,6 +862,13 @@ void TerminalView::pasteText(const std::string& text)
     sendAndScrollToBottom(preparePastedText(text, screen.modes.bracketedPaste));
 }
 
+void TerminalView::pasteThenPressEnter(const std::string& text)
+{
+    constexpr auto enter = "\r";
+    const auto lock = lockTerminal();
+    sendAndScrollToBottom(preparePastedText(text, screen.modes.bracketedPaste) + enter);
+}
+
 // ---- selection & mouse -----------------------------------------------------
 
 VisibleCell TerminalView::findCellUnderPointer(Graphics::Point pos) const
