@@ -7,8 +7,6 @@
 # and the key from 1Password.
 #
 #   COWTERM_IOS_TEAM=<team id>|none [COWTERM_ASC_KEY_ID= COWTERM_ASC_ISSUER_ID= COWTERM_ASC_KEY=|COWTERM_ASC_KEY_P8=] scripts/release-ios.sh [--upload]
-#
-# EACP_SOURCE builds against a local eacp checkout, as in scripts/build-ios-simulator.sh.
 set -euo pipefail
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
@@ -26,13 +24,6 @@ build_number="$(git rev-list --count HEAD)"
 if [[ "${1:-}" == --upload && -n "$(git status --porcelain --untracked-files=no)" ]]; then
     echo "uncommitted changes: commit them first, so build $build_number is exactly HEAD" >&2
     exit 1
-fi
-
-if [[ -n "${EACP_SOURCE:-}" ]]; then
-    eacp_source_flag="-DLOCKSTEP_eacp_SOURCE=$EACP_SOURCE"
-    echo "building against $EACP_SOURCE, not the eacp lockstep.lock pins" >&2
-else
-    eacp_source_flag="-ULOCKSTEP_eacp_SOURCE"
 fi
 
 signing=(-DCMAKE_XCODE_ATTRIBUTE_DEVELOPMENT_TEAM="$team" -DCMAKE_XCODE_ATTRIBUTE_CODE_SIGN_STYLE=Automatic)
@@ -58,7 +49,7 @@ cmake -G Xcode -B "$build" -DCMAKE_SYSTEM_NAME=iOS \
     -DCMAKE_XCODE_GENERATE_SCHEME=ON \
     -DCMAKE_XCODE_ATTRIBUTE_SKIP_INSTALL=YES \
     -DCOWTERM_IOS_BUILD_NUMBER="$build_number" \
-    "$eacp_source_flag" \
+    -ULOCKSTEP_eacp_SOURCE \
     "${signing[@]}"
 
 rm -rf "$archive"

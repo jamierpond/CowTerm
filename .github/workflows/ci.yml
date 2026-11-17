@@ -78,7 +78,6 @@ jobs:
 
       - uses: extractions/setup-just@v2
 
-      # No EACP_SOURCE here, so the script builds against lockstep.lock's eacp.
       - run: scripts/build-ios-simulator.sh
       - run: just ios-check-launch
 
