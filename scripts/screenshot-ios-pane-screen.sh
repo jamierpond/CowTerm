@@ -25,7 +25,8 @@ take() {
 
 for device_name in "iPhone 17e" "iPhone 18 Pro Max"; do
     for orientation in portrait landscape; do
-        rotate=""
+        # The simulator keeps the last orientation across launches, so portrait is asked for too.
+        rotate="--portrait"
         [ "$orientation" = landscape ] && rotate="--landscape"
         take "$device_name" "live-$orientation" "$seconds_for_the_screen_to_settle" $rotate
         take "$device_name" "menu-$orientation" "$seconds_for_the_screen_to_settle" $rotate --menu
