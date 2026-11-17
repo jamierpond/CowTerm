@@ -42,6 +42,7 @@ struct LaunchOptions
 {
     bool raisesSoftwareKeyboard = false;
     bool turnsToLandscape = false;
+    bool turnsToPortrait = false;
     bool opensMenu = false;
     bool streamsOutput = false;
     bool scrollsBack = false;
@@ -81,6 +82,7 @@ struct LaunchSwitch
 constexpr LaunchSwitch launchSwitches[] = {
     {"--raise-keyboard", &LaunchOptions::raisesSoftwareKeyboard},
     {"--landscape", &LaunchOptions::turnsToLandscape},
+    {"--portrait", &LaunchOptions::turnsToPortrait},
     {"--menu", &LaunchOptions::opensMenu},
     {"--stream", &LaunchOptions::streamsOutput},
     {"--scroll-back", &LaunchOptions::scrollsBack},
@@ -303,6 +305,9 @@ struct CowTermMobileApp
 
         if (launchOptions.turnsToLandscape)
             cowterm::mobile::requestLandscapeInterfaceOrientation(window);
+
+        if (launchOptions.turnsToPortrait)
+            cowterm::mobile::requestPortraitInterfaceOrientation(window);
 
         if (launchOptions.opensMenu)
             screen.openMenu();

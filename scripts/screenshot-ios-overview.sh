@@ -3,7 +3,8 @@
 # sessions) on the smallest and largest iPhones, portrait and landscape, into
 # OUTPUT_DIR. Build first with scripts/build-ios-simulator.sh. The two
 # simulators are this script's own, created on first use, so it never takes
-# over a simulator another agent is driving.
+# over a simulator another agent is driving. A simulator keeps the last
+# orientation it was turned to, so the portrait shot asks for portrait.
 #
 #   scripts/screenshot-ios-overview.sh <output-dir>
 set -eu
@@ -22,7 +23,7 @@ shoot() {
         xcrun simctl create "$simulator_name" "$device_type" "$runtime" > /dev/null
     fi
 
-    scripts/run-ios-simulator.sh "$simulator_name" --overview
+    scripts/run-ios-simulator.sh "$simulator_name" --overview --portrait
     sleep "$settle_seconds"
     scripts/screenshot-ios-simulator.sh "$output_dir/$file_stem-portrait.png" "$simulator_name"
 
