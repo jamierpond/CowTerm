@@ -1,0 +1,45 @@
+#pragma once
+
+#include "NetworkPathWatch.h"
+
+#include "Phone/PhoneConnection.h"
+#include "TerminalView/TerminalView.h"
+
+#include <memory>
+#include <optional>
+
+namespace cowterm::mobile
+{
+// The phone's connection to a host, when the launch named one: settings read
+// from the launch arguments and SIMCTL_CHILD_ environment, the stored last
+// screen, and the hooks that keep the link honest (background, foreground,
+// network change). Everything it hears is logged until the pane screen shows it.
+class PhoneLaunch
+{
+public:
+    explicit PhoneLaunch(term::phone::PhoneSettings settings);
+
+    // Empty when the launch names no destination: the app shows sample text.
+    static std::optional<term::phone::PhoneSettings> readSettings(int argc, char* argv[]);
+
+    // The pane view's config: its shell is the daemon's pane on the host.
+    term::TerminalConfig makeTerminalConfig();
+
+    // The pane to open at once; empty until the daemon has chosen one.
+    std::string getPaneToOpen() const;
+
+    // From Apps::setSuspendHandler.
+    void handleSuspended(bool isSuspended);
+
+    // What the last launch stored, loaded before the link is up.
+    const std::optional<term::phone::StoredScreen>& getStoredScreen() const { return storedScreen; }
+
+private:
+    void logWhatTheConnectionHears();
+
+    term::phone::PhoneSettings settings;
+    std::optional<term::phone::StoredScreen> storedScreen;
+    term::phone::PhoneConnection connection;
+    NetworkPathWatch networkPathWatch;
+};
+} // namespace cowterm::mobile

@@ -46,7 +46,7 @@ auto probeOpensAThrowawayPaneByDefault = test("EmbeddedSshProbe/opensAThrowawayP
     const auto arguments = parseProbeArguments({"jamie@tamby"});
 
     check(arguments.has_value());
-    check(!arguments->isAdoptingAPane);
+    check(arguments->mode == ProbeMode::ThrowawayPane);
 };
 
 auto probeAdoptsTheNamedPane = test("EmbeddedSshProbe/adoptsTheNamedPane") = []
@@ -54,8 +54,8 @@ auto probeAdoptsTheNamedPane = test("EmbeddedSshProbe/adoptsTheNamedPane") = []
     const auto arguments = parseProbeArguments({"jamie@tamby", "--adopt", "pane-7"});
 
     check(arguments.has_value());
-    check(arguments->isAdoptingAPane);
-    check(arguments->adoptedPaneId == "pane-7");
+    check(arguments->mode == ProbeMode::AdoptPane);
+    check(arguments->paneId == "pane-7");
 };
 
 auto probeAdoptsTheFirstPaneWithoutAnId = test("EmbeddedSshProbe/adoptsTheFirstPaneWithoutAnId") = []
@@ -63,8 +63,21 @@ auto probeAdoptsTheFirstPaneWithoutAnId = test("EmbeddedSshProbe/adoptsTheFirstP
     const auto arguments = parseProbeArguments({"jamie@tamby", "--adopt"});
 
     check(arguments.has_value());
-    check(arguments->isAdoptingAPane);
-    check(arguments->adoptedPaneId.empty());
+    check(arguments->mode == ProbeMode::AdoptPane);
+    check(arguments->paneId.empty());
+};
+
+auto probeLeavesAndKillsANamedPane = test("EmbeddedSshProbe/leavesAndKillsANamedPane") = []
+{
+    const auto leave = parseProbeArguments({"jamie@tamby", "--leave-pane", "phone-test"});
+    const auto kill = parseProbeArguments({"jamie@tamby", "--kill-pane", "phone-test"});
+
+    check(leave.has_value());
+    check(leave->mode == ProbeMode::LeavePaneRunning);
+    check(leave->paneId == "phone-test");
+    check(kill.has_value());
+    check(kill->mode == ProbeMode::KillPane);
+    check(!parseProbeArguments({"jamie@tamby", "--kill-pane"}).has_value());
 };
 
 auto probeRefusesOtherArguments = test("EmbeddedSshProbe/refusesOtherArguments") = []

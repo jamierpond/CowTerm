@@ -1,9 +1,58 @@
 #include "EmbeddedSshProbeArguments.h"
 
+#include <array>
+#include <string_view>
+
 namespace
 {
-constexpr auto adoptFlag = "--adopt";
+struct ModeFlag
+{
+    std::string_view flag;
+    ProbeMode mode;
+    bool needsPaneId;
+};
+
+constexpr auto modeFlags = std::array {
+    ModeFlag {"--adopt", ProbeMode::AdoptPane, false},
+    ModeFlag {"--leave-pane", ProbeMode::LeavePaneRunning, true},
+    ModeFlag {"--kill-pane", ProbeMode::KillPane, true},
+};
+
 constexpr auto mostArguments = std::size_t {3};
+
+std::optional<ModeFlag> findModeFlag(const std::string& text)
+{
+    for (const auto& flag: modeFlags)
+    {
+        if (flag.flag == text)
+            return flag;
+    }
+
+    return std::nullopt;
+}
+
+// The mode and pane after the destination: none at all is ThrowawayPane.
+std::optional<ProbeArguments> parseModeArguments(const term::SshDestination& destination,
+                                                 const std::vector<std::string>& modeArguments)
+{
+    if (modeArguments.empty())
+        return ProbeArguments {destination};
+
+    const auto flag = findModeFlag(modeArguments[0]);
+
+    if (!flag)
+        return std::nullopt;
+
+    auto parsed = ProbeArguments {destination, flag->mode};
+
+    if (modeArguments.size() > 1)
+        parsed.paneId = modeArguments[1];
+
+    if (flag->needsPaneId && parsed.paneId.empty())
+        return std::nullopt;
+
+    return parsed;
+}
 } // namespace
 
 std::optional<ProbeArguments> parseProbeArguments(const std::vector<std::string>& arguments)
@@ -16,18 +65,5 @@ std::optional<ProbeArguments> parseProbeArguments(const std::vector<std::string>
     if (!destination)
         return std::nullopt;
 
-    auto parsed = ProbeArguments {*destination};
-
-    if (arguments.size() == 1)
-        return parsed;
-
-    if (arguments[1] != adoptFlag)
-        return std::nullopt;
-
-    parsed.isAdoptingAPane = true;
-
-    if (arguments.size() == mostArguments)
-        parsed.adoptedPaneId = arguments[2];
-
-    return parsed;
+    return parseModeArguments(*destination, {arguments.begin() + 1, arguments.end()});
 }

@@ -1,4 +1,5 @@
 #include "InterfaceOrientation.h"
+#include "PhoneLaunch.h"
 
 #include "TerminalView/GlyphAtlas.h"
 #include "TerminalView/TerminalView.h"
@@ -71,11 +72,13 @@ struct LaunchOptions
 {
     bool raisesSoftwareKeyboard = false;
     bool turnsToLandscape = false;
+    std::optional<term::phone::PhoneSettings> phoneSettings;
 };
 
 LaunchOptions parseLaunchOptions(int argc, char* argv[])
 {
     auto options = LaunchOptions {};
+    options.phoneSettings = cowterm::mobile::PhoneLaunch::readSettings(argc, argv);
 
     for (auto index = 1; index < argc; ++index)
     {
@@ -107,8 +110,8 @@ void logSafeAreaInsets(const Graphics::Insets& insets)
 class MobileRootView final : public Graphics::View
 {
 public:
-    MobileRootView()
-        : terminal(makeSampleTextTerminalConfig(), {})
+    MobileRootView(const term::TerminalConfig& config, const std::string& paneId)
+        : terminal(config, {}, paneId)
     {
         addSubview(terminal);
     }
@@ -137,13 +140,48 @@ Graphics::WindowOptions makeWindowOptions()
     return options;
 }
 
+std::unique_ptr<cowterm::mobile::PhoneLaunch> makePhoneLaunch(const LaunchOptions& launchOptions)
+{
+    if (!launchOptions.phoneSettings)
+        return nullptr;
+
+    return std::make_unique<cowterm::mobile::PhoneLaunch>(*launchOptions.phoneSettings);
+}
+
+// The daemon's pane when the launch named one; the sample text otherwise.
+bool isOpeningAPhonePane(const std::unique_ptr<cowterm::mobile::PhoneLaunch>& phone)
+{
+    return phone != nullptr && !phone->getPaneToOpen().empty();
+}
+
+term::TerminalConfig makeRootTerminalConfig(const std::unique_ptr<cowterm::mobile::PhoneLaunch>& phone)
+{
+    if (isOpeningAPhonePane(phone))
+        return phone->makeTerminalConfig();
+
+    return makeSampleTextTerminalConfig();
+}
+
+std::string getRootPaneId(const std::unique_ptr<cowterm::mobile::PhoneLaunch>& phone)
+{
+    if (isOpeningAPhonePane(phone))
+        return phone->getPaneToOpen();
+
+    return {};
+}
+
 struct CowTermMobileApp
 {
     explicit CowTermMobileApp(const LaunchOptions& launchOptions)
+        : phone(makePhoneLaunch(launchOptions))
+        , root(makeRootTerminalConfig(phone), getRootPaneId(phone))
     {
         Apps::setSuspendHandler(
-            [](bool suspended)
+            [this](bool suspended)
             {
+                if (phone != nullptr)
+                    phone->handleSuspended(suspended);
+
                 if (suspended)
                     LOG("lifecycle: entered background");
                 else
@@ -170,6 +208,7 @@ struct CowTermMobileApp
             cowterm::mobile::requestLandscapeInterfaceOrientation(window);
     }
 
+    std::unique_ptr<cowterm::mobile::PhoneLaunch> phone;
     MobileRootView root;
     Graphics::Window window {root, makeWindowOptions()};
 };

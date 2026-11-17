@@ -6,16 +6,33 @@
 #include <string>
 #include <vector>
 
+enum class ProbeMode
+{
+    // Open a throwaway pane, echo into it, print it and kill it.
+    ThrowawayPane,
+
+    // Print an existing pane read only and release it.
+    AdoptPane,
+
+    // Open a pane with this id running `seq 1 300` and leave it running.
+    LeavePaneRunning,
+
+    // Kill this pane (one LeavePaneRunning made).
+    KillPane
+};
+
 // CowTermEmbeddedSshProbe's command line:
-//   <user@host[:port]>                  a throwaway pane of its own
-//   <user@host[:port]> --adopt [pane]   an existing pane, read only
+//   <user@host[:port]>                       ThrowawayPane
+//   <user@host[:port]> --adopt [pane]        AdoptPane
+//   <user@host[:port]> --leave-pane <pane>   LeavePaneRunning
+//   <user@host[:port]> --kill-pane <pane>    KillPane
 struct ProbeArguments
 {
     term::SshDestination destination;
-    bool isAdoptingAPane = false;
+    ProbeMode mode = ProbeMode::ThrowawayPane;
 
     // Empty with --adopt: the first pane the daemon lists.
-    std::string adoptedPaneId;
+    std::string paneId;
 };
 
 // Empty when the arguments don't match the usage above.

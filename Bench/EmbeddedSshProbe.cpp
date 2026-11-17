@@ -2,8 +2,9 @@
 // host's session daemon. It lists the host's panes, opens a throwaway pane,
 // runs an echo there, prints that pane's screen as the daemon's `state` message
 // draws it, then kills the pane. With --adopt it prints an existing pane's
-// screen instead and releases it, never writing to it.
-// Run by scripts/probe-embedded-ssh.sh.
+// screen instead and releases it, never writing to it. --leave-pane opens a
+// pane running `seq 1 300` and leaves it for the phone to open; --kill-pane
+// ends it. Run by scripts/probe-embedded-ssh.sh and run-ios-against-host.sh.
 
 #include "EmbeddedSshProbeArguments.h"
 
@@ -33,6 +34,22 @@ constexpr auto probeRows = 24;
 constexpr auto probeSession = "embedded-ssh-probe";
 constexpr auto probeDirectory = "/tmp";
 constexpr auto marker = "hello-from-embedded-ssh";
+constexpr auto lastNumberOfSequence = "300";
+
+// What the probe types into its pane, and the line that shows it ran.
+struct PaneScript
+{
+    std::string command;
+    std::string lineThatShowsItRan;
+};
+
+PaneScript makePaneScript(ProbeMode mode)
+{
+    if (mode == ProbeMode::LeavePaneRunning)
+        return {std::string {"seq 1 "} + lastNumberOfSequence + "\r", lastNumberOfSequence};
+
+    return {std::string {"echo "} + marker + "\r", marker};
+}
 constexpr auto failedExitCode = 1;
 constexpr auto usageExitCode = 2;
 
@@ -89,11 +106,11 @@ void printScreen(const term::TermScreen& screen)
         std::printf("  | %s\n", readRowText(screen, row).c_str());
 }
 
-bool isShowingMarkerLine(const term::TermScreen& screen)
+bool isShowingLine(const term::TermScreen& screen, const std::string& line)
 {
     for (auto row = 0; row < screen.rows(); ++row)
     {
-        if (readRowText(screen, row) == marker)
+        if (readRowText(screen, row) == line)
             return true;
     }
 
@@ -131,6 +148,10 @@ private:
     {
         std::printf("connected to %s through EmbeddedSshLink; bridge hello received\n",
                     arguments.destination.host.c_str());
+
+        if (arguments.mode == ProbeMode::KillPane)
+            return killPane(arguments.paneId);
+
         link.send(term::proto::make("info"));
     }
 
@@ -164,10 +185,14 @@ private:
         for (const auto& pane: panes)
             std::printf("  %s\n", pane.infoLine.c_str());
 
-        if (arguments.isAdoptingAPane)
+        if (arguments.mode == ProbeMode::AdoptPane)
             return adoptPane(findPaneToAdopt(panes));
 
         paneId = makeThrowawayPaneId();
+
+        if (arguments.mode == ProbeMode::LeavePaneRunning)
+            paneId = arguments.paneId;
+
         std::printf("opening throwaway pane %s\n", paneId.c_str());
         sendSpawn(probeSession, probeDirectory);
     }
@@ -188,7 +213,7 @@ private:
     {
         for (const auto& pane: panes)
         {
-            if (arguments.adoptedPaneId.empty() || pane.id == arguments.adoptedPaneId)
+            if (arguments.paneId.empty() || pane.id == arguments.paneId)
                 return pane;
         }
 
@@ -215,19 +240,31 @@ private:
     void handleOutput(const std::string& payload)
     {
         liveModel.feed(payload);
+        const auto script = makePaneScript(arguments.mode);
 
-        if (!hasSentEcho)
+        if (!hasSentCommand)
         {
-            hasSentEcho = true;
-            link.send(term::proto::make("write", {paneId}, std::string {"echo "} + marker + "\r"));
+            hasSentCommand = true;
+            link.send(term::proto::make("write", {paneId}, script.command));
         }
 
-        if (!hasAskedForState && isShowingMarkerLine(liveModel.screen))
+        if (!hasSeenCommandRun && isShowingLine(liveModel.screen, script.lineThatShowsItRan))
         {
-            hasAskedForState = true;
+            hasSeenCommandRun = true;
             link.send(term::proto::make("release", {paneId}));
-            sendSpawn(probeSession, probeDirectory);
+            handleCommandRan();
         }
+    }
+
+    void handleCommandRan()
+    {
+        if (arguments.mode == ProbeMode::LeavePaneRunning)
+        {
+            std::printf("left pane %s running on %s\n", paneId.c_str(), arguments.destination.host.c_str());
+            return finish({});
+        }
+
+        sendSpawn(probeSession, probeDirectory);
     }
 
     void handleState(const std::string& payload)
@@ -242,12 +279,18 @@ private:
         std::printf("screen of %s, loaded from the daemon's state message:\n", paneId.c_str());
         printScreen(restored.screen);
 
-        if (arguments.isAdoptingAPane)
+        if (arguments.mode == ProbeMode::AdoptPane)
         {
             link.send(term::proto::make("release", {paneId}));
             return finish({});
         }
 
+        killPane(paneId);
+    }
+
+    void killPane(const std::string& id)
+    {
+        paneId = id;
         link.send(term::proto::make("kill", {paneId}));
         hasKilledPane = true;
         std::printf("killed throwaway pane %s\n", paneId.c_str());
@@ -268,8 +311,8 @@ private:
     term::Theme theme;
     term::TerminalModel liveModel {probeColumns, probeRows, theme};
     std::string paneId;
-    bool hasSentEcho = false;
-    bool hasAskedForState = false;
+    bool hasSentCommand = false;
+    bool hasSeenCommandRun = false;
     bool hasKilledPane = false;
     bool isFinished = false;
     std::string failure;
@@ -311,7 +354,9 @@ int main(int argc, char** argv)
 
     if (!arguments)
     {
-        std::fprintf(stderr, "usage: CowTermEmbeddedSshProbe <user@host[:port]> [--adopt [pane id]]\n");
+        std::fprintf(stderr,
+                     "usage: CowTermEmbeddedSshProbe <user@host[:port]> "
+                     "[--adopt [pane id] | --leave-pane <pane id> | --kill-pane <pane id>]\n");
         return usageExitCode;
     }
 
