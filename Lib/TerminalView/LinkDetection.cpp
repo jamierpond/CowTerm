@@ -5,6 +5,7 @@
 #include "Emulator/HyperlinkTable.h"
 
 #include <algorithm>
+#include <array>
 #include <cctype>
 #include <vector>
 
@@ -18,7 +19,21 @@ constexpr auto longestLogicalLineRows = 64L;
 
 constexpr auto urlPunctuation = std::string_view {"-._~:/?#[]@!$&()*+,;=%"};
 constexpr auto trailingSentencePunctuation = std::string_view {".,;:!?"};
+constexpr auto closingBrackets = std::string_view {")]"};
 constexpr auto firstNonAsciiByte = 0x80;
+
+// Claude Code's prompt box breaks a URL one column short of the right edge.
+constexpr auto mostColumnsABrokenRowStopsShortOfTheEdge = 1;
+constexpr auto deepestContinuationIndent = 8;
+constexpr auto listBullets =
+    std::array<std::string_view, 4> {"-", "*", "+", "\u2022"};
+constexpr auto orderedListMarkerEndings = std::string_view {".)"};
+
+enum class RowJoining
+{
+    SoftWrapsOnly,
+    SoftWrapsAndIndentedContinuations
+};
 
 struct LogicalCell
 {
@@ -35,6 +50,17 @@ struct LogicalLine
     std::vector<CellRef> cellOfByte;
 };
 
+bool isUrlByte(char byte)
+{
+    const auto code = (unsigned char) byte;
+
+    if (code >= firstNonAsciiByte)
+        return true;
+
+    return std::isalnum(code) != 0
+           || urlPunctuation.find(byte) != std::string_view::npos;
+}
+
 bool isRowWrappedOnward(const TermScreen& screen, long row)
 {
     return isAbsoluteRowStored(screen, row) && findLineAtAbsoluteRow(screen, row).wrapped;
@@ -45,31 +71,149 @@ bool doesRowRunOntoStoredRow(const TermScreen& screen, long row)
     return isRowWrappedOnward(screen, row) && isAbsoluteRowStored(screen, row + 1);
 }
 
-long findLogicalLineFirstRow(const TermScreen& screen, long row)
+int measureIndent(const Line& line)
+{
+    auto indent = 0;
+
+    while (indent < (int) line.size() && line[(std::size_t) indent].isSpace())
+        ++indent;
+
+    return indent;
+}
+
+std::string readTextOfCell(const TermScreen& screen, const Line& line, int column)
+{
+    auto text = std::string {};
+    appendCellText(text, screen, line[(std::size_t) column]);
+    return text;
+}
+
+std::string readWordFrom(const TermScreen& screen, const Line& line, int column)
+{
+    auto word = std::string {};
+
+    for (; column < (int) line.size() && !line[(std::size_t) column].isSpace();
+         ++column)
+    {
+        if (!line[(std::size_t) column].hasFlag(CellFlag::WideCont))
+            word += readTextOfCell(screen, line, column);
+    }
+
+    return word;
+}
+
+bool isListMarker(std::string_view word)
+{
+    if (std::find(listBullets.begin(), listBullets.end(), word) != listBullets.end())
+        return true;
+
+    if (word.size() < 2
+        || orderedListMarkerEndings.find(word.back()) == std::string_view::npos)
+        return false;
+
+    const auto number = word.substr(0, word.size() - 1);
+    return std::all_of(number.begin(),
+                       number.end(),
+                       [](char digit)
+                       { return std::isdigit((unsigned char) digit) != 0; });
+}
+
+bool isByteThatEndsTextRatherThanAUrl(char byte)
+{
+    return trailingSentencePunctuation.find(byte) != std::string_view::npos
+           || closingBrackets.find(byte) != std::string_view::npos;
+}
+
+// Where a program that breaks its own lines may have cut a URL in two.
+bool doesRowStopMidUrlAtTheEdge(const TermScreen& screen, const Line& line)
+{
+    const auto inkLength = measureInkLength(line);
+
+    if (inkLength == 0
+        || inkLength < screen.columns() - mostColumnsABrokenRowStopsShortOfTheEdge)
+        return false;
+
+    const auto lastCharacter = readTextOfCell(screen, line, inkLength - 1);
+    return isUrlByte(lastCharacter.back())
+           && !isByteThatEndsTextRatherThanAUrl(lastCharacter.back());
+}
+
+bool isContinuationIndent(int indent)
+{
+    return indent >= 1 && indent <= deepestContinuationIndent;
+}
+
+// After its indent the row starts with URL text that is not a new URL or a list item.
+bool doesRowContinueAUrlAfterIndent(const TermScreen& screen,
+                                    const Line& line,
+                                    int indent)
+{
+    if (!isContinuationIndent(indent) || indent >= (int) line.size())
+        return false;
+
+    const auto word = readWordFrom(screen, line, indent);
+    return isUrlByte(word.front()) && !isListMarker(word)
+           && !hasOpenableScheme(word);
+}
+
+bool doesRowContinueOnIndentedRow(const TermScreen& screen, long row)
+{
+    if (!isAbsoluteRowStored(screen, row) || !isAbsoluteRowStored(screen, row + 1))
+        return false;
+
+    const auto& line = findLineAtAbsoluteRow(screen, row);
+    const auto& next = findLineAtAbsoluteRow(screen, row + 1);
+
+    return !line.wrapped && doesRowStopMidUrlAtTheEdge(screen, line)
+           && doesRowContinueAUrlAfterIndent(screen, next, measureIndent(next));
+}
+
+bool doesRowJoinNextRow(const TermScreen& screen, long row, RowJoining joining)
+{
+    if (doesRowRunOntoStoredRow(screen, row))
+        return true;
+
+    return joining == RowJoining::SoftWrapsAndIndentedContinuations
+           && doesRowContinueOnIndentedRow(screen, row);
+}
+
+long findLogicalLineFirstRow(const TermScreen& screen, long row, RowJoining joining)
 {
     auto first = row;
 
-    while (row - first < longestLogicalLineRows && isRowWrappedOnward(screen, first - 1))
+    while (row - first < longestLogicalLineRows
+           && doesRowJoinNextRow(screen, first - 1, joining))
         --first;
 
     return first;
 }
 
-long findLogicalLineLastRow(const TermScreen& screen, long row)
+long findLogicalLineLastRow(const TermScreen& screen, long row, RowJoining joining)
 {
     auto last = row;
 
-    while (last - row < longestLogicalLineRows && doesRowRunOntoStoredRow(screen, last))
+    while (last - row < longestLogicalLineRows
+           && doesRowJoinNextRow(screen, last, joining))
         ++last;
 
     return last;
 }
 
-void appendRowToLogicalLine(const TermScreen& screen, long row, LogicalLine& logical)
+// Columns [first, end) of a row.
+struct ColumnRange
+{
+    int first = 0;
+    int end = 0;
+};
+
+void appendRowToLogicalLine(const TermScreen& screen,
+                            long row,
+                            ColumnRange columns,
+                            LogicalLine& logical)
 {
     const auto& line = findLineAtAbsoluteRow(screen, row);
 
-    for (auto col = 0; col < (int) line.size(); ++col)
+    for (auto col = columns.first; col < columns.end; ++col)
     {
         const auto& cell = line[(std::size_t) col];
 
@@ -83,13 +227,29 @@ void appendRowToLogicalLine(const TermScreen& screen, long row, LogicalLine& log
     }
 }
 
-LogicalLine readLogicalLine(const TermScreen& screen, long row)
+// An indented continuation row is read from after its indent.
+LogicalLine readLogicalLine(const TermScreen& screen, long row, RowJoining joining)
 {
     auto logical = LogicalLine {};
-    const auto last = findLogicalLineLastRow(screen, row);
+    const auto last = findLogicalLineLastRow(screen, row, joining);
+    auto firstColumn = 0;
 
-    for (auto each = findLogicalLineFirstRow(screen, row); each <= last; ++each)
-        appendRowToLogicalLine(screen, each, logical);
+    for (auto each = findLogicalLineFirstRow(screen, row, joining); each <= last;
+         ++each)
+    {
+        const auto& line = findLineAtAbsoluteRow(screen, each);
+        const auto isIndentedContinuationNext = each < last && !line.wrapped;
+        auto columns = ColumnRange {firstColumn, (int) line.size()};
+        firstColumn = 0;
+
+        if (isIndentedContinuationNext)
+        {
+            columns.end = measureInkLength(line);
+            firstColumn = measureIndent(findLineAtAbsoluteRow(screen, each + 1));
+        }
+
+        appendRowToLogicalLine(screen, each, columns, logical);
+    }
 
     return logical;
 }
@@ -125,7 +285,27 @@ std::optional<DetectedLink> findExplicitHyperlink(const TermScreen& screen,
     while (last + 1 < logical.cells.size() && logical.cells[last + 1].hyperlink == id)
         ++last;
 
-    return DetectedLink {{logical.cells[first].ref, logical.cells[last].ref}, std::string {uri}};
+    return DetectedLink {{logical.cells[first].ref, logical.cells[last].ref, {}},
+                         std::string {uri}};
+}
+
+LinkSpan makeTextUrlSpan(const LogicalLine& logical, TextRange range)
+{
+    auto span = LinkSpan {
+        logical.cellOfByte[range.begin], logical.cellOfByte[range.end - 1], {}};
+    auto previousRow = span.start.row;
+
+    for (auto byte = range.begin; byte < range.end; ++byte)
+    {
+        const auto cell = logical.cellOfByte[byte];
+
+        if (cell.row != previousRow && cell.col > 0)
+            span.indentedRowStarts.push_back(cell);
+
+        previousRow = cell.row;
+    }
+
+    return span;
 }
 
 std::optional<DetectedLink> findTextUrl(const LogicalLine& logical, CellRef cell)
@@ -141,18 +321,9 @@ std::optional<DetectedLink> findTextUrl(const LogicalLine& logical, CellRef cell
     if (!range)
         return std::nullopt;
 
-    const auto span = LinkSpan {logical.cellOfByte[range->begin], logical.cellOfByte[range->end - 1]};
-    return DetectedLink {span, logical.text.substr(range->begin, range->end - range->begin)};
-}
-
-bool isUrlByte(char byte)
-{
-    const auto code = (unsigned char) byte;
-
-    if (code >= firstNonAsciiByte)
-        return true;
-
-    return std::isalnum(code) != 0 || urlPunctuation.find(byte) != std::string_view::npos;
+    return DetectedLink {
+        makeTextUrlSpan(logical, *range),
+        logical.text.substr(range->begin, range->end - range->begin)};
 }
 
 long countByte(std::string_view text, char byte)
@@ -216,6 +387,17 @@ std::size_t measureSchemeLength(std::string_view url)
 }
 } // namespace
 
+bool LinkSpan::contains(CellRef cell) const
+{
+    if (cell < start || end < cell)
+        return false;
+
+    return std::none_of(indentedRowStarts.begin(),
+                        indentedRowStarts.end(),
+                        [cell](CellRef rowStart)
+                        { return rowStart.row == cell.row && cell.col < rowStart.col; });
+}
+
 std::optional<TextRange> findUrlAround(std::string_view text, std::size_t byteIndex)
 {
     if (byteIndex >= text.size() || !isUrlByte(text[byteIndex]))
@@ -241,15 +423,19 @@ std::optional<DetectedLink> findLinkAt(const TermScreen& screen, CellRef cell)
     if (!isAbsoluteRowStored(screen, cell.row))
         return std::nullopt;
 
-    const auto logical = readLogicalLine(screen, cell.row);
-    const auto index = findCellIndex(logical, cell);
+    const auto wrappedLine =
+        readLogicalLine(screen, cell.row, RowJoining::SoftWrapsOnly);
+    const auto index = findCellIndex(wrappedLine, cell);
 
     if (!index)
         return std::nullopt;
 
-    if (logical.cells[*index].hyperlink != noHyperlink)
-        return findExplicitHyperlink(screen, logical, *index);
+    if (wrappedLine.cells[*index].hyperlink != noHyperlink)
+        return findExplicitHyperlink(screen, wrappedLine, *index);
 
-    return findTextUrl(logical, cell);
+    return findTextUrl(
+        readLogicalLine(
+            screen, cell.row, RowJoining::SoftWrapsAndIndentedContinuations),
+        cell);
 }
 } // namespace term

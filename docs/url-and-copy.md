@@ -36,6 +36,12 @@ it, across wraps.
   quoted URL stops at its quote. Only schemes CowTerm already opens count
   (`http`, `https`, `mailto`, `file`). A logical line is read up to 64 rows
   either way.
+- URLs a program broke itself (Claude Code breaks lines rather than letting
+  the terminal wrap them): a URL whose row's text reaches within one column of
+  the right edge runs on into the next row's text after its indent (1 to 8
+  spaces), unless that row starts a list item or a new URL, or the first row
+  ends in sentence punctuation or a closing bracket. The indent is not part of
+  the link or its underline.
 - OSC 8: was already parsed and opened on Cmd-click; it now spans wrapped
   rows and underlines on hover like text URLs. An explicit link wins over
   text detection.
