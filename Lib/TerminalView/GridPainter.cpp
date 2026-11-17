@@ -1,5 +1,7 @@
 #include "GridPainter.h"
 
+#include "Emulator/Utf8Decoder.h"
+
 #include <algorithm>
 #include <array>
 #include <optional>
@@ -277,7 +279,8 @@ void GridPainter::drawBlockCursor(Point cellOrigin, const PaintedLine& line, int
 void GridPainter::drawCopyModeBadge(const std::string& indicator, float viewWidth)
 {
     const auto cellW = tools.atlas.cellWidth();
-    const auto width = (float) indicator.size() * cellW + badgePadding * 2;
+    const auto codepoints = decodeUtf8(indicator);
+    const auto width = (float) codepoints.size() * cellW + badgePadding * 2;
     const auto left = viewWidth - width - tools.margins.x;
 
     tools.sprites.fillRect({left, tools.margins.y, width, tools.atlas.cellHeight()},
@@ -285,9 +288,11 @@ void GridPainter::drawCopyModeBadge(const std::string& indicator, float viewWidt
 
     auto pen = Point {left + badgePadding, tools.margins.y + tools.atlas.baseline()};
 
-    for (const auto c: indicator)
+    // One glyph per codepoint: a byte at a time drew "…" as three
+    // replacement glyphs.
+    for (const auto codepoint: codepoints)
     {
-        const auto slot = tools.atlas.glyph((char32_t) c, false, false, singleCellWidth);
+        const auto slot = tools.atlas.glyph(codepoint, false, false, singleCellWidth);
 
         if (isDrawable(slot))
             queueGlyph(slot, pen, toColor(tools.theme.background), false);

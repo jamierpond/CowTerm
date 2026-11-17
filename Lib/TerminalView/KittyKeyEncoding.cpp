@@ -133,17 +133,6 @@ std::optional<Entry> findByKeyCode(const std::array<Entry, size>& table, std::ui
     return *found;
 }
 
-std::u32string decodeUtf8(std::string_view text)
-{
-    auto decoder = Utf8Decoder {};
-    auto codepoints = std::u32string {};
-
-    for (const auto byte: text)
-        decoder.decode((std::uint8_t) byte, [&](char32_t codepoint) { codepoints += codepoint; });
-
-    return codepoints;
-}
-
 // macOS gives arrows, F-keys, Home/End and paging Private Use Area characters
 // (U+F700 up); they are keys, not text.
 bool isAppleFunctionKeyCode(char32_t codepoint)

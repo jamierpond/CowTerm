@@ -2,6 +2,8 @@
 
 #include <array>
 #include <cstdint>
+#include <string>
+#include <string_view>
 
 namespace term
 {
@@ -106,4 +108,16 @@ private:
     char32_t codepoint = 0;
     int remainingContinuationBytes = 0;
 };
+
+// Every codepoint in a whole UTF-8 string.
+inline std::u32string decodeUtf8(std::string_view text)
+{
+    auto decoder = Utf8Decoder {};
+    auto codepoints = std::u32string {};
+
+    for (const auto byte: text)
+        decoder.decode((std::uint8_t) byte, [&](char32_t codepoint) { codepoints += codepoint; });
+
+    return codepoints;
+}
 } // namespace term

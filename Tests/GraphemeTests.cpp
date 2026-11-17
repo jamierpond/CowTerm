@@ -1,5 +1,6 @@
 #include <Emulator/TermParser.h>
 #include <Emulator/TermScreen.h>
+#include <Emulator/Utf8Decoder.h>
 #include <TerminalView/CellText.h>
 
 #include <NanoTest/NanoTest.h>
@@ -107,4 +108,15 @@ auto tStylesAreShared = test("Styles/aFullStyleTableDropsUnusedStyles") = []
     const auto last = styleCount - 1;
     const auto expected = (Rgb) (((last % 256) << 16) | ((last / 256 % 256) << 8) | (last / 65536));
     check(fed.cell(0).fg == expected);
+};
+
+// The status note over a pane ("reconnecting…") is drawn a codepoint at a time;
+// drawn a byte at a time, "…" came out as three replacement glyphs.
+auto tStatusNoteEllipsis = test("Utf8/ellipsisDecodesToOneCodepoint") = []
+{
+    constexpr auto ellipsis = char32_t {0x2026};
+    const auto codepoints = decodeUtf8("reconnecting\xe2\x80\xa6");
+
+    check(codepoints.size() == std::string_view {"reconnecting"}.size() + 1);
+    check(codepoints.back() == ellipsis);
 };

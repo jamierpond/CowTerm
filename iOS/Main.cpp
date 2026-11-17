@@ -56,8 +56,9 @@ constexpr std::string_view sampleScreenText =
 class SampleTextShell final : public term::Shell
 {
 public:
-    explicit SampleTextShell(bool streamsOutputToUse)
+    SampleTextShell(bool streamsOutputToUse, std::string statusNoteToUse)
         : streamsOutput(streamsOutputToUse)
+        , statusNote(std::move(statusNoteToUse))
     {
     }
 
@@ -67,6 +68,7 @@ public:
     {
         onOutput = std::move(onOutputToUse);
         onOutput(std::string {sampleScreenText});
+        onStatusChanged(statusNote);
 
         if (streamsOutput)
             streamTimer.emplace([this] { writeNextStreamedLine(); }, streamedLinesPerSecond);
@@ -91,16 +93,17 @@ private:
     }
 
     bool streamsOutput = false;
+    std::string statusNote;
     int streamedLineCount = 0;
     std::function<void(std::string)> onOutput = [](std::string) {};
     std::optional<Threads::Timer> streamTimer;
 };
 
-term::TerminalConfig makeSampleTextTerminalConfig(bool streamsOutput)
+term::TerminalConfig makeSampleTextTerminalConfig(bool streamsOutput, const std::string& statusNote)
 {
     auto config = term::TerminalConfig {};
-    config.makeShell = [streamsOutput](const std::string&)
-    { return std::make_unique<SampleTextShell>(streamsOutput); };
+    config.makeShell = [streamsOutput, statusNote](const std::string&)
+    { return std::make_unique<SampleTextShell>(streamsOutput, statusNote); };
     return config;
 }
 
@@ -236,6 +239,15 @@ void dragPaneDownToScrollBack(term::TerminalView& terminal)
     terminal.endTouchScrollWithVelocity(0.0f);
 }
 
+// The note a daemon pane shows over its text when its link is not live.
+std::string describeSampleStatusNote(cowterm::mobile::LinkState state)
+{
+    if (state == cowterm::mobile::LinkState::Live)
+        return {};
+
+    return "tamby: connection lost; reconnecting\xe2\x80\xa6";
+}
+
 std::unique_ptr<cowterm::mobile::PhoneLaunch> makePhoneLaunch(const LaunchOptions& launchOptions)
 {
     if (!launchOptions.phoneSettings)
@@ -256,7 +268,8 @@ term::TerminalConfig makePaneTerminalConfig(const std::unique_ptr<cowterm::mobil
     if (isOpeningAPhonePane(phone))
         return cowterm::mobile::PhonePaneBinding::makeFirstPaneConfig(*phone);
 
-    return makeSampleTextTerminalConfig(launchOptions.streamsOutput);
+    return makeSampleTextTerminalConfig(launchOptions.streamsOutput,
+                                        describeSampleStatusNote(launchOptions.linkState));
 }
 
 std::string getPaneId(const std::unique_ptr<cowterm::mobile::PhoneLaunch>& phone)
