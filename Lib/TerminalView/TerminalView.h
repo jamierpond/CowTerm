@@ -126,7 +126,8 @@ public:
 
     // Sends composed text as a paste (bracketed when the program asked for
     // it), then Enter, as typing, and returns to the live bottom: what the
-    // phone's composer sends.
+    // phone's composer sends. Asks through confirmUnsafePaste first, as a
+    // paste does, when the text could run commands.
     void pasteThenPressEnter(const std::string& text);
 
     // Finger scrolling for a touch screen host, fed the finger's touch events.
@@ -222,6 +223,7 @@ private:
     void runOnUiThread(std::function<void()> action);
     void requestShowParsedOutput();
     void pasteText(const std::string& text);
+    void pasteOnceSafe(const std::string& text, const eacp::Callback& send);
     void showParsedOutput();
     void reportFocusIfChanged();
     bool openHyperlinkUnderPointer(const eacp::Graphics::MouseEvent& event);
