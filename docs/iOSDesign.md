@@ -1,6 +1,6 @@
 # CowTerm for iPhone: the design
 
-Status: design, nothing built. [iOSApp.md](iOSApp.md) is the technical plan
+Status: being built on jp/ios-app; see "Results of the risk tests" and "Decisions made while building" at the end. [iOSApp.md](iOSApp.md) is the technical plan
 (ssh link, libraries, pairing, push). This page says how the app behaves under
 a thumb, and it overrules that page where the two disagree; the last section
 lists where.
@@ -392,11 +392,86 @@ the cause. vim on the alternate screen is unaffected.
 daemon under `COWTERM_INSTANCE=resize-scrollback-test`, so Jamie's daemon and
 panes are never touched, and it quits that daemon at the end.
 
+### Reaching a daemon through libssh2
+
+An ssh client inside the app reaches cowtermd on tamby and macprorack, opens a
+pane, reads its screen and closes it. `scripts/probe-embedded-ssh.sh
+<user@host>` runs it. libssh2 1.11.1 on mbedTLS 3.6.8 is pinned in lockstep,
+and key exchange and host keys work with stock OpenSSH 10.2.
+
+mbedTLS has no ed25519, so libssh2 cannot sign with an ed25519 key file. tamby
+accepts only Jamie's ed25519 key, so the probe signs through a private
+ssh-agent for that run. The phone's planned Secure Enclave key is P-256, which
+works.
+
+### CowTerm's libraries on the iOS Simulator
+
+The four libraries build for the simulator with eacp's own iOS CI flags
+(`scripts/build-ios-simulator.sh`). The PTY is a stub on iOS
+(`Lib/Shell/Pty-iOS.cpp`). emberstore does not build for iOS (it watches files
+with FSEvents), so `MruStore` stays out of the phone; the overview's ranking
+will need an iOS file watcher in emberstore. RudderClient and Crashout's
+handler are Mac-only and stay out too.
+
+simctl cannot rotate a simulator. The app turns itself to landscape when
+launched with `--landscape`, which is how landscape screenshots are taken.
+
 ## Decisions made while building
 
 - The resize test runs Claude with no tools (`--tools ''`) and Haiku, so the
   spawned Claude cannot act on Jamie's machine; how Claude draws does not
   depend on the model.
+- When the client holding a pane's size goes away (the phone is locked or
+  loses signal), the client that held it before takes it back at once, rather
+  than leaving the pane at phone width until someone types on the Mac.
+- A client that does not say its protocol version in `hello` is treated as
+  version 4, and its plain resize still takes the pane, as before. Without
+  that, an old Mac app could never get a pane back from the phone.
+- `ct bridge` keeps a daemon one protocol version older running instead of
+  restarting it. Restarting ends every shell in it, Claudes included, and a
+  neighbouring version can serve both. A daemon two versions old is still
+  restarted.
+- The phone sends every size claim as a `resize` followed by `claim-size`, so
+  daemons from before size owners (tamby and macprorack run one tonight)
+  still resize the pane it opens.
+- The pane last typed into is its own message (`last-input`) instead of a
+  fifth column in `info`, because older clients read the fourth column to the
+  end of the line and would take the time into the session name.
+- Typing is marked as such (`write <id> input`) at TerminalView's typing and
+  paste path, so a terminal's automatic replies never count as input.
+- The Mac calls itself "Mac" to other clients ("Windows" and "Linux"
+  elsewhere). Its "on iPhone, 49 columns; type here to take it back" banner
+  uses the existing note over a pane (the one that says a connection was
+  lost). Typing in any pane takes back every pane on every machine that
+  another client holds.
+- The ssh link's hello and failure wording moved from `SshBridgeLink` into a
+  `BridgeLink` base both links share, and `RemoteHost` takes a link factory.
+  libssh2 is its own library (`CowTerm::EmbeddedSsh`), so ct, the daemon and
+  the Mac app never link it.
+- The phone's app is `CowTermMobile`, bundle id `audio.pond.cowterm.mobile`,
+  named "CowTerm" on the home screen, iOS 15 or later.
+- Scrolling has no rubber band: it stops hard at the top and bottom. The
+  scroll position keeps the hidden part of the top row as a fraction of a row,
+  so a font size change needs no correction.
+
+## What eacp lacks on iOS
+
+Each gap is a local branch of eacp off Eyal's develop, in its own worktree,
+not pushed and with no pull request. `jp/ios-integration`
+(`~/projects/eacp-ios-integration`) is jp/develop with the three commits
+cherry-picked on top; the phone app builds against it with
+`EACP_SOURCE=~/projects/eacp-ios-integration scripts/build-ios-simulator.sh`,
+and CowTerm's pin is unchanged.
+
+| Gap | Branch | Commit |
+| --- | --- | --- |
+| Typing: no `UIKeyInput`, so no keyboard and no text; hardware keys reported nothing | `jp/ios-text-input` (`~/projects/eacp-ios-text-input`) | 176ab5a4 |
+| The software keyboard's height and animation | `jp/ios-keyboard-frame` (`~/projects/eacp-ios-keyboard-frame`) | 2b287d8f |
+| The status bar was always hidden | `jp/ios-status-bar` (`~/projects/eacp-ios-status-bar`) | c5ce3388 |
+
+Lifecycle events, touch timestamps and safe-area insets already exist. The
+keyboard-frame and status-bar branches both change the iOS window's
+constructor, so whichever merges second needs a one-line fix.
 
 ## Where this overrules iOSApp.md
 
