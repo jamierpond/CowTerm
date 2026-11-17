@@ -313,3 +313,19 @@ ios-device-log phone="pond" which="":
 # Write the iPhone app's icons, every size iOS asks for, from the Mac app's Terminal/Icon.svg
 ios-app-icon:
     scripts/make-ios-app-icon.sh
+
+# ---- CowTerm for iPhone on TestFlight (scripts/release-ios.sh) ----
+
+# Launch the simulator build on the first iPhone simulator and fail if it is not running after a wait
+ios-check-launch seconds="15":
+    scripts/check-ios-simulator-launch.sh {{seconds}}
+
+asc := "scripts/asc-run.sh"
+
+# Archive the iPhone app for the App Store with the paid team from 1Password; --upload sends it to TestFlight
+ios-release *arguments:
+    {{asc}} scripts/release-ios.sh {{arguments}}
+
+# App Store Connect for the iPhone app: check, testflight (the note, the internal group), invite <email>; --write sends
+ios-asc *arguments:
+    {{asc}} scripts/app-store-connect.py {{arguments}}

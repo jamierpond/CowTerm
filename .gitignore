@@ -27,3 +27,6 @@ build-repo
 
 # lockstep cache in CI
 /.lockstep-cache/
+
+# scripts/release-ios.sh: the archive and the exported .ipa
+/Deploy/Apple-iOS/out/

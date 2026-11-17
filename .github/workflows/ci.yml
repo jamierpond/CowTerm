@@ -59,6 +59,35 @@ jobs:
           path: .lockstep-cache
           key: ${{ steps.lockstep-cache.outputs.cache-primary-key }}
 
+  # The iPhone app built for the simulator against the pinned eacp, then
+  # launched on a simulator to check it starts and stays up. Its tests are the
+  # Lib/Phone ones the macOS lane runs: the phone build has no test targets.
+  ios:
+    name: iOS Simulator
+    runs-on: macos-latest
+    env:
+      LOCKSTEP_CACHE: ${{ github.workspace }}/.lockstep-cache
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/cache/restore@v4
+        id: lockstep-cache
+        with:
+          path: .lockstep-cache
+          key: lockstep-ios-${{ hashFiles('lockstep.lock', 'cmake/lockstep.cmake') }}
+
+      - uses: extractions/setup-just@v2
+
+      # No EACP_SOURCE here, so the script builds against lockstep.lock's eacp.
+      - run: scripts/build-ios-simulator.sh
+      - run: just ios-check-launch
+
+      - uses: actions/cache/save@v4
+        if: always() && steps.lockstep-cache.outputs.cache-hit != 'true'
+        with:
+          path: .lockstep-cache
+          key: ${{ steps.lockstep-cache.outputs.cache-primary-key }}
+
   codehealth:
     name: Code Health
     runs-on: ubuntu-24.04
