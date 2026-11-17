@@ -38,7 +38,7 @@ if ! xcrun simctl list devices booted | grep -q "$device"; then
 fi
 
 mkdir -p build-ios-sim
-"$probe" "$destination" --watch-pane "$pane" > "$watch_log" 2>&1 &
+"$probe" "$destination" --watch-pane "$pane" 2>&1 | while IFS= read -r line; do echo "$(date +%H:%M:%S) $line"; done > "$watch_log" &
 watcher=$!
 
 clean_up() {
@@ -78,8 +78,9 @@ mkdir -p "$(dirname "$screenshot")"
 scripts/screenshot-ios-simulator.sh "$screenshot" "$device_name" > /dev/null
 echo "screenshot: $screenshot"
 
-xcrun simctl terminate "$device" "$bundle_id"
+# Counted first: terminate can return after the daemon has already answered.
 lines_before_quitting=$(wc -l < "$watch_log")
+xcrun simctl terminate "$device" "$bundle_id"
 waited=0
 until tail -n "+$((lines_before_quitting + 1))" "$watch_log" | grep -q "size-owner $desk_size owner=probe"; do
     if [ "$waited" -ge "$wait_seconds" ]; then
