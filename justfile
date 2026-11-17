@@ -71,3 +71,15 @@ ios-probe-ssh *arguments:
 # Build the iPhone app for a real phone, install it and launch it (the phone plugged in and unlocked)
 ios-device phone="pond" *app_arguments:
     EACP_SOURCE={{eacp_with_ios_branches}} scripts/install-ios-device.sh "{{phone}}" {{app_arguments}}
+
+# Give the phone a key, the hosts and their host keys, and put its key on this Mac, tamby and macprorack
+ios-pair phone="pond":
+    scripts/pair-ios-device.sh "{{phone}}"
+
+# Take the phone's key off this Mac, tamby and macprorack
+ios-unpair phone="pond":
+    scripts/unpair-ios-device.sh "{{phone}}"
+
+# Print the log the app wrote on the phone on its last launch
+ios-device-log phone="pond":
+    scripts/read-ios-device-log.sh "{{phone}}"
