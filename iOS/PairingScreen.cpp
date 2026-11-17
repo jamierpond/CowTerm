@@ -451,6 +451,8 @@ PairingScreen::PairingScreen(const term::pairing::PairedHosts& pairedHosts,
     : panel(theme, pairedHosts, std::move(authorizedKeysLine), std::move(fetchHostKey))
 {
     host.setBackgroundColour(term::toColor(theme.background));
+    // The panel takes the safe area and the keyboard from calculatePairingAreas.
+    host.setRespectsSafeArea(false);
     host.setRootComponent(panel);
     addChildren({host});
 }
