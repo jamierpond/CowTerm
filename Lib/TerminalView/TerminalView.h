@@ -148,6 +148,10 @@ public:
     // Without one (the default) the grid follows the view's bounds.
     void setFixedGridSize(std::optional<PtySize> size);
 
+    // The grid a view of this size in points holds at the current font, for
+    // a host that fixes the grid from a size the view does not have yet.
+    PtySize calculateGridSizeFor(eacp::Graphics::Point size) const;
+
     // A paste isPasteSafe rejects: the host asks the user, and calls
     // pasteAnyway if they confirm. Without a host it pastes, as before.
     std::function<void(const std::string& text, const eacp::Callback& pasteAnyway)>
@@ -267,7 +271,6 @@ private:
     float calculatePixelOffsetIntoTopRow() const;
     int countRowsToDraw() const;
     void drawScrollIndicator(GridPainter& painter);
-    PtySize calculateGridSizeFromBounds() const;
 
     bool handleCopyModeKey(const eacp::Graphics::KeyEvent& event);
     void applyCopyModeCommand(const CopyModeCommand& command);

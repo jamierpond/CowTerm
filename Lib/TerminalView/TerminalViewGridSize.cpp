@@ -32,7 +32,7 @@ void TerminalView::applyGridSize()
     if (!isPositiveSize(cellW, cellH) || !isPositiveSize(bounds.w, bounds.h))
         return;
 
-    const auto size = fixedGridSize.value_or(calculateGridSizeFromBounds());
+    const auto size = fixedGridSize.value_or(calculateGridSizeFor({bounds.w, bounds.h}));
     const auto cols = size.cols;
     const auto rows = size.rows;
     hasGridSizeFromBounds = true;
@@ -56,11 +56,10 @@ void TerminalView::applyGridSize()
         scrollPosition.showLinesFromBottom(linesFromBottom, calculateScrollRange());
 }
 
-PtySize TerminalView::calculateGridSizeFromBounds() const
+PtySize TerminalView::calculateGridSizeFor(Graphics::Point size) const
 {
-    const auto bounds = getLocalBounds();
-    const auto cols = countWholeCellsThatFit(bounds.w, marginX, atlas->cellWidth());
-    const auto rows = countWholeCellsThatFit(bounds.h, marginY, atlas->cellHeight());
+    const auto cols = countWholeCellsThatFit(size.x, marginX, atlas->cellWidth());
+    const auto rows = countWholeCellsThatFit(size.y, marginY, atlas->cellHeight());
     return {std::max(minimumGridColumns, cols), std::max(minimumGridRows, rows)};
 }
 

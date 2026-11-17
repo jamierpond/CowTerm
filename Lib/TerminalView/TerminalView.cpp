@@ -1105,7 +1105,8 @@ std::optional<DetectedLink>
     const auto isLinkModifierHeld = Platform::isMac() ? event.modifiers.command
                                                       : event.modifiers.control;
 
-    if (!isLinkModifierHeld)
+    // A touch screen has no modifier to hold, so a tap opens the link.
+    if (!isLinkModifierHeld && !event.fromTouch)
         return std::nullopt;
 
     return findLinkAt(screen, cellRefAt(event.pos));
