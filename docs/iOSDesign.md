@@ -587,14 +587,21 @@ ios-pair` now gives it all three, and the sample needs `--sample`.
 ### Touch on a real phone
 
 On Jamie's phone no touch reached the pane screen: no tap on the bar, no
-keyboard, no way back to the list, no scrolling. The log of a session in which
-he tapped everything held not one touch. The app showed the list first and
-then swapped the pane screen in with `Window::setContentView`, which on iOS
-sets the window's view controller's `view`; the swapped-in view drew but got
-no touches. Both screens are now children of one content view
-(`ScreenStack` in `iOS/Main.cpp`) and the hidden one is hidden, so it takes
-no touches either. Nothing had ever tapped the app before: the simulator
-checks drove it with launch flags.
+keyboard, no way back to the list, no scrolling, and a tap on the pane opened
+another session. eacp on iOS hands every touch to the window's root view and
+picks the target with `View::hitTest`, which never looked at visibility. The
+session list, hidden but still laid over the pane screen, took every touch:
+the phone's log showed "overview list: finger down" for taps on the pane, and
+the keyboard Jamie raised typed into the list's hidden search field. The fix is
+in eacp: a hidden view takes no touch (`jp/ios-integration` 5266bc64, local,
+not pushed, with a test in `Tests/UI/OverlayViewTests.cpp`). It also frees the
+pane screen's own hidden parts (the menu, which covers the whole pane, the
+pill, the prompt buttons and the key row). Nothing had ever tapped the app
+before: the simulator checks drove it with launch flags.
+
+Both screens now live in one content view (`ScreenStack` in `iOS/Main.cpp`)
+instead of being swapped in with `Window::setContentView`, so the root view
+that receives touches never changes.
 
 - The app logs each finger that lands on the pane, the bar and the list, and
   each bar action, so `just ios-device-log` shows what a finger did.
@@ -657,6 +664,7 @@ and CowTerm's pin is unchanged.
 | The software keyboard's height and animation | `jp/ios-keyboard-frame` (`~/projects/eacp-ios-keyboard-frame`) | 2b287d8f |
 | The status bar was always hidden | `jp/ios-status-bar` (`~/projects/eacp-ios-status-bar`) | c5ce3388 |
 | No native text view, so no dictation or autocorrect for the composer; a hardware key's down event on it | `jp/ios-native-text-view` (`~/projects/eacp-ios-native-text-view`), stacked on `jp/ios-text-input` | eea9e5a7, f06a4c3d |
+| A hidden view still took touches and clicks (`View::hitTest`) | committed on `jp/ios-integration` only | 5266bc64 |
 
 Lifecycle events, touch timestamps and safe-area insets already exist. The
 keyboard-frame and status-bar branches both change the iOS window's

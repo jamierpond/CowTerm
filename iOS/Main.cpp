@@ -248,8 +248,8 @@ std::string getPaneId(const std::unique_ptr<cowterm::mobile::PhoneLaunch>& phone
 }
 
 // The window's one content view: the pane screen and the overview both live
-// in it, and it shows one. On a real phone a view swapped in with
-// Window::setContentView drew but never received a touch.
+// in it, and it shows one. eacp sends every touch to the window's root view
+// and hit-tests from there, so the root never changes.
 class ScreenStack final : public Graphics::View
 {
 public:
