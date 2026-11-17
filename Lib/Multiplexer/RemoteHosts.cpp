@@ -79,6 +79,11 @@ void RemoteHost::connect()
     daemon->replaceLink(std::move(link));
 }
 
+void RemoteHost::reconnectNow()
+{
+    connect();
+}
+
 void RemoteHost::handleConnected()
 {
     status = Status::Connected;
@@ -144,6 +149,8 @@ void RemoteHost::handleOtherMessage(const std::string& verb, const std::string& 
         onNotifyUserRequest(*this, message.args[0], message.payload);
     else if (verb == "nu-cancel" && !message.args.empty())
         onNotifyUserCancelled(*this, message.args[0]);
+    else
+        onUnhandledMessage(*this, verb, body);
 }
 
 void RemoteHost::sendNotifyUserReply(const std::string& requestId, const std::string& reply)

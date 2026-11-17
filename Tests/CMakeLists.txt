@@ -271,6 +271,12 @@ if (TARGET CowTerm::EmbeddedSsh)
                 ../Bench/EmbeddedSshProbeArguments.cpp
             TARGETS CowTerm::EmbeddedSsh)
     target_include_directories(CowTermEmbeddedSshTests PRIVATE ../Bench)
+
+    # The phone's connection layer without a phone or a host: settings, pane
+    # choice, link stalls, the stored last screen and the mirrored pane.
+    nano_add_executable(CowTermPhoneTests
+            SOURCES PhoneTests.cpp
+            TARGETS CowTerm::Phone)
 endif ()
 
 # The headless ct a remote host runs, and the app's own ct mode.

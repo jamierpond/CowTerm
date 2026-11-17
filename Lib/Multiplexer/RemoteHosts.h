@@ -44,6 +44,9 @@ public:
     // Asks the host to list its projects again; onChanged fires when it answers.
     void requestScan();
 
+    // Drops the link and dials again now, skipping any reconnect delay.
+    void reconnectNow();
+
     // Asks for the sessions every Mac attached to this host has open.
     void requestLayouts();
 
@@ -63,6 +66,10 @@ public:
         [](RemoteHost&, const std::string&) {};
 
     void sendNotifyUserReply(const std::string& requestId, const std::string& reply);
+
+    // A message from the host's daemon that RemoteHost itself does not use.
+    std::function<void(RemoteHost& host, const std::string& verb, const std::string& body)>
+        onUnhandledMessage = [](RemoteHost&, const std::string&, const std::string&) {};
 
 private:
     void connect();

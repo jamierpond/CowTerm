@@ -29,6 +29,9 @@ public:
     // naming the fix when there is one. onDisconnected follows.
     std::function<void(const std::string& reason)> onFailed = [](const std::string&) {};
 
+    // Any bytes at all arrived from the bridge: the link is not stalled.
+    eacp::Callback onBytesReceived = [] {};
+
 protected:
     const std::string& getHost() const { return host; }
     bool hasFinished() const { return finished; }

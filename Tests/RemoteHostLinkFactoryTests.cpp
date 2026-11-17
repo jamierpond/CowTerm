@@ -74,3 +74,28 @@ auto failedLinkMarksTheHostUnreachable = test("RemoteHost/failedLinkMarksTheHost
     check(remote.getStatus() == RemoteHost::Status::Unreachable);
     check(remote.getFailureReason() == reason);
 };
+
+auto reconnectNowAsksForAFreshLink = test("RemoteHost/reconnectNowAsksForAFreshLink") = []
+{
+    auto factory = LinkFactory {};
+    auto remote = RemoteHost {host, {"~/projects"}, factory.makeFactory()};
+
+    remote.reconnectNow();
+
+    check(factory.requestedHosts == std::vector<std::string> {host, host});
+    check(remote.getStatus() == RemoteHost::Status::Connecting);
+};
+
+auto messagesRemoteHostIgnoresReachTheApp = test("RemoteHost/messagesRemoteHostIgnoresReachTheApp") = []
+{
+    auto factory = LinkFactory {};
+    auto remote = RemoteHost {host, {"~/projects"}, factory.makeFactory()};
+    auto heardVerb = std::string {};
+    remote.onUnhandledMessage = [&](RemoteHost&, const std::string& verb, const std::string&) { heardVerb = verb; };
+    auto& link = factory.getLastLink();
+
+    link.deliverBytes(bridge::encodeFrame(bridge::makeHelloMessage("0.1.0")));
+    link.deliverBytes(bridge::encodeFrame("last-input pane-1 1794906370945"));
+
+    check(heardVerb == "last-input");
+};

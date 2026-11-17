@@ -1,0 +1,36 @@
+#pragma once
+
+#include "Multiplexer/EmbeddedSshLink.h"
+
+#include <filesystem>
+#include <functional>
+#include <optional>
+#include <string>
+#include <vector>
+
+namespace term::phone
+{
+// What the phone connects to and how. The app builds it at its edge, from its
+// launch arguments and environment, and hands it to PhoneConnection.
+struct PhoneSettings
+{
+    SshDestination destination;
+    SshCredentials credentials;
+
+    // The pane to open; empty lets the daemon's last-input answer choose.
+    std::string explicitPaneId;
+
+    // Where the shown pane's last screen is kept between launches.
+    std::filesystem::path storedScreenPath;
+};
+
+using EnvironmentReader = std::function<std::string(const std::string& name)>;
+
+// Each setting from a launch argument ("--destination jamie@tamby") or, when
+// that is absent, an environment variable (COWTERM_DESTINATION), which
+// `simctl launch` passes on from SIMCTL_CHILD_COWTERM_DESTINATION. Empty when
+// there is no destination, or it is not user@host[:port].
+std::optional<PhoneSettings> parsePhoneSettings(const std::vector<std::string>& arguments,
+                                                const EnvironmentReader& readEnvironment,
+                                                const std::filesystem::path& storedScreenPath);
+} // namespace term::phone

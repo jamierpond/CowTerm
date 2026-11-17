@@ -7,6 +7,7 @@
 
 #include "Shell/Shell.h"
 
+#include <algorithm>
 #include <utility>
 
 namespace term
@@ -358,6 +359,17 @@ DaemonClient::ShellInfo DaemonClient::infoFor(const std::string& id) const
         return found->second;
 
     return {};
+}
+
+std::vector<std::string> DaemonClient::listShellIds() const
+{
+    auto ids = std::vector<std::string> {};
+
+    for (const auto& [id, shell]: info)
+        ids.push_back(id);
+
+    std::ranges::sort(ids);
+    return ids;
 }
 
 void DaemonClient::killServer()

@@ -62,6 +62,8 @@ void BridgeLink::send(const std::string& message)
 
 void BridgeLink::receiveBytes(const std::string& bytes)
 {
+    onBytesReceived();
+
     for (auto& message: decoder.append(bytes))
         receiveMessage(std::move(message));
 

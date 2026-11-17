@@ -12,6 +12,7 @@
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
+#include <vector>
 
 namespace term
 {
@@ -127,6 +128,9 @@ public:
     void release(const std::string& id);
 
     ShellInfo infoFor(const std::string& id) const;
+
+    // Every shell the last info refresh listed, by id in alphabetical order.
+    std::vector<std::string> listShellIds() const;
 
     // Raw messages that aren't about a pane ("layouts", "scan-result").
     std::function<void(const std::string& verb, const std::string& body)> onOtherMessage =
