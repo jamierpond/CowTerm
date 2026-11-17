@@ -32,7 +32,13 @@ target_link_libraries(CowTermMobile PRIVATE
         CowTerm::TerminalView CowTerm::Multiplexer CowTerm::Phone eacp-ui "-framework Network")
 # The Mac's paste confirmation, reused as it is.
 target_include_directories(CowTermMobile PRIVATE ${PROJECT_SOURCE_DIR}/Terminal)
-set_target_properties(CowTermMobile PROPERTIES MACOSX_BUNDLE TRUE)
+# The cow icon in every iPhone size, from scripts/make-ios-app-icon.sh.
+target_sources(CowTermMobile PRIVATE Resources/Assets.xcassets)
+set_source_files_properties(Resources/Assets.xcassets PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
+
+set_target_properties(CowTermMobile PROPERTIES
+        MACOSX_BUNDLE TRUE
+        XCODE_ATTRIBUTE_ASSETCATALOG_COMPILER_APPICON_NAME AppIcon)
 
 # The Mac app's JetBrains Mono, embedded the same way.
 res_embed_add(CowTermMobile DIRECTORY ${PROJECT_SOURCE_DIR}/Terminal/Resources)

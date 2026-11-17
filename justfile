@@ -310,3 +310,7 @@ check-update-keeps-shells destination folder:
 # Print the log the app wrote on the phone on its last launch, or with "previous" the one before
 ios-device-log phone="pond" which="":
     scripts/read-ios-device-log.sh "{{phone}}" {{which}}
+
+# Write the iPhone app's icons, every size iOS asks for, from the Mac app's Terminal/Icon.svg
+ios-app-icon:
+    scripts/make-ios-app-icon.sh
