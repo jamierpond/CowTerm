@@ -50,6 +50,10 @@ inline bool isNeighbouringProtocolVersion(int ours, int theirs)
 // automatic replies. The daemon remembers the pane and the time.
 inline constexpr auto userInputMarker = "input";
 
+// What the phone calls itself in hello. The daemon rings the phone only while
+// the phone is not the one showing a pane.
+inline constexpr auto phoneClientName = "iPhone";
+
 // spawn's payload: the working directory, then optionally a newline and a
 // command to run in place of an interactive shell.
 struct SpawnPayload

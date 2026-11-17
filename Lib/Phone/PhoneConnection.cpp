@@ -15,7 +15,6 @@ using namespace eacp;
 
 namespace
 {
-constexpr auto phoneClientName = "iPhone";
 constexpr auto tickInterval = Time::MS {500};
 constexpr auto lastInputAnswerWait = Milliseconds {2000};
 
@@ -107,7 +106,7 @@ PhoneConnection::PhoneConnection(PhoneSettings settingsToUse,
     , temporaryPanesOfEarlierRuns(loadTemporaryPanes(temporaryPanesPath))
     , startedAt(readClock())
 {
-    DaemonClient::setClientName(phoneClientName);
+    DaemonClient::setClientName(proto::phoneClientName);
     DaemonClient::setClaimsSizeOfEveryPaneItShows(true);
     DaemonClient::setOpensOnlyListedPanes(true);
     DaemonClient::setOnlyCommandItMayStart(diffViewCommand);

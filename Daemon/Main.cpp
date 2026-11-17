@@ -6,11 +6,13 @@
 // app gets the whole terminal state, and that state is saved to disk so a
 // pane comes back with its screen and history after the daemon restarts.
 
+#include "Multiplexer/Config.h"
 #include "Multiplexer/DataDirectories.h"
 #include "Multiplexer/PaneSizeOwner.h"
 #include "Multiplexer/Protocol.h"
 #include "Signals.h"
 #include "CommandLookup.h"
+#include "PanePushNotifier.h"
 #include "Shell/Pty.h"
 #include "Emulator/TerminalModel.h"
 
@@ -57,6 +59,7 @@ const term::Theme daemonTheme {};
 struct PaneActivity
 {
     std::int64_t lastInputMilliseconds = 0;
+    std::int64_t lastDesktopInputMilliseconds = 0;
     std::int64_t lastOutputMilliseconds = 0;
     std::string state;
     std::int64_t stateSinceMilliseconds = 0;
@@ -138,7 +141,8 @@ struct SpawnRequest
 
 struct Daemon
 {
-    Daemon()
+    explicit Daemon(const PushRelayTarget& pushRelayTarget)
+        : pushNotifier(pushRelayTarget)
     {
         term::ignoreHangups();
         term::releaseInheritedStreams();
@@ -270,7 +274,7 @@ struct Daemon
     }
 
     // write <id> [input], payload the bytes.
-    void handleWrite(IPC::Messenger&, const term::proto::Message& message)
+    void handleWrite(IPC::Messenger& sender, const term::proto::Message& message)
     {
         const auto& id = message.args[0];
         constexpr auto markerArgument = std::size_t {1};
@@ -281,6 +285,9 @@ struct Daemon
         {
             lastInput = {id, getMillisecondsSinceEpoch()};
             found->second->activity.lastInputMilliseconds = lastInput.millisecondsSinceEpoch;
+
+            if (clients.at(&sender).name != term::proto::phoneClientName)
+                found->second->activity.lastDesktopInputMilliseconds = lastInput.millisecondsSinceEpoch;
         }
 
         write(id, message.payload);
@@ -368,7 +375,23 @@ struct Daemon
             activity.state = message.args[1];
             activity.stateMessage = message.payload;
             activity.stateSinceMilliseconds = getMillisecondsSinceEpoch();
+            reportPaneStateForPush(found->first, *found->second);
         }
+    }
+
+    void reportPaneStateForPush(const std::string& id, DaemonPane& pane)
+    {
+        const auto& activity = pane.activity;
+        pushNotifier.reportPaneState(
+            {id, pane.sessionName, pane.pty.currentWorkingDirectory()},
+            {activity.state, activity.stateMessage, activity.stateSinceMilliseconds},
+            {activity.lastDesktopInputMilliseconds, isPaneShownOnPhone(pane)});
+    }
+
+    bool isPaneShownOnPhone(const DaemonPane& pane) const
+    {
+        const auto owner = pane.sizeOwner.getOwner();
+        return owner && findClientName(owner) == term::proto::phoneClientName;
     }
 
     // One "<id>\t<last input>\t<last output>\t<state>\t<state since>\t<message>"
@@ -610,6 +633,7 @@ struct Daemon
         const auto watchers = std::move(found->second->watchers);
         panes.erase(found);
         forgetSavedPane(id);
+        pushNotifier.forgetPane(id);
 
         for (auto* watcher: watchers)
             watcher->send(term::proto::make("exit", {id}));
@@ -636,6 +660,7 @@ struct Daemon
     {
         panes.erase(id);
         forgetSavedPane(id);
+        pushNotifier.forgetPane(id);
     }
 
     emberstore::Document<term::TerminalState> paneDocument(const std::string& id) const
@@ -738,6 +763,7 @@ struct Daemon
     std::map<std::string, std::string> layouts;
     int idleTicks = 0;
     emberstore::Database paneStore = openPaneStore();
+    PanePushNotifier pushNotifier;
 
     IPC::MessageServer server {term::proto::serverName()};
     Threads::Timer idleTimer {[this] { checkIdle(); }, idleCheckInterval};
@@ -759,7 +785,8 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char** argv)
 
     try
     {
-        return Apps::run<Daemon>();
+        const auto config = term::loadConfig();
+        return Apps::run<Daemon>(PushRelayTarget {config.pushRelay, config.pushHostName});
     }
     catch (const std::exception& error)
     {

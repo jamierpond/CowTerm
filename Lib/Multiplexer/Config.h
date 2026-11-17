@@ -31,7 +31,16 @@ struct AppConfig
     std::string theme = "rosepine";
     std::map<std::string, HostSettings> hosts;
 
-    MIRO_REFLECT(searchDirs, font, fontSize, theme, hosts)
+    // Where this machine's daemon sends a Claude's finishing or asking, to
+    // ring the phone ("http://macprorack:8742"); empty sends nothing.
+    std::string pushRelay;
+
+    // This machine's name as the phone dials it ("big-cow"), which the
+    // notification's title shows and its tap opens. Both Macs' host names
+    // read "daily-driver", so it is set here, not looked up.
+    std::string pushHostName;
+
+    MIRO_REFLECT(searchDirs, font, fontSize, theme, hosts, pushRelay, pushHostName)
 };
 
 AppConfig loadConfig();
