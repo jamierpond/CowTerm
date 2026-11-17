@@ -2,6 +2,9 @@
 # Pairs the iPhone app with this Mac, tamby and macprorack, so it reaches them
 # when opened from the home screen.
 #
+# Pairing again with a new key removes the phone's older keys from each host,
+# so no old key stays authorised.
+#
 # The phone gets its own ECDSA P-256 key with no passphrase (the app's mbedTLS
 # cannot sign with ed25519), written by openssl as SEC1 PEM on the named curve:
 # mbedTLS reads neither OpenSSH's own format nor the explicit curve parameters
@@ -99,11 +102,24 @@ authorized_line="$key_type_and_blob $key_comment"
 echo "$authorized_line" > "$key.pub"
 key_blob=$(echo "$key_type_and_blob" | cut -d' ' -f2)
 
-# Appends the line once; a file whose last line has no newline gets one first.
+# Removes any other key marked for this phone (an earlier pairing), then appends
+# the line once; a file whose last line has no newline gets one first. Prints
+# what it did, then how many lines carry the phone's mark afterwards.
 append_once='
     file="$HOME/.ssh/authorized_keys"
+    stale=0
+    if [ -f "$file" ]; then
+        stale=$(grep " $3\$" "$file" | grep -vcF "$1" || true)
+    fi
+    if [ "$stale" -gt 0 ]; then
+        kept=$(mktemp)
+        awk -v mark=" $3" -v blob="$1" "index(\$0, blob) || substr(\$0, length(\$0) - length(mark) + 1) != mark" "$file" > "$kept"
+        cat "$kept" > "$file"
+        rm -f "$kept"
+        printf "removed %s older key(s) for this phone, " "$stale"
+    fi
     if [ -f "$file" ] && grep -qF "$1" "$file"; then
-        echo "already there"
+        echo "already there; $(grep -c " $3\$" "$file") line(s) for this phone"
         exit 0
     fi
     mkdir -p "$HOME/.ssh"
@@ -112,14 +128,14 @@ append_once='
     fi
     printf "%s\n" "$2" >> "$file"
     chmod 600 "$file"
-    echo "added"'
+    echo "added; $(grep -c " $3\$" "$file") line(s) for this phone"'
 
 for host in $hosts; do
     if [ "$host" = "$this_mac" ]; then
-        result=$(printf '%s\n' "$append_once" | sh -s "$key_blob" "$authorized_line")
+        result=$(printf '%s\n' "$append_once" | sh -s "$key_blob" "$authorized_line" "$key_comment")
     else
         result=$(printf '%s\n' "$append_once" | ssh -o BatchMode=yes -o ConnectTimeout="$ssh_timeout_seconds" \
-            "$host" "sh -s '$key_blob' '$authorized_line'")
+            "$host" "sh -s '$key_blob' '$authorized_line' '$key_comment'")
     fi
     echo "$host authorized_keys: $result"
 done
