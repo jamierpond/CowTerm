@@ -154,6 +154,7 @@ private:
     void handleLinkDropped();
     void handleSizeOwner(const proto::Message& message);
     void sendSpawn(const SpawnRequest& request);
+    void sendResizeAndClaim(const std::string& id, const PtySize& size);
     void handleMessage(const std::string& body);
     void handleOutput(const std::string& id, std::string payload);
     void handleState(const std::string& id, const std::string& payload);

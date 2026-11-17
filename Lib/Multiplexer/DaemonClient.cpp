@@ -283,6 +283,14 @@ void DaemonClient::sendSpawn(const SpawnRequest& request)
         claimSize(request.id, request.size);
 }
 
+// A daemon from before size owners ignores claim-size, and one that knows it
+// only remembers the resize until the claim arrives, so the pair works on both.
+void DaemonClient::sendResizeAndClaim(const std::string& id, const PtySize& size)
+{
+    send(proto::make("resize", {id, toString(size.cols), toString(size.rows)}));
+    send(proto::make("claim-size", {id, toString(size.cols), toString(size.rows)}));
+}
+
 void DaemonClient::spawn(const SpawnRequest& request, Routes routesToUse)
 {
     routes[request.id] = {std::move(routesToUse), request};
@@ -306,7 +314,7 @@ void DaemonClient::claimSize(const std::string& id, const PtySize& size)
     if (auto found = routes.find(id); found != routes.end())
         found->second.request.size = size;
 
-    send(proto::make("claim-size", {id, toString(size.cols), toString(size.rows)}));
+    sendResizeAndClaim(id, size);
 }
 
 void DaemonClient::reclaimSizes()

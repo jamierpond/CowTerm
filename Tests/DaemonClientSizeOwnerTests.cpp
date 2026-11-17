@@ -117,8 +117,9 @@ auto tPhoneClaimsWhatItOpensAndResizes = test("DaemonClientSizeOwner/phoneClaims
         "claim-size", {paneId, std::to_string(phoneColumns), std::to_string(rows)})));
     check(recorded.hasSent(proto::make(
         "claim-size", {paneId, std::to_string(narrowerColumns), std::to_string(rows)})));
-    check(!recorded.hasSent(proto::make(
-        "resize", {paneId, std::to_string(narrowerColumns), std::to_string(rows)})));
+    check(recorded.hasSent(proto::make(
+        "resize", {paneId, std::to_string(narrowerColumns), std::to_string(rows)})),
+          "a daemon from before size owners still resizes");
 };
 
 auto tSpawnCarriesTheSessionName = test("DaemonClientSizeOwner/spawnCarriesTheSessionName") = []
