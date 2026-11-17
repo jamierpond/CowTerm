@@ -345,6 +345,8 @@ Answers that change the design:
    the daemon holds it awake while a pane is busy.
 2. Does he run Claude Code in its full-screen mode? That decides whether
    scrolling Claude's transcript is local and smooth or goes over the network.
+   Answered while building: yes (`"tui": "fullscreen"`), so it goes over the
+   network. See "Results of the risk tests".
 3. Should the phone start new sessions and panes, or only steer existing ones?
 4. Which iPhone?
 
@@ -366,6 +368,35 @@ Found in the Mac app while reading it, and not changed: the leader key shows
 nothing while it is pending and never times out; the terminal bell is not
 connected to anything; the palette paints twelve rows and cannot scroll;
 `leader x` kills a shell with no way back.
+
+## Results of the risk tests
+
+### Resizing a Claude pane 150 → 49 → 150
+
+Jamie's Claude Code runs full-screen (`"tui": "fullscreen"` in his settings),
+and full-screen Claude leaves the scrollback clean: it draws on the alternate
+screen, writes nothing to history, and repaints at each width. Its transcript
+is scrolled by Claude itself, so on the phone a drag over a Claude pane sends
+wheel steps over the network, as the design's alternate-screen rule says. That
+answers the second question for Jamie below.
+
+Inline Claude (the default `tui`) does leave duplicates. Each width change
+reprints the lines that were on screen, and the old copy stays in history:
+after 150 → 49 → 150, 9 of 60 reply lines appear twice in scrollback (11 after
+the first resize alone). The same snapshots without resizing, which still
+nudge the height by one row on each adopt, leave none, so the column change is
+the cause. vim on the alternate screen is unaffected.
+
+`scripts/resize-scrollback-test.py --program claude|claude-inline|vim
+[--control] --directory <a folder Claude trusts>` reruns it. It starts its own
+daemon under `COWTERM_INSTANCE=resize-scrollback-test`, so Jamie's daemon and
+panes are never touched, and it quits that daemon at the end.
+
+## Decisions made while building
+
+- The resize test runs Claude with no tools (`--tools ''`) and Haiku, so the
+  spawned Claude cannot act on Jamie's machine; how Claude draws does not
+  depend on the model.
 
 ## Where this overrules iOSApp.md
 
