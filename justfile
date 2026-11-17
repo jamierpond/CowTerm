@@ -321,3 +321,7 @@ ios-device-log phone="pond" which="":
 # Write the iPhone app's icons, every size iOS asks for, from the Mac app's Terminal/Icon.svg
 ios-app-icon:
     scripts/make-ios-app-icon.sh
+
+# Ask for the push relay's 1Password service-account token and store it on the relay host, readable only by its user
+push-relay-store-token host="jamiepond@macprorack":
+    scripts/store-push-relay-token.sh {{host}}
