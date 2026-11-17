@@ -512,12 +512,27 @@ launched with `--landscape`, which is how landscape screenshots are taken.
   for iOS. The palette's ranking moved into `CowTerm::Multiplexer` with
   `git mv`.
 - A tap on a link opens it on the phone without a modifier key.
+- The pane's rows come from the tallest portrait keyboard seen (the
+  composer's keyboard has a suggestion bar, raw mode's does not), so switching
+  between them never resizes the shell. Before any keyboard has shown, the
+  default is 328 points.
+- The key row's keys are 48 points wide where they fit; on a 390-point phone
+  they get 43.
+- iOS does not let an app relabel its own keyboard's keys, so a latched Ctrl
+  shows on the lit Ctrl key of the key row instead of as `^C` on the keyboard.
+  This is where the design could not be followed.
+- The composer sends through `TerminalView::pasteThenPressEnter`: a bracketed
+  paste then Enter, counted as typing, and back to the live bottom.
+- The overview shows a waiting session once, as a card nearest the thumb, with
+  the other sessions above it. While searching there are no cards. Branch,
+  changed-file count, thumbnails and answer buttons are not shown: the daemon
+  does not report the first two, and asks through the daemon are not built.
 
 ## What eacp lacks on iOS
 
 Each gap is a local branch of eacp off Eyal's develop, in its own worktree,
 not pushed and with no pull request. `jp/ios-integration`
-(`~/projects/eacp-ios-integration`) is jp/develop with the three commits
+(`~/projects/eacp-ios-integration`) is jp/develop with the four commits
 cherry-picked on top; the phone app builds against it with
 `EACP_SOURCE=~/projects/eacp-ios-integration scripts/build-ios-simulator.sh`,
 and CowTerm's pin is unchanged.
@@ -527,6 +542,7 @@ and CowTerm's pin is unchanged.
 | Typing: no `UIKeyInput`, so no keyboard and no text; hardware keys reported nothing | `jp/ios-text-input` (`~/projects/eacp-ios-text-input`) | 176ab5a4 |
 | The software keyboard's height and animation | `jp/ios-keyboard-frame` (`~/projects/eacp-ios-keyboard-frame`) | 2b287d8f |
 | The status bar was always hidden | `jp/ios-status-bar` (`~/projects/eacp-ios-status-bar`) | c5ce3388 |
+| No native text view, so no dictation or autocorrect for the composer | `jp/ios-native-text-view` (`~/projects/eacp-ios-native-text-view`) | 8c06c192 |
 
 Lifecycle events, touch timestamps and safe-area insets already exist. The
 keyboard-frame and status-bar branches both change the iOS window's
