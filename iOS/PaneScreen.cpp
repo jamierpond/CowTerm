@@ -284,7 +284,9 @@ void PaneScreen::layOutParts()
         typing.layOut({}, false);
     }
 
-    promptHost.setBounds(paneArea.removeFromBottom(calculatePromptButtonsHeight()));
+    // In landscape with the keyboard up the buttons can be all the pane has room for.
+    const auto promptHeight = std::min(calculatePromptButtonsHeight(), paneArea.h);
+    promptHost.setBounds(paneArea.removeFromBottom(promptHeight));
     promptHost.setVisible(promptButtons.prompt.has_value());
     bottomBarHost.setVisible(!isKeyboardUp());
     terminal->setBounds(paneArea);

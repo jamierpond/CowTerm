@@ -37,5 +37,9 @@ for device_name in "iPhone 17e" "iPhone 18 Pro Max"; do
             $rotate --raise-keyboard
         take "$device_name" "raw-keyboard-$orientation" "$seconds_for_the_screen_to_settle" \
             $rotate --raw --raise-keyboard
+        take "$device_name" "claude-prompt-$orientation" "$seconds_for_the_screen_to_settle" \
+            $rotate --claude-prompt
+        take "$device_name" "claude-composer-$orientation" "$seconds_for_the_screen_to_settle" \
+            $rotate --claude-prompt --raise-keyboard
     done
 done
