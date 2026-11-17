@@ -34,6 +34,15 @@ std::optional<ModeFlag> findModeFlag(const std::string& text)
     return std::nullopt;
 }
 
+// Only --leave-pane takes a session name, and the pane modes need a pane id.
+bool areModeArgumentsComplete(const ModeFlag& flag, const ProbeArguments& parsed)
+{
+    const auto hasSessionNameWhereNotAllowed =
+        !parsed.sessionName.empty() && flag.mode != ProbeMode::LeavePaneRunning;
+    const auto isMissingPaneId = flag.needsPaneId && parsed.paneId.empty();
+    return !hasSessionNameWhereNotAllowed && !isMissingPaneId;
+}
+
 // The mode and pane after the destination: none at all is ThrowawayPane.
 std::optional<ProbeArguments> parseModeArguments(const term::SshDestination& destination,
                                                  const std::vector<std::string>& modeArguments)
@@ -54,10 +63,7 @@ std::optional<ProbeArguments> parseModeArguments(const term::SshDestination& des
     if (modeArguments.size() > sessionArgument)
         parsed.sessionName = modeArguments[sessionArgument];
 
-    if (!parsed.sessionName.empty() && flag->mode != ProbeMode::LeavePaneRunning)
-        return std::nullopt;
-
-    if (flag->needsPaneId && parsed.paneId.empty())
+    if (!areModeArgumentsComplete(*flag, parsed))
         return std::nullopt;
 
     return parsed;
