@@ -242,9 +242,9 @@ void TerminalView::showParsedOutput()
     const auto lock = lockTerminal();
 
     if (screen.modes.altScreen)
-        scrollOffset = 0;
+        scrollToLiveBottom();
 
-    scrollOffset = std::min(scrollOffset, screen.scrollbackSize());
+    syncScrollPositionWithScrollback();
     repaintUnlessSynchronized();
 }
 
@@ -290,7 +290,7 @@ void TerminalView::send(std::string_view bytes)
 
 void TerminalView::sendAndScrollToBottom(std::string_view bytes)
 {
-    scrollOffset = 0;
+    scrollToLiveBottom();
     blinkOn = true;
     rowDrawings.invalidateRowsWithBlinkingText();
     send(bytes);
@@ -400,9 +400,16 @@ void TerminalView::applyGridSize()
     if (cols == screen.columns() && rows == screen.rows())
         return;
 
+    // A resize reflows and renumbers every row, so the view keeps its distance
+    // from the bottom instead.
+    syncScrollPositionWithScrollback();
+    const auto linesFromBottom = calculateLinesFromBottom();
     screen.resize(cols, rows);
     shell->resize({cols, rows});
-    scrollOffset = std::min(scrollOffset, screen.scrollbackSize());
+    syncScrollPositionWithScrollback();
+
+    if (!scrollPosition.isFollowingLiveBottom())
+        scrollPosition.showLinesFromBottom(linesFromBottom, screen.scrollbackSize());
 }
 
 void TerminalView::restoreTerminalState(const std::string& serialized)
@@ -414,7 +421,7 @@ void TerminalView::restoreTerminalState(const std::string& serialized)
 
     const auto lock = lockTerminal();
     terminal.restoreState(*state);
-    scrollOffset = 0;
+    scrollToLiveBottom();
     title = terminal.getTitle();
     cwd = terminal.getWorkingDirectory();
 
@@ -442,20 +449,11 @@ void TerminalView::setFontSize(float newSize)
     repaint();
 }
 
-void TerminalView::scrollBy(int lines)
-{
-    const auto previous = scrollOffset;
-    scrollOffset = std::clamp(scrollOffset + lines, 0, screen.scrollbackSize());
-
-    if (scrollOffset != previous)
-        repaintIfShown();
-}
-
 // ---- rendering -------------------------------------------------------------
 
 long TerminalView::findTopVisibleAbsoluteRow() const
 {
-    return (long) screen.scrollbackSize() - scrollOffset;
+    return scrollPosition.findTopAbsoluteRow(screen.scrollbackSize());
 }
 
 int TerminalView::calculateVisualRow(long absoluteRow) const
@@ -465,17 +463,18 @@ int TerminalView::calculateVisualRow(long absoluteRow) const
 
 Graphics::Point TerminalView::calculateCellOrigin(int visualRow, int column) const
 {
+    const auto rowTop = marginY + (float) visualRow * atlas->cellHeight();
     return {marginX + (float) column * atlas->cellWidth(),
-            marginY + (float) visualRow * atlas->cellHeight()};
+            rowTop - calculatePixelOffsetIntoTopRow()};
 }
 
 PaintedRow TerminalView::describeVisibleRow(int visualRow) const
 {
-    const auto& line = screen.lineAt(visualRow, scrollOffset);
+    const auto& line = screen.lineAt(visualRow, calculateLinesFromBottom());
 
     return {screen.resolveLine(line),
             findTopVisibleAbsoluteRow() + visualRow,
-            marginY + (float) visualRow * atlas->cellHeight(),
+            calculateCellOrigin(visualRow, 0).y,
             std::min((int) line.size(), screen.columns())};
 }
 
@@ -486,7 +485,7 @@ GridPainter TerminalView::makePainter()
 
 bool TerminalView::isCursorLayerVisible() const
 {
-    return copyMode || scrollOffset == 0 || !shellStatus.empty();
+    return copyMode || scrollPosition.isFollowingLiveBottom() || !shellStatus.empty();
 }
 
 void TerminalView::showShellStatus(const std::string& status)
@@ -504,7 +503,7 @@ std::string TerminalView::describeCopyModePosition() const
     if (!copyMode)
         return shellStatus;
 
-    return "[" + std::to_string(scrollOffset) + "/"
+    return "[" + std::to_string(calculateLinesFromBottom()) + "/"
            + std::to_string(screen.scrollbackSize()) + "]";
 }
 
@@ -513,12 +512,12 @@ std::string TerminalView::describeCopyModePosition() const
 // and the next frame rebuilds again.
 void TerminalView::updateRowDrawings(GridPainter& painter)
 {
-    const auto isScrolledBack = scrollOffset != 0;
+    const auto isScrolledBack = !scrollPosition.isFollowingLiveBottom();
 
     if (isScrolledBack)
         rowDrawings.invalidateAllRows();
 
-    rowDrawings.updateRows({screen.rows(),
+    rowDrawings.updateRows({countRowsToDraw(),
                             [this](int row) { return screen.isRowDirty(row); },
                             [this, &painter](int row)
                             { return painter.buildRowDrawing(describeVisibleRow(row)); },
@@ -539,7 +538,8 @@ void TerminalView::drawCursor(GridPainter& painter)
     if (!screen.modes.showCursor)
         return;
 
-    const auto visualRow = screen.cursor.y + scrollOffset;
+    const auto linesFromBottom = calculateLinesFromBottom();
+    const auto visualRow = screen.cursor.y + linesFromBottom;
 
     if (visualRow >= screen.rows())
         return;
@@ -557,7 +557,7 @@ void TerminalView::drawCursor(GridPainter& painter)
 
     painter.drawCursor(origin,
                        findCursorStyle(parser.cursorShape()),
-                       screen.resolveLine(screen.lineAt(visualRow, scrollOffset)),
+                       screen.resolveLine(screen.lineAt(visualRow, linesFromBottom)),
                        screen.cursor.x);
 }
 
@@ -607,6 +607,8 @@ void TerminalView::render(GPU::Frame& frame)
     if (!sprites)
         return;
 
+    syncScrollPositionWithScrollback();
+
     sprites->begin(pass);
     glyphs->begin();
 
@@ -640,7 +642,7 @@ void TerminalView::clearScreenAndScrollback()
 {
     screen.eraseInDisplay(3);
     screen.setCursor(0, 0);
-    scrollOffset = 0;
+    scrollToLiveBottom();
     send("\014");
     repaintIfShown();
 }
@@ -865,7 +867,9 @@ VisibleCell TerminalView::findCellUnderPointer(Graphics::Point pos) const
 
 CellRef TerminalView::cellRefAt(Graphics::Point pos) const
 {
-    const auto cell = findCellUnderPointer(pos);
+    const auto shiftedToRowTops =
+        Graphics::Point {pos.x, pos.y + calculatePixelOffsetIntoTopRow()};
+    const auto cell = findCellUnderPointer(shiftedToRowTops);
     return {findTopVisibleAbsoluteRow() + cell.visualRow, cell.column};
 }
 
@@ -921,7 +925,7 @@ void TerminalView::enterCopyMode()
 
     // Already scrolled up: keep the view and start at its top-left, like
     // tmux. Otherwise start at the terminal cursor.
-    if (scrollOffset > 0)
+    if (!scrollPosition.isFollowingLiveBottom())
         setCopyCursor({findTopVisibleAbsoluteRow(), 0});
     else
         setCopyCursor(
@@ -935,7 +939,7 @@ void TerminalView::exitCopyMode()
     copyLineSelect = false;
     selection.active = false;
     rowDrawings.invalidateAllRows();
-    scrollOffset = 0;
+    scrollToLiveBottom();
     repaintIfShown();
 }
 
@@ -944,15 +948,18 @@ void TerminalView::setCopyCursor(CellRef target)
     copyCursor.row = std::clamp(target.row, 0L, findLastAbsoluteRow(screen));
     copyCursor.col = std::clamp(target.col, 0, screen.columns() - 1);
 
+    syncScrollPositionWithScrollback();
     const auto visualRow = calculateVisualRow(copyCursor.row);
+    const auto scrollbackSize = screen.scrollbackSize();
+    const auto linesFromBottomWithCursorOnTopRow = (int) (scrollbackSize - copyCursor.row);
+    const auto linesFromBottomWithCursorOnBottomRow =
+        linesFromBottomWithCursorOnTopRow + screen.rows() - 1;
 
     if (visualRow < 0)
-        scrollOffset = (int) ((long) screen.scrollbackSize() - copyCursor.row);
+        scrollPosition.showLinesFromBottom(linesFromBottomWithCursorOnTopRow, scrollbackSize);
     else if (visualRow >= screen.rows())
-        scrollOffset = (int) ((long) screen.scrollbackSize() - copyCursor.row
-                              + screen.rows() - 1);
+        scrollPosition.showLinesFromBottom(linesFromBottomWithCursorOnBottomRow, scrollbackSize);
 
-    scrollOffset = std::clamp(scrollOffset, 0, screen.scrollbackSize());
     updateCopySelection();
     repaintIfShown();
 }
@@ -1205,57 +1212,5 @@ void TerminalView::mouseUp(const MouseEvent& event)
 
     selecting = false;
     repaintIfShown();
-}
-
-int TerminalView::takeWholeWheelLines(float wheelDelta)
-{
-    wheelRemainder += wheelDelta;
-    const auto lines = (int) wheelRemainder;
-    wheelRemainder -= (float) lines;
-    return lines;
-}
-
-// Full-screen apps get wheel motion as arrow keys, the classic fallback when no
-// mouse mode is active.
-void TerminalView::sendWheelAsArrowKeys(int lines)
-{
-    const auto arrows = encodeWheelAsArrowKeys(lines, screen.modes.appCursorKeys);
-
-    for (auto i = 0; i < arrows.count; ++i)
-        send(arrows.key);
-}
-
-float TerminalView::getPointsPerWheelLine() const
-{
-    if (!atlas)
-        return 0.f;
-
-    return atlas->cellHeight();
-}
-
-void TerminalView::sendWheelAsMouseReports(const MouseEvent& event, int lines)
-{
-    const auto reports = encodeWheelAsMouseReports(lines);
-
-    for (auto i = 0; i < reports.count; ++i)
-        sendMouseReport(event, reports.button, true, false);
-}
-
-void TerminalView::mouseWheel(const MouseEvent& event)
-{
-    const auto lock = lockTerminal();
-    const auto wheelLines =
-        convertWheelDeltaToLines(event.delta.y, event.preciseScrolling, getPointsPerWheelLine());
-    const auto lines = takeWholeWheelLines(wheelLines);
-
-    if (lines == 0)
-        return;
-
-    if (isReportingMouseFor(event))
-        sendWheelAsMouseReports(event, lines);
-    else if (screen.modes.altScreen)
-        sendWheelAsArrowKeys(lines);
-    else
-        scrollBy(lines);
 }
 } // namespace term

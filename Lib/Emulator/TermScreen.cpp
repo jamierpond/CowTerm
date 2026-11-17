@@ -608,6 +608,7 @@ void TermScreen::eraseInDisplay(int mode)
 
     if (mode == eraseScreenAndScrollback)
     {
+        linesDroppedFromScrollback += scrollback.size();
         scrollback.clear();
         eraseInDisplay(eraseWholeScreen);
         return;
@@ -740,9 +741,13 @@ void TermScreen::scrollUpRegion(int count, int top, int bottom)
         if (isScrollingIntoHistory(top))
         {
             scrollback.push_back(std::move(lines[(std::size_t) top]));
+            ++linesAddedToScrollback;
 
             if ((int) scrollback.size() > maxScrollback)
+            {
                 scrollback.pop_front();
+                ++linesDroppedFromScrollback;
+            }
         }
 
         lines.erase(lines.begin() + top);

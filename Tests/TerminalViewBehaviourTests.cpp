@@ -470,6 +470,97 @@ auto tWheelInAltScreenAppKeys = test("View/wheelInAltScreenHonoursApplicationKey
     check(pane.takeWritten() == "\033OB");
 };
 
+// ---- scrolling the scrollback -----------------------------------------------
+
+namespace
+{
+std::string makeLinesOfOutput(int count)
+{
+    auto output = std::string {};
+
+    for (auto line = 0; line < count; ++line)
+        output += "line " + std::to_string(line) + "\r\n";
+
+    return output;
+}
+
+Graphics::TouchEvent touchAt(Graphics::Point position, double timestampSeconds)
+{
+    auto touch = Graphics::TouchEvent {};
+    touch.pos = position;
+    touch.timestamp = timestampSeconds;
+    return touch;
+}
+
+Graphics::TouchEvent touchMovedDownByRows(const Graphics::TouchEvent& start,
+                                          float rows,
+                                          double timestampSeconds)
+{
+    const auto travel = rows * referenceAtlas().cellHeight();
+    const auto moved = Graphics::Point {start.pos.x, start.pos.y + travel};
+    return touchAt(moved, timestampSeconds);
+}
+} // namespace
+
+auto tScrolledBackCountsNewLines = test("View/scrolledBackTheViewCountsLinesThatArrive") = []
+{
+    constexpr auto linesOfHistory = 50;
+    constexpr auto linesArrivingLater = 3;
+    constexpr auto wheelLinesBack = 5.f;
+    auto pane = TestPane {};
+    pane.showOutput(makeLinesOfOutput(linesOfHistory));
+
+    pane.view->mouseWheel(wheelBy(wheelLinesBack));
+    pane.showOutput(makeLinesOfOutput(linesArrivingLater));
+    check(pane.view->countLinesArrivedWhileScrolledBack() == linesArrivingLater);
+
+    pane.view->keyDown(typedKey("x"));
+    check(pane.view->countLinesArrivedWhileScrolledBack() == 0, "typing returns to the live bottom");
+};
+
+auto tTouchDragScrollsBack = test("View/aFingerDraggedDownScrollsTheScrollbackBack") = []
+{
+    constexpr auto linesOfHistory = 50;
+    constexpr auto rowsDragged = 2.5f;
+    constexpr auto moveTime = 0.02;
+    constexpr auto liftTime = 0.03;
+    auto pane = TestPane {};
+    pane.showOutput(makeLinesOfOutput(linesOfHistory));
+    pane.takeWritten();
+
+    const auto start = touchAt(centreOfCell(0, 0), 0.0);
+    const auto moved = touchMovedDownByRows(start, rowsDragged, moveTime);
+    pane.view->beginTouchScroll(start);
+    pane.view->moveTouchScroll(moved);
+    pane.view->endTouchScroll(touchAt(moved.pos, liftTime));
+    pane.showOutput(makeLinesOfOutput(1));
+
+    check(pane.view->countLinesArrivedWhileScrolledBack() == 1);
+    check(pane.takeWritten().empty(), "scrolling the scrollback sends the shell nothing");
+
+    pane.view->scrollToLiveBottom();
+    check(pane.view->countLinesArrivedWhileScrolledBack() == 0);
+};
+
+auto tTouchDragInAltScreen = test("View/aFingerDragInAltScreenSendsOneArrowPerLine") = []
+{
+    constexpr auto rowsDragged = 3.f;
+    constexpr auto moveTime = 0.02;
+    constexpr auto liftTime = 0.03;
+    auto pane = TestPane {};
+    pane.showOutput("\033[?1049h");
+    pane.takeWritten();
+
+    const auto start = touchAt(centreOfCell(0, 0), 0.0);
+    const auto moved = touchMovedDownByRows(start, rowsDragged, moveTime);
+    pane.view->beginTouchScroll(start);
+    pane.view->moveTouchScroll(moved);
+    check(pane.takeWritten() == "\033[A\033[A\033[A");
+
+    pane.view->endTouchScroll(touchAt(moved.pos, liftTime));
+    check(pane.takeWritten().empty(), "no coast follows the finger in a program");
+};
+
 // ---- copy mode keys ---------------------------------------------------------
 
 auto tCopyModeSwallowsKeys = test("View/copyModeKeepsKeysFromTheShell") = []

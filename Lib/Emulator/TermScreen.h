@@ -104,6 +104,14 @@ public:
     void resize(int newCols, int newRows);
 
     int scrollbackSize() const { return (int) scrollback.size(); }
+
+    // Running counts since the screen was made, for a view anchored to a
+    // scrollback row: lines dropped from the front renumber every row after.
+    std::uint64_t countLinesEverAddedToScrollback() const { return linesAddedToScrollback; }
+    std::uint64_t countLinesEverDroppedFromScrollback() const
+    {
+        return linesDroppedFromScrollback;
+    }
     const Line& lineAt(int visualRow, int scrollOffset) const;
 
     // OSC 8: cells printed from here on link to uri; an empty uri ends the link.
@@ -221,6 +229,8 @@ private:
     std::vector<Line> grid;
     std::vector<Line> altGrid;
     std::deque<Line> scrollback;
+    std::uint64_t linesAddedToScrollback = 0;
+    std::uint64_t linesDroppedFromScrollback = 0;
     CursorPos savedCursor;
     Pen savedPen;
     int scrollTop = 0;

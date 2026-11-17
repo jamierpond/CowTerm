@@ -129,6 +129,7 @@ nano_add_executable(CowTermViewTests
             OutputParserThreadTests.cpp
             GraphemeTests.cpp
             RowDrawingCacheTests.cpp
+            ScrollPositionTests.cpp
         TARGETS CowTerm::TerminalView)
 
 # Guards the -fno-ipa-bit-cp in the top CMakeLists.txt: under GCC 15.3 with

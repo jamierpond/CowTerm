@@ -8,6 +8,8 @@
 #include "KittyKeyEncoding.h"
 #include "RowDrawingCache.h"
 #include "OutputParserThread.h"
+#include "ScrollMomentum.h"
+#include "ScrollPosition.h"
 
 #include "Emulator/FocusReports.h"
 #include "Shell/Shell.h"
@@ -114,6 +116,21 @@ public:
 
     void paste();
 
+    // Finger scrolling for a touch screen host, fed the finger's touch events.
+    // The content tracks the finger and coasts after it lifts, at the speed
+    // its last moves give or at one the host measured. On the alternate
+    // screen, or while the program reports the mouse, the drag sends it one
+    // wheel step per line moved instead, with no coast.
+    void beginTouchScroll(const eacp::Graphics::TouchEvent& touch);
+    void moveTouchScroll(const eacp::Graphics::TouchEvent& touch);
+    void endTouchScroll(const eacp::Graphics::TouchEvent& touch);
+    void endTouchScrollWithVelocity(float velocityPixelsPerSecond);
+
+    // Lines of output that arrived since the reader scrolled back; 0 at the
+    // live bottom.
+    std::uint64_t countLinesArrivedWhileScrolledBack() const;
+    void scrollToLiveBottom();
+
     // A paste isPasteSafe rejects: the host asks the user, and calls
     // pasteAnyway if they confirm. Without a host it pastes, as before.
     std::function<void(const std::string& text, const eacp::Callback& pasteAnyway)>
@@ -160,6 +177,7 @@ public:
     bool isShownOnScreen() const;
 
     void render(eacp::GPU::Frame& frame) override;
+    void update(eacp::Threads::FrameTime frameTime) override;
     void resized() override;
 
     void keyDown(const eacp::Graphics::KeyEvent& event) override;
@@ -215,6 +233,13 @@ private:
                     const std::string& workingDirectory,
                     const std::string& commandToRun);
     void scrollBy(int lines);
+    ScrollEdgeContact scrollByRows(double rows);
+    ScrollEdgeContact scrollByPixels(float pixels);
+    void stopScrollMomentum();
+    void syncScrollPositionWithScrollback();
+    int calculateLinesFromBottom() const;
+    float calculatePixelOffsetIntoTopRow() const;
+    int countRowsToDraw() const;
 
     bool handleCopyModeKey(const eacp::Graphics::KeyEvent& event);
     void applyCopyModeCommand(const CopyModeCommand& command);
@@ -236,6 +261,8 @@ private:
                          bool pressed,
                          bool motion);
     int takeWholeWheelLines(float wheelDelta);
+    bool isWheelForProgram(const eacp::Graphics::MouseEvent& event) const;
+    void sendWheelLinesToProgram(const eacp::Graphics::MouseEvent& event, int lines);
     void sendWheelAsArrowKeys(int lines);
     float getPointsPerWheelLine() const;
     void sendWheelAsMouseReports(const eacp::Graphics::MouseEvent& event, int lines);
@@ -288,7 +315,10 @@ private:
     eacp::Threads::Timer blinkTimer;
     bool blinkOn = true;
 
-    int scrollOffset = 0;
+    ScrollPosition scrollPosition;
+    ScrollMomentum scrollMomentum;
+    TouchVelocityTracker touchVelocity;
+    eacp::Graphics::Point lastTouchPosition;
     float wheelRemainder = 0;
 
     bool selecting = false;
