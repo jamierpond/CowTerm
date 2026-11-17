@@ -331,6 +331,12 @@ if (TARGET CowTerm::EmbeddedSsh)
                 PhoneConnectionTests.cpp
                 PhoneOverviewTests.cpp
             TARGETS CowTerm::Phone)
+
+    # The phone adding a computer itself: its key's encodings, typed hosts,
+    # fingerprints and trusting a host key on first connection.
+    nano_add_executable(CowTermPairingTests
+            SOURCES PairingTests.cpp
+            TARGETS CowTerm::Pairing)
 endif ()
 
 # The headless ct a remote host runs, and the app's own ct mode.

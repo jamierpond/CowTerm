@@ -10,6 +10,8 @@
 #   CowTermPhone         the phone's link to one host's daemon over the
 #                        in-process ssh client: pane choice, link state,
 #                        stored last screen. Multiplexer + EmbeddedSsh.
+#   CowTermPairing       the phone adding a computer itself: its key's line,
+#                        host key trust on first connection. EmbeddedSsh.
 #   CowTermTerminalView  the embeddable GPU terminal widget — what another
 #                        project links to put a terminal pane in its window.
 #                        Emulator + Shell; never Multiplexer.
@@ -21,6 +23,7 @@ add_subdirectory(Shell)
 add_subdirectory(Multiplexer)
 if (TARGET CowTerm::EmbeddedSsh)
     add_subdirectory(Phone)
+    add_subdirectory(Pairing)
 endif ()
 if (NOT COWTERM_HEADLESS)
     add_subdirectory(TerminalView)
