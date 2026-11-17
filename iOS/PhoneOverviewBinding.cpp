@@ -1,6 +1,11 @@
 #include "PhoneOverviewBinding.h"
 
+#include "Multiplexer/RemoteHosts.h"
+
 #include <eacp/Core/Utils/Logging.h>
+
+#include <map>
+#include <optional>
 
 namespace cowterm::mobile
 {
@@ -19,21 +24,67 @@ OverviewInputs makeOverviewInputs(const term::phone::OverviewReport& report)
     return inputs;
 }
 
+namespace
+{
+struct HostCounts
+{
+    int sessions = 0;
+    int panes = 0;
+    std::optional<int> daemonProtocolVersion;
+};
+
+std::map<std::string, HostCounts> countSessionsByHost(const term::phone::OverviewReport& report)
+{
+    auto countsByHost = std::map<std::string, HostCounts> {};
+
+    for (const auto& row: report.sessions)
+    {
+        auto& counts = countsByHost[row.host];
+        ++counts.sessions;
+        counts.panes += static_cast<int>(row.paneIds.size());
+
+        if (auto* remote = term::RemoteHosts::find(row.host))
+            counts.daemonProtocolVersion = remote->getDaemon().getDaemonProtocolVersion();
+    }
+
+    return countsByHost;
+}
+
+// One line per host: what the phone can open there, or why it cannot reach it.
+std::string describeHostsAnswering(const term::phone::OverviewReport& report)
+{
+    auto text = std::string {};
+
+    for (const auto& [host, counts]: countSessionsByHost(report))
+    {
+        const auto version = counts.daemonProtocolVersion ? std::to_string(*counts.daemonProtocolVersion) : "unknown";
+        text += "\n  " + host + " (daemon protocol " + version + "): " + std::to_string(counts.sessions)
+                + " sessions, " + std::to_string(counts.panes) + " panes";
+    }
+
+    for (const auto& host: report.unreachableHosts)
+        text += "\n  " + host.host + " unreachable: " + host.reason;
+
+    return text;
+}
+} // namespace
+
 PhoneOverviewBinding::PhoneOverviewBinding(PhoneLaunch& phoneToUse,
                                            OverviewScreen& screenToUse,
-                                           ShowPane showPaneToUse)
+                                           eacp::Callback showPaneScreenToUse)
     : phone(phoneToUse)
     , screen(screenToUse)
-    , showPane(std::move(showPaneToUse))
+    , showPaneScreen(std::move(showPaneScreenToUse))
 {
     phone.getOverview().onRowsChanged = [this](const term::phone::OverviewReport& report) { showReport(report); };
 
     screen.onOpenSession = [this](const term::overview::OverviewRow& row) { openSession(row); };
+    screen.setInputs(makeOverviewInputs(phone.getOverview().buildReport()));
 }
 
 void PhoneOverviewBinding::showReport(const term::phone::OverviewReport& report)
 {
-    LOG("overview: ", report.sessions.size(), " sessions, ", report.unreachableHosts.size(), " hosts unreachable");
+    logHostsAnsweringWhenChanged(report);
     screen.setInputs(makeOverviewInputs(report));
 
     if (sessionToOpen.empty())
@@ -44,6 +95,17 @@ void PhoneOverviewBinding::showReport(const term::phone::OverviewReport& report)
         sessionToOpen.clear();
         screen.onOpenSession(*row);
     }
+}
+
+void PhoneOverviewBinding::logHostsAnsweringWhenChanged(const term::phone::OverviewReport& report)
+{
+    auto description = describeHostsAnswering(report);
+
+    if (description == loggedHostsAnswering)
+        return;
+
+    LOG("overview: ", report.sessions.size(), " sessions from ", report.hostCount, " hosts:", description);
+    loggedHostsAnswering = std::move(description);
 }
 
 void PhoneOverviewBinding::openSessionOnceListed(const std::string& hostAndSession)
@@ -65,6 +127,6 @@ void PhoneOverviewBinding::openSession(const term::overview::OverviewRow& row)
 
     LOG("overview: open ", row.host, "/", row.sessionName, " on pane ", *paneId);
     setShown(false);
-    showPane(*paneId);
+    showPaneScreen();
 }
 } // namespace cowterm::mobile

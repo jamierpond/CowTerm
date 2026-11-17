@@ -22,6 +22,7 @@ constexpr auto nameFontSize = 16.0f;
 constexpr auto detailFontSize = 13.0f;
 constexpr auto searchFontSize = 16.0f;
 constexpr auto bannerFontSize = 15.0f;
+constexpr auto bannerLineHeight = 24.0f;
 
 constexpr auto sidePadding = 12.0f;
 constexpr auto stripeWidth = 4.0f;
@@ -301,6 +302,7 @@ void OverviewPanel::showSearchResults(const std::string& query)
     inputs.query = query;
     content = arrangeOverview(inputs);
     list.setVisible(!content.banner);
+    searchField.setVisible(inputs.hostCount > 0);
     list.setItems(content.itemsFromTheBottom);
     repaint();
 }
@@ -337,7 +339,14 @@ void OverviewPanel::paint(UI::Graphics& g)
 
     g.setFont(makeFont(bannerFontSize));
     g.setColour(term::toColor(theme.ansi[ansiRed]));
-    g.drawText(*content.banner, list.getBounds(), UI::Justification::Centred);
+
+    const auto lines = eacp::Strings::split(*content.banner, '\n');
+    const auto bannerHeight = bannerLineHeight * static_cast<float>(lines.size());
+    auto lineBounds = getLocalBounds();
+    lineBounds.removeFromTop((lineBounds.h - bannerHeight) / 2.0f);
+
+    for (const auto& line: lines)
+        g.drawText(line, lineBounds.removeFromTop(bannerLineHeight), UI::Justification::Centred);
 }
 
 OverviewScreen::OverviewScreen()

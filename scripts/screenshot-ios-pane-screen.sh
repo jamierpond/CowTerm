@@ -16,7 +16,7 @@ take() {
     name="$2"
     settle="$3"
     shift 3
-    scripts/run-ios-simulator.sh "$device_name" "$@" > /dev/null
+    scripts/run-ios-simulator.sh "$device_name" --sample "$@" > /dev/null
     sleep "$settle"
     slug=$(echo "$device_name" | tr ' A-Z' '-a-z')
     scripts/screenshot-ios-simulator.sh "$out/pane-$slug-$name.png" "$device_name" > /dev/null 2>&1

@@ -83,6 +83,26 @@ std::optional<std::vector<SshDestination>> parseDestinationList(const std::strin
 }
 } // namespace
 
+std::string joinPairedHosts(const std::string& hostsFileText)
+{
+    auto joined = std::string {};
+
+    for (const auto& line: eacp::Strings::split(hostsFileText, '\n'))
+    {
+        const auto host = eacp::Strings::trim(line);
+
+        if (host.empty())
+            continue;
+
+        if (!joined.empty())
+            joined += destinationSeparator;
+
+        joined += host;
+    }
+
+    return joined;
+}
+
 std::string makeHostLabel(const SshDestination& destination)
 {
     return destination.user + "@" + destination.host;

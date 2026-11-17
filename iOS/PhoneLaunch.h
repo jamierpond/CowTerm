@@ -11,16 +11,19 @@
 
 namespace cowterm::mobile
 {
-// The phone's connection to a host, when the launch named one: settings read
-// from the launch arguments and SIMCTL_CHILD_ environment, the stored last
-// screen, and the hooks that keep the link honest (background, foreground,
-// network change). Everything it hears is logged, and passed on to the pane screen.
+// The phone's connection to its hosts: settings read from the launch arguments
+// and SIMCTL_CHILD_ environment, or from the paired setup in the app's
+// container, the stored last screen, and the hooks that keep the link honest
+// (background, foreground, network change). Everything it hears is logged, and
+// passed on to the pane screen.
 class PhoneLaunch
 {
 public:
     explicit PhoneLaunch(term::phone::PhoneSettings settings);
 
-    // Empty when the launch names no destination: the app shows sample text.
+    // From the launch arguments and environment when they name a destination,
+    // else from the setup `just ios-pair` copied into the app's container.
+    // Empty when neither has a host.
     static std::optional<term::phone::PhoneSettings> readSettings(int argc, char* argv[]);
 
     // The pane view's config: its shell is the daemon's pane on the host.
@@ -54,6 +57,7 @@ public:
     const std::optional<term::phone::StoredScreen>& getStoredScreen() const { return storedScreen; }
 
 private:
+    static std::string describeHostList(const term::phone::PhoneSettings& settings);
     void logWhatTheConnectionHears();
 
     term::phone::PhoneSettings settings;

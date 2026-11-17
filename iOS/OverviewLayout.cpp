@@ -17,7 +17,8 @@ constexpr auto waitingCardHeight = 84.0f;
 constexpr auto sessionRowHeight = 56.0f;
 constexpr auto unreachableHostRowHeight = 56.0f;
 constexpr auto itemGap = 6.0f;
-constexpr auto everyMachineUnreachableBanner = "No machine answers. Check the network or Tailscale.";
+constexpr auto everyMachineUnreachableBanner = "No machine answers.\nCheck the network or Tailscale.";
+constexpr auto noHostsSetUpBanner = "No hosts set up.\nRun just ios-pair on the Mac.";
 
 struct ItemHeight
 {
@@ -34,7 +35,7 @@ constexpr ItemHeight itemHeights[] = {
 bool isEveryMachineUnreachable(const OverviewInputs& inputs)
 {
     const auto unreachableCount = static_cast<int>(inputs.unreachableHosts.size());
-    return inputs.hostCount > 0 && unreachableCount >= inputs.hostCount;
+    return unreachableCount >= inputs.hostCount;
 }
 
 OverviewItem makeSessionItem(OverviewItemKind kind, const OverviewRow& session)
@@ -101,7 +102,9 @@ OverviewContent arrangeOverview(const OverviewInputs& inputs)
 {
     auto content = OverviewContent {};
 
-    if (isEveryMachineUnreachable(inputs))
+    if (inputs.hostCount == 0)
+        content.banner = noHostsSetUpBanner;
+    else if (isEveryMachineUnreachable(inputs))
         content.banner = everyMachineUnreachableBanner;
     else if (!inputs.query.empty())
         content.itemsFromTheBottom = listSearchResults(inputs);

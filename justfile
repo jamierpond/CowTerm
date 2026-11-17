@@ -40,6 +40,10 @@ ios-screenshots:
 ios-test-size-owner destination folder:
     scripts/run-ios-size-owner-test.sh {{destination}} {{folder}}
 
+# Check the phone gives a protocol 4 daemon's throwaway panes their size back on leaving them and in the background
+ios-test-size-return destination device="iPhone 17 Pro":
+    scripts/check-ios-size-return.sh {{destination}} "{{device}}"
+
 # Check the overview against a test daemon on a host
 ios-test-overview destination folder:
     scripts/run-ios-overview-test.sh {{destination}} {{folder}}

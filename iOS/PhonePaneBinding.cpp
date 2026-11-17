@@ -12,10 +12,10 @@ using namespace term::phone;
 
 namespace
 {
-bool hasStoredScreenForFirstPane(const PhoneLaunch& phone)
+bool hasStoredScreenFor(const PhoneLaunch& phone, const PaneOnHostId& pane)
 {
     const auto& stored = phone.getStoredScreen();
-    return stored && stored->paneId == phone.getPaneToOpen();
+    return stored && PaneOnHostId {stored->host, stored->paneId} == pane;
 }
 
 // The stored screen's save time, on the clock the top line counts the age on.
@@ -58,9 +58,13 @@ PaneDescription describeChosenPane(const ChosenPane& chosen)
 }
 } // namespace
 
-PhonePaneBinding::PhonePaneBinding(PhoneLaunch& phoneToUse, PaneScreen& screenToUse)
+PhonePaneBinding::PhonePaneBinding(PhoneLaunch& phoneToUse,
+                                   PaneScreen& screenToUse,
+                                   eacp::Callback showPaneScreenToUse)
     : phone(phoneToUse)
     , screen(screenToUse)
+    , showPaneScreen(std::move(showPaneScreenToUse))
+    , shownPaneId(phone.getPaneToOpen())
 {
     showStoredScreenDescription();
 
@@ -69,11 +73,11 @@ PhonePaneBinding::PhonePaneBinding(PhoneLaunch& phoneToUse, PaneScreen& screenTo
     screen.actions.onChoosePane = [this](int paneIndex) { switchToPane(paneIndex); };
 }
 
-term::TerminalConfig PhonePaneBinding::makeFirstPaneConfig(PhoneLaunch& phone)
+term::TerminalConfig PhonePaneBinding::makePaneConfig(PhoneLaunch& phone, const PaneOnHostId& pane)
 {
     auto config = phone.makeTerminalConfig();
 
-    if (!hasStoredScreenForFirstPane(phone))
+    if (!hasStoredScreenFor(phone, pane))
         return config;
 
     const auto serialized = term::serializeTerminalState(phone.getStoredScreen()->state);
@@ -89,7 +93,7 @@ void PhonePaneBinding::showStoredScreenDescription()
     auto pane = PaneDescription {};
     pane.hostName = phone.getHost();
 
-    if (hasStoredScreenForFirstPane(phone))
+    if (hasStoredScreenFor(phone, {phone.getHost(), phone.getPaneToOpen()}))
     {
         const auto& stored = *phone.getStoredScreen();
         pane.sessionName = stored.sessionName;
@@ -113,9 +117,19 @@ void PhonePaneBinding::showLinkState(PhoneLinkState state)
     screen.setLinkStatus({linkState, pictureTakenAt});
 }
 
+// The launch's own choice, or a row opened from the overview, is put on the
+// screen here; a pane already shown only gets its session's dots updated.
 void PhonePaneBinding::showChosenPane(const ChosenPane& chosen)
 {
     sessionPaneIds = chosen.sessionPaneIds;
+
+    if (chosen.paneId != shownPaneId)
+    {
+        shownPaneId = chosen.paneId;
+        screen.showPane(makePaneConfig(phone, {chosen.host, chosen.paneId}), chosen.paneId);
+        showPaneScreen();
+    }
+
     screen.setPaneDescription(describeChosenPane(chosen));
 }
 
@@ -125,8 +139,6 @@ void PhonePaneBinding::switchToPane(int paneIndex)
         return;
 
     const auto paneId = sessionPaneIds[(std::size_t) paneIndex];
-
-    if (phone.choosePaneOfSession(paneId))
-        screen.showPane(phone.makeTerminalConfig(), paneId);
+    phone.choosePaneOfSession(paneId);
 }
 } // namespace cowterm::mobile

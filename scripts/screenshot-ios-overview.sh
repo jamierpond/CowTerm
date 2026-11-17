@@ -1,5 +1,5 @@
 #!/bin/sh
-# Screenshots the overview (the app launched with --overview and its sample
+# Screenshots the overview (the app launched with --sample --overview, its invented
 # sessions) on the smallest and largest iPhones, portrait and landscape, into
 # OUTPUT_DIR. Build first with scripts/build-ios-simulator.sh. The two
 # simulators are this script's own, created on first use, so it never takes
@@ -23,11 +23,11 @@ shoot() {
         xcrun simctl create "$simulator_name" "$device_type" "$runtime" > /dev/null
     fi
 
-    scripts/run-ios-simulator.sh "$simulator_name" --overview --portrait
+    scripts/run-ios-simulator.sh "$simulator_name" --sample --overview --portrait
     sleep "$settle_seconds"
     scripts/screenshot-ios-simulator.sh "$output_dir/$file_stem-portrait.png" "$simulator_name"
 
-    scripts/run-ios-simulator.sh "$simulator_name" --overview --landscape
+    scripts/run-ios-simulator.sh "$simulator_name" --sample --overview --landscape
     sleep "$settle_seconds"
     scripts/screenshot-ios-simulator.sh "$output_dir/$file_stem-landscape.png" "$simulator_name"
 

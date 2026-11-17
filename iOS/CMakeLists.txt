@@ -1,5 +1,6 @@
 # CowTerm for iPhone (docs/iOSDesign.md): the pane screen, showing a pane on a
-# host when the launch names one (PhoneLaunch), a sample shell otherwise.
+# host chosen at launch or from the overview (PhoneLaunch), or with --sample
+# an invented pane and overview for screenshots.
 eacp_add_app(CowTermMobile
         Main.cpp
         InterfaceOrientation-iOS.mm
@@ -12,6 +13,7 @@ eacp_add_app(CowTermMobile
         PaneScreenLayout.cpp
         PhoneLaunch.cpp PhoneOverviewBinding.cpp
         PhonePaneBinding.cpp
+        NoPaneYetShell.cpp
         SampleShell.cpp
         StoredScreenShell.cpp
         Typing.cpp

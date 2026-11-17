@@ -42,6 +42,10 @@ using EnvironmentReader = std::function<std::string(const std::string& name)>;
 // "user@host": how RemoteHosts and the overview name a destination.
 std::string makeHostLabel(const SshDestination& destination);
 
+// The hosts file `just ios-pair` writes, one "user@host" a line, as the
+// comma-separated list --destination takes.
+std::string joinPairedHosts(const std::string& hostsFileText);
+
 std::optional<PhoneSettings> parsePhoneSettings(const std::vector<std::string>& arguments,
                                                 const EnvironmentReader& readEnvironment,
                                                 const std::filesystem::path& storedScreenPath);

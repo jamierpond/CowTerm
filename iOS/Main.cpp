@@ -1,4 +1,5 @@
 #include "InterfaceOrientation.h"
+#include "NoPaneYetShell.h"
 #include "OverviewSamples.h"
 #include "OverviewScreen.h"
 #include "PaneScreen.h"
@@ -6,6 +7,8 @@
 #include "PhoneOverviewBinding.h"
 #include "PhonePaneBinding.h"
 #include "SampleShell.h"
+
+#include "Multiplexer/DataDirectories.h"
 
 #include "TerminalView/GlyphAtlas.h"
 #include "TerminalView/TerminalView.h"
@@ -19,6 +22,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cstdlib>
+#include <filesystem>
 #include <optional>
 #include <string_view>
 
@@ -36,10 +40,15 @@ constexpr auto secondPaneIndex = 1;
 // Long enough for the keyboard to have come up, so the composer is on screen.
 constexpr auto composeDelay = Time::MS {1500};
 
+// Read back from the phone with `xcrun devicectl device copy from`.
+constexpr auto logFileName = "CowTermMobile.log";
+
 // Test hooks, from the launch arguments, for what a headless simulator cannot
 // do by hand.
 struct LaunchOptions
 {
+    // The invented pane and overview the screenshot scripts take, in place of any host.
+    bool showsSamples = false;
     bool raisesSoftwareKeyboard = false;
     bool turnsToLandscape = false;
     bool turnsToPortrait = false;
@@ -80,6 +89,7 @@ struct LaunchSwitch
 };
 
 constexpr LaunchSwitch launchSwitches[] = {
+    {"--sample", &LaunchOptions::showsSamples},
     {"--raise-keyboard", &LaunchOptions::raisesSoftwareKeyboard},
     {"--landscape", &LaunchOptions::turnsToLandscape},
     {"--portrait", &LaunchOptions::turnsToPortrait},
@@ -137,7 +147,6 @@ void applyLaunchValue(LaunchOptions& options, std::string_view argument)
 LaunchOptions parseLaunchOptions(int argc, char* argv[])
 {
     auto options = LaunchOptions {};
-    options.phoneSettings = cowterm::mobile::PhoneLaunch::readSettings(argc, argv);
 
     for (auto index = 1; index < argc; ++index)
     {
@@ -146,6 +155,9 @@ LaunchOptions parseLaunchOptions(int argc, char* argv[])
         if (!applyLaunchSwitch(options, argument))
             applyLaunchValue(options, argument);
     }
+
+    if (!options.showsSamples)
+        options.phoneSettings = cowterm::mobile::PhoneLaunch::readSettings(argc, argv);
 
     return options;
 }
@@ -214,7 +226,10 @@ term::TerminalConfig makePaneTerminalConfig(const std::unique_ptr<cowterm::mobil
                                             const LaunchOptions& launchOptions)
 {
     if (isOpeningAPhonePane(phone))
-        return cowterm::mobile::PhonePaneBinding::makeFirstPaneConfig(*phone);
+        return cowterm::mobile::PhonePaneBinding::makePaneConfig(*phone, {phone->getHost(), phone->getPaneToOpen()});
+
+    if (!launchOptions.showsSamples)
+        return cowterm::mobile::makeNoPaneYetConfig();
 
     auto sample = cowterm::mobile::SampleShellOptions {};
     sample.streamsOutput = launchOptions.streamsOutput;
@@ -262,8 +277,8 @@ struct CowTermMobileApp
         };
 
         if (phone != nullptr)
-            phoneBinding.emplace(*phone, screen);
-        else
+            phoneBinding.emplace(*phone, screen, [this] { window.setContentView(screen); });
+        else if (launchOptions.showsSamples)
             showSamplePane();
 
         connectOverview();
@@ -333,31 +348,29 @@ struct CowTermMobileApp
         }
     }
 
-    // Sample rows until the connection layer feeds real ones; opening a
-    // session goes back to the pane screen.
+    // The hosts' sessions, or the sample rows with --sample; with neither, the
+    // overview says no hosts are set up.
     void connectOverview()
     {
+        screen.actions.onOverview = [this] { showOverview(); };
+
+        if (phone != nullptr)
+        {
+            phoneOverview.emplace(*phone, overview, [this] { window.setContentView(screen); });
+            phoneOverview->openSessionOnceListed(launchOptions.sessionToOpen);
+            phoneOverview->setShown(isShowingOverviewFirst());
+            return;
+        }
+
+        if (!launchOptions.showsSamples)
+            return overview.setInputs({});
+
         overview.setInputs(cowterm::mobile::makeSampleOverviewInputs());
         overview.onOpenSession = [this](const term::overview::OverviewRow& session)
         {
             LOG("overview: open ", session.host, "/", session.sessionName);
             window.setContentView(screen);
         };
-        screen.actions.onOverview = [this] { showOverview(); };
-
-        if (phone != nullptr)
-        {
-            phoneOverview.emplace(*phone,
-                                  overview,
-                                  [this](const std::string& paneId)
-                                  {
-                                      screen.showPane(phone->makeTerminalConfig(), paneId);
-                                      window.setContentView(screen);
-                                  });
-
-            phoneOverview->openSessionOnceListed(launchOptions.sessionToOpen);
-            phoneOverview->setShown(launchOptions.showsOverview);
-        }
     }
 
     void showOverview()
@@ -368,9 +381,21 @@ struct CowTermMobileApp
         window.setContentView(overview);
     }
 
-    Graphics::View& chooseRootView()
+    // The pane screen comes first only with a pane to show: a named one, or the sample.
+    bool isShowingOverviewFirst() const
     {
         if (launchOptions.showsOverview)
+            return true;
+
+        if (launchOptions.showsSamples)
+            return false;
+
+        return !isOpeningAPhonePane(phone);
+    }
+
+    Graphics::View& chooseRootView()
+    {
+        if (isShowingOverviewFirst())
             return overview;
 
         return screen;
@@ -394,8 +419,18 @@ struct CowTermMobileApp
 };
 } // namespace
 
+// Each launch starts the log afresh, so it holds only this run.
+void startLogFile()
+{
+    const auto logPath = term::getLogsDirectory() / logFileName;
+    auto error = std::error_code {};
+    std::filesystem::remove(logPath, error);
+    eacp::setLogFile(logPath.string());
+}
+
 int main(int argc, char* argv[])
 {
+    startLogFile();
     term::registerEmbeddedFonts();
 
     return Apps::run<CowTermMobileApp>(parseLaunchOptions(argc, argv));

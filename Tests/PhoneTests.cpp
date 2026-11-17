@@ -118,6 +118,13 @@ auto settingsNeedADestination = test("PhoneSettings/needADestination") = []
     check(!parsePhoneSettings({"--destination", "tamby"}, makeEnvironment({}), {}).has_value());
 };
 
+auto pairedHostsBecomeADestinationList = test("PhoneSettings/pairedHostsBecomeADestinationList") = []
+{
+    check(joinPairedHosts("jamiepond@big-cow\n jamiepond@tamby \n\njamiepond@macprorack\n")
+          == "jamiepond@big-cow,jamiepond@tamby,jamiepond@macprorack");
+    check(joinPairedHosts("").empty());
+};
+
 auto lastInputAnswerNamesThePane = test("PaneChoice/lastInputAnswerNamesThePane") = []
 {
     constexpr auto typedAt = std::int64_t {1794906370945};

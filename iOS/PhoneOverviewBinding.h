@@ -10,13 +10,12 @@ namespace cowterm::mobile
 {
 // Feeds the overview the hosts' real sessions while it is shown, and opens a
 // tapped session's pane: the one typed into last, else its first, only when
-// its daemon still lists it.
+// its daemon still lists it. The pane binding puts that pane on the pane
+// screen; showPaneScreen then brings the pane screen up.
 class PhoneOverviewBinding
 {
 public:
-    using ShowPane = std::function<void(const std::string& paneId)>;
-
-    PhoneOverviewBinding(PhoneLaunch& phoneToUse, OverviewScreen& screenToUse, ShowPane showPaneToUse);
+    PhoneOverviewBinding(PhoneLaunch& phoneToUse, OverviewScreen& screenToUse, eacp::Callback showPaneScreenToUse);
 
     // Call with true as the overview comes on screen: the hosts are asked
     // every few seconds until a session opens.
@@ -28,12 +27,14 @@ public:
 
 private:
     void showReport(const term::phone::OverviewReport& report);
+    void logHostsAnsweringWhenChanged(const term::phone::OverviewReport& report);
     void openSession(const term::overview::OverviewRow& row);
 
     PhoneLaunch& phone;
     OverviewScreen& screen;
-    ShowPane showPane;
+    eacp::Callback showPaneScreen;
     std::string sessionToOpen;
+    std::string loggedHostsAnswering;
 };
 
 OverviewInputs makeOverviewInputs(const term::phone::OverviewReport& report);

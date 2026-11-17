@@ -2,9 +2,12 @@
 
 #include "Multiplexer/DataDirectories.h"
 
+#include <eacp/Core/Utils/Files.h>
 #include <eacp/Core/Utils/Logging.h>
 
 #include <cstdlib>
+#include <filesystem>
+#include <map>
 
 namespace cowterm::mobile
 {
@@ -14,6 +17,12 @@ using namespace term::phone;
 namespace
 {
 constexpr auto storedScreenFileName = "last-screen.json";
+
+// What `just ios-pair` copies into the app's container, under the data folder.
+constexpr auto pairingFolderName = "pairing";
+constexpr auto pairedHostsFileName = "hosts";
+constexpr auto pairedKeyFileName = "phone-key";
+constexpr auto pairedKnownHostsFileName = "known_hosts";
 
 std::string readEnvironment(const std::string& name)
 {
@@ -33,6 +42,65 @@ std::string joinPaneIds(const std::vector<std::string>& paneIds)
         joined += (joined.empty() ? "" : " ") + id;
 
     return joined;
+}
+
+std::string readFileIfPresent(const std::filesystem::path& path)
+{
+    auto error = std::error_code {};
+
+    if (!std::filesystem::exists(path, error))
+        return {};
+
+    return Files::readFile(path.string());
+}
+
+std::string describePathIfPresent(const std::filesystem::path& path)
+{
+    auto error = std::error_code {};
+
+    if (!std::filesystem::exists(path, error))
+        return {};
+
+    return path.string();
+}
+
+// The paired setup, read as the settings' environment names: the launch's own
+// arguments still come first.
+EnvironmentReader makePairedSetupReader(const std::filesystem::path& folder)
+{
+    const auto values = std::map<std::string, std::string> {
+        {"COWTERM_DESTINATION", joinPairedHosts(readFileIfPresent(folder / pairedHostsFileName))},
+        {"COWTERM_KEY_FILE", describePathIfPresent(folder / pairedKeyFileName)},
+        {"COWTERM_KNOWN_HOSTS", describePathIfPresent(folder / pairedKnownHostsFileName)},
+    };
+
+    return [values](const std::string& name) -> std::string
+    {
+        if (const auto found = values.find(name); found != values.end())
+            return found->second;
+
+        return {};
+    };
+}
+
+std::string describeSize(term::PtySize size)
+{
+    return std::to_string(size.cols) + " x " + std::to_string(size.rows);
+}
+
+std::string describeHostStatus(term::RemoteHost::Status status)
+{
+    switch (status)
+    {
+        case term::RemoteHost::Status::Connected:
+            return "link up";
+        case term::RemoteHost::Status::Unreachable:
+            return "unreachable:";
+        case term::RemoteHost::Status::Connecting:
+            return "connecting";
+    }
+
+    return {};
 }
 
 void logStoredScreen(const std::optional<StoredScreen>& stored)
@@ -63,13 +131,38 @@ PhoneLaunch::PhoneLaunch(PhoneSettings settingsToUse)
 {
     logStoredScreen(storedScreen);
     logWhatTheConnectionHears();
+
+    if (storedScreen)
+        connection.setPaneShownLastTime({storedScreen->host, storedScreen->paneId});
 }
 
 std::optional<PhoneSettings> PhoneLaunch::readSettings(int argc, char* argv[])
 {
     const auto arguments = std::vector<std::string> {argv + 1, argv + argc};
     const auto storedScreenPath = term::getDataDirectory() / storedScreenFileName;
-    return parsePhoneSettings(arguments, readEnvironment, storedScreenPath);
+
+    if (auto fromLaunch = parsePhoneSettings(arguments, readEnvironment, storedScreenPath))
+        return fromLaunch;
+
+    const auto pairingFolder = term::getDataDirectory() / pairingFolderName;
+    auto paired = parsePhoneSettings(arguments, makePairedSetupReader(pairingFolder), storedScreenPath);
+
+    if (paired)
+        LOG("phone: hosts from ", pairingFolder.string(), ": ", describeHostList(*paired));
+    else
+        LOG("phone: no hosts set up in ", pairingFolder.string());
+
+    return paired;
+}
+
+std::string PhoneLaunch::describeHostList(const PhoneSettings& settings)
+{
+    auto hosts = std::string {};
+
+    for (const auto& destination: settings.overviewDestinations)
+        hosts += (hosts.empty() ? "" : ", ") + makeHostLabel(destination);
+
+    return hosts;
 }
 
 term::TerminalConfig PhoneLaunch::makeTerminalConfig()
@@ -128,5 +221,27 @@ void PhoneLaunch::logWhatTheConnectionHears()
     };
 
     connection.onPaneStatus = [](const std::string& status) { LOG("phone: pane status ", status); };
+
+    connection.onHostStatusChanged =
+        [](const std::string& host, term::RemoteHost::Status status, const std::string& reason)
+    { LOG("phone: ", host, " ", describeHostStatus(status), " ", reason); };
+
+    connection.onPaneDrawn = [](const ChosenPane& pane, term::PtySize size, std::optional<term::PtySize> borrowed)
+    {
+        LOG("phone: pane ",
+            pane.paneId,
+            " on ",
+            pane.host,
+            " opened at ",
+            describeSize(size),
+            ", its size before the phone took it ",
+            borrowed ? describeSize(*borrowed) : std::string {"unknown"});
+    };
+
+    connection.onSizesReturned = [](const std::string& host, const std::vector<term::DaemonClient::ReturnedSize>& returned)
+    {
+        for (const auto& given: returned)
+            LOG("phone: gave pane ", given.paneId, " on ", host, " its size back, ", describeSize(given.size));
+    };
 }
 } // namespace cowterm::mobile

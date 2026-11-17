@@ -38,7 +38,8 @@ struct OverviewContent
 {
     std::vector<OverviewItem> itemsFromTheBottom;
 
-    // Shown alone, instead of the list, when no machine answers.
+    // Shown alone, instead of the list, when no host is set up or none
+    // answers; one line per '\n'.
     std::optional<std::string> banner;
 };
 
@@ -54,7 +55,8 @@ struct OverviewInputs
 // With no query: the waiting sessions as cards nearest the thumb, then the
 // other sessions as rows in the overview's order (a waiting session is not
 // shown twice), then one row per unreachable machine. With a query: only the matching sessions, in the Mac palette's
-// order. When every machine is unreachable: the banner and nothing else.
+// order. When no host is set up, or every machine is unreachable: a banner
+// saying so and nothing else.
 OverviewContent arrangeOverview(const OverviewInputs& inputs);
 
 float getOverviewItemHeight(OverviewItemKind kind);

@@ -103,6 +103,14 @@ auto tEveryMachineUnreachable = test("Overview/noMachineAnsweringIsOneBannerInst
     check(content.itemsFromTheBottom.empty());
 };
 
+auto tNoHostsSetUpIsOneBanner = test("Overview/noHostsSetUpIsOneBannerAndNothingElse") = []
+{
+    const auto content = arrangeOverview(OverviewInputs {});
+
+    check(content.banner == std::optional<std::string> {"No hosts set up.\nRun just ios-pair on the Mac."});
+    check(content.itemsFromTheBottom.empty());
+};
+
 auto tFirstItemAtTheBottom = test("Overview/theFirstItemSitsAtTheBottomOfTheList") = []
 {
     const auto heights = std::vector {rowHeight, rowHeight};

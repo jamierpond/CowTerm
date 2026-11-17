@@ -378,6 +378,7 @@ private:
 
         auto restored = term::TerminalModel {probeColumns, probeRows, theme};
         restored.restoreState(*state);
+        std::printf("pane %s is %dx%d\n", paneId.c_str(), state->screen.columns, state->screen.rows);
         std::printf("screen of %s, loaded from the daemon's state message:\n", paneId.c_str());
         printScreen(restored.screen);
 

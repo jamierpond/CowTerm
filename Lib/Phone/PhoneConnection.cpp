@@ -322,7 +322,10 @@ void PhoneConnection::handleUnhandledMessage(const std::string& fromHost,
 void PhoneConnection::handleTick()
 {
     const auto now = readClock();
-    choosePaneWhenKnown();
+
+    if (!chosenPane)
+        choosePaneWhenKnown();
+
     redialHosts(now);
     updateLinkState();
     reportShownPaneDrawn();
