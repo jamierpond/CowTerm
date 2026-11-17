@@ -73,12 +73,26 @@ const KeyGroups& findKeyGroups(int page)
     return secondPage;
 }
 
-int countKeys(const KeyGroups& groups)
+// The compose switch is two keys wide, so its word fits on the narrowest phone.
+int findKeyWidthInKeys(KeyRowKey key)
+{
+    constexpr auto composeKeyWidthInKeys = 2;
+
+    if (key == KeyRowKey::Composer)
+        return composeKeyWidthInKeys;
+
+    return 1;
+}
+
+int countKeyWidths(const KeyGroups& groups)
 {
     auto count = 0;
 
     for (const auto& group: groups)
-        count += (int) group.size();
+    {
+        for (const auto key: group)
+            count += findKeyWidthInKeys(key);
+    }
 
     return count;
 }
@@ -154,8 +168,9 @@ std::vector<KeyRowSlot> calculateKeyRowLayout(Rect row, int page)
 {
     const auto& groups = findKeyGroups(page);
     const auto gaps = (float) (groups.size() - 1) * groupGap;
-    const auto keyWidth = std::min(widestKey, (row.w - gaps) / (float) countKeys(groups));
-    const auto rowWidth = keyWidth * (float) countKeys(groups) + gaps;
+    const auto keyWidths = static_cast<float>(countKeyWidths(groups));
+    const auto keyWidth = std::min(widestKey, (row.w - gaps) / keyWidths);
+    const auto rowWidth = keyWidth * keyWidths + gaps;
 
     auto x = row.x + (row.w - rowWidth) / 2.0f;
     auto slots = std::vector<KeyRowSlot> {};
@@ -164,8 +179,9 @@ std::vector<KeyRowSlot> calculateKeyRowLayout(Rect row, int page)
     {
         for (const auto key: group)
         {
-            slots.push_back({key, {x, row.y, keyWidth, row.h}});
-            x += keyWidth;
+            const auto width = keyWidth * static_cast<float>(findKeyWidthInKeys(key));
+            slots.push_back({key, {x, row.y, width, row.h}});
+            x += width;
         }
 
         x += groupGap;

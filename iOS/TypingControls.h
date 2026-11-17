@@ -41,6 +41,9 @@ public:
     // The composer on, as the key row's switch turns it on.
     void switchToComposer();
 
+    // The key row's second page (symbols, compose, hide), as its last key turns to it.
+    void showKeyRowSecondPage();
+
     // While the link is down a sent message waits in the composer, marked
     // unsent, and goes when the link is live again.
     void setLinkLive(bool isLive);

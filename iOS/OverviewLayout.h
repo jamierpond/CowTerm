@@ -59,6 +59,21 @@ struct OverviewInputs
 // saying so and nothing else.
 OverviewContent arrangeOverview(const OverviewInputs& inputs);
 
+// Where the list, the search field and the button that lowers the keyboard
+// go. The search field sits on top of the keyboard while it is up, else on the
+// home indicator's inset, and the list ends just above it, so the best match is
+// nearest the field. The button shows only while the keyboard is up.
+struct OverviewAreas
+{
+    eacp::Graphics::Rect list;
+    eacp::Graphics::Rect searchField;
+    std::optional<eacp::Graphics::Rect> hideKeyboardButton;
+};
+
+OverviewAreas calculateOverviewAreas(eacp::Graphics::Rect screen,
+                                     eacp::Graphics::Insets safeArea,
+                                     float keyboardCoveredHeight);
+
 float getOverviewItemHeight(OverviewItemKind kind);
 
 std::vector<float> listOverviewItemHeights(const std::vector<OverviewItem>& items);

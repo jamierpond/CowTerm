@@ -2,6 +2,8 @@
 
 #include <NanoTest/NanoTest.h>
 
+#include <array>
+
 // The phone overview's arrangement and its bottom-anchored list, on the Mac.
 
 using namespace nano;
@@ -149,4 +151,58 @@ auto tTapFindsItem = test("Overview/aTapFindsTheItemUnderIt") = []
     check(findOverviewItemAt(bounds, bounds[1].center()) == std::size_t {1});
     check(!findOverviewItemAt(bounds, {listWidth / 2.0f, listTop}).has_value(),
           "the empty top of a short list is nothing");
+};
+
+namespace
+{
+constexpr auto iPhone12MiniWidth = 375.0f;
+constexpr auto iPhone12MiniHeight = 812.0f;
+constexpr auto iPhone12MiniSafeTop = 50.0f;
+constexpr auto iPhone12MiniSafeBottom = 34.0f;
+constexpr auto iPhone12MiniKeyboard = 317.0f;
+constexpr auto iPhone18ProMaxWidth = 440.0f;
+constexpr auto iPhone18ProMaxHeight = 956.0f;
+constexpr auto iPhone18ProMaxSafeTop = 62.0f;
+constexpr auto iPhone18ProMaxKeyboard = 346.0f;
+
+struct PhoneScreen
+{
+    eacp::Graphics::Rect bounds;
+    eacp::Graphics::Insets safeArea;
+    float keyboard = 0.0f;
+};
+
+const auto phonesWithTheKeyboardUp = std::array {
+    PhoneScreen {{0.0f, 0.0f, iPhone12MiniWidth, iPhone12MiniHeight},
+                 {.top = iPhone12MiniSafeTop, .bottom = iPhone12MiniSafeBottom},
+                 iPhone12MiniKeyboard},
+    PhoneScreen {{0.0f, 0.0f, iPhone18ProMaxWidth, iPhone18ProMaxHeight},
+                 {.top = iPhone18ProMaxSafeTop, .bottom = iPhone12MiniSafeBottom},
+                 iPhone18ProMaxKeyboard},
+};
+} // namespace
+
+auto tSearchSitsOnTheKeyboard = test("Overview/theSearchFieldSitsOnTopOfTheKeyboard") = []
+{
+    for (const auto& phone: phonesWithTheKeyboardUp)
+    {
+        const auto areas = calculateOverviewAreas(phone.bounds, phone.safeArea, phone.keyboard);
+        const auto keyboardTop = phone.bounds.bottom() - phone.keyboard;
+
+        check(areas.searchField.bottom() <= keyboardTop, "the field is above the keyboard");
+        check(areas.list.bottom() <= areas.searchField.y, "the list ends above the field");
+        check(areas.list.y >= phone.safeArea.top);
+        check(areas.list.h > 0.0f);
+        check(areas.hideKeyboardButton.has_value() && areas.hideKeyboardButton->bottom() <= keyboardTop);
+        check(areas.hideKeyboardButton.has_value() && areas.hideKeyboardButton->right() <= phone.bounds.right());
+    }
+};
+
+auto tSearchSitsOnTheHomeIndicator = test("Overview/withTheKeyboardDownTheFieldClearsTheHomeIndicator") = []
+{
+    const auto& mini = phonesWithTheKeyboardUp.front();
+    const auto areas = calculateOverviewAreas(mini.bounds, mini.safeArea, 0.0f);
+
+    check(areas.searchField.bottom() <= mini.bounds.bottom() - mini.safeArea.bottom);
+    check(!areas.hideKeyboardButton.has_value());
 };

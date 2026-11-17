@@ -361,6 +361,11 @@ void PaneScreen::composeAndSend(const std::string& text)
     typing.composeAndSend(text);
 }
 
+void PaneScreen::showKeyRowSecondPage()
+{
+    typing.showKeyRowSecondPage();
+}
+
 void PaneScreen::switchToComposer()
 {
     typing.switchToComposer();

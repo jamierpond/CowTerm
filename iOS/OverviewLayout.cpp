@@ -114,6 +114,33 @@ OverviewContent arrangeOverview(const OverviewInputs& inputs)
     return content;
 }
 
+OverviewAreas calculateOverviewAreas(Rect screen, eacp::Graphics::Insets safeArea, float keyboardCoveredHeight)
+{
+    constexpr auto sidePadding = 12.0f;
+    constexpr auto searchFieldHeight = 44.0f;
+    constexpr auto searchFieldGap = 8.0f;
+    constexpr auto hideKeyboardButtonWidth = 64.0f;
+
+    const auto isKeyboardUp = keyboardCoveredHeight > 0.0f;
+    auto area = screen;
+    area.removeFromTop(safeArea.top);
+    area.removeFromBottom(std::max(safeArea.bottom, keyboardCoveredHeight) + searchFieldGap);
+    area = area.inset(sidePadding, 0.0f);
+
+    auto areas = OverviewAreas {};
+    areas.searchField = area.removeFromBottom(searchFieldHeight);
+
+    if (isKeyboardUp)
+    {
+        areas.hideKeyboardButton = areas.searchField.removeFromRight(hideKeyboardButtonWidth);
+        areas.searchField.removeFromRight(searchFieldGap);
+    }
+
+    area.removeFromBottom(searchFieldGap);
+    areas.list = area;
+    return areas;
+}
+
 float getOverviewItemHeight(OverviewItemKind kind)
 {
     for (const auto& entry: itemHeights)

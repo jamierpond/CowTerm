@@ -57,11 +57,13 @@ struct LaunchOptions
     bool streamsOutput = false;
     bool scrollsBack = false;
     bool showsComposer = false;
+    bool showsKeyRowSecondPage = false;
     bool switchesToSecondPane = false;
     bool showsClaudePrompt = false;
     std::string composedText;
     bool showsOverview = false;
     std::string sessionToOpen;
+    std::string searchQuery;
     cowterm::mobile::LinkState linkState = cowterm::mobile::LinkState::Live;
     int paneCount = samplePaneCount;
     std::optional<term::phone::PhoneSettings> phoneSettings;
@@ -98,6 +100,7 @@ constexpr LaunchSwitch launchSwitches[] = {
     {"--stream", &LaunchOptions::streamsOutput},
     {"--scroll-back", &LaunchOptions::scrollsBack},
     {"--composer", &LaunchOptions::showsComposer},
+    {"--key-row-symbols", &LaunchOptions::showsKeyRowSecondPage},
     {"--switch-to-second-pane", &LaunchOptions::switchesToSecondPane},
     {"--claude-prompt", &LaunchOptions::showsClaudePrompt},
     {"--overview", &LaunchOptions::showsOverview},
@@ -123,6 +126,7 @@ void applyLaunchValue(LaunchOptions& options, std::string_view argument)
     constexpr auto panesPrefix = std::string_view {"--panes="};
     constexpr auto composePrefix = std::string_view {"--compose="};
     constexpr auto openSessionPrefix = std::string_view {"--open-session="};
+    constexpr auto searchPrefix = std::string_view {"--search="};
 
     if (argument.starts_with(linkPrefix))
     {
@@ -137,6 +141,10 @@ void applyLaunchValue(LaunchOptions& options, std::string_view argument)
     else if (argument.starts_with(openSessionPrefix))
     {
         options.sessionToOpen = std::string {argument.substr(openSessionPrefix.size())};
+    }
+    else if (argument.starts_with(searchPrefix))
+    {
+        options.searchQuery = std::string {argument.substr(searchPrefix.size())};
     }
     else if (argument.starts_with(panesPrefix))
     {
@@ -317,6 +325,7 @@ struct CowTermMobileApp
                 change.animationSeconds,
                 " s");
             screen.setSoftwareKeyboardChange(change);
+            overview.setSoftwareKeyboardChange(change);
         };
 
         if (phone != nullptr)
@@ -355,6 +364,12 @@ struct CowTermMobileApp
     {
         if (launchOptions.showsComposer)
             screen.switchToComposer();
+
+        if (launchOptions.showsKeyRowSecondPage)
+            screen.showKeyRowSecondPage();
+
+        if (!launchOptions.searchQuery.empty())
+            overview.search(launchOptions.searchQuery);
 
         if (launchOptions.raisesSoftwareKeyboard)
             screen.raiseKeyboard();

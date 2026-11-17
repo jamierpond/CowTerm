@@ -146,3 +146,43 @@ auto tLayoutSecondPage = test("Typing/secondPageHoldsTheSymbols") = []
     check(slots.front().key == KeyRowKey::Pipe);
     check(findKeyRowKeyAt(slots, slots[1].bounds.center()) == KeyRowKey::Tilde);
 };
+
+namespace
+{
+constexpr auto iPhone12MiniPortraitWidth = 375.0f;
+constexpr auto iPhone12MiniLandscapeWidth = 812.0f;
+constexpr auto iPhone18ProMaxLandscapeWidth = 956.0f;
+constexpr auto barFontSize = 15.0f;
+constexpr auto monospacedAdvancePerPoint = 0.6f;
+constexpr auto keyFaceInsetBothSides = 6.0f;
+
+// "compose" in the bar's JetBrains Mono, plus the key face's inset.
+float findComposeKeyNeededWidth()
+{
+    const auto letters = static_cast<float>(getKeyRowLabel(KeyRowKey::Composer).size());
+    return letters * barFontSize * monospacedAdvancePerPoint + keyFaceInsetBothSides;
+}
+} // namespace
+
+auto tKeyRowFitsEveryPhone = test("Typing/everyKeyFitsTheRowOnEveryPhoneBothWays") = []
+{
+    for (const auto width: {iPhone12MiniPortraitWidth,
+                            iPhone18ProMaxWidth,
+                            iPhone12MiniLandscapeWidth,
+                            iPhone18ProMaxLandscapeWidth})
+    {
+        const auto row = eacp::Graphics::Rect {0.0f, 0.0f, width, widestKey};
+
+        for (auto page = 0; page < keyRowPageCount; ++page)
+        {
+            for (const auto& slot: calculateKeyRowLayout(row, page))
+            {
+                check(slot.bounds.x >= 0.0f);
+                check(slot.bounds.right() <= width + layoutTolerance);
+
+                if (slot.key == KeyRowKey::Composer)
+                    check(slot.bounds.w >= findComposeKeyNeededWidth(), "its word fits on the key");
+            }
+        }
+    }
+};

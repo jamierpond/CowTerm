@@ -47,6 +47,11 @@ TypingControls::TypingControls(const term::Theme& themeToUse,
 
     keyRowHost.setBackgroundColour(term::toColor(theme.background));
     keyRowHost.setRootComponent(keyRow);
+
+    // A ComponentHost takes focus on a press, which would take it from the
+    // pane and close the keyboard under the finger pressing a key.
+    keyRowHost.setGrabsFocusOnMouseDown(false);
+    stopButtonHost.setGrabsFocusOnMouseDown(false);
     keyRow.onKey = [this](KeyRowKey key) { pressKeyRowKey(key); };
 
     stopButtonHost.setBackgroundColour(term::toColor(theme.background));
@@ -129,6 +134,7 @@ void TypingControls::lowerKeyboard()
 
 void TypingControls::pressKeyRowKey(KeyRowKey key)
 {
+    LOG("key row: ", getKeyRowLabel(key));
     switch (key)
     {
         case KeyRowKey::Control:
@@ -277,6 +283,13 @@ void TypingControls::toggleComposer()
         raiseKeyboard();
 
     onLayoutChanged();
+}
+
+void TypingControls::showKeyRowSecondPage()
+{
+    constexpr auto secondPage = 1;
+    keyRow.page = secondPage;
+    keyRow.repaint();
 }
 
 void TypingControls::switchToComposer()

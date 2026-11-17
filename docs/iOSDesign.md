@@ -157,6 +157,11 @@ and it sends as a bracketed paste followed by Enter.
   `^C`, `^R`, `^D`, so the mode is on the keys and not on a tinted button.
 - The composer's field is there only while its switch is on, so the two ways
   of typing cannot be confused.
+- The key row's keys are the pane's own: pressing one keeps the keyboard up.
+  An eacp ComponentHost takes focus on a press, which took it from the pane and
+  closed the keyboard, so the key row's host no longer does.
+- "compose" sits on the key row's second page and is two keys wide, so its
+  word fits on a 375-point iPhone 12 mini; a symbol label was the other choice.
 - A paste of several lines into a shell shows its first lines and asks, as the
   Mac does. A keystroke sent to a remote shell cannot be undone, so the check
   belongs before sending.
@@ -226,7 +231,10 @@ cards shows one card and two edges, and his ten most used sessions cover only
 - The list is anchored at the bottom. Row 0 is nearest the thumb, since he
   picks row 0 53% of the time and rows 0 to 2 89% of the time.
 - A search field sits under the list, by the thumb, with the Mac's fuzzy match.
-  His median pick is three typed characters.
+  His median pick is three typed characters. While the keyboard is up the field
+  sits directly on top of it, the list ends above the field with the best match
+  nearest it, and a "hide" button beside the field lowers the keyboard. Return
+  opens the top match.
 - Thumbnails are the stored last screen, shown small on the waiting cards only.
   At card size a terminal is texture, not text, so the words carry the card.
 - An unreachable host is one row with the reason. If nothing on the tailnet

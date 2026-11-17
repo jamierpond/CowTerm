@@ -72,6 +72,11 @@ public:
 
     void setInputs(OverviewInputs inputsToShow);
 
+    // The screen's safe area and how much of it the keyboard covers, so the
+    // search field can sit on top of the keyboard.
+    void setScreenInsets(eacp::Graphics::Insets safeAreaToUse, float keyboardCoveredHeightToUse);
+    void search(const std::string& query);
+
     void paint(eacp::UI::Graphics& g) override;
     void resized() override;
 
@@ -85,6 +90,9 @@ private:
     OverviewInputs inputs;
     OverviewContent content;
     eacp::UI::TextEditor searchField;
+    eacp::UI::Button hideKeyboardButton {"hide"};
+    eacp::Graphics::Insets safeArea;
+    float keyboardCoveredHeight = 0.0f;
 };
 
 class OverviewScreen final : public eacp::Graphics::View
@@ -96,7 +104,13 @@ public:
     // "one machine is down" from "nothing answers".
     void setInputs(OverviewInputs inputs);
 
+    void setSoftwareKeyboardChange(const eacp::Graphics::SoftwareKeyboardChange& change);
+
+    // Types query into the search field with the keyboard up, as a finger would.
+    void search(const std::string& query);
+
     void resized() override;
+    void safeAreaInsetsChanged() override;
 
     OpenSession onOpenSession = [](const term::overview::OverviewRow&) {};
 
@@ -104,5 +118,6 @@ private:
     term::Theme theme;
     eacp::UI::ComponentHost host;
     OverviewPanel panel {theme};
+    float keyboardCoveredHeight = 0.0f;
 };
 } // namespace cowterm::mobile

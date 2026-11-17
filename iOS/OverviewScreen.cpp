@@ -31,8 +31,6 @@ constexpr auto stripeWidth = 4.0f;
 constexpr auto stripeGap = 10.0f;
 constexpr auto cardPadding = 12.0f;
 constexpr auto cornerRadius = 10.0f;
-constexpr auto searchFieldHeight = 44.0f;
-constexpr auto searchFieldGap = 8.0f;
 
 constexpr auto mutedTextAlpha = 0.55f;
 constexpr auto cardBrightening = 0.06f;
@@ -294,8 +292,10 @@ OverviewPanel::OverviewPanel(const term::Theme& themeToUse)
         showSearchResults(query);
     };
     searchField.onReturnKey = [this](const std::string&) { openBestMatch(); };
+    hideKeyboardButton.onClick = [this] { searchField.giveAwayKeyboardFocus(); };
+    hideKeyboardButton.setVisible(false);
 
-    addChildren({list, searchField});
+    addChildren({list, searchField, hideKeyboardButton});
 }
 
 void OverviewPanel::setInputs(OverviewInputs inputsToShow)
@@ -327,13 +327,32 @@ void OverviewPanel::openBestMatch()
     }
 }
 
+void OverviewPanel::setScreenInsets(eacp::Graphics::Insets safeAreaToUse, float keyboardCoveredHeightToUse)
+{
+    safeArea = safeAreaToUse;
+    keyboardCoveredHeight = keyboardCoveredHeightToUse;
+    resized();
+}
+
+void OverviewPanel::search(const std::string& query)
+{
+    searchField.grabKeyboardFocus();
+    searchField.setText(query);
+    showSearchResults(query);
+}
+
 void OverviewPanel::resized()
 {
-    auto area = getLocalBounds().inset(sidePadding, 0.0f);
-    searchField.setBounds(area.removeFromBottom(searchFieldHeight));
-    area.removeFromBottom(searchFieldGap);
-    list.setBounds(area);
+    const auto areas = calculateOverviewAreas(getLocalBounds(), safeArea, keyboardCoveredHeight);
+    searchField.setBounds(areas.searchField);
+    hideKeyboardButton.setVisible(areas.hideKeyboardButton.has_value());
+
+    if (areas.hideKeyboardButton)
+        hideKeyboardButton.setBounds(*areas.hideKeyboardButton);
+
+    list.setBounds(areas.list);
     list.setItems(content.itemsFromTheBottom);
+    repaint();
 }
 
 void OverviewPanel::paint(UI::Graphics& g)
@@ -372,5 +391,22 @@ void OverviewScreen::setInputs(OverviewInputs inputs)
 void OverviewScreen::resized()
 {
     host.setBounds(getLocalBounds());
+    panel.setScreenInsets(getSafeAreaInsets(), keyboardCoveredHeight);
+}
+
+void OverviewScreen::search(const std::string& query)
+{
+    panel.search(query);
+}
+
+void OverviewScreen::safeAreaInsetsChanged()
+{
+    panel.setScreenInsets(getSafeAreaInsets(), keyboardCoveredHeight);
+}
+
+void OverviewScreen::setSoftwareKeyboardChange(const eacp::Graphics::SoftwareKeyboardChange& change)
+{
+    keyboardCoveredHeight = change.coveredHeight;
+    panel.setScreenInsets(getSafeAreaInsets(), keyboardCoveredHeight);
 }
 } // namespace cowterm::mobile

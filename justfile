@@ -84,6 +84,10 @@ ios-unpair phone="pond":
 ios-device-test-live-output phone="pond":
     scripts/check-ios-device-live-output.sh "{{phone}}"
 
+# Have Jamie press each key-row key on the phone into a throwaway `cat -v` pane and print what arrived
+ios-device-test-key-row destination="jamiepond@macprorack" phone="pond":
+    scripts/check-ios-device-key-row.sh "{{destination}}" "{{phone}}"
+
 # Print the log the app wrote on the phone on its last launch, or with "previous" the one before
 ios-device-log phone="pond" which="":
     scripts/read-ios-device-log.sh "{{phone}}" {{which}}

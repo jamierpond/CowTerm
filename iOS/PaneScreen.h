@@ -71,6 +71,7 @@ public:
     // ⌨: the keyboard, typing into the pane, or into the composer when it is on.
     void raiseKeyboard();
     void switchToComposer();
+    void showKeyRowSecondPage();
     void composeAndSend(const std::string& text);
 
     void resized() override;
