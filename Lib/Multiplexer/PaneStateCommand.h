@@ -29,12 +29,6 @@ struct ParsedPaneStateReport
 ParsedPaneStateReport parsePaneStateArguments(const std::vector<std::string>& args,
                                               const std::string& defaultPaneId);
 
-// A prompt submitted is working, a permission or input question is waiting
-// with the question, the end of a turn is finished with Claude's last line.
-// Nullopt for any other hook event, or input that is not a hook's JSON.
-std::optional<PaneStateReport> readClaudeHookReport(const std::string& hookInputJson,
-                                                    const std::string& paneId);
-
 // Hands the report to this machine's daemon and returns ct's exit code: 0 when
 // the daemon took it, 2 for a usage error, 4 when no daemon is running.
 int runPaneStateCommand(const std::vector<std::string>& args, const std::string& defaultPaneId);

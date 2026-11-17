@@ -1,3 +1,4 @@
+#include <Multiplexer/ClaudeHookReport.h>
 #include <Multiplexer/PaneStateCommand.h>
 
 #include <NanoTest/NanoTest.h>

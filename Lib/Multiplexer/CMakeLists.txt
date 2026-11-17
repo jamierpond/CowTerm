@@ -27,6 +27,7 @@ add_library(CowTermMultiplexer STATIC
         PaletteItem.cpp
         PaletteRanking.cpp
         PaneSizeOwner.cpp
+        ClaudeHookReport.cpp
         PaneStateCommand.cpp
         ProjectScan.cpp
         Projects.cpp
