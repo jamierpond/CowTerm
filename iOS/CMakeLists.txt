@@ -4,6 +4,9 @@ eacp_add_app(CowTermMobile
         Main.cpp
         InterfaceOrientation-iOS.mm
         NetworkPathWatch-iOS.mm
+        OverviewLayout.cpp
+        OverviewSamples.cpp
+        OverviewScreen.cpp
         PaneScreen.cpp
         PaneScreenChrome.cpp
         PaneScreenLayout.cpp

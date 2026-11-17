@@ -112,12 +112,15 @@ nano_add_executable(CowTermPanelTests
 
 target_include_directories(CowTermPanelTests PRIVATE ../Terminal)
 
-# The phone's pane screen layout and bar gestures, from iOS/, on the Mac.
+# The phone's pane screen layout and bar gestures, and the overview's
+# arrangement and bottom-anchored list, from iOS/, on the Mac.
 nano_add_executable(CowTermPaneScreenTests
         SOURCES
             PaneScreenLayoutTests.cpp
+            OverviewLayoutTests.cpp
             ../iOS/PaneScreenLayout.cpp
-        TARGETS eacp-graphics)
+            ../iOS/OverviewLayout.cpp
+        TARGETS eacp-graphics CowTerm::Multiplexer)
 
 target_include_directories(CowTermPaneScreenTests PRIVATE ../iOS)
 

@@ -1,4 +1,6 @@
 #include "InterfaceOrientation.h"
+#include "OverviewSamples.h"
+#include "OverviewScreen.h"
 #include "PaneScreen.h"
 #include "PhoneLaunch.h"
 
@@ -109,6 +111,7 @@ struct LaunchOptions
     bool opensMenu = false;
     bool streamsOutput = false;
     bool scrollsBack = false;
+    bool showsOverview = false;
     cowterm::mobile::LinkState linkState = cowterm::mobile::LinkState::Live;
     int paneCount = samplePaneCount;
     std::optional<term::phone::PhoneSettings> phoneSettings;
@@ -142,6 +145,7 @@ constexpr LaunchSwitch launchSwitches[] = {
     {"--menu", &LaunchOptions::opensMenu},
     {"--stream", &LaunchOptions::streamsOutput},
     {"--scroll-back", &LaunchOptions::scrollsBack},
+    {"--overview", &LaunchOptions::showsOverview},
 };
 
 bool applyLaunchSwitch(LaunchOptions& options, std::string_view argument)
@@ -387,6 +391,24 @@ struct CowTermMobileApp
             Threads::callAfter(scrollBackDelay,
                                [this] { dragPaneDownToScrollBack(screen.terminal); });
         }
+
+        if (launchOptions.showsOverview)
+            showSampleOverview();
+    }
+
+    void showSampleOverview()
+    {
+        overview.setInputs(cowterm::mobile::makeSampleOverviewInputs());
+        overview.onOpenSession = [](const term::overview::OverviewRow& session)
+        { LOG("overview: open ", session.host, "/", session.sessionName); };
+    }
+
+    Graphics::View& chooseRootView()
+    {
+        if (launchOptions.showsOverview)
+            return overview;
+
+        return screen;
     }
 
     // A picture taken twelve seconds before launch, so a pane that is not
@@ -402,7 +424,8 @@ struct CowTermMobileApp
     cowterm::mobile::PaneScreen screen;
     std::chrono::steady_clock::time_point pictureTakenAt = std::chrono::steady_clock::now();
     bool isLive = false;
-    Graphics::Window window {screen, makeWindowOptions()};
+    cowterm::mobile::OverviewScreen overview;
+    Graphics::Window window {chooseRootView(), makeWindowOptions()};
 };
 } // namespace
 
