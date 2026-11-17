@@ -113,7 +113,9 @@ nano_add_executable(CowTermPanelTests
 target_include_directories(CowTermPanelTests PRIVATE ../Terminal)
 
 # The phone's pane screen layout and bar gestures, and the overview's
-# arrangement and bottom-anchored list, from iOS/, on the Mac.
+# arrangement and bottom-anchored list, from iOS/, on the Mac. The phone's
+# library is built only where libssh2 is (Apple), so Linux and Windows skip them.
+if (TARGET CowTerm::Phone)
 nano_add_executable(CowTermPaneScreenTests
         SOURCES
             PaneScreenLayoutTests.cpp
@@ -129,6 +131,7 @@ nano_add_executable(CowTermPaneScreenTests
         TARGETS eacp-graphics eacp-ui CowTerm::Phone CowTerm::TerminalView)
 
 target_include_directories(CowTermPaneScreenTests PRIVATE ../iOS)
+endif ()
 
 # forkpty/openpty live in libutil on Linux; on Apple they are in libSystem.
 if (LINUX)
