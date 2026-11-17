@@ -32,6 +32,7 @@ nano_add_executable(CowTermScreenTests
             ScreenColorTests.cpp
             ParserFuzzRegressionTests.cpp
             TerminalModeTests.cpp
+            ClipboardOscTests.cpp
             ReflowTests.cpp
             TerminalStateTests.cpp
             DirtyRowTests.cpp

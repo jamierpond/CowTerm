@@ -165,6 +165,9 @@ void TerminalView::connectParserToUiThread()
     parser.onNotify = [this](const std::string& text)
     { runOnUiThread([this, text] { onNotify(text); }); };
 
+    parser.onCopyToClipboard = [this](const std::string& text)
+    { runOnUiThread([text] { Clipboard::copyText(text); }); };
+
     parser.onSynchronizedOutputStarted = [this]
     { runOnUiThread([this] { startSynchronizedOutputTimeout(); }); };
 }

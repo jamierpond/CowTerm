@@ -36,6 +36,10 @@ public:
     // requesting a desktop notification.
     std::function<void(const std::string&)> onNotify = [](const std::string&) {};
 
+    // OSC 52: a program (nvim yanking over ssh, say) writing decoded text to
+    // the system clipboard.
+    std::function<void(const std::string&)> onCopyToClipboard = [](const std::string&) {};
+
     // Mode 2026 was set: the program is drawing a frame. The view holds its
     // repaints until the mode is reset, or for at most a second after this.
     std::function<void()> onSynchronizedOutputStarted = [] {};
@@ -64,6 +68,9 @@ private:
     void processCsiByte(std::uint8_t byte);
     void collectCsiByte(std::uint8_t byte);
     void processOscByte(std::uint8_t byte);
+    void collectOscByte(std::uint8_t byte);
+    bool isCollectingClipboardOsc() const;
+    void releaseLargeOscBuffer();
     void processStringSequenceByte(std::uint8_t byte);
     void processCharsetByte(std::uint8_t byte);
 

@@ -2,6 +2,8 @@
 
 #include "SelectGraphicRendition.h"
 
+#include <eacp/Core/Utils/Base64.h>
+
 #include <algorithm>
 #include <array>
 #include <cstdio>
@@ -25,6 +27,12 @@ constexpr std::uint8_t lastIntermediate = 0x2f;
 constexpr std::uint8_t firstFinalByte = 0x40;
 constexpr std::uint8_t lastFinalByte = 0x7e;
 constexpr auto largestOscLength = std::size_t {4096};
+
+// OSC 52 carries a whole yank as base64, so it gets far more room than a title.
+constexpr auto bytesPerMebibyte = std::size_t {1024 * 1024};
+constexpr auto largestClipboardOscLength = 8 * bytesPerMebibyte;
+constexpr auto clipboardOscPrefix = std::string_view {"52;"};
+constexpr auto clipboardReadRequest = std::string_view {"?"};
 
 // DEC special graphics (ESC ( 0): the 0x60..0x7e range becomes line-drawing
 // glyphs. Everything full-screen apps draw borders with on a non-UTF-8 path.
@@ -113,6 +121,24 @@ std::optional<std::string> notificationFromOsc777(const std::string& payload)
         text = text.substr(0, titleEnd) + ": " + text.substr(titleEnd + 1);
 
     return text;
+}
+
+// targets;base64 (OSC 52's payload) -> the decoded text. Every target means
+// the system clipboard. A read request ("?") is never answered, so a remote
+// program cannot see the clipboard.
+std::optional<std::string> clipboardTextFromOsc52(const std::string& payload)
+{
+    const auto targetsEnd = payload.find(';');
+
+    if (targetsEnd == std::string::npos)
+        return std::nullopt;
+
+    const auto encoded = std::string_view {payload}.substr(targetsEnd + 1);
+
+    if (encoded.empty() || encoded == clipboardReadRequest)
+        return std::nullopt;
+
+    return eacp::Base64::decode(encoded);
 }
 
 std::string formatColorQueryReply(std::string_view code, Rgb rgb)
@@ -372,6 +398,12 @@ struct TermParserActions
             p.onNotify(*text);
     }
 
+    static void copyToClipboard(TermParser& p, const std::string& payload)
+    {
+        if (const auto text = clipboardTextFromOsc52(payload))
+            p.onCopyToClipboard(*text);
+    }
+
     // Color queries: vim probes these to pick its default background.
     static void answerColorQuery(TermParser& p, std::string_view code, Rgb rgb, const std::string& payload)
     {
@@ -379,13 +411,14 @@ struct TermParserActions
             p.respond(formatColorQueryReply(code, rgb));
     }
 
-    static constexpr std::array<OscEntry, 8> oscActions = {{
+    static constexpr std::array<OscEntry, 9> oscActions = {{
         {"0", reportTitle},
         {"2", reportTitle},
         {"7", reportCwd},
         {"8", setHyperlink},
         {"9", [](TermParser& p, const std::string& payload) { p.onNotify(payload); }},
         {"777", reportNotification},
+        {"52", copyToClipboard},
         {"10",
          [](TermParser& p, const std::string& payload)
          { answerColorQuery(p, "10", p.theme.foreground, payload); }},
@@ -521,8 +554,42 @@ void TermParser::processOscByte(std::uint8_t byte)
 
     if (byte == escapeByte)
         stringEscPending = true;
-    else if (oscBuffer.size() < largestOscLength)
+    else
+        collectOscByte(byte);
+}
+
+// Other codes keep their first largestOscLength bytes and still run. A
+// clipboard write that outgrows its limit is dropped whole, so a cut-off yank
+// never lands.
+void TermParser::collectOscByte(std::uint8_t byte)
+{
+    if (!isCollectingClipboardOsc())
+    {
+        if (oscBuffer.size() < largestOscLength)
+            oscBuffer.push_back((char) byte);
+
+        return;
+    }
+
+    if (oscBuffer.size() < largestClipboardOscLength)
+    {
         oscBuffer.push_back((char) byte);
+        return;
+    }
+
+    oscBuffer = {};
+    state = State::StringSequence;
+}
+
+bool TermParser::isCollectingClipboardOsc() const
+{
+    return oscBuffer.starts_with(clipboardOscPrefix);
+}
+
+void TermParser::releaseLargeOscBuffer()
+{
+    if (oscBuffer.capacity() > largestOscLength)
+        oscBuffer = {};
 }
 
 // DCS/SOS/PM/APC content is consumed and dropped.
@@ -696,6 +763,8 @@ void TermParser::dispatchOsc()
 
     if (const auto action = findEntry(TermParserActions::oscActions, code))
         action->run(*this, oscBuffer.substr(separator + 1));
+
+    releaseLargeOscBuffer();
 }
 
 void TermParser::putCodepoint(char32_t codepoint)

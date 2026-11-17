@@ -119,6 +119,7 @@ inline std::string runParserFuzzInput(std::string_view bytes)
     parser.onTitleChanged = [&](const std::string& title) { recordEvent("title ", title); };
     parser.onCwdChanged = [&](const std::string& cwd) { recordEvent("cwd ", cwd); };
     parser.onNotify = [&](const std::string& text) { recordEvent("notify ", text); };
+    parser.onCopyToClipboard = [&](const std::string& text) { recordEvent("copy ", text); };
     parser.onBell = [&] { recordEvent("bell", {}); };
 
     parser.feed(input.firstHalf);
