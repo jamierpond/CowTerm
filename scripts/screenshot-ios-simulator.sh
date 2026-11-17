@@ -1,7 +1,9 @@
 #!/bin/sh
 # Saves a PNG of a booted iOS simulator's screen. Further arguments go to
 # `simctl io screenshot`: a phone with two screens (iPhone Duo) needs one,
-# e.g. --display=1.
+# e.g. --display=1. For a landscape shot, launch the app with
+# `scripts/run-ios-simulator.sh <name> --landscape` first; the PNG then comes
+# out landscape.
 #
 #   scripts/screenshot-ios-simulator.sh <file.png> ["iPhone 18 Pro Max"] [--display=1]
 set -eu

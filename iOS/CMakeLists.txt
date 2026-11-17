@@ -1,6 +1,6 @@
 # CowTerm for iPhone (docs/iOSDesign.md). For now one TerminalView filling the
 # screen, showing fixed sample text; the daemon link over ssh comes later.
-eacp_add_app(CowTermMobile Main.cpp
+eacp_add_app(CowTermMobile Main.cpp InterfaceOrientation-iOS.mm
         BUNDLE_ID audio.pond.cowterm.mobile
         DISPLAY_NAME "CowTerm")
 

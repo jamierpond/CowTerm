@@ -1,7 +1,11 @@
+#include "InterfaceOrientation.h"
+
 #include "TerminalView/GlyphAtlas.h"
 #include "TerminalView/TerminalView.h"
 
-#include <eacp/Graphics/Window/ViewWindow.h>
+#include <eacp/Core/App/App.h>
+#include <eacp/Core/Utils/Logging.h>
+#include <eacp/Graphics/Window/Window.h>
 
 #include <string_view>
 
@@ -31,7 +35,7 @@ constexpr std::string_view sampleScreenText =
     "\x1b[1;32mjamie@tamby\x1b[0m:\x1b[1;34m~/projects/CowTerm\x1b[0m$ ";
 
 // Stands in for the daemon until the ssh link exists: the pane shows
-// sampleScreenText once and ignores everything typed into it.
+// sampleScreenText once and logs what is typed into it.
 class SampleTextShell final : public term::Shell
 {
 public:
@@ -43,7 +47,7 @@ public:
         return true;
     }
 
-    void write(std::string_view) override {}
+    void write(std::string_view data) override { LOG("typed ", data.size(), " bytes"); }
     void resize(const term::PtySize&) override {}
 
     std::string foregroundProcess() const override { return {}; }
@@ -60,12 +64,120 @@ term::TerminalConfig makeSampleTextTerminalConfig()
     { return std::make_unique<SampleTextShell>(); };
     return config;
 }
+
+// Test hooks, from the launch arguments, for what a headless simulator cannot
+// do by hand.
+struct LaunchOptions
+{
+    bool raisesSoftwareKeyboard = false;
+    bool turnsToLandscape = false;
+};
+
+LaunchOptions parseLaunchOptions(int argc, char* argv[])
+{
+    auto options = LaunchOptions {};
+
+    for (auto index = 1; index < argc; ++index)
+    {
+        const auto argument = std::string_view {argv[index]};
+
+        if (argument == "--raise-keyboard")
+            options.raisesSoftwareKeyboard = true;
+        else if (argument == "--landscape")
+            options.turnsToLandscape = true;
+    }
+
+    return options;
+}
+
+void logSafeAreaInsets(const Graphics::Insets& insets)
+{
+    LOG("safe area top ",
+        insets.top,
+        " left ",
+        insets.left,
+        " bottom ",
+        insets.bottom,
+        " right ",
+        insets.right);
+}
+
+// The window's content: the terminal, kept inside the safe area so the
+// status bar, the camera housing and the home indicator never cover text.
+class MobileRootView final : public Graphics::View
+{
+public:
+    MobileRootView()
+        : terminal(makeSampleTextTerminalConfig(), {})
+    {
+        addSubview(terminal);
+    }
+
+    void resized() override { placeTerminalInsideSafeArea(); }
+
+    void safeAreaInsetsChanged() override
+    {
+        logSafeAreaInsets(getSafeAreaInsets());
+        placeTerminalInsideSafeArea();
+    }
+
+    term::TerminalView terminal;
+
+private:
+    void placeTerminalInsideSafeArea()
+    {
+        terminal.setBounds(getLocalBounds().inset(getSafeAreaInsets()));
+    }
+};
+
+Graphics::WindowOptions makeWindowOptions()
+{
+    auto options = Graphics::WindowOptions {};
+    options.statusBar = Graphics::StatusBar::LightText;
+    return options;
+}
+
+struct CowTermMobileApp
+{
+    explicit CowTermMobileApp(const LaunchOptions& launchOptions)
+    {
+        Apps::setSuspendHandler(
+            [](bool suspended)
+            {
+                if (suspended)
+                    LOG("lifecycle: entered background");
+                else
+                    LOG("lifecycle: back in foreground");
+            });
+
+        window.events.onSoftwareKeyboardChanged =
+            [](const Graphics::SoftwareKeyboardChange& change)
+        {
+            LOG("software keyboard covers ",
+                change.coveredHeight,
+                " points, animating ",
+                change.animationSeconds,
+                " s");
+        };
+
+        if (launchOptions.raisesSoftwareKeyboard)
+        {
+            root.terminal.setWantsTextInput(true);
+            root.terminal.focus();
+        }
+
+        if (launchOptions.turnsToLandscape)
+            cowterm::mobile::requestLandscapeInterfaceOrientation(window);
+    }
+
+    MobileRootView root;
+    Graphics::Window window {root, makeWindowOptions()};
+};
 } // namespace
 
-int main()
+int main(int argc, char* argv[])
 {
     term::registerEmbeddedFonts();
 
-    return Graphics::runWindowedApp<term::TerminalView>(
-        Graphics::WindowOptions {}, makeSampleTextTerminalConfig(), std::string {});
+    return Apps::run<CowTermMobileApp>(parseLaunchOptions(argc, argv));
 }
