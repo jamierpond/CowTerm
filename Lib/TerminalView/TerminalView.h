@@ -179,9 +179,13 @@ public:
     std::function<void(const std::string&)> onNotify = [](const std::string&) {};
     eacp::Callback onShellExit = [] {};
 
-    // Cmd-click (Ctrl-click off macOS) on an OSC 8 hyperlink or a URL in the
-    // text; the host opens it.
+    // Cmd-click (Ctrl-click off macOS), or a tap on a touch screen, on an OSC 8
+    // hyperlink or a URL in the text; the host opens it.
     std::function<void(const std::string&)> onOpenHyperlink = [](const std::string&) {};
+
+    // Underlines every link at all times, so a touch screen shows what a tap
+    // opens; otherwise only the link under the pointer with the modifier held.
+    void setUnderlinesEveryLink(bool shouldUnderline);
 
     // Fired when the user clicks into this pane; the session view moves its
     // active-pane marker here.
@@ -337,6 +341,7 @@ private:
     int calculateVisualRow(long absoluteRow) const;
     eacp::Graphics::Point calculateCellOrigin(int visualRow, int column) const;
     PaintedRow describeVisibleRow(int visualRow) const;
+    std::vector<bool> findCellsToUnderlineAsLinks(long absoluteRow) const;
     GridPainter makePainter();
     void updateRowDrawings(GridPainter& painter);
     void drawCursorLayer(eacp::GPU::RenderPass& pass,
@@ -388,7 +393,8 @@ private:
     {
         Nobody,
         Selection,
-        Program
+        Program,
+        Link
     };
 
     bool selecting = false;
@@ -397,6 +403,7 @@ private:
     ScrollbackMovement seenScrollbackMovement;
     SelectionRange selection;
     std::optional<LinkSpan> hoveredLink;
+    bool underlinesEveryLink = false;
     RowDrawingCache rowDrawings;
 
     bool copyMode = false;

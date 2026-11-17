@@ -149,6 +149,7 @@ nano_add_executable(CowTermViewTests
         SOURCES
             TerminalViewBehaviourTests.cpp
             TerminalViewLogicTests.cpp
+            LinkTests.cpp
             KittyKeyEncodingTests.cpp
             OutputParserThreadTests.cpp
             GraphemeTests.cpp

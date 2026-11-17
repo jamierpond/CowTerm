@@ -43,8 +43,9 @@ int measureInkLength(const Line& line);
 std::string extractVisibleRowText(const TermScreen& screen, const Line& line, int columns);
 
 // The text from `start` to `end` inclusive. A soft-wrapped row runs straight
-// on into the next; other rows end in a newline, trimmed of trailing blanks.
-// Rows outside the buffer are skipped.
+// on into the next, and so does a URL a program broke at the pane's edge
+// (findColumnWhereBrokenUrlResumes); other rows end in a newline, trimmed of
+// trailing blanks. Rows outside the buffer are skipped.
 std::string extractTextBetween(const TermScreen& screen, CellRef start, CellRef end);
 
 struct WordSpan

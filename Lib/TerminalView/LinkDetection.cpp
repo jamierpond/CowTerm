@@ -32,7 +32,7 @@ constexpr auto orderedListMarkerEndings = std::string_view {".)"};
 enum class RowJoining
 {
     SoftWrapsOnly,
-    SoftWrapsAndIndentedContinuations
+    SoftWrapsAndBrokenUrls
 };
 
 struct LogicalCell
@@ -128,34 +128,65 @@ bool doesRowStopMidUrlAtTheEdge(const TermScreen& screen, const Line& line)
            && !isByteThatEndsTextRatherThanAUrl(lastCharacter.back());
 }
 
+// A program that wraps text cuts a word only when the word is wider than the
+// row, so a row holding one word from its first column to the edge carries on.
+bool isRowOneWordToTheEdge(const TermScreen& screen, const Line& line)
+{
+    const auto inkLength = measureInkLength(line);
+
+    if (inkLength < screen.columns() - mostColumnsABrokenRowStopsShortOfTheEdge)
+        return false;
+
+    return std::none_of(line.begin(),
+                        line.begin() + inkLength,
+                        [](const Cell& cell) { return cell.isSpace(); });
+}
+
 bool isContinuationIndent(int indent)
 {
     return indent >= 1 && indent <= deepestContinuationIndent;
 }
 
-// After its indent the row starts with URL text that is not a new URL or a list item.
-bool doesRowContinueAUrlAfterIndent(const TermScreen& screen,
-                                    const Line& line,
-                                    int indent)
+bool isAsciiUrlByte(char byte)
 {
-    if (!isContinuationIndent(indent) || indent >= (int) line.size())
+    return (unsigned char) byte < firstNonAsciiByte && isUrlByte(byte);
+}
+
+// From the column on, the row starts with URL text that is not a new URL or a
+// list item; box drawing and other non-ASCII text does not carry a URL on.
+bool doesRowContinueAUrlFrom(const TermScreen& screen, const Line& line, int column)
+{
+    if (column >= (int) line.size())
         return false;
 
-    const auto word = readWordFrom(screen, line, indent);
-    return isUrlByte(word.front()) && !isListMarker(word)
+    const auto word = readWordFrom(screen, line, column);
+    return !word.empty() && isAsciiUrlByte(word.front()) && !isListMarker(word)
            && !hasOpenableScheme(word);
 }
 
-bool doesRowContinueOnIndentedRow(const TermScreen& screen, long row)
+bool doesRowBreakWhereNextRowCarriesOn(const TermScreen& screen,
+                                       const Line& line,
+                                       int nextRowIndent)
+{
+    if (isContinuationIndent(nextRowIndent))
+        return doesRowStopMidUrlAtTheEdge(screen, line);
+
+    return nextRowIndent == 0 && isRowOneWordToTheEdge(screen, line);
+}
+
+// A program broke the row itself, so it is not marked wrapped, partway
+// through a URL that the next row carries on.
+bool doesRowContinueOnBrokenUrlRow(const TermScreen& screen, long row)
 {
     if (!isAbsoluteRowStored(screen, row) || !isAbsoluteRowStored(screen, row + 1))
         return false;
 
     const auto& line = findLineAtAbsoluteRow(screen, row);
     const auto& next = findLineAtAbsoluteRow(screen, row + 1);
+    const auto nextRowIndent = measureIndent(next);
 
-    return !line.wrapped && doesRowStopMidUrlAtTheEdge(screen, line)
-           && doesRowContinueAUrlAfterIndent(screen, next, measureIndent(next));
+    return !line.wrapped && doesRowBreakWhereNextRowCarriesOn(screen, line, nextRowIndent)
+           && doesRowContinueAUrlFrom(screen, next, nextRowIndent);
 }
 
 bool doesRowJoinNextRow(const TermScreen& screen, long row, RowJoining joining)
@@ -163,8 +194,8 @@ bool doesRowJoinNextRow(const TermScreen& screen, long row, RowJoining joining)
     if (doesRowRunOntoNextRow(screen, row))
         return true;
 
-    return joining == RowJoining::SoftWrapsAndIndentedContinuations
-           && doesRowContinueOnIndentedRow(screen, row);
+    return joining == RowJoining::SoftWrapsAndBrokenUrls
+           && doesRowContinueOnBrokenUrlRow(screen, row);
 }
 
 long findLogicalLineFirstRow(const TermScreen& screen, long row, RowJoining joining)
@@ -375,6 +406,86 @@ std::size_t measureSchemeLength(std::string_view url)
     const auto slashes = url.find_first_not_of('/', afterColon);
     return slashes == std::string_view::npos ? url.size() : slashes;
 }
+
+std::vector<std::size_t> findSchemeStarts(std::string_view text, TextRange run)
+{
+    auto starts = std::vector<std::size_t> {};
+
+    for (auto start = run.begin; start < run.end; ++start)
+    {
+        if (hasOpenableScheme(text.substr(start)))
+            starts.push_back(start);
+    }
+
+    return starts;
+}
+
+// What findUrlAround finds for each byte of the run, in one pass: a byte
+// belongs to the URL of the last scheme before it.
+void addUrlsInRun(std::string_view text, TextRange run, std::vector<TextRange>& urls)
+{
+    const auto starts = findSchemeStarts(text, run);
+
+    for (auto each = std::size_t {0}; each < starts.size(); ++each)
+    {
+        const auto start = starts[each];
+        const auto url = trimUrlEnd(text.substr(start, run.end - start));
+        const auto nextStart = each + 1 < starts.size() ? starts[each + 1] : run.end;
+
+        if (url.size() > measureSchemeLength(url))
+            urls.push_back({start, std::min(start + url.size(), nextStart)});
+    }
+}
+
+std::vector<TextRange> findEveryUrlIn(std::string_view text)
+{
+    auto urls = std::vector<TextRange> {};
+    auto byte = std::size_t {0};
+
+    while (byte < text.size())
+    {
+        if (!isUrlByte(text[byte]))
+        {
+            ++byte;
+            continue;
+        }
+
+        const auto run = findUrlByteRunAround(text, byte);
+        addUrlsInRun(text, run, urls);
+        byte = run.end;
+    }
+
+    return urls;
+}
+
+bool isOpenableHyperlinkCell(const TermScreen& screen, const Cell& cell)
+{
+    return cell.hyperlink != noHyperlink
+           && hasOpenableScheme(screen.findHyperlinkUri(cell.hyperlink));
+}
+
+void markHyperlinkCells(const TermScreen& screen, const Line& line, std::vector<bool>& inLink)
+{
+    for (auto col = std::size_t {0}; col < line.size(); ++col)
+    {
+        if (isOpenableHyperlinkCell(screen, line[col]))
+            inLink[col] = true;
+    }
+}
+
+void markTextUrlCells(const LogicalLine& logical, long row, std::vector<bool>& inLink)
+{
+    for (const auto url: findEveryUrlIn(logical.text))
+    {
+        for (auto byte = url.begin; byte < url.end; ++byte)
+        {
+            const auto cell = logical.cellOfByte[byte];
+
+            if (cell.row == row)
+                inLink[(std::size_t) cell.col] = true;
+        }
+    }
+}
 } // namespace
 
 bool LinkSpan::contains(CellRef cell) const
@@ -425,7 +536,37 @@ std::optional<DetectedLink> findLinkAt(const TermScreen& screen, CellRef cell)
 
     return findTextUrl(
         readLogicalLine(
-            screen, cell.row, RowJoining::SoftWrapsAndIndentedContinuations),
+            screen, cell.row, RowJoining::SoftWrapsAndBrokenUrls),
         cell);
+}
+
+std::optional<int> findColumnWhereBrokenUrlResumes(const TermScreen& screen, long row)
+{
+    if (!doesRowContinueOnBrokenUrlRow(screen, row))
+        return std::nullopt;
+
+    const auto lastCharacter =
+        CellRef {row, measureInkLength(findLineAtAbsoluteRow(screen, row)) - 1};
+    const auto link = findTextUrl(
+        readLogicalLine(screen, row, RowJoining::SoftWrapsAndBrokenUrls), lastCharacter);
+
+    if (!link || link->span.end.row == row)
+        return std::nullopt;
+
+    return measureIndent(findLineAtAbsoluteRow(screen, row + 1));
+}
+
+std::vector<bool> findCellsInLinksOnRow(const TermScreen& screen, long row)
+{
+    if (!isAbsoluteRowStored(screen, row))
+        return {};
+
+    const auto& line = findLineAtAbsoluteRow(screen, row);
+    auto inLink = std::vector<bool>(line.size(), false);
+
+    markHyperlinkCells(screen, line, inLink);
+    markTextUrlCells(
+        readLogicalLine(screen, row, RowJoining::SoftWrapsAndBrokenUrls), row, inLink);
+    return inLink;
 }
 } // namespace term

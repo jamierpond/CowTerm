@@ -11,7 +11,7 @@
 
 // Finding the link under a cell: an OSC 8 hyperlink, or a URL written as plain
 // text, either one running across soft-wrapped rows. A text URL also runs on
-// into an indented row when a program broke the line itself, as Claude Code does.
+// into the next row when a program broke the line itself, as Claude Code does.
 namespace term
 {
 // Cells of a link, inclusive at both ends, in reading order.
@@ -45,4 +45,14 @@ struct TextRange
 std::optional<TextRange> findUrlAround(std::string_view text, std::size_t byteIndex);
 
 std::optional<DetectedLink> findLinkAt(const TermScreen& screen, CellRef cell);
+
+// The rule a copy shares with findLinkAt for a row a program broke itself,
+// without marking it wrapped, partway through a URL: the column of the next
+// row where the URL resumes, after its indent. Empty when the text URL at the
+// row's last character does not run on into the next row.
+std::optional<int> findColumnWhereBrokenUrlResumes(const TermScreen& screen, long row);
+
+// For each cell of the row, whether a click there would open a link (with
+// the modifier held): an OSC 8 link or a URL in the text.
+std::vector<bool> findCellsInLinksOnRow(const TermScreen& screen, long row);
 } // namespace term

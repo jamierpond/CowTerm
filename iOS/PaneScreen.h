@@ -42,6 +42,10 @@ private:
     bool isScrolling = false;
 };
 
+// A tap on a link opens it in Safari or the app that owns it, and every link
+// is underlined so the tap's effect is visible before it is made.
+void makeLinksOpenOnTap(term::TerminalView& terminal);
+
 struct PaneScreenActions
 {
     std::function<void()> onPreviousSession = [] {};

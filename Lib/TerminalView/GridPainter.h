@@ -44,6 +44,10 @@ struct PaintedRow
     long absoluteRow = 0;
     float y = 0;
     int columns = 0;
+
+    // Per column, whether the cell is part of a link to underline; empty
+    // unless the view underlines every link.
+    std::vector<bool> cellsInLinks;
 };
 
 // A stretch of cells sharing one non-default background, [firstColumn,
@@ -177,6 +181,7 @@ private:
                               Rgb foreground,
                               RowDrawing& drawing);
     bool isInHoveredLink(CellRef cell) const;
+    static bool isCellInLink(const PaintedRow& row, int column);
     void drawGlyphOverCursor(eacp::Graphics::Point cellOrigin,
                              const PaintedLine& line,
                              int column);

@@ -139,6 +139,7 @@ void DiffViewScreen::open(const term::TerminalConfig& config, const term::phone:
 
     terminal = std::make_unique<term::TerminalView>(configWithNotice, paneToOpen.workingDirectory, paneToOpen.paneId, term::phone::diffViewCommand);
     terminal->onShellExit = [this] { handleDiffViewEnded(); };
+    makeLinksOpenOnTap(*terminal);
 
     removeSubview(touchSurface);
     addChildren({*terminal, touchSurface});

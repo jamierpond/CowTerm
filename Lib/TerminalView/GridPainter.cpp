@@ -215,7 +215,8 @@ void GridPainter::addRowInk(const PaintedRow& row, RowDrawing& drawing)
         const auto selected = selection.contains(ref);
         const auto foreground = findCellColours(cell, selected, tools.theme).foreground;
         const auto origin = Point {tools.margins.x + (float) col * cellW, row.y};
-        const auto isUnderlined = hasAttribute(cell, Attr::Underline) || isInHoveredLink(ref);
+        const auto isUnderlined = hasAttribute(cell, Attr::Underline) || isInHoveredLink(ref)
+                                  || isCellInLink(row, col);
 
         addCellGlyph(cell, origin, foreground, drawing);
 
@@ -430,6 +431,11 @@ void GridPainter::addCellStrikethrough(const ResolvedCell& cell,
 bool GridPainter::isInHoveredLink(CellRef cell) const
 {
     return hoveredLink && hoveredLink->contains(cell);
+}
+
+bool GridPainter::isCellInLink(const PaintedRow& row, int column)
+{
+    return column < (int) row.cellsInLinks.size() && row.cellsInLinks[(std::size_t) column];
 }
 
 void GridPainter::drawGlyphOverCursor(Point cellOrigin, const PaintedLine& line, int column)

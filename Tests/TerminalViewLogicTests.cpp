@@ -594,7 +594,7 @@ auto tBackgroundRuns = test("ViewLogic/backgroundRunsMergeAndSkipTheDefault") = 
 {
     const auto parsed = ParsedScreen {"\033[41mab\033[42mc\033[0m d\033[41me"};
     const auto& line = parsed.screen.lineAt(0, 0);
-    const auto row = PaintedRow {parsed.screen.resolveLine(line), 0, 0.f, screenColumns};
+    const auto row = PaintedRow {parsed.screen.resolveLine(line), 0, 0.f, screenColumns, {}};
     const auto selection = SelectionRange {{0, 9}, {0, 10}, true};
 
     const auto runs = findBackgroundRuns(row, selection, parsed.theme);

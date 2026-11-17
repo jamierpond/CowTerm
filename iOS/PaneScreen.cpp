@@ -5,6 +5,7 @@
 #include "Multiplexer/Config.h"
 #include "Multiplexer/HostColours.h"
 
+#include <eacp/Core/App/App.h>
 #include <eacp/Core/Utils/Logging.h>
 
 #include <algorithm>
@@ -38,6 +39,16 @@ Graphics::MouseEvent makeTapMouseEvent(const TouchEvent& touch,
     return mouse;
 }
 } // namespace
+
+void makeLinksOpenOnTap(term::TerminalView& terminal)
+{
+    terminal.setUnderlinesEveryLink(true);
+    terminal.onOpenHyperlink = [](const std::string& uri)
+    {
+        LOG("pane screen: opening a link");
+        Apps::openExternalURL(uri);
+    };
+}
 
 PaneTouchSurface::PaneTouchSurface(std::function<term::TerminalView&()> findTerminalToUse)
     : findTerminal(std::move(findTerminalToUse))
@@ -173,6 +184,7 @@ void PaneScreen::showPane(const term::TerminalConfig& config, const std::string&
     { showScrolledBackState(state); };
     terminal->confirmUnsafePaste = [this](const std::string& text, const Callback& paste)
     { pasteConfirmation.ask(text, paste); };
+    makeLinksOpenOnTap(*terminal);
 
     addChildren({*terminal, touchSurface, topLineHost, bottomBarHost, pillHost, promptHost});
     typing.addTo(*this);

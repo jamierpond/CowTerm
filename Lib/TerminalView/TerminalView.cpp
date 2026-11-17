@@ -476,11 +476,23 @@ PaintedRow TerminalView::describeVisibleRow(int visualRow) const
     const auto rowTop = calculateCellOrigin(visualRow, 0).y;
 
     if (!isAbsoluteRowShown(absoluteRow))
-        return {{}, absoluteRow, rowTop, 0};
+        return {{}, absoluteRow, rowTop, 0, {}};
 
     const auto& line = findLineAtAbsoluteRow(screen, absoluteRow);
     const auto lineLength = static_cast<int>(line.size());
-    return {screen.resolveLine(line), absoluteRow, rowTop, std::min(lineLength, screen.columns())};
+    return {screen.resolveLine(line),
+            absoluteRow,
+            rowTop,
+            std::min(lineLength, screen.columns()),
+            findCellsToUnderlineAsLinks(absoluteRow)};
+}
+
+std::vector<bool> TerminalView::findCellsToUnderlineAsLinks(long absoluteRow) const
+{
+    if (!underlinesEveryLink)
+        return {};
+
+    return findCellsInLinksOnRow(screen, absoluteRow);
 }
 
 GridPainter TerminalView::makePainter()
@@ -1165,6 +1177,14 @@ eacp::Graphics::MouseCursor TerminalView::getCursorForHoveredLink() const
     return eacp::Graphics::MouseCursor::Default;
 }
 
+void TerminalView::setUnderlinesEveryLink(bool shouldUnderline)
+{
+    const auto lock = lockTerminal();
+    underlinesEveryLink = shouldUnderline;
+    rowDrawings.invalidateAllRows();
+    repaintIfShown();
+}
+
 void TerminalView::setHoveredLink(std::optional<LinkSpan> link)
 {
     if (!hoveredLink && !link)
@@ -1206,7 +1226,10 @@ void TerminalView::mouseDown(const MouseEvent& event)
         return shell->takeSizeBack();
 
     if (openHyperlinkUnderPointer(event))
+    {
+        mousePressOwner = MousePressOwner::Link;
         return;
+    }
 
     if (isReportingMouseFor(event))
     {

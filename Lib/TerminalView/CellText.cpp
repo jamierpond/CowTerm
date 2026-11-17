@@ -1,5 +1,7 @@
 #include "CellText.h"
 
+#include "LinkDetection.h"
+
 #include <eacp/Text/Utf8.h>
 
 #include <algorithm>
@@ -133,17 +135,32 @@ std::optional<CellRef> findWordStartingBelowTheWrap(const TermScreen& screen, Ce
     return CellRef {wordEnd.row + 1, word.lastColumn};
 }
 
-// A soft-wrapped row runs straight on, keeping a space that ended it.
-void appendSelectedRowText(const TermScreen& screen,
-                           long row,
-                           const SelectionRange& selected,
-                           std::string& result)
+std::optional<int> findColumnWhereSelectedBrokenUrlResumes(const TermScreen& screen,
+                                                          long row,
+                                                          const SelectionRange& selected)
+{
+    if (row == selected.end.row || findLineAtAbsoluteRow(screen, row).wrapped)
+        return std::nullopt;
+
+    return findColumnWhereBrokenUrlResumes(screen, row);
+}
+
+// A soft-wrapped row runs straight on, keeping a space that ended it. A URL a
+// program broke at the edge runs on too, without the next row's indent.
+// Returns the column the next row's text starts from.
+int appendSelectedRowText(const TermScreen& screen,
+                          long row,
+                          const SelectionRange& selected,
+                          int firstColumn,
+                          std::string& result)
 {
     const auto& line = findLineAtAbsoluteRow(screen, row);
     const auto isLastRow = row == selected.end.row;
-    const auto fromCol = row == selected.start.row ? selected.start.col : 0;
+    const auto selectedFromCol = row == selected.start.row ? selected.start.col : 0;
+    const auto fromCol = std::max(selectedFromCol, firstColumn);
     const auto toCol = isLastRow ? selected.end.col : (int) line.size() - 1;
     const auto runsOnToNextRow = line.wrapped && !isLastRow;
+    const auto brokenUrlResumesAt = findColumnWhereSelectedBrokenUrlResumes(screen, row, selected);
 
     auto rowText = extractRowText(screen, line, fromCol, toCol);
 
@@ -152,8 +169,13 @@ void appendSelectedRowText(const TermScreen& screen,
 
     result += rowText;
 
+    if (brokenUrlResumesAt)
+        return *brokenUrlResumesAt;
+
     if (!isLastRow && !runsOnToNextRow)
         result.push_back('\n');
+
+    return 0;
 }
 } // namespace
 
@@ -200,11 +222,12 @@ std::string extractVisibleRowText(const TermScreen& screen, const Line& line, in
 std::string extractTextBetween(const TermScreen& screen, CellRef start, CellRef end)
 {
     auto result = std::string {};
+    auto firstColumn = 0;
 
     for (auto row = start.row; row <= end.row; ++row)
     {
         if (isAbsoluteRowStored(screen, row))
-            appendSelectedRowText(screen, row, {start, end, true}, result);
+            firstColumn = appendSelectedRowText(screen, row, {start, end, true}, firstColumn, result);
     }
 
     return result;
