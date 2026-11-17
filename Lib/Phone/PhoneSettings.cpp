@@ -16,6 +16,7 @@ struct SettingsText
     std::string destination;
     std::string agentSocketPath;
     std::string privateKeyPath;
+    std::string publicKeyPath;
     std::string knownHostsPath;
     std::string paneId;
     std::string bridgeCommand;
@@ -32,6 +33,7 @@ constexpr auto settingSources = std::array {
     SettingSource {"--destination", "COWTERM_DESTINATION", &SettingsText::destination},
     SettingSource {"--agent-socket", "COWTERM_AGENT_SOCKET", &SettingsText::agentSocketPath},
     SettingSource {"--key-file", "COWTERM_KEY_FILE", &SettingsText::privateKeyPath},
+    SettingSource {"--public-key-file", "COWTERM_PUBLIC_KEY_FILE", &SettingsText::publicKeyPath},
     SettingSource {"--known-hosts", "COWTERM_KNOWN_HOSTS", &SettingsText::knownHostsPath},
     SettingSource {"--pane", "COWTERM_PANE", &SettingsText::paneId},
     SettingSource {"--bridge-command", "COWTERM_BRIDGE_COMMAND", &SettingsText::bridgeCommand},
@@ -121,7 +123,7 @@ std::optional<PhoneSettings> parsePhoneSettings(const std::vector<std::string>& 
     auto settings = PhoneSettings {};
     settings.destination = destinations->front();
     settings.overviewDestinations = *destinations;
-    settings.credentials = {text.agentSocketPath, text.privateKeyPath, text.knownHostsPath};
+    settings.credentials = {text.agentSocketPath, text.privateKeyPath, text.knownHostsPath, text.publicKeyPath};
     settings.explicitPaneId = text.paneId;
     settings.storedScreenPath = storedScreenPath;
 

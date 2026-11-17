@@ -128,10 +128,21 @@ auto backgroundGivesAProtocolFourPaneItsSizeBack =
         {"pane-1", std::to_string(deskColumns), std::to_string(deskRows)})));
     check(returnedHosts == std::vector<std::string> {phone.connection.getHost()});
 };
+auto quietHostIsNotRedialledWhileNoPaneIsShown = test("PhoneConnection/quietHostIsNotRedialledWhileNoPaneIsShown") = []
+{
+    auto phone = PhoneOnRecordedHost {makeSettings({})};
+    phone.bringLinkUp();
+
+    phone.now += pastTheRedialSilence;
+    phone.connection.handleTick();
+    check(phone.factory.requestedHosts.size() == 1, "the overview asks no host every second");
+};
+
 auto quietPhoneLinkStallsThenRedials =
     test("PhoneConnection/quietLinkStallsThenRedials") = []
 {
     auto phone = PhoneOnRecordedHost {makeSettings("pane-1")};
+    phone.openPaneView("pane-1");
     phone.bringLinkUp();
     phone.connection.handleTick();
     check(phone.connection.getLinkState() == PhoneLinkState::Live);

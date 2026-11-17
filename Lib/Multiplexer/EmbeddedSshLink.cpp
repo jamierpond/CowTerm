@@ -379,7 +379,16 @@ private:
         if (authenticateWithAgent() || authenticateWithKeyFile())
             return std::nullopt;
 
-        return destination.user + "@" + destination.host + ": Permission denied (publickey).";
+        return destination.user + "@" + destination.host + ": Permission denied (publickey)." + describeKeyFileFailure();
+    }
+
+    // What libssh2 said about the key file, which the server's refusal does not.
+    std::string describeKeyFileFailure() const
+    {
+        if (credentials.privateKeyPath.empty())
+            return {};
+
+        return " Key file " + credentials.privateKeyPath + ": " + describeLastError();
     }
 
     bool authenticateWithAgent()
@@ -417,10 +426,12 @@ private:
             return false;
 
         const auto userLength = static_cast<unsigned int>(destination.user.size());
+        // libssh2 takes no public key file as a null path.
+        const auto* publicKeyPath = credentials.publicKeyPath.empty() ? nullptr : credentials.publicKeyPath.c_str();
         return libssh2_userauth_publickey_fromfile_ex(session.get(),
                                                       destination.user.c_str(),
                                                       userLength,
-                                                      nullptr,
+                                                      publicKeyPath,
                                                       credentials.privateKeyPath.c_str(),
                                                       nullptr)
                == 0;

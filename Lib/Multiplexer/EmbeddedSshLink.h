@@ -36,6 +36,11 @@ struct SshCredentials
 
     // The OpenSSH known_hosts file the host's key must be listed in.
     std::string knownHostsPath;
+
+    // The private key's public half ("<key>.pub"). libssh2 on mbedTLS can
+    // derive it only from an RSA key, so an ECDSA key file needs it; empty
+    // lets libssh2 derive it.
+    std::string publicKeyPath;
 };
 
 // A remote session daemon reached by running `ct bridge` on an ssh exec

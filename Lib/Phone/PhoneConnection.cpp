@@ -212,13 +212,15 @@ void PhoneConnection::redialHosts(Milliseconds now)
 }
 
 // Only the shown pane's host is asked something every second, so only its
-// silence means a stall; the others are redialled from backoff when the app wakes.
+// silence means a stall; the others, and every host while no pane is shown,
+// are redialled from backoff when the app wakes.
 bool PhoneConnection::shouldRedial(const std::string& overviewHost, Milliseconds now) const
 {
     const auto status = RemoteHosts::find(overviewHost)->getStatus();
     const auto& watch = watches.at(overviewHost);
+    const auto isShowingAPaneOnHost = !shownPaneId.empty() && overviewHost == findShownHost();
 
-    if (overviewHost == findShownHost())
+    if (isShowingAPaneOnHost)
         return watch.shouldReconnect(status, now);
 
     return status == RemoteHost::Status::Unreachable && watch.shouldReconnect(status, now);

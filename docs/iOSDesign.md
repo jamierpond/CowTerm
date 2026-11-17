@@ -540,6 +540,85 @@ launched with `--landscape`, which is how landscape screenshots are taken.
 - With several hosts (`--destination a,b`), each host has its own link watch;
   only the shown pane's host counts silence as a stall.
 
+### Pairing a phone
+
+The app on a real phone showed the sample pane, labelled live, because a phone
+has no ssh key, host list or known hosts to reach anything with. `just
+ios-pair` now gives it all three, and the sample needs `--sample`.
+
+- The phone gets its own ECDSA P-256 key with no passphrase, since the app's
+  mbedTLS cannot sign with ed25519. openssl writes it as SEC1 PEM on the named
+  curve. macOS's `ssh-keygen -m PEM` writes the curve's parameters out in full,
+  which mbedTLS refuses ("PK - Invalid key tag or value"); a key read back from
+  the phone in that form is rewritten as the same key on the named curve.
+- libssh2 on mbedTLS can work out a key file's public half only for RSA, so
+  the phone also gets `phone-key.pub`, and `SshCredentials::publicKeyPath`
+  hands it to libssh2. Without it libssh2 answers "Key type not supported" and
+  the host refuses the key.
+- Its public key goes into `~/.ssh/authorized_keys` on this Mac (`big-cow`),
+  tamby and macprorack, once, with the comment `cowterm-device:pond`. Running
+  the script again reads the key back from the phone and adds nothing. `just
+  ios-unpair` removes exactly the lines with that comment.
+- The phone's known hosts are the lines this Mac's `~/.ssh/known_hosts`
+  already has for the names it dials. A name missing there is scanned with
+  `ssh-keyscan` and kept only if the key equals one known_hosts holds under
+  another name. All three names were already there, so none was added.
+- Before copying, the script signs in with the phone's files through the app's
+  own ssh client (the probe), on each host, so a key OpenSSH takes but libssh2
+  does not is caught on the Mac.
+- The script copies `hosts` (one `user@host` a line; the first is where an
+  explicit `--pane` opens), `known_hosts`, `phone-key` and `phone-key.pub` into
+  `Library/Application Support/pond/CowTerm/pairing` in the app's container
+  with `devicectl device copy to`, and deletes the private key from the Mac.
+  The key is a file in the container, not in the keychain or the Secure
+  Enclave yet.
+- The app reads that folder at its edge (`PhoneLaunch::readSettings`) only when
+  the launch arguments and environment name no host, so the simulator scripts
+  work as before. With no host anywhere the overview says "No hosts set up.
+  Run just ios-pair on the Mac." and shows nothing else.
+- On the phone the app writes its log to `logs/CowTermMobile.log` in the same
+  folder, keeping the launch before as `CowTermMobile.previous.log`; `just
+  ios-device-log` prints it.
+- The phone dials the bare tailnet names (`big-cow`, `tamby`, `macprorack`).
+  They resolve only while Tailscale on the phone is connected; otherwise each
+  host shows "Could not resolve hostname".
+- While the overview is on screen no host is asked anything every second, so
+  silence is not a stall then; only the shown pane's host stalls and is
+  redialled for being quiet.
+
+### Opening on protocol 4 daemons
+
+Jamie's daemons (the Mac's CowTerm, cowtermd on tamby and macprorack) speak
+protocol 4. The phone works with them as they are; this is what is missing
+there:
+
+- No last-input, so no daemon can say which pane he typed in last. The app
+  opens on the pane it showed last time, if that pane still exists, and
+  otherwise stays on the overview. It never opens a pane nobody chose, since
+  opening one takes its size.
+- No activity, so overview rows have no state line ("working, 4 min"), no
+  waiting cards, and are not ordered by use: they are alphabetical within each
+  host.
+- No session names for the Mac's own panes. A pane with no session counts as in
+  the session named after its folder, so `~/projects/CowTerm`'s panes form one
+  row named CowTerm. Two Mac sessions in one folder show as one row, and a pane
+  that changed folder moves to that folder's row.
+- No size owner. The phone still takes the size of the pane it shows, and keeps
+  the size the pane had in the first state its daemon sent. It sends that size
+  back as a plain resize when it leaves the pane, goes to the background, or
+  its link stalls, and takes the pane again on coming back. The Mac is never
+  told: it shows no "on iPhone" note and typing on the Mac does not take the
+  pane back. Any resize from the Mac (its window or layout changing) does take
+  the pane back without the phone knowing, and the phone then shows it at the
+  Mac's width until it opens the pane again. If the app is killed in the
+  foreground (a reinstall from Xcode or devicectl, a crash), nothing is sent
+  and the pane stays at phone size until the Mac resizes it. That happened
+  once while testing on 17 November: a reinstall left one of Jamie's eacp panes
+  at 45 × 17 until the Mac laid it out again at 74 × 20. A daemon that answers `daemon-hello` with 5 or more keeps size
+  owners itself and gets none of this.
+- `scripts/check-ios-size-return.sh` (`just ios-test-size-return`) checks it on
+  two throwaway panes on a host.
+
 ## What eacp lacks on iOS
 
 Each gap is a local branch of eacp off Eyal's develop, in its own worktree,

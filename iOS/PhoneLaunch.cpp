@@ -22,6 +22,7 @@ constexpr auto storedScreenFileName = "last-screen.json";
 constexpr auto pairingFolderName = "pairing";
 constexpr auto pairedHostsFileName = "hosts";
 constexpr auto pairedKeyFileName = "phone-key";
+constexpr auto pairedPublicKeyFileName = "phone-key.pub";
 constexpr auto pairedKnownHostsFileName = "known_hosts";
 
 std::string readEnvironment(const std::string& name)
@@ -71,6 +72,7 @@ EnvironmentReader makePairedSetupReader(const std::filesystem::path& folder)
     const auto values = std::map<std::string, std::string> {
         {"COWTERM_DESTINATION", joinPairedHosts(readFileIfPresent(folder / pairedHostsFileName))},
         {"COWTERM_KEY_FILE", describePathIfPresent(folder / pairedKeyFileName)},
+        {"COWTERM_PUBLIC_KEY_FILE", describePathIfPresent(folder / pairedPublicKeyFileName)},
         {"COWTERM_KNOWN_HOSTS", describePathIfPresent(folder / pairedKnownHostsFileName)},
     };
 
@@ -95,7 +97,7 @@ std::string describeHostStatus(term::RemoteHost::Status status)
         case term::RemoteHost::Status::Connected:
             return "link up";
         case term::RemoteHost::Status::Unreachable:
-            return "unreachable:";
+            return "failed:";
         case term::RemoteHost::Status::Connecting:
             return "connecting";
     }

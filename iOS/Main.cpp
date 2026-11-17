@@ -42,6 +42,7 @@ constexpr auto composeDelay = Time::MS {1500};
 
 // Read back from the phone with `xcrun devicectl device copy from`.
 constexpr auto logFileName = "CowTermMobile.log";
+constexpr auto previousLogFileName = "CowTermMobile.previous.log";
 
 // Test hooks, from the launch arguments, for what a headless simulator cannot
 // do by hand.
@@ -419,12 +420,13 @@ struct CowTermMobileApp
 };
 } // namespace
 
-// Each launch starts the log afresh, so it holds only this run.
+// Each launch starts the log afresh and keeps the one before, so a relaunch
+// never loses what the last run did.
 void startLogFile()
 {
     const auto logPath = term::getLogsDirectory() / logFileName;
     auto error = std::error_code {};
-    std::filesystem::remove(logPath, error);
+    std::filesystem::rename(logPath, term::getLogsDirectory() / previousLogFileName, error);
     eacp::setLogFile(logPath.string());
 }
 

@@ -444,6 +444,10 @@ term::SshCredentials readCredentials()
         if (Files::exists(sshDirectory + keyName))
         {
             credentials.privateKeyPath = sshDirectory + keyName;
+
+            if (Files::exists(credentials.privateKeyPath + ".pub"))
+                credentials.publicKeyPath = credentials.privateKeyPath + ".pub";
+
             return credentials;
         }
     }

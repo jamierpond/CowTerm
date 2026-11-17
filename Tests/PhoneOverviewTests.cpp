@@ -171,6 +171,7 @@ void openRackSession(ShownOverview& shown)
 {
     shown.phone.answerFrom(rack, proto::make("info", {}, makeInfoLine("c", "macprorack/Miro")));
     shown.phone.connection.openSession(shown.findRow("macprorack/Miro"));
+    shown.phone.openPaneView("c");
 }
 } // namespace
 
