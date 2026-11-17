@@ -108,7 +108,7 @@ public:
 
     int page = 0;
     bool isControlLatched = false;
-    bool isRawMode = false;
+    bool isComposerOn = false;
     std::function<void(KeyRowKey)> onKey = [](KeyRowKey) {};
 
 private:

@@ -132,12 +132,15 @@ idea he has to learn.
 
 ### Typing
 
-A composer is the main input, for every pane and not only Claude's. It is a
-real iOS text view sitting above the keyboard, so it has dictation,
-autocorrect, the space-bar cursor and correction by tapping a word. It sends as
-a bracketed paste followed by Enter. There is no local echo over ssh and a
-round trip on cellular is 60 to 300 ms, so composing on the phone and sending
-whole lines is both faster and safer than typing into the grid.
+Keys go straight to the pane as they are typed, like any terminal. This was
+first designed the other way round, with a composer as the main input, and
+changed on 17 November after Jamie used it: Claude Code already has its own
+input box, so a second field below it that sends on return was confusing.
+
+The composer stays, behind the key row's "compose" switch, off by default and
+lit while it is on. It is a real iOS text view above the keyboard, so it has
+dictation, autocorrect, the space-bar cursor and correction by tapping a word,
+and it sends as a bracketed paste followed by Enter.
 
 - Up-arrow in an empty composer recalls earlier messages, since dictation will
   mangle `eacp` and `jp/develop` and fixing a recalled line beats saying it
@@ -152,9 +155,8 @@ whole lines is both faster and safer than typing into the grid.
   Symbols (`| ~ / -`) are on a second page of the row.
 - `Ctrl` latches for one key. While it is latched the keyboard's own keys show
   `^C`, `^R`, `^D`, so the mode is on the keys and not on a tinted button.
-- Raw mode is a switch on the key row: keys go straight to the pane, for vim
-  and for shells. The composer's field is gone while raw mode is on, so the two
-  cannot be confused.
+- The composer's field is there only while its switch is on, so the two ways
+  of typing cannot be confused.
 - A paste of several lines into a shell shows its first lines and asks, as the
   Mac does. A keystroke sent to a remote shell cannot be undone, so the check
   belongs before sending.
@@ -263,8 +265,8 @@ in the wrong one is harmless.
 
 | Mode | How it shows | Typing does |
 | --- | --- | --- |
-| Composer | Text field above the keyboard | Edits the field |
-| Raw keys | No field; the key row's switch is lit; a cursor shows in the pane | Goes to the pane |
+| Typing (the default) | No field; a cursor shows in the pane | Goes to the pane |
+| Composer | Text field above the keyboard; the key row's "compose" is lit | Edits the field |
 | Ctrl latched | The keyboard's keys read `^C`, `^R` … | Sends that control key, then unlatches |
 | Selecting | Tinted border; the bar reads Copy, Line, Search, Done | Leaves the mode, and says so |
 | Scrolled back | "↓ n new" pill, scroll indicator | Sends, and returns to the bottom |
@@ -596,7 +598,11 @@ the keyboard Jamie raised typed into the list's hidden search field. The fix is
 in eacp: a hidden view takes no touch (`jp/ios-integration` 5266bc64, local,
 not pushed, with a test in `Tests/UI/OverlayViewTests.cpp`). It also frees the
 pane screen's own hidden parts (the menu, which covers the whole pane, the
-pill, the prompt buttons and the key row). Nothing had ever tapped the app
+pill, the prompt buttons and the key row). A second commit (f5cfb3c0) does
+the same in `View::touchTarget`, which picks the view a finger goes to: the
+hidden menu still took every drag on the pane and turned it into mouse
+events, so a drag selected text instead of scrolling, and no drag reached the
+pane's touch surface. Nothing had ever tapped the app
 before: the simulator checks drove it with launch flags.
 
 Both screens now live in one content view (`ScreenStack` in `iOS/Main.cpp`)
@@ -664,7 +670,7 @@ and CowTerm's pin is unchanged.
 | The software keyboard's height and animation | `jp/ios-keyboard-frame` (`~/projects/eacp-ios-keyboard-frame`) | 2b287d8f |
 | The status bar was always hidden | `jp/ios-status-bar` (`~/projects/eacp-ios-status-bar`) | c5ce3388 |
 | No native text view, so no dictation or autocorrect for the composer; a hardware key's down event on it | `jp/ios-native-text-view` (`~/projects/eacp-ios-native-text-view`), stacked on `jp/ios-text-input` | eea9e5a7, f06a4c3d |
-| A hidden view still took touches and clicks (`View::hitTest`) | committed on `jp/ios-integration` only | 5266bc64 |
+| A hidden view still took touches and clicks (`View::hitTest`, `View::touchTarget`) | committed on `jp/ios-integration` only | 5266bc64, f5cfb3c0 |
 
 Lifecycle events, touch timestamps and safe-area insets already exist. The
 keyboard-frame and status-bar branches both change the iOS window's

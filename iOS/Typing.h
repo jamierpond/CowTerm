@@ -44,7 +44,7 @@ enum class KeyRowKey
     Tilde,
     Slash,
     Minus,
-    RawMode,
+    Composer,
     HideKeyboard,
     NextPage
 };
@@ -52,7 +52,7 @@ enum class KeyRowKey
 std::string_view getKeyRowLabel(KeyRowKey key);
 
 // The key a key row key presses, as a hardware keyboard would report it.
-// Empty for the row's own controls (Ctrl, raw mode, hide, next page).
+// Empty for the row's own controls (Ctrl, the composer switch, hide, next page).
 std::optional<eacp::Graphics::KeyEvent> makeKeyRowKeyEvent(KeyRowKey key);
 
 struct KeyRowSlot

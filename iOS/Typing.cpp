@@ -38,7 +38,7 @@ constexpr auto keyRowKeys = std::to_array<KeyRowKeyInfo>({
     {KeyRowKey::Tilde, "~", noKeyCode, "~"},
     {KeyRowKey::Slash, "/", noKeyCode, "/"},
     {KeyRowKey::Minus, "-", noKeyCode, "-"},
-    {KeyRowKey::RawMode, "raw", noKeyCode, ""},
+    {KeyRowKey::Composer, "compose", noKeyCode, ""},
     {KeyRowKey::HideKeyboard, "\xe2\x8c\x84", noKeyCode, ""},
     {KeyRowKey::NextPage, "\xe2\x8b\xaf", noKeyCode, ""},
 });
@@ -63,7 +63,7 @@ const KeyGroups& findKeyGroups(int page)
 
     static const auto secondPage =
         KeyGroups {{KeyRowKey::Pipe, KeyRowKey::Tilde, KeyRowKey::Slash, KeyRowKey::Minus},
-                   {KeyRowKey::RawMode},
+                   {KeyRowKey::Composer},
                    {KeyRowKey::HideKeyboard},
                    {KeyRowKey::NextPage}};
 

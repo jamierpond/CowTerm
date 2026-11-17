@@ -105,7 +105,7 @@ void TypingControls::raiseKeyboard()
     LOG("typing: raising the keyboard");
     auto& terminal = findTerminal();
 
-    if (isRawMode)
+    if (!isComposerOn)
     {
         terminal.setWantsTextInput(true);
         terminal.focus();
@@ -134,8 +134,8 @@ void TypingControls::pressKeyRowKey(KeyRowKey key)
         case KeyRowKey::Control:
             controlLatch.toggle();
             break;
-        case KeyRowKey::RawMode:
-            toggleRawMode();
+        case KeyRowKey::Composer:
+            toggleComposer();
             break;
         case KeyRowKey::HideKeyboard:
             lowerKeyboard();
@@ -189,7 +189,7 @@ bool TypingControls::recallOnHardwareArrow(const Graphics::KeyEvent& key)
 
 bool TypingControls::canRecallIntoComposer() const
 {
-    if (isRawMode)
+    if (!isComposerOn)
         return false;
 
     return composer.getText().empty() || history.isRecalling();
@@ -266,12 +266,12 @@ void TypingControls::sendKeyToPane(const Graphics::KeyEvent& key)
     findTerminal().dispatchKeyEvent(key);
 }
 
-void TypingControls::toggleRawMode()
+void TypingControls::toggleComposer()
 {
     const auto wasKeyboardUp = composer.isEditing() || findTerminal().hasFocus();
-    isRawMode = !isRawMode;
+    isComposerOn = !isComposerOn;
     composer.stopEditing();
-    findTerminal().setWantsTextInput(isRawMode);
+    findTerminal().setWantsTextInput(!isComposerOn);
 
     if (wasKeyboardUp)
         raiseKeyboard();
@@ -279,10 +279,10 @@ void TypingControls::toggleRawMode()
     onLayoutChanged();
 }
 
-void TypingControls::switchToRawMode()
+void TypingControls::switchToComposer()
 {
-    if (!isRawMode)
-        toggleRawMode();
+    if (!isComposerOn)
+        toggleComposer();
 
     showKeyRowState();
 }
@@ -290,7 +290,7 @@ void TypingControls::switchToRawMode()
 void TypingControls::showKeyRowState()
 {
     keyRow.isControlLatched = controlLatch.isHeld();
-    keyRow.isRawMode = isRawMode;
+    keyRow.isComposerOn = isComposerOn;
     keyRow.repaint();
 }
 } // namespace cowterm::mobile

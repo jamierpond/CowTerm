@@ -335,8 +335,8 @@ bool KeyRow::isLit(KeyRowKey key) const
     if (key == KeyRowKey::Control)
         return isControlLatched;
 
-    if (key == KeyRowKey::RawMode)
-        return isRawMode;
+    if (key == KeyRowKey::Composer)
+        return isComposerOn;
 
     return false;
 }

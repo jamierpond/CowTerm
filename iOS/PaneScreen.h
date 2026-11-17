@@ -68,9 +68,9 @@ public:
     // What a long press on the bottom bar opens.
     void openMenu();
 
-    // ⌨: the composer with the keyboard up, or the pane itself in raw mode.
+    // ⌨: the keyboard, typing into the pane, or into the composer when it is on.
     void raiseKeyboard();
-    void switchToRawMode();
+    void switchToComposer();
     void composeAndSend(const std::string& text);
 
     void resized() override;

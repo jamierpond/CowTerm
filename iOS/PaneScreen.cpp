@@ -67,6 +67,7 @@ void PaneTouchSurface::touchMoved(const TouchEvent& event)
     if (!isScrolling && hasMovedBeyondTapSlop(fingerDown->pos, event.pos))
     {
         isScrolling = true;
+        LOG("pane screen: drag scrolls from ", fingerDown->pos.x, ", ", fingerDown->pos.y);
         findTerminal().beginTouchScroll(*fingerDown);
     }
 
@@ -360,9 +361,9 @@ void PaneScreen::composeAndSend(const std::string& text)
     typing.composeAndSend(text);
 }
 
-void PaneScreen::switchToRawMode()
+void PaneScreen::switchToComposer()
 {
-    typing.switchToRawMode();
+    typing.switchToComposer();
 }
 
 void PaneScreen::returnToLiveBottom()

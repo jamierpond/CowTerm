@@ -13,10 +13,11 @@
 
 namespace cowterm::mobile
 {
-// The composer and the key row above the keyboard (docs/iOSDesign.md,
-// "Typing"). The composer is a native text view, so dictation and autocorrect
-// work; it sends as a bracketed paste then Enter. Raw mode hides it and sends
-// the keyboard's keys straight to the pane. Ctrl latches for one key.
+// The key row above the keyboard and the composer (docs/iOSDesign.md,
+// "Typing"). Keys go straight to the pane, as in any terminal. The key row's
+// "compose" switch brings up the composer, a native text view for dictation
+// and autocorrect that sends as a bracketed paste then Enter. Ctrl latches for
+// one key.
 class TypingControls
 {
 public:
@@ -30,15 +31,15 @@ public:
     void connectTerminal(term::TerminalView& terminal);
 
     void layOut(const TypingRects& rects, bool isKeyboardUp);
-    bool showsComposer() const { return !isRawMode; }
+    bool showsComposer() const { return isComposerOn; }
 
     void raiseKeyboard();
 
     // Puts text in the composer and sends it, as return would.
     void composeAndSend(const std::string& text);
 
-    // Raw mode on, as the key row's switch turns it on.
-    void switchToRawMode();
+    // The composer on, as the key row's switch turns it on.
+    void switchToComposer();
 
     // While the link is down a sent message waits in the composer, marked
     // unsent, and goes when the link is live again.
@@ -47,7 +48,7 @@ public:
     // On a Claude pane a stop button (Esc) sits at the composer's left.
     void setShowsStopButton(bool showsStop);
 
-    // Raw mode changed, so the screen lays out again.
+    // The composer came or went, so the screen lays out again.
     std::function<void()> onLayoutChanged = [] {};
 
 private:
@@ -58,7 +59,7 @@ private:
     bool canRecallIntoComposer() const;
     bool recallOnHardwareArrow(const eacp::Graphics::KeyEvent& key);
     void sendKeyToPane(const eacp::Graphics::KeyEvent& key);
-    void toggleRawMode();
+    void toggleComposer();
     void lowerKeyboard();
     void showKeyRowState();
     void showWhetherUnsent();
@@ -75,7 +76,7 @@ private:
 
     ComposerHistory history;
     ControlLatch controlLatch;
-    bool isRawMode = false;
+    bool isComposerOn = false;
     bool isLinkLive = true;
     bool isHoldingUnsent = false;
 };

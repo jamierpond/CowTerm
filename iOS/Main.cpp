@@ -56,7 +56,7 @@ struct LaunchOptions
     bool opensMenu = false;
     bool streamsOutput = false;
     bool scrollsBack = false;
-    bool typesRaw = false;
+    bool showsComposer = false;
     bool switchesToSecondPane = false;
     bool showsClaudePrompt = false;
     std::string composedText;
@@ -97,7 +97,7 @@ constexpr LaunchSwitch launchSwitches[] = {
     {"--menu", &LaunchOptions::opensMenu},
     {"--stream", &LaunchOptions::streamsOutput},
     {"--scroll-back", &LaunchOptions::scrollsBack},
-    {"--raw", &LaunchOptions::typesRaw},
+    {"--composer", &LaunchOptions::showsComposer},
     {"--switch-to-second-pane", &LaunchOptions::switchesToSecondPane},
     {"--claude-prompt", &LaunchOptions::showsClaudePrompt},
     {"--overview", &LaunchOptions::showsOverview},
@@ -353,8 +353,8 @@ struct CowTermMobileApp
 
     void applyLaunchKeyboardOptions()
     {
-        if (launchOptions.typesRaw)
-            screen.switchToRawMode();
+        if (launchOptions.showsComposer)
+            screen.switchToComposer();
 
         if (launchOptions.raisesSoftwareKeyboard)
             screen.raiseKeyboard();

@@ -591,6 +591,28 @@ auto tTouchDragInAltScreen = test("View/aFingerDragInAltScreenSendsOneArrowPerLi
     check(pane.takeWritten().empty(), "no coast follows the finger in a program");
 };
 
+auto tTouchDragUnderMouseReporting = test("View/aFingerDragUnderTmuxMouseSendsWheelReportsNotAPress") = []
+{
+    constexpr auto rowsDragged = 2.f;
+    constexpr auto moveTime = 0.02;
+    constexpr auto liftTime = 0.03;
+    constexpr auto wheelUpReportUnderTheFinger = "\033[<64;1;3M";
+    auto pane = TestPane {};
+    pane.showOutput("\033[?1049h\033[?1002h\033[?1006h");
+    pane.takeWritten();
+
+    const auto start = touchAt(centreOfCell(0, 0), 0.0);
+    const auto moved = touchMovedDownByRows(start, rowsDragged, moveTime);
+    pane.view->beginTouchScroll(start);
+    pane.view->moveTouchScroll(moved);
+    pane.view->endTouchScroll(touchAt(moved.pos, liftTime));
+
+    const auto written = pane.takeWritten();
+    check(written == std::string {wheelUpReportUnderTheFinger} + wheelUpReportUnderTheFinger,
+          "a finger dragged down two rows scrolls the program back two lines");
+    check(written.find("\033[<0;") == std::string::npos, "never a button press, which starts tmux's selection");
+};
+
 auto tScrolledBackStateReported = test("View/leavingAndReturningToTheBottomIsReported") = []
 {
     constexpr auto linesOfHistory = 50;

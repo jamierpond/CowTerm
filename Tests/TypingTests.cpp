@@ -115,7 +115,7 @@ auto tKeyRowEncodings = test("Typing/keyRowKeysSendWhatAKeyboardWould") = []
 auto tRowControls = test("Typing/rowControlsSendNothing") = []
 {
     check(!makeKeyRowKeyEvent(KeyRowKey::Control).has_value());
-    check(!makeKeyRowKeyEvent(KeyRowKey::RawMode).has_value());
+    check(!makeKeyRowKeyEvent(KeyRowKey::Composer).has_value());
     check(!makeKeyRowKeyEvent(KeyRowKey::NextPage).has_value());
 };
 
