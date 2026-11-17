@@ -13,13 +13,19 @@ test *ctest_arguments:
 ios-build *cmake_build_arguments:
     EACP_SOURCE={{eacp_with_ios_branches}} scripts/build-ios-simulator.sh {{cmake_build_arguments}}
 
-# Install and launch the iPhone app in a headless simulator
+# Install and launch the iPhone app, and open the Simulator window on it
 ios-run device=smallest_iphone *app_arguments:
     scripts/run-ios-simulator.sh "{{device}}" {{app_arguments}}
+    scripts/show-ios-simulator.sh "{{device}}"
 
-# Build, then launch
+# Build, launch, and open the Simulator window
 ios device=smallest_iphone *app_arguments: ios-build
     scripts/run-ios-simulator.sh "{{device}}" {{app_arguments}}
+    scripts/show-ios-simulator.sh "{{device}}"
+
+# Open the Simulator window on an app that is already running
+ios-show device=smallest_iphone:
+    scripts/show-ios-simulator.sh "{{device}}"
 
 # Open a real pane from a host in the simulator and save a screenshot of it
 ios-host destination screenshot=(screenshot_folder / "host.png"):
