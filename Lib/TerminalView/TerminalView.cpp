@@ -7,6 +7,7 @@
 #include <eacp/Core/App/Clipboard.h>
 
 #include <algorithm>
+#include <cmath>
 #include <cstdio>
 #include <random>
 
@@ -40,6 +41,17 @@ std::unique_ptr<Shell> shellFor(const TerminalConfig& config,
 bool isPositiveSize(float width, float height)
 {
     return width > 0 && height > 0;
+}
+
+constexpr auto minimumGridColumns = 2;
+constexpr auto minimumGridRows = 1;
+
+// How many whole cells fit along a length after a margin at each end.
+int countWholeCellsThatFit(float length, float margin, float cellSize)
+{
+    const auto cellsThatFit = std::floor((length - 2 * margin) / cellSize);
+    const auto wholeCells = static_cast<int>(cellsThatFit);
+    return wholeCells;
 }
 
 std::vector<EnvironmentVariable> environmentFor(const TerminalConfig& config,
@@ -245,6 +257,7 @@ void TerminalView::showParsedOutput()
         scrollToLiveBottom();
 
     syncScrollPositionWithScrollback();
+    reportScrolledBackStateIfChanged();
     repaintUnlessSynchronized();
 }
 
@@ -389,8 +402,9 @@ void TerminalView::applyGridSize()
     if (!isPositiveSize(cellW, cellH) || !isPositiveSize(bounds.w, bounds.h))
         return;
 
-    const auto cols = std::max(2, (int) ((bounds.w - 2 * marginX) / cellW));
-    const auto rows = std::max(1, (int) ((bounds.h - 2 * marginY) / cellH));
+    const auto size = fixedGridSize.value_or(calculateGridSizeFromBounds());
+    const auto cols = size.cols;
+    const auto rows = size.rows;
     hasGridSizeFromBounds = true;
 
     if (commandTerminal)
@@ -409,7 +423,35 @@ void TerminalView::applyGridSize()
     syncScrollPositionWithScrollback();
 
     if (!scrollPosition.isFollowingLiveBottom())
-        scrollPosition.showLinesFromBottom(linesFromBottom, screen.scrollbackSize());
+        scrollPosition.showLinesFromBottom(linesFromBottom, calculateScrollRange());
+}
+
+PtySize TerminalView::calculateGridSizeFromBounds() const
+{
+    const auto bounds = getLocalBounds();
+    const auto cols = countWholeCellsThatFit(bounds.w, marginX, atlas->cellWidth());
+    const auto rows = countWholeCellsThatFit(bounds.h, marginY, atlas->cellHeight());
+    return {std::max(minimumGridColumns, cols), std::max(minimumGridRows, rows)};
+}
+
+// With a fixed grid, the rows the view's height holds; otherwise the grid's.
+int TerminalView::countViewportRows() const
+{
+    if (!fixedGridSize)
+        return screen.rows();
+
+    const auto bounds = getLocalBounds();
+    const auto rows = countWholeCellsThatFit(bounds.h, marginY, atlas->cellHeight());
+    return std::max(minimumGridRows, rows);
+}
+
+void TerminalView::setFixedGridSize(std::optional<PtySize> size)
+{
+    const auto lock = lockTerminal();
+    fixedGridSize = size;
+    applyGridSize();
+    rowDrawings.invalidateAllRows();
+    repaintIfShown();
 }
 
 void TerminalView::restoreTerminalState(const std::string& serialized)
@@ -453,7 +495,7 @@ void TerminalView::setFontSize(float newSize)
 
 long TerminalView::findTopVisibleAbsoluteRow() const
 {
-    return scrollPosition.findTopAbsoluteRow(screen.scrollbackSize());
+    return scrollPosition.findTopAbsoluteRow(calculateScrollRange());
 }
 
 int TerminalView::calculateVisualRow(long absoluteRow) const
@@ -463,19 +505,24 @@ int TerminalView::calculateVisualRow(long absoluteRow) const
 
 Graphics::Point TerminalView::calculateCellOrigin(int visualRow, int column) const
 {
-    const auto rowTop = marginY + (float) visualRow * atlas->cellHeight();
-    return {marginX + (float) column * atlas->cellWidth(),
+    const auto visualRowAsFloat = static_cast<float>(visualRow);
+    const auto columnAsFloat = static_cast<float>(column);
+    const auto rowTop = marginY + visualRowAsFloat * atlas->cellHeight();
+    return {marginX + columnAsFloat * atlas->cellWidth(),
             rowTop - calculatePixelOffsetIntoTopRow()};
 }
 
 PaintedRow TerminalView::describeVisibleRow(int visualRow) const
 {
-    const auto& line = screen.lineAt(visualRow, calculateLinesFromBottom());
+    const auto absoluteRow = findTopVisibleAbsoluteRow() + visualRow;
+    const auto rowTop = calculateCellOrigin(visualRow, 0).y;
 
-    return {screen.resolveLine(line),
-            findTopVisibleAbsoluteRow() + visualRow,
-            calculateCellOrigin(visualRow, 0).y,
-            std::min((int) line.size(), screen.columns())};
+    if (!isAbsoluteRowShown(absoluteRow))
+        return {{}, absoluteRow, rowTop, 0};
+
+    const auto& line = findLineAtAbsoluteRow(screen, absoluteRow);
+    const auto lineLength = static_cast<int>(line.size());
+    return {screen.resolveLine(line), absoluteRow, rowTop, std::min(lineLength, screen.columns())};
 }
 
 GridPainter TerminalView::makePainter()
@@ -538,10 +585,10 @@ void TerminalView::drawCursor(GridPainter& painter)
     if (!screen.modes.showCursor)
         return;
 
-    const auto linesFromBottom = calculateLinesFromBottom();
-    const auto visualRow = screen.cursor.y + linesFromBottom;
+    const long cursorAbsoluteRow = screen.scrollbackSize() + screen.cursor.y;
+    const auto visualRow = calculateVisualRow(cursorAbsoluteRow);
 
-    if (visualRow >= screen.rows())
+    if (visualRow < 0 || visualRow >= countViewportRows())
         return;
 
     const auto origin = calculateCellOrigin(visualRow, screen.cursor.x);
@@ -557,7 +604,7 @@ void TerminalView::drawCursor(GridPainter& painter)
 
     painter.drawCursor(origin,
                        findCursorStyle(parser.cursorShape()),
-                       screen.resolveLine(screen.lineAt(visualRow, linesFromBottom)),
+                       screen.resolveLine(findLineAtAbsoluteRow(screen, cursorAbsoluteRow)),
                        screen.cursor.x);
 }
 
@@ -565,7 +612,7 @@ void TerminalView::drawCopyMode(GridPainter& painter, const std::string& indicat
 {
     const auto visualRow = calculateVisualRow(copyCursor.row);
 
-    if (visualRow >= 0 && visualRow < screen.rows())
+    if (visualRow >= 0 && visualRow < countViewportRows())
         painter.drawBlockCursor(calculateCellOrigin(visualRow, copyCursor.col),
                                 screen.resolveLine(findLineAtAbsoluteRow(screen, copyCursor.row)),
                                 copyCursor.col);
@@ -633,6 +680,13 @@ void TerminalView::render(GPU::Frame& frame)
     if (isCursorLayerVisible())
         drawCursorLayer(pass, painter, copyIndicator);
 
+    if (scrollIndicatorFade.isVisible())
+    {
+        sprites->begin(pass);
+        drawScrollIndicator(painter);
+        sprites->flush();
+    }
+
     renderedVersion = screen.version();
 }
 
@@ -696,19 +750,24 @@ bool TerminalView::handleClipboardShortcut(const KeyEvent& event)
 
 int TerminalView::calculateScrollLinesForJump(ViewportJump jump) const
 {
+    const auto range = calculateScrollRange();
+    const auto scrollableRows = range.liveBottomTopRow - range.oldestTopRow;
+    const auto wholeRange = static_cast<int>(scrollableRows);
+    const auto page = countViewportRows() - 1;
+
     switch (jump)
     {
         case ViewportJump::ToOldest:
-            return screen.scrollbackSize();
+            return wholeRange;
 
         case ViewportJump::ToNewest:
-            return -screen.scrollbackSize();
+            return -wholeRange;
 
         case ViewportJump::PageTowardOldest:
-            return screen.rows() - 1;
+            return page;
 
         case ViewportJump::PageTowardNewest:
-            return -(screen.rows() - 1);
+            return -page;
     }
 
     return 0;
@@ -859,10 +918,18 @@ VisibleCell TerminalView::findCellUnderPointer(Graphics::Point pos) const
 {
     const auto column =
         std::clamp((int) ((pos.x - marginX) / atlas->cellWidth()), 0, screen.columns() - 1);
-    const auto visualRow =
-        std::clamp((int) ((pos.y - marginY) / atlas->cellHeight()), 0, screen.rows() - 1);
+    const auto rowsFromTop = static_cast<int>((pos.y - marginY) / atlas->cellHeight());
+    const auto visualRow = std::clamp(rowsFromTop, 0, countViewportRows() - 1);
 
     return {visualRow, column};
+}
+
+VisibleCell TerminalView::findGridCellUnderPointer(Graphics::Point pos) const
+{
+    const auto cell = findCellUnderPointer(pos);
+    const auto rowsAboveGrid = countViewportRows() - screen.rows();
+    const auto gridRow = std::clamp(cell.visualRow - rowsAboveGrid, 0, screen.rows() - 1);
+    return {gridRow, cell.column};
 }
 
 CellRef TerminalView::cellRefAt(Graphics::Point pos) const
@@ -870,7 +937,8 @@ CellRef TerminalView::cellRefAt(Graphics::Point pos) const
     const auto shiftedToRowTops =
         Graphics::Point {pos.x, pos.y + calculatePixelOffsetIntoTopRow()};
     const auto cell = findCellUnderPointer(shiftedToRowTops);
-    return {findTopVisibleAbsoluteRow() + cell.visualRow, cell.column};
+    const auto row = findTopVisibleAbsoluteRow() + cell.visualRow;
+    return {std::max(row, findFirstShownAbsoluteRow()), cell.column};
 }
 
 bool TerminalView::hasSelection() const
@@ -950,17 +1018,15 @@ void TerminalView::setCopyCursor(CellRef target)
 
     syncScrollPositionWithScrollback();
     const auto visualRow = calculateVisualRow(copyCursor.row);
-    const auto scrollbackSize = screen.scrollbackSize();
-    const auto linesFromBottomWithCursorOnTopRow = (int) (scrollbackSize - copyCursor.row);
-    const auto linesFromBottomWithCursorOnBottomRow =
-        linesFromBottomWithCursorOnTopRow + screen.rows() - 1;
+    const auto viewportRows = countViewportRows();
 
     if (visualRow < 0)
-        scrollPosition.showLinesFromBottom(linesFromBottomWithCursorOnTopRow, scrollbackSize);
-    else if (visualRow >= screen.rows())
-        scrollPosition.showLinesFromBottom(linesFromBottomWithCursorOnBottomRow, scrollbackSize);
+        scrollPosition.showTopRow(copyCursor.row, calculateScrollRange());
+    else if (visualRow >= viewportRows)
+        scrollPosition.showTopRow(copyCursor.row - viewportRows + 1, calculateScrollRange());
 
     updateCopySelection();
+    reportScrolledBackStateIfChanged();
     repaintIfShown();
 }
 
@@ -1079,7 +1145,7 @@ void TerminalView::sendMouseReport(const MouseEvent& event,
     if (!screen.modes.mouseSgr)
         return;
 
-    const auto cell = findCellUnderPointer(event.pos);
+    const auto cell = findGridCellUnderPointer(event.pos);
     send(encodeSgrMouseReport({button, pressed, motion, cell.column + 1, cell.visualRow + 1}));
 }
 

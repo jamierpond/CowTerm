@@ -515,7 +515,8 @@ auto tScrolledBackCountsNewLines = test("View/scrolledBackTheViewCountsLinesThat
     check(pane.view->countLinesArrivedWhileScrolledBack() == linesArrivingLater);
 
     pane.view->keyDown(typedKey("x"));
-    check(pane.view->countLinesArrivedWhileScrolledBack() == 0, "typing returns to the live bottom");
+    check(pane.view->countLinesArrivedWhileScrolledBack() == 0,
+          "typing returns to the live bottom");
 };
 
 auto tTouchDragScrollsBack = test("View/aFingerDraggedDownScrollsTheScrollbackBack") = []
@@ -559,6 +560,74 @@ auto tTouchDragInAltScreen = test("View/aFingerDragInAltScreenSendsOneArrowPerLi
 
     pane.view->endTouchScroll(touchAt(moved.pos, liftTime));
     check(pane.takeWritten().empty(), "no coast follows the finger in a program");
+};
+
+auto tScrolledBackStateReported = test("View/leavingAndReturningToTheBottomIsReported") = []
+{
+    constexpr auto linesOfHistory = 50;
+    constexpr auto linesArrivingLater = 2;
+    constexpr auto wheelLinesBack = 5.f;
+    auto pane = TestPane {};
+    pane.showOutput(makeLinesOfOutput(linesOfHistory));
+    auto reports = std::vector<ScrolledBackState> {};
+    pane.view->onScrolledBackStateChanged = [&reports](ScrolledBackState state)
+    { reports.push_back(state); };
+
+    pane.view->mouseWheel(wheelBy(wheelLinesBack));
+    check(reports.size() == 1 && reports.back().isScrolledBack);
+
+    pane.showOutput(makeLinesOfOutput(linesArrivingLater));
+    check(reports.back().linesArrivedWhileScrolledBack == linesArrivingLater);
+
+    pane.view->scrollToLiveBottom();
+    check(!reports.back().isScrolledBack);
+    check(reports.back().linesArrivedWhileScrolledBack == 0);
+};
+
+namespace
+{
+constexpr auto fixedColumns = 30;
+constexpr auto fixedRows = 3;
+
+int countRowsInTestView()
+{
+    const auto heightForRows = viewHeight - 2.f * marginY;
+    const auto rowsThatFit = std::floor(heightForRows / referenceAtlas().cellHeight());
+    const auto rows = static_cast<int>(rowsThatFit);
+    return rows;
+}
+} // namespace
+
+auto tFixedGridSize = test("View/aFixedGridIsWhatTheShellGetsWhateverTheBounds") = []
+{
+    constexpr auto tallerHeight = 300.f;
+    auto pane = TestPane {};
+    pane.view->setFixedGridSize(PtySize {fixedColumns, fixedRows});
+
+    check(pane.recording->resizes.back().cols == fixedColumns);
+    check(pane.recording->resizes.back().rows == fixedRows);
+
+    const auto resizesBefore = pane.recording->resizes.size();
+    pane.view->setBounds({0.f, 0.f, viewWidth, tallerHeight});
+    pane.view->resized();
+    check(pane.recording->resizes.size() == resizesBefore,
+          "the keyboard going away resizes nothing");
+};
+
+auto tFixedGridMouseRows = test("View/belowScrollbackRowsTheGridRowsReportFromOne") = []
+{
+    auto pane = TestPane {};
+    pane.view->setFixedGridSize(PtySize {fixedColumns, fixedRows});
+    pane.showOutput("\033[?1000h\033[?1006h");
+    pane.takeWritten();
+
+    const auto bottomRow = countRowsInTestView() - 1;
+    const auto firstGridRow = countRowsInTestView() - fixedRows;
+    pane.view->mouseDown(mouseAtCell(0, bottomRow));
+    check(pane.takeWritten() == "\033[<0;1;3M", "the view's last row is the grid's last");
+
+    pane.view->mouseDown(mouseAtCell(0, firstGridRow));
+    check(pane.takeWritten() == "\033[<0;1;1M");
 };
 
 // ---- copy mode keys ---------------------------------------------------------

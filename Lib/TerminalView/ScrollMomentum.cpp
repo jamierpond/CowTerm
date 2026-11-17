@@ -34,7 +34,7 @@ double calculateFlingDistanceOverTime(double velocityPixelsPerSecond,
            / std::log(decelerationRatePerMillisecond);
 }
 
-void ScrollMomentum::startFling(float velocityPixelsPerSecond)
+void ScrollMomentum::startFling(double velocityPixelsPerSecond)
 {
     velocity = velocityPixelsPerSecond;
 
@@ -44,24 +44,24 @@ void ScrollMomentum::startFling(float velocityPixelsPerSecond)
 
 void ScrollMomentum::stop()
 {
-    velocity = 0.f;
+    velocity = 0.0;
 }
 
-float ScrollMomentum::advanceBy(FractionalSeconds elapsed)
+double ScrollMomentum::advanceBy(FractionalSeconds elapsed)
 {
     if (!isMoving())
-        return 0.f;
+        return 0.0;
 
     const auto distance = calculateFlingDistanceOverTime(
         velocity, elapsed, normalScrollDecelerationRatePerMillisecond);
     const auto speedKept =
         calculateShareOfSpeedKept(elapsed, normalScrollDecelerationRatePerMillisecond);
-    velocity = (float) (velocity * speedKept);
+    velocity *= speedKept;
 
     if (std::abs(velocity) < minimumMomentumSpeed)
         stop();
 
-    return (float) distance;
+    return distance;
 }
 
 void TouchVelocityTracker::reset()
@@ -79,23 +79,22 @@ void TouchVelocityTracker::addSample(TouchSample sample)
     samples.erase(std::remove_if(samples.begin(), samples.end(), isTooOld), samples.end());
 }
 
-float TouchVelocityTracker::calculateVelocityAtLift(FractionalSeconds liftTime) const
+double TouchVelocityTracker::calculateVelocityAtLift(FractionalSeconds liftTime) const
 {
     if (samples.size() < 2)
-        return 0.f;
+        return 0.0;
 
     const auto& first = samples.front();
     const auto& last = samples.back();
 
     if (liftTime - last.time > fingerRestBeforeLift)
-        return 0.f;
+        return 0.0;
 
     const auto elapsed = last.time - first.time;
 
     if (elapsed <= FractionalSeconds::zero())
-        return 0.f;
+        return 0.0;
 
-    const auto travel = (double) (last.position - first.position);
-    return (float) (travel / elapsed.count());
+    return (last.position - first.position) / elapsed.count();
 }
 } // namespace term

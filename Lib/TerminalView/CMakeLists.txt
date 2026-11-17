@@ -9,6 +9,7 @@ add_library(CowTermTerminal STATIC
         TerminalViewScrolling.cpp
         CellText.cpp
         CopyMode.cpp
+        ScrollIndicator.cpp
         ScrollMomentum.cpp
         ScrollPosition.cpp
         GridPainter.cpp

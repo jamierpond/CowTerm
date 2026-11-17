@@ -8,6 +8,7 @@ namespace term
 {
 using eacp::Graphics::Color;
 using eacp::Graphics::Point;
+using eacp::Graphics::Rect;
 
 namespace
 {
@@ -293,6 +294,13 @@ void GridPainter::drawCopyModeBadge(const std::string& indicator, float viewWidt
 
         pen.x += cellW;
     }
+}
+
+void GridPainter::drawScrollIndicator(const Rect& thumb, float opacity)
+{
+    constexpr auto scrollIndicatorAlpha = 0.5f;
+    const auto alpha = scrollIndicatorAlpha * opacity;
+    tools.sprites.fillRect(thumb, toColor(tools.theme.foreground, alpha));
 }
 
 // A plain cell is one glyph; only a grapheme cluster pays for shaping.

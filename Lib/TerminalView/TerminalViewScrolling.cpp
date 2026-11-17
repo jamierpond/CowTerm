@@ -20,20 +20,50 @@ void TerminalView::syncScrollPositionWithScrollback()
 {
     const auto totals = ScrollbackTotals {screen.countLinesEverAddedToScrollback(),
                                           screen.countLinesEverDroppedFromScrollback()};
-    scrollPosition.applyScrollbackTotals(totals, screen.scrollbackSize());
+    scrollPosition.applyScrollbackTotals(totals, calculateScrollRange());
+}
+
+void TerminalView::reportScrolledBackStateIfChanged()
+{
+    if (!scrollPosition.takeWhetherScrolledBackStateChanged())
+        return;
+
+    onScrolledBackStateChanged({!scrollPosition.isFollowingLiveBottom(),
+                                scrollPosition.countLinesArrivedWhileScrolledBack()});
+}
+
+ScrollRange TerminalView::calculateScrollRange() const
+{
+    return term::calculateScrollRange(
+        {screen.scrollbackSize(), screen.rows(), countViewportRows(), !screen.modes.altScreen});
+}
+
+// The alternate screen shows blank rows, not the primary screen's history,
+// above its grid.
+long TerminalView::findFirstShownAbsoluteRow() const
+{
+    if (screen.modes.altScreen)
+        return screen.scrollbackSize();
+
+    return 0;
+}
+
+bool TerminalView::isAbsoluteRowShown(long absoluteRow) const
+{
+    return absoluteRow >= findFirstShownAbsoluteRow();
 }
 
 int TerminalView::calculateLinesFromBottom() const
 {
-    return scrollPosition.calculateLinesFromBottom(screen.scrollbackSize());
+    return scrollPosition.calculateLinesFromBottom(calculateScrollRange());
 }
 
 // Rounded to whole device pixels, so glyphs land on the pixel grid the atlas
 // rasterized them for.
 float TerminalView::calculatePixelOffsetIntoTopRow() const
 {
-    const auto offsetInPoints =
-        (float) scrollPosition.getHiddenFractionOfTopRow() * atlas->cellHeight();
+    const auto hiddenFraction = static_cast<float>(scrollPosition.getHiddenFractionOfTopRow());
+    const auto offsetInPoints = hiddenFraction * atlas->cellHeight();
     const auto devicePixelsPerPoint = atlas->scale();
     return std::round(offsetInPoints * devicePixelsPerPoint) / devicePixelsPerPoint;
 }
@@ -42,9 +72,9 @@ float TerminalView::calculatePixelOffsetIntoTopRow() const
 int TerminalView::countRowsToDraw() const
 {
     if (calculatePixelOffsetIntoTopRow() > 0.f)
-        return screen.rows() + 1;
+        return countViewportRows() + 1;
 
-    return screen.rows();
+    return countViewportRows();
 }
 
 std::uint64_t TerminalView::countLinesArrivedWhileScrolledBack() const
@@ -63,20 +93,30 @@ void TerminalView::scrollToLiveBottom()
 
     scrollPosition.followLiveBottom();
     rowDrawings.invalidateAllRows();
+    reportScrolledBackStateIfChanged();
     repaintIfShown();
 }
 
 ScrollEdgeContact TerminalView::scrollByRows(double rows)
 {
     syncScrollPositionWithScrollback();
-    const auto contact = scrollPosition.scrollByRows(rows, screen.scrollbackSize());
+    const auto range = calculateScrollRange();
+    const auto contact = scrollPosition.scrollByRows(rows, range);
+
+    if (range.liveBottomTopRow > range.oldestTopRow)
+    {
+        scrollIndicatorFade.showForScroll();
+        updateContinuousRendering();
+    }
+
+    reportScrolledBackStateIfChanged();
     repaintIfShown();
     return contact;
 }
 
-ScrollEdgeContact TerminalView::scrollByPixels(float pixels)
+ScrollEdgeContact TerminalView::scrollByPixels(double pixels)
 {
-    return scrollByRows(convertWheelDeltaToLines(pixels, true, atlas->cellHeight()));
+    return scrollByRows(pixels / atlas->cellHeight());
 }
 
 void TerminalView::scrollBy(int lines)
@@ -87,19 +127,59 @@ void TerminalView::scrollBy(int lines)
 void TerminalView::stopScrollMomentum()
 {
     scrollMomentum.stop();
+    updateContinuousRendering();
+}
 
-    if (isContinuous())
-        setContinuous(false);
+// Frames run every refresh only while something moves: a coast, or the
+// scroll indicator before it has faded.
+void TerminalView::updateContinuousRendering()
+{
+    const auto isAnimating = scrollMomentum.isMoving() || scrollIndicatorFade.isVisible();
+
+    if (isAnimating != isContinuous())
+        setContinuous(isAnimating);
 }
 
 void TerminalView::update(Threads::FrameTime frameTime)
 {
     const auto lock = lockTerminal();
-    const auto pixels = scrollMomentum.advanceBy(FractionalSeconds {frameTime.delta});
-    const auto contact = scrollByPixels(pixels);
+    const auto elapsed = FractionalSeconds {frameTime.delta};
 
-    if (contact == ScrollEdgeContact::StoppedAtEdge || !scrollMomentum.isMoving())
-        stopScrollMomentum();
+    if (scrollMomentum.isMoving())
+    {
+        const auto pixels = scrollMomentum.advanceBy(elapsed);
+
+        if (scrollByPixels(pixels) == ScrollEdgeContact::StoppedAtEdge)
+            scrollMomentum.stop();
+    }
+
+    scrollIndicatorFade.advanceBy(elapsed);
+    updateContinuousRendering();
+    repaintIfShown();
+}
+
+void TerminalView::drawScrollIndicator(GridPainter& painter)
+{
+    constexpr auto indicatorWidth = 3.f;
+    constexpr auto indicatorInset = 3.f;
+
+    const auto range = calculateScrollRange();
+    const auto bounds = getLocalBounds();
+    const auto rowsFromOldest = findTopVisibleAbsoluteRow() - range.oldestTopRow;
+    const auto scrollableRows = range.liveBottomTopRow - range.oldestTopRow;
+    const auto layout = ScrollIndicatorLayout {
+        indicatorInset,
+        bounds.h - 2.f * indicatorInset,
+        static_cast<double>(scrollableRows),
+        static_cast<double>(countViewportRows()),
+        static_cast<double>(rowsFromOldest) + scrollPosition.getHiddenFractionOfTopRow()};
+    const auto thumb = calculateScrollIndicatorThumb(layout);
+    const auto thumbTop = static_cast<float>(thumb.top);
+    const auto thumbHeight = static_cast<float>(thumb.height);
+    const auto opacity = static_cast<float>(scrollIndicatorFade.calculateOpacity());
+    const auto left = bounds.w - indicatorInset - indicatorWidth;
+
+    painter.drawScrollIndicator({left, thumbTop, indicatorWidth, thumbHeight}, opacity);
 }
 
 void TerminalView::beginTouchScroll(const TouchEvent& touch)
@@ -142,7 +222,7 @@ void TerminalView::endTouchScroll(const TouchEvent& touch)
     endTouchScrollWithVelocity(touchVelocity.calculateVelocityAtLift(liftTime));
 }
 
-void TerminalView::endTouchScrollWithVelocity(float velocityPixelsPerSecond)
+void TerminalView::endTouchScrollWithVelocity(double velocityPixelsPerSecond)
 {
     const auto lock = lockTerminal();
     auto event = MouseEvent {};
@@ -154,9 +234,7 @@ void TerminalView::endTouchScrollWithVelocity(float velocityPixelsPerSecond)
         return;
 
     scrollMomentum.startFling(velocityPixelsPerSecond);
-
-    if (scrollMomentum.isMoving())
-        setContinuous(true);
+    updateContinuousRendering();
 }
 
 // ---- wheel -----------------------------------------------------------------
@@ -164,8 +242,9 @@ void TerminalView::endTouchScrollWithVelocity(float velocityPixelsPerSecond)
 int TerminalView::takeWholeWheelLines(float wheelDelta)
 {
     wheelRemainder += wheelDelta;
-    const auto lines = (int) wheelRemainder;
-    wheelRemainder -= (float) lines;
+    const auto wholeLines = std::trunc(wheelRemainder);
+    wheelRemainder -= wholeLines;
+    const auto lines = static_cast<int>(wholeLines);
     return lines;
 }
 

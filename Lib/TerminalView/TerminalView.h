@@ -8,6 +8,7 @@
 #include "KittyKeyEncoding.h"
 #include "RowDrawingCache.h"
 #include "OutputParserThread.h"
+#include "ScrollIndicator.h"
 #include "ScrollMomentum.h"
 #include "ScrollPosition.h"
 
@@ -28,6 +29,13 @@
 namespace term
 {
 inline constexpr float minFontSize = 7.0f;
+
+// Whether the reader is scrolled back, and how many lines arrived since.
+struct ScrolledBackState
+{
+    bool isScrolledBack = false;
+    std::uint64_t linesArrivedWhileScrolledBack = 0;
+};
 inline constexpr float maxFontSize = 40.0f;
 
 // Everything the widget takes from its host. A consumer fills the
@@ -124,12 +132,21 @@ public:
     void beginTouchScroll(const eacp::Graphics::TouchEvent& touch);
     void moveTouchScroll(const eacp::Graphics::TouchEvent& touch);
     void endTouchScroll(const eacp::Graphics::TouchEvent& touch);
-    void endTouchScrollWithVelocity(float velocityPixelsPerSecond);
+    void endTouchScrollWithVelocity(double velocityPixelsPerSecond);
 
     // Lines of output that arrived since the reader scrolled back; 0 at the
     // live bottom.
     std::uint64_t countLinesArrivedWhileScrolledBack() const;
     void scrollToLiveBottom();
+
+    // Fired when the view leaves or returns to the live bottom, and when a
+    // line arrives while it is scrolled back.
+    std::function<void(ScrolledBackState)> onScrolledBackStateChanged = [](ScrolledBackState) {};
+
+    // Fixes the grid the shell draws in, whatever the view's size. A view
+    // taller than the grid shows scrollback above it, the grid at the bottom.
+    // Without one (the default) the grid follows the view's bounds.
+    void setFixedGridSize(std::optional<PtySize> size);
 
     // A paste isPasteSafe rejects: the host asks the user, and calls
     // pasteAnyway if they confirm. Without a host it pastes, as before.
@@ -234,12 +251,20 @@ private:
                     const std::string& commandToRun);
     void scrollBy(int lines);
     ScrollEdgeContact scrollByRows(double rows);
-    ScrollEdgeContact scrollByPixels(float pixels);
+    ScrollEdgeContact scrollByPixels(double pixels);
     void stopScrollMomentum();
+    void updateContinuousRendering();
     void syncScrollPositionWithScrollback();
+    void reportScrolledBackStateIfChanged();
+    int countViewportRows() const;
+    ScrollRange calculateScrollRange() const;
+    bool isAbsoluteRowShown(long absoluteRow) const;
+    long findFirstShownAbsoluteRow() const;
     int calculateLinesFromBottom() const;
     float calculatePixelOffsetIntoTopRow() const;
     int countRowsToDraw() const;
+    void drawScrollIndicator(GridPainter& painter);
+    PtySize calculateGridSizeFromBounds() const;
 
     bool handleCopyModeKey(const eacp::Graphics::KeyEvent& event);
     void applyCopyModeCommand(const CopyModeCommand& command);
@@ -269,6 +294,9 @@ private:
 
     // The cell under a point, clamped to the grid.
     VisibleCell findCellUnderPointer(eacp::Graphics::Point pos) const;
+
+    // The grid cell under a point, for mouse reports to the program.
+    VisibleCell findGridCellUnderPointer(eacp::Graphics::Point pos) const;
     CellRef cellRefAt(eacp::Graphics::Point pos) const;
     void selectRow(CellRef cell);
     void selectWordAt(CellRef cell);
@@ -318,7 +346,9 @@ private:
     ScrollPosition scrollPosition;
     ScrollMomentum scrollMomentum;
     TouchVelocityTracker touchVelocity;
+    ScrollIndicatorFade scrollIndicatorFade;
     eacp::Graphics::Point lastTouchPosition;
+    std::optional<PtySize> fixedGridSize;
     float wheelRemainder = 0;
 
     bool selecting = false;

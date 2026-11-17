@@ -126,6 +126,9 @@ public:
     // tmux's position badge, top right.
     void drawCopyModeBadge(const std::string& indicator, float viewWidth);
 
+    // The scroll position bar on the right edge, at this opacity.
+    void drawScrollIndicator(const eacp::Graphics::Rect& thumb, float opacity);
+
 private:
     template <typename Visit>
     void forEachCellGlyph(const ResolvedCell& cell, Visit&& visit);
