@@ -83,7 +83,11 @@ is showing.
   PTY. With the keyboard down, the extra rows show scrollback.
 - Only the pane on screen is adopted and resized. The other 90 stay as the Mac
   left them.
-- The Mac reclaims its sizes when its window next receives input.
+- While the phone has the pane open on screen, every client keeps the phone's
+  size: the Mac draws the pane at that grid, narrow, at its normal font, with
+  the "on iPhone" note. Typing on the Mac does not take it back. The Mac gets
+  its size back when the phone leaves the pane or goes to the background, or
+  when he clicks the note.
 
 The cost is two reflows per pane per trip. Whether Claude Code leaves duplicate
 frames in scrollback after 150 → 49 → 150 is the first thing to test, before
@@ -346,7 +350,7 @@ the pane screen properly before anything else.
    150 → 49 → 150 and look at the scrollback; reach a daemon through libssh2
    from a command-line tool; build CowTerm's libraries for the simulator.
 2. The daemon changes 1, 2, 4 and 7 above, with the Mac app using them
-   ("on iPhone" banner, reclaim on input).
+   ("on iPhone" banner; click it to take the pane back).
 3. The pane screen: stored last screen, phone-owned size, per-pixel scrolling
    with momentum, reconnect on network change, composer, key row, bottom bar.
    This is the part to get right; it is tried on a real phone before the next
@@ -484,10 +488,17 @@ launched with `--landscape`, which is how landscape screenshots are taken.
 - Typing is marked as such (`write <id> input`) at TerminalView's typing and
   paste path, so a terminal's automatic replies never count as input.
 - The Mac calls itself "Mac" to other clients ("Windows" and "Linux"
-  elsewhere). Its "on iPhone, 49 columns; type here to take it back" banner
+  elsewhere). Its "on iPhone, 49 columns; click here to take it back" note
   uses the existing note over a pane (the one that says a connection was
-  lost). Typing in any pane takes back every pane on every machine that
-  another client holds.
+  lost). Jamie agreed the rule on 17 November, replacing "typing on the Mac
+  takes every pane back": while the phone holds a pane, the Mac draws it at
+  the phone's grid (`TerminalView::setFixedGridSize`, driven by the
+  `size-owner` notice through `Shell::onGridSetElsewhere`) and sends no resize
+  of its own for it, so the size it gets back is the one it had. A click on
+  the note sends `reclaim-sizes`. The phone sends `yield-size <id>` (new in
+  protocol 5; older daemons ignore it) when it goes to the background or its
+  link stalls, so the client that held the pane before takes it back while
+  the phone still watches it; it claims again on coming back.
 - The ssh link's hello and failure wording moved from `SshBridgeLink` into a
   `BridgeLink` base both links share, and `RemoteHost` takes a link factory.
   libssh2 is its own library (`CowTerm::EmbeddedSsh`), so ct, the daemon and

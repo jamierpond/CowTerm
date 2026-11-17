@@ -101,6 +101,12 @@ void TerminalView::startShell(const TerminalConfig& config,
             showShellStatus(status);
     };
 
+    shell->onGridSetElsewhere = [this, guard](std::optional<PtySize> size)
+    {
+        if (!guard.expired())
+            setFixedGridSize(size);
+    };
+
     shell->start(
         {{screen.columns(), screen.rows()},
          workingDirectory,
@@ -485,16 +491,6 @@ GridPainter TerminalView::makePainter()
 bool TerminalView::isCursorLayerVisible() const
 {
     return copyMode || scrollPosition.isFollowingLiveBottom() || !shellStatus.empty();
-}
-
-void TerminalView::showShellStatus(const std::string& status)
-{
-    {
-        const auto lock = lockTerminal();
-        shellStatus = status;
-    }
-
-    repaintIfShown();
 }
 
 std::string TerminalView::describeCopyModePosition() const
@@ -1202,6 +1198,9 @@ void TerminalView::mouseDown(const MouseEvent& event)
     const auto lock = lockTerminal();
     onFocused();
     mousePressOwner = MousePressOwner::Nobody;
+
+    if (isOnShellStatusNote(event.pos))
+        return shell->takeSizeBack();
 
     if (openHyperlinkUnderPointer(event))
         return;

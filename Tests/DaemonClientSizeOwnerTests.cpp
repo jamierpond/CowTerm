@@ -233,6 +233,8 @@ auto tDaemonWithSizeOwnersGetsNoSizeBack =
     auto phone = PhoneHoldingDeskPane {proto::sizeOwnerProtocolVersion};
 
     check(phone.recorded.client->returnBorrowedSizes().empty());
+    check(phone.recorded.sent == std::vector {proto::make("yield-size", {paneId})}, "the daemon gives it back itself");
+    phone.recorded.sent.clear();
     phone.recorded.client->release(paneId);
     check(phone.recorded.sent == std::vector {proto::make("release", {paneId})});
 };
@@ -278,4 +280,20 @@ auto tPhoneClaimsOnlyOnceTheListedPaneIsOpened =
               == sentBeforeInfo.end(),
           "no resize reaches the pane before the daemon's first state");
     check(recorded.hasSent(makeClaimMessage(phoneColumns, rows)));
+};
+
+auto tMacSendsNoSizeWhilePhoneHolds = test("DaemonClientSizeOwner/macSendsNoSizeWhileAPhoneHoldsThePane") = []
+{
+    constexpr auto deskColumns = 150;
+    auto recorded = ClientWithRecordedLink {};
+    recorded.client->spawn({paneId, {deskColumns, rows}, "/tmp", "Grazer", {}}, {});
+    recorded.link->deliver(makeSizeOwnerMessage(false, "iPhone"));
+    recorded.sent.clear();
+
+    recorded.client->resize(paneId, {phoneColumns, rows});
+    check(recorded.sent.empty(), "drawing the phone's grid must not become the Mac's size");
+
+    recorded.link->deliver(makeSizeOwnerMessage(true, "Mac"));
+    recorded.client->resize(paneId, {deskColumns, rows});
+    check(!recorded.sent.empty());
 };

@@ -19,6 +19,7 @@ bool OutputWatchingShell::start(const term::PtyOptions& options,
         onRestoreState(state);
     };
     inner->onStatusChanged = onStatusChanged;
+    inner->onGridSetElsewhere = onGridSetElsewhere;
 
     auto watchedOutput = [flag = flag, output = std::move(onOutput)](std::string bytes)
     {

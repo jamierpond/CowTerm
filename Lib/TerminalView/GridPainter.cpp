@@ -276,17 +276,24 @@ void GridPainter::drawBlockCursor(Point cellOrigin, const PaintedLine& line, int
     drawGlyphOverCursor(cellOrigin, line, column);
 }
 
+Rect calculateBadgeBounds(const std::string& indicator, const BadgeMetrics& metrics)
+{
+    const auto codepointCount = static_cast<float>(decodeUtf8(indicator).size());
+    const auto width = codepointCount * metrics.cellWidth + badgePadding * 2;
+    const auto left = metrics.viewWidth - width - metrics.margins.x;
+    return {left, metrics.margins.y, width, metrics.cellHeight};
+}
+
 void GridPainter::drawCopyModeBadge(const std::string& indicator, float viewWidth)
 {
     const auto cellW = tools.atlas.cellWidth();
     const auto codepoints = decodeUtf8(indicator);
-    const auto width = (float) codepoints.size() * cellW + badgePadding * 2;
-    const auto left = viewWidth - width - tools.margins.x;
+    const auto bounds =
+        calculateBadgeBounds(indicator, {viewWidth, cellW, tools.atlas.cellHeight(), tools.margins});
 
-    tools.sprites.fillRect({left, tools.margins.y, width, tools.atlas.cellHeight()},
-                           toColor(tools.theme.ansi[badgeAnsiColour]));
+    tools.sprites.fillRect(bounds, toColor(tools.theme.ansi[badgeAnsiColour]));
 
-    auto pen = Point {left + badgePadding, tools.margins.y + tools.atlas.baseline()};
+    auto pen = Point {bounds.x + badgePadding, tools.margins.y + tools.atlas.baseline()};
 
     // One glyph per codepoint: a byte at a time drew "…" as three
     // replacement glyphs.

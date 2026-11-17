@@ -340,6 +340,7 @@ private:
     bool isCursorBlinkingNow() const;
     void drawCopyMode(GridPainter& painter, const std::string& indicator);
     void showShellStatus(const std::string& status);
+    bool isOnShellStatusNote(eacp::Graphics::Point position) const;
     bool isCursorLayerVisible() const;
 
     Theme theme;

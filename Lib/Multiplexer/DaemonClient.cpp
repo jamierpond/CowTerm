@@ -266,9 +266,26 @@ std::optional<DaemonClient::ReturnedSize>
     return ReturnedSize {id, size};
 }
 
+// A daemon with size owners hands each pane this client holds back to the
+// client that held it before; it says which sizes, so nothing is listed here.
+void DaemonClient::yieldClaimedSizes()
+{
+    for (const auto& [id, route]: routes)
+    {
+        if (panesWithSizeReturned.insert(id).second)
+            send(proto::make("yield-size", {id}));
+    }
+}
+
 std::vector<DaemonClient::ReturnedSize> DaemonClient::returnBorrowedSizes()
 {
     auto returned = std::vector<ReturnedSize> {};
+
+    if (getClaimsSizeOfEveryPaneItShows() && doesDaemonKeepSizeOwners())
+    {
+        yieldClaimedSizes();
+        return returned;
+    }
 
     for (const auto& [id, size]: borrowedSizes)
     {
@@ -486,6 +503,11 @@ void DaemonClient::reclaimSizes()
     send(proto::make("reclaim-sizes"));
 }
 
+bool DaemonClient::isPaneHeldElsewhere(const std::string& id) const
+{
+    return panesHeldElsewhere.contains(id);
+}
+
 bool DaemonClient::hasPanesHeldElsewhere() const
 {
     return !panesHeldElsewhere.empty();
@@ -495,6 +517,11 @@ void DaemonClient::resize(const std::string& id, const PtySize& size)
 {
     if (getClaimsSizeOfEveryPaneItShows())
         return claimSize(id, size);
+
+    // The pane is drawn at the holder's grid meanwhile; sending that would
+    // replace the size the daemon gives back to this client when it lets go.
+    if (isPaneHeldElsewhere(id))
+        return;
 
     if (auto found = routes.find(id); found != routes.end())
         found->second.request.size = size;
@@ -550,20 +577,12 @@ namespace
 {
 using FindDaemon = std::function<DaemonClient*()>;
 
-// Typing in any pane takes back every pane a phone or another Mac holds, on
-// every machine, so the whole window returns to this client's sizes at once.
-void reclaimSizesOnEveryDaemon()
+std::optional<PtySize> findGridSetElsewhere(const DaemonClient::SizeOwnerNotice& notice)
 {
-    auto daemons = std::vector<DaemonClient*> {DaemonClient::get()};
+    if (notice.isThisClientTheOwner)
+        return std::nullopt;
 
-    for (auto* host: RemoteHosts::all())
-        daemons.push_back(&host->getDaemon());
-
-    for (auto* daemon: daemons)
-    {
-        if (daemon != nullptr && daemon->hasPanesHeldElsewhere())
-            daemon->reclaimSizes();
-    }
+    return notice.size;
 }
 
 // Shown over a pane whose size another client sets; cleared when it is back.
@@ -578,7 +597,7 @@ std::string describeSizeOwner(const DaemonClient::SizeOwnerNotice& notice)
         owner = "another device";
 
     return "on " + owner + ", " + std::to_string(notice.size.cols)
-           + " columns; type here to take it back";
+           + " columns; click here to take it back";
 }
 
 // A pane's shell living in a daemon, here or on another machine. The pane
@@ -619,8 +638,12 @@ public:
         routes.onExit = onExit;
         routes.onLinkLost = onStatusChanged;
         routes.onGone = [status = onStatusChanged, gone = describeGonePane()] { status(gone); };
-        routes.onSizeOwnerChanged = [status = onStatusChanged](const DaemonClient::SizeOwnerNotice& notice)
-        { status(describeSizeOwner(notice)); };
+        routes.onSizeOwnerChanged =
+            [status = onStatusChanged, setGrid = onGridSetElsewhere](const DaemonClient::SizeOwnerNotice& notice)
+        {
+            status(describeSizeOwner(notice));
+            setGrid(findGridSetElsewhere(notice));
+        };
         routes.onMissingCommand = [this, onOutput](const std::string& program)
         {
             closeOnNextKey = std::move(exitAfterNotice);
@@ -651,8 +674,6 @@ public:
         if (closeOnNextKey)
             return write(data);
 
-        reclaimSizesOnEveryDaemon();
-
         if (auto* client = findDaemon())
             client->writeUserInput(id, data);
     }
@@ -661,6 +682,12 @@ public:
     {
         if (auto* client = findDaemon())
             client->resize(id, size);
+    }
+
+    void takeSizeBack() override
+    {
+        if (auto* client = findDaemon(); client != nullptr && client->isPaneHeldElsewhere(id))
+            client->reclaimSizes();
     }
 
     std::string foregroundProcess() const override

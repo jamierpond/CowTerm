@@ -170,6 +170,29 @@ auto tMacResizeWaitsUntilItReclaims = test("DaemonPhoneProtocol/macResizeWaitsUn
     mac.messenger.send(term::proto::make("kill", {paneId}));
 };
 
+auto tPhoneInTheBackgroundYieldsThePane = test("DaemonPhoneProtocol/phoneInTheBackgroundYieldsThePane") = []
+{
+    auto daemon = TestDaemon {"daemon-yield-test"};
+    auto mac = DaemonConversation {daemon.instance};
+    auto phone = DaemonConversation {daemon.instance};
+    check(mac.waitForConnection() && phone.waitForConnection());
+    introduce(mac, "Mac");
+    introduce(phone, "iPhone");
+
+    createPane(mac, paneId, desktopColumns);
+    openPane(phone, paneId, phoneColumns);
+    phone.messenger.send(term::proto::make(
+        "claim-size", {paneId, toArgument(phoneColumns), toArgument(rows)}));
+    mac.waitForMessage("size-owner");
+    phone.waitForMessage("size-owner");
+
+    phone.messenger.send(term::proto::make("yield-size", {paneId}));
+    check(isSizeOwnerNotice(mac.waitForMessage("size-owner"), {desktopColumns, true, "Mac"}));
+    check(readPaneColumns(daemon.instance) == desktopColumns, "the Mac has its size back while the phone still watches");
+
+    mac.messenger.send(term::proto::make("kill", {paneId}));
+};
+
 auto tPhoneLeavingHandsThePaneBack = test("DaemonPhoneProtocol/phoneLeavingHandsThePaneBack") = []
 {
     auto daemon = TestDaemon {"daemon-owner-leaves-test"};

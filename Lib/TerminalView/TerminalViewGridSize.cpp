@@ -83,4 +83,26 @@ void TerminalView::setFixedGridSize(std::optional<PtySize> size)
     rowDrawings.invalidateAllRows();
     repaintIfShown();
 }
+// The note over a pane (a lost connection, another device holding its size)
+// sits at the top right; a click on it asks for the pane back.
+bool TerminalView::isOnShellStatusNote(Graphics::Point position) const
+{
+    if (shellStatus.empty() || copyMode)
+        return false;
+
+    const auto metrics =
+        BadgeMetrics {getLocalBounds().w, atlas->cellWidth(), atlas->cellHeight(), {marginX, marginY}};
+    return calculateBadgeBounds(shellStatus, metrics).contains(position);
+}
+
+void TerminalView::showShellStatus(const std::string& status)
+{
+    {
+        const auto lock = lockTerminal();
+        shellStatus = status;
+    }
+
+    repaintIfShown();
+}
+
 } // namespace term

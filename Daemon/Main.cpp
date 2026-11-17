@@ -203,6 +203,7 @@ struct Daemon
             MessageHandler {"resize", 3, &Daemon::handleResize},
             MessageHandler {"claim-size", 3, &Daemon::handleClaimSize},
             MessageHandler {"reclaim-sizes", 0, &Daemon::handleReclaimSizes},
+            MessageHandler {"yield-size", 1, &Daemon::handleYieldSize},
             MessageHandler {"last-input", 0, &Daemon::handleLastInput},
             MessageHandler {"pane-state", 2, &Daemon::handlePaneState},
             MessageHandler {"activity", 0, &Daemon::handleActivity},
@@ -318,6 +319,20 @@ struct Daemon
 
             if (auto size = pane->sizeOwner.reclaimSize(client.id))
                 applySize(id, *pane, *size);
+        }
+    }
+
+    // yield-size <id>: the sender stops holding the pane's size but keeps
+    // watching it (a phone gone to the background); the client that held it
+    // before takes it back.
+    void handleYieldSize(IPC::Messenger& sender, const term::proto::Message& message)
+    {
+        const auto& client = clients.at(&sender);
+
+        if (auto found = panes.find(message.args[0]); found != panes.end())
+        {
+            if (auto size = found->second->sizeOwner.forgetClient(client.id))
+                applySize(found->first, *found->second, *size);
         }
     }
 

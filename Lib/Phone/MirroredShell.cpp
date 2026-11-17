@@ -28,6 +28,8 @@ bool MirroredShell::start(const PtyOptions& options,
         restore(serialized);
     };
 
+    inner->onGridSetElsewhere = onGridSetElsewhere;
+
     inner->onStatusChanged = [note = onStatusNote, show = onStatusChanged](const std::string& status)
     {
         note(status);

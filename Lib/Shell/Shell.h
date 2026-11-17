@@ -3,6 +3,7 @@
 #include "Pty.h"
 
 #include <functional>
+#include <optional>
 #include <string>
 
 namespace term
@@ -48,6 +49,14 @@ public:
     // or empty to clear it; local shells never call it.
     std::function<void(const std::string&)> onStatusChanged =
         [](const std::string&) {};
+
+    // Set before start(). Another client holds the pane's size (a phone
+    // showing it): the pane is drawn at that grid until it is empty again.
+    std::function<void(std::optional<PtySize>)> onGridSetElsewhere = [](std::optional<PtySize>) {};
+
+    // The user asked for the pane back from whoever holds its size (a click
+    // on the note that says so). Nothing for a shell no one else can hold.
+    virtual void takeSizeBack() {}
 };
 
 // In-process shell: the pane owns the PTY directly. detach() still kills —

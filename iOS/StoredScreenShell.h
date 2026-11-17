@@ -33,6 +33,7 @@ public:
 
     void terminate() override { inner->terminate(); }
     void detach() override { inner->detach(); }
+    void takeSizeBack() override { inner->takeSizeBack(); }
 
 private:
     std::unique_ptr<term::Shell> inner;

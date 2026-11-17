@@ -141,11 +141,12 @@ public:
     // Takes back every pane another client holds, at this client's sizes.
     void reclaimSizes();
 
-    // A daemon from before size owners (protocol 4) never gives a pane back to
-    // the client that held it before. So a client that claims sizes keeps each
-    // pane's size from the first state the daemon sent for it, and puts it back
-    // by hand: on release, and here, when the app leaves the foreground or the
-    // link stalls. Nothing for a daemon that keeps size owners itself.
+    // When the app leaves the foreground or the link stalls, the panes this
+    // client holds go back to whoever held them before. A daemon with size
+    // owners does that itself, asked with yield-size. One from before size
+    // owners (protocol 4) never does, so a client that claims sizes keeps each
+    // pane's size from the first state the daemon sent for it and puts it back
+    // by hand, here and on release; only these are listed.
     std::vector<ReturnedSize> returnBorrowedSizes();
 
     // Claims again, at this client's size, each pane returnBorrowedSizes gave back.
@@ -161,6 +162,7 @@ public:
     }
 
     bool hasPanesHeldElsewhere() const;
+    bool isPaneHeldElsewhere(const std::string& id) const;
     void kill(const std::string& id);
     void release(const std::string& id);
 
@@ -202,6 +204,7 @@ private:
                                   const std::string& serializedState);
     bool doesDaemonKeepSizeOwners() const;
     bool hasSizeToReturn(const std::string& id) const;
+    void yieldClaimedSizes();
     std::optional<ReturnedSize> returnBorrowedSize(const std::string& id);
     void forgetBorrowedSize(const std::string& id);
     void handleMessage(const std::string& body);

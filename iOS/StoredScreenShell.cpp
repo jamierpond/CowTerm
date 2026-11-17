@@ -17,6 +17,7 @@ bool StoredScreenShell::start(const term::PtyOptions& options,
 
     inner->onRestoreState = onRestoreState;
     inner->onStatusChanged = onStatusChanged;
+    inner->onGridSetElsewhere = onGridSetElsewhere;
     return inner->start(options, std::move(onOutput), std::move(onExit));
 }
 } // namespace cowterm::mobile

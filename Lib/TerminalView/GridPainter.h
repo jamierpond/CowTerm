@@ -95,6 +95,18 @@ struct PaintTools
 // Draws the cell grid's layers: backgrounds as sprite runs, glyphs through
 // the instanced glyph renderer, decorations, cursors and the copy-mode badge.
 // Queues only; the caller begins and flushes the renderers in layer order.
+// What the note at the top right of a pane needs to know about the view.
+struct BadgeMetrics
+{
+    float viewWidth = 0.0f;
+    float cellWidth = 0.0f;
+    float cellHeight = 0.0f;
+    eacp::Graphics::Point margins;
+};
+
+// Where the note at the pane's top right goes, so a click can find it.
+eacp::Graphics::Rect calculateBadgeBounds(const std::string& indicator, const BadgeMetrics& metrics);
+
 class GridPainter
 {
 public:

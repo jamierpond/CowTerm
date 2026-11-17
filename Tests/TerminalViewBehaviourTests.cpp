@@ -6,7 +6,9 @@
 #include <NanoTest/NanoTest.h>
 
 #include <cmath>
+#include <functional>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -42,6 +44,9 @@ struct ShellRecording
 {
     std::string written;
     std::vector<PtySize> resizes;
+    int sizeTakeBacks = 0;
+    std::function<void(std::optional<PtySize>)> setGridHeldElsewhere;
+    std::function<void(const std::string&)> showStatus;
     std::function<void(std::string)> deliverOutput;
     std::function<void(const std::string&)> deliverRestoredState;
 };
@@ -60,6 +65,8 @@ public:
     {
         recording->deliverOutput = std::move(onOutput);
         recording->deliverRestoredState = onRestoreState;
+        recording->setGridHeldElsewhere = onGridSetElsewhere;
+        recording->showStatus = onStatusChanged;
         return true;
     }
 
@@ -69,6 +76,7 @@ public:
     std::string currentWorkingDirectory() const override { return {}; }
     void terminate() override {}
     void detach() override {}
+    void takeSizeBack() override { ++recording->sizeTakeBacks; }
 
 private:
     std::shared_ptr<ShellRecording> recording;
@@ -1489,4 +1497,36 @@ auto tCopyModeReattach = test("CopyMode/aReattachDropsTheSelectionInsteadOfCopyi
 
     check(pane.view->inCopyMode());
     check(pane.view->getSelectedText().empty());
+};
+
+auto tHeldPaneDrawsTheHoldersGrid = test("View/aPaneAPhoneHoldsIsDrawnAtThePhonesGrid") = []
+{
+    constexpr auto phoneColumns = 45;
+    constexpr auto phoneRows = 17;
+    auto pane = TestPane {};
+    const auto deskGrid = pane.recording->resizes.back();
+
+    pane.recording->setGridHeldElsewhere(PtySize {phoneColumns, phoneRows});
+    check(pane.recording->resizes.back().cols == phoneColumns);
+
+    pane.recording->setGridHeldElsewhere(std::nullopt);
+    check(pane.recording->resizes.back().cols == deskGrid.cols, "the desk's grid when the phone lets go");
+};
+
+auto tClickOnTheNoteTakesTheSizeBack = test("View/aClickOnTheOnIPhoneNoteTakesThePaneBack") = []
+{
+    constexpr auto noteText = "on iPhone, 45 columns; click here to take it back";
+    const auto pointInsideTheNote = Graphics::Point {viewWidth - marginX - 2.f, marginY + 2.f};
+    auto pane = TestPane {};
+    pane.recording->showStatus(noteText);
+    pane.takeWritten();
+
+    auto click = Graphics::MouseEvent {};
+    click.pos = pointInsideTheNote;
+    click.downPos = pointInsideTheNote;
+    click.button = Graphics::MouseButton::Left;
+    pane.view->mouseDown(click);
+
+    check(pane.recording->sizeTakeBacks == 1);
+    check(pane.takeWritten().empty(), "the click reaches no program");
 };
