@@ -128,6 +128,8 @@ void PaneScreen::showPane(const term::TerminalConfig& config, const std::string&
     terminal = std::make_unique<term::TerminalView>(config, std::string {}, paneId);
     terminal->onScrolledBackStateChanged = [this](term::ScrolledBackState state)
     { showScrolledBackState(state); };
+    terminal->confirmUnsafePaste = [this](const std::string& text, const Callback& paste)
+    { pasteConfirmation.ask(text, paste); };
 
     addChildren({*terminal, touchSurface, topLineHost, bottomBarHost, pillHost});
     typing.addTo(*this);
@@ -154,6 +156,7 @@ void PaneScreen::setLinkStatus(const LinkStatus& linkToShow)
     topLine.link = link;
     topLine.repaint();
     showLinkStateOnPane();
+    typing.setLinkLive(isLive());
 }
 
 void PaneScreen::showLinkStateOnPane()
@@ -290,6 +293,11 @@ void PaneScreen::refreshWhatChangesOverTime()
 void PaneScreen::raiseKeyboard()
 {
     typing.raiseKeyboard();
+}
+
+void PaneScreen::composeAndSend(const std::string& text)
+{
+    typing.composeAndSend(text);
 }
 
 void PaneScreen::switchToRawMode()

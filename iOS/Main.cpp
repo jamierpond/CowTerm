@@ -29,6 +29,9 @@ constexpr auto samplePaneCount = 3;
 constexpr auto streamedLinesPerSecond = 10;
 constexpr auto scrollBackDelay = Time::MS {5000};
 
+// Long enough for the keyboard to have come up, so the composer is on screen.
+constexpr auto composeDelay = Time::MS {1500};
+
 constexpr std::string_view sampleScreenText =
     "\x1b[1;32mjamie@tamby\x1b[0m:\x1b[1;34m~/projects/CowTerm\x1b[0m$ git status\r\n"
     "On branch \x1b[1mjp/ios-app\x1b[0m\r\n"
@@ -117,6 +120,7 @@ struct LaunchOptions
     bool streamsOutput = false;
     bool scrollsBack = false;
     bool typesRaw = false;
+    std::string composedText;
     bool showsOverview = false;
     cowterm::mobile::LinkState linkState = cowterm::mobile::LinkState::Live;
     int paneCount = samplePaneCount;
@@ -173,11 +177,17 @@ void applyLaunchValue(LaunchOptions& options, std::string_view argument)
 {
     constexpr auto linkPrefix = std::string_view {"--link="};
     constexpr auto panesPrefix = std::string_view {"--panes="};
+    constexpr auto composePrefix = std::string_view {"--compose="};
 
     if (argument.starts_with(linkPrefix))
     {
         options.linkState =
             parseLinkState(argument.substr(linkPrefix.size())).value_or(options.linkState);
+    }
+    else if (argument.starts_with(composePrefix))
+    {
+        options.composedText = std::string {argument.substr(composePrefix.size())};
+        std::ranges::replace(options.composedText, '|', '\n');
     }
     else if (argument.starts_with(panesPrefix))
     {
@@ -339,6 +349,12 @@ struct CowTermMobileApp
 
         if (launchOptions.raisesSoftwareKeyboard)
             screen.raiseKeyboard();
+
+        if (!launchOptions.composedText.empty())
+        {
+            Threads::callAfter(composeDelay,
+                               [this] { screen.composeAndSend(launchOptions.composedText); });
+        }
 
         if (launchOptions.turnsToLandscape)
             cowterm::mobile::requestLandscapeInterfaceOrientation(window);

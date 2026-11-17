@@ -34,8 +34,15 @@ public:
 
     void raiseKeyboard();
 
+    // Puts text in the composer and sends it, as return would.
+    void composeAndSend(const std::string& text);
+
     // Raw mode on, as the key row's switch turns it on.
     void switchToRawMode();
+
+    // While the link is down a sent message waits in the composer, marked
+    // unsent, and goes when the link is live again.
+    void setLinkLive(bool isLive);
 
     // Raw mode changed, so the screen lays out again.
     std::function<void()> onLayoutChanged = [] {};
@@ -50,6 +57,7 @@ private:
     void toggleRawMode();
     void lowerKeyboard();
     void showKeyRowState();
+    void showWhetherUnsent();
 
     term::Theme theme;
     std::function<term::TerminalView&()> findTerminal;
@@ -61,5 +69,7 @@ private:
     ComposerHistory history;
     ControlLatch controlLatch;
     bool isRawMode = false;
+    bool isLinkLive = true;
+    bool isHoldingUnsent = false;
 };
 } // namespace cowterm::mobile

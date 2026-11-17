@@ -9,6 +9,8 @@ namespace
 constexpr auto composerFont = "JetBrains Mono";
 constexpr auto composerFontSize = 15.0f;
 constexpr auto composerBrightening = 0.06f;
+constexpr auto ansiRed = 1;
+constexpr auto unsentTintAmount = 0.25f;
 constexpr auto newline = "\n";
 constexpr auto enter = "\r";
 
@@ -24,11 +26,19 @@ TypingControls::TypingControls(const term::Theme& themeToUse,
     , findTerminal(std::move(findTerminalToUse))
 {
     composer.setFont(composerFont, composerFontSize);
-    composer.setColours(term::toColor(theme.foreground),
-                        term::toColor(theme.background).brighter(composerBrightening));
+    showWhetherUnsent();
     composer.onIncomingText = [this](const std::string& incoming)
     { return takeIncomingComposerText(incoming); };
-    composer.onTextChanged = [this] { history.stopRecalling(); };
+    composer.onTextChanged = [this]
+    {
+        history.stopRecalling();
+
+        if (composer.getText().empty() && isHoldingUnsent)
+        {
+            isHoldingUnsent = false;
+            showWhetherUnsent();
+        }
+    };
 
     keyRowHost.setBackgroundColour(term::toColor(theme.background));
     keyRowHost.setRootComponent(keyRow);
@@ -77,6 +87,12 @@ void TypingControls::raiseKeyboard()
     }
 
     composer.startEditing();
+}
+
+void TypingControls::composeAndSend(const std::string& text)
+{
+    composer.setText(text);
+    sendComposedText();
 }
 
 void TypingControls::lowerKeyboard()
@@ -158,10 +174,42 @@ bool TypingControls::takeIncomingComposerText(const std::string& incoming)
     return true;
 }
 
+void TypingControls::setLinkLive(bool isLive)
+{
+    isLinkLive = isLive;
+
+    if (isLinkLive && isHoldingUnsent)
+        sendComposedText();
+}
+
+// The composer's field turns red while it holds a message that has not gone.
+void TypingControls::showWhetherUnsent()
+{
+    const auto field = term::toColor(theme.background).brighter(composerBrightening);
+    const auto unsentRed = term::toColor(theme.ansi[ansiRed]);
+
+    const auto text = term::toColor(theme.foreground);
+
+    if (isHoldingUnsent)
+        composer.setColours(text, field.interpolatedWith(unsentRed, unsentTintAmount));
+    else
+        composer.setColours(text, field);
+}
+
 void TypingControls::sendComposedText()
 {
     const auto text = composer.getText();
     auto& terminal = findTerminal();
+
+    if (!isLinkLive)
+    {
+        isHoldingUnsent = !text.empty();
+        showWhetherUnsent();
+        return;
+    }
+
+    isHoldingUnsent = false;
+    showWhetherUnsent();
 
     if (text.empty())
     {

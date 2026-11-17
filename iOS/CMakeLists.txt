@@ -15,11 +15,15 @@ eacp_add_app(CowTermMobile
         StoredScreenShell.cpp
         Typing.cpp
         TypingControls.cpp
+        ${PROJECT_SOURCE_DIR}/Terminal/NotifyUserPrompt.cpp
+        ${PROJECT_SOURCE_DIR}/Terminal/PasteConfirmation.cpp
         BUNDLE_ID audio.pond.cowterm.mobile
         DISPLAY_NAME "CowTerm")
 
 target_link_libraries(CowTermMobile PRIVATE
         CowTerm::TerminalView CowTerm::Multiplexer CowTerm::Phone eacp-ui "-framework Network")
+# The Mac's paste confirmation, reused as it is.
+target_include_directories(CowTermMobile PRIVATE ${PROJECT_SOURCE_DIR}/Terminal)
 set_target_properties(CowTermMobile PROPERTIES MACOSX_BUNDLE TRUE)
 
 # The Mac app's JetBrains Mono, embedded the same way.

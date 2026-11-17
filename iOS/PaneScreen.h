@@ -4,6 +4,7 @@
 #include "PaneScreenInputs.h"
 #include "TypingControls.h"
 
+#include "PasteConfirmation.h"
 #include "TerminalView/TerminalView.h"
 
 #include <eacp/Core/Threads/Timer.h>
@@ -67,6 +68,7 @@ public:
     // ⌨: the composer with the keyboard up, or the pane itself in raw mode.
     void raiseKeyboard();
     void switchToRawMode();
+    void composeAndSend(const std::string& text);
 
     void resized() override;
     void safeAreaInsetsChanged() override;
@@ -113,6 +115,9 @@ private:
     ActionMenu menu {theme};
 
     TypingControls typing {theme, [this]() -> term::TerminalView& { return *terminal; }};
+
+    term::AppConfig pasteConfig;
+    term::PasteConfirmation pasteConfirmation {pasteConfig};
 
     eacp::Threads::Timer refreshTimer;
 };
