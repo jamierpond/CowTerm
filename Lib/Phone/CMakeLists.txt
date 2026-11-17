@@ -7,6 +7,7 @@ add_library(CowTermPhone STATIC
         MirroredShell.cpp
         PaneChoice.cpp
         PhoneConnection.cpp
+        PhoneOverview.cpp
         PhoneSettings.cpp
         StoredScreen.cpp)
 

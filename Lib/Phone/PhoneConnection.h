@@ -3,6 +3,7 @@
 #include "LinkWatch.h"
 #include "MirroredShell.h"
 #include "PaneChoice.h"
+#include "PhoneOverview.h"
 #include "PhoneSettings.h"
 #include "StoredScreen.h"
 
@@ -59,6 +60,14 @@ public:
     // shows it through makeShell.
     bool choosePaneOfSession(const std::string& paneId);
 
+    // The overview's rows from every host in the settings.
+    PhoneOverview& getOverview() { return overview; }
+
+    // Makes the row's session the chosen one, on the pane typed into last,
+    // else its first, and only one the host's daemon lists. The pane to show
+    // through makeShell, or empty when the daemon lists none of its panes.
+    std::optional<std::string> openSession(const overview::OverviewRow& row);
+
     // The app went to the background: store the shown screen now.
     void handleBackground();
 
@@ -75,15 +84,18 @@ public:
 
 private:
     RemoteHost& getRemoteHost() const;
-    std::unique_ptr<BridgeLink> makeWatchedLink();
+    std::unique_ptr<BridgeLink> makeWatchedLink(const std::string& requestedHost);
+    void connectOverviewHost(RemoteHost& remote);
     void handleHostChanged();
-    void handleUnhandledMessage(const std::string& verb, const std::string& body);
+    void handleUnhandledMessage(const std::string& fromHost, const std::string& verb, const std::string& body);
+    void redialUnreachableOverviewHosts();
+    const std::string& findShownHost() const;
     bool isWaitingToAskForLastInput() const;
     bool hasGivenUpOnLastInput(Milliseconds now) const;
     void storeShownScreenWhileLive(Milliseconds now);
     void askForLastInput();
     void choosePaneWhenKnown();
-    std::vector<ListedPane> listPanes() const;
+    std::vector<ListedPane> listPanes(const std::string& onHost) const;
     void storeShownScreen();
     void updateLinkState();
 
@@ -91,6 +103,8 @@ private:
     BridgeLinkFactory makeLink;
     Clock readClock;
     std::string host;
+    std::vector<std::string> overviewHosts;
+    PhoneOverview overview;
     LinkWatch watch;
     PhoneLinkState linkState = PhoneLinkState::Connecting;
     std::shared_ptr<PaneMirror> mirror = std::make_shared<PaneMirror>();
@@ -107,7 +121,7 @@ private:
 Milliseconds getMillisecondsSinceEpoch();
 Milliseconds readSteadyClock();
 
-// The phone's link: EmbeddedSshLink to the settings' destination, running
-// their bridge command.
+// The phone's link to each host: EmbeddedSshLink to the settings' destination
+// with that "user@host", running their bridge command.
 BridgeLinkFactory makeEmbeddedSshLinkFactory(const PhoneSettings& settings);
 } // namespace term::phone

@@ -3,6 +3,7 @@
 #include "Multiplexer/BridgeLink.h"
 
 #include <functional>
+#include <map>
 #include <memory>
 #include <optional>
 #include <string>
@@ -36,12 +37,15 @@ struct RecordingLinkFactory
             requestedHosts.push_back(requestedHost);
             auto link = std::make_unique<RecordingBridgeLink>(requestedHost);
             lastLink = std::ref(*link);
+            linksByHost.insert_or_assign(requestedHost, std::ref(*link));
             return link;
         };
     }
 
     RecordingBridgeLink& getLastLink() { return lastLink->get(); }
+    RecordingBridgeLink& getLinkFor(const std::string& host) { return linksByHost.at(host).get(); }
 
     std::vector<std::string> requestedHosts;
     std::optional<std::reference_wrapper<RecordingBridgeLink>> lastLink;
+    std::map<std::string, std::reference_wrapper<RecordingBridgeLink>> linksByHost;
 };

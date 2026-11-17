@@ -293,6 +293,7 @@ if (TARGET CowTerm::EmbeddedSsh)
             SOURCES
                 PhoneTests.cpp
                 PhoneConnectionTests.cpp
+                PhoneOverviewTests.cpp
             TARGETS CowTerm::Phone)
 endif ()
 

@@ -20,6 +20,30 @@ constexpr auto tickInterval = Time::MS {500};
 constexpr auto lastInputAnswerWait = Milliseconds {2000};
 constexpr auto storeIntervalWhileLive = Milliseconds {10000};
 
+std::vector<std::string> listOverviewHosts(const PhoneSettings& settings)
+{
+    auto hosts = std::vector<std::string> {makeHostLabel(settings.destination)};
+
+    for (const auto& destination: settings.overviewDestinations)
+    {
+        const auto label = makeHostLabel(destination);
+
+        if (std::ranges::find(hosts, label) == hosts.end())
+            hosts.push_back(label);
+    }
+
+    return hosts;
+}
+
+std::vector<std::string> makeSearchDirs(const std::vector<std::string>& hosts)
+{
+    auto searchDirs = std::vector<std::string> {};
+
+    for (const auto& host: hosts)
+        searchDirs.push_back(remote::makeRemoteProjectDir(host, remoteHomeDirectory));
+
+    return searchDirs;
+}
 } // namespace
 
 Milliseconds readSteadyClock()
@@ -30,8 +54,18 @@ Milliseconds readSteadyClock()
 
 BridgeLinkFactory makeEmbeddedSshLinkFactory(const PhoneSettings& settings)
 {
-    return [settings](const std::string&) -> std::unique_ptr<BridgeLink>
-    { return std::make_unique<EmbeddedSshLink>(settings.destination, settings.credentials, settings.bridgeCommand); };
+    return [settings](const std::string& hostLabel) -> std::unique_ptr<BridgeLink>
+    {
+        auto destination = settings.destination;
+
+        for (const auto& candidate: settings.overviewDestinations)
+        {
+            if (makeHostLabel(candidate) == hostLabel)
+                destination = candidate;
+        }
+
+        return std::make_unique<EmbeddedSshLink>(destination, settings.credentials, settings.bridgeCommand);
+    };
 }
 
 Milliseconds getMillisecondsSinceEpoch()
@@ -46,7 +80,9 @@ PhoneConnection::PhoneConnection(PhoneSettings settingsToUse,
     : settings(std::move(settingsToUse))
     , makeLink(std::move(makeLinkToUse))
     , readClock(std::move(readClockToUse))
-    , host(settings.destination.user + "@" + settings.destination.host)
+    , host(makeHostLabel(settings.destination))
+    , overviewHosts(listOverviewHosts(settings))
+    , overview(overviewHosts)
 {
     DaemonClient::setClientName(phoneClientName);
     DaemonClient::setClaimsSizeOfEveryPaneItShows(true);
@@ -54,14 +90,23 @@ PhoneConnection::PhoneConnection(PhoneSettings settingsToUse,
     watch.noteReconnecting(readClock());
 
     auto config = AppConfig {};
-    config.searchDirs = {remote::makeRemoteProjectDir(host, remoteHomeDirectory)};
-    RemoteHosts::configure(config, [this](const std::string&) { return makeWatchedLink(); });
+    config.searchDirs = makeSearchDirs(overviewHosts);
+    RemoteHosts::configure(config, [this](const std::string& requestedHost) { return makeWatchedLink(requestedHost); });
+
+    for (const auto& overviewHost: overviewHosts)
+        connectOverviewHost(*RemoteHosts::find(overviewHost));
 
     auto& remote = getRemoteHost();
-    remote.onChanged = [this] { handleHostChanged(); };
-    remote.onUnhandledMessage = [this](RemoteHost&, const std::string& verb, const std::string& body)
-    { handleUnhandledMessage(verb, body); };
-    remote.getDaemon().onInfoChanged = [this] { choosePaneWhenKnown(); };
+    remote.onChanged = [this]
+    {
+        handleHostChanged();
+        overview.handleInfoChanged();
+    };
+    remote.getDaemon().onInfoChanged = [this]
+    {
+        choosePaneWhenKnown();
+        overview.handleInfoChanged();
+    };
 
     tickTimer = std::make_unique<Threads::Timer>(
         [this, guard = std::weak_ptr<bool> {alive}]
@@ -73,6 +118,14 @@ PhoneConnection::PhoneConnection(PhoneSettings settingsToUse,
                                });
         },
         tickInterval);
+}
+
+void PhoneConnection::connectOverviewHost(RemoteHost& remote)
+{
+    remote.onChanged = [this] { overview.handleInfoChanged(); };
+    remote.getDaemon().onInfoChanged = [this] { overview.handleInfoChanged(); };
+    remote.onUnhandledMessage = [this](RemoteHost& from, const std::string& verb, const std::string& body)
+    { handleUnhandledMessage(from.getHost(), verb, body); };
 }
 
 PhoneConnection::~PhoneConnection()
@@ -90,13 +143,15 @@ std::unique_ptr<Shell> PhoneConnection::makeShell(const std::string& paneId)
     if (chosenPane && chosenPane->paneId == paneId)
         sessionName = chosenPane->sessionName;
 
+    const auto& paneHost = findShownHost();
+
     auto noteStatus = [this, guard = std::weak_ptr<bool> {alive}](const std::string& status)
     {
         if (!guard.expired())
             onPaneStatus(status);
     };
 
-    return std::make_unique<MirroredShell>(makeRemoteShell(paneId, host, sessionName), mirror, noteStatus);
+    return std::make_unique<MirroredShell>(makeRemoteShell(paneId, paneHost, sessionName), mirror, noteStatus);
 }
 
 std::string PhoneConnection::getFailureReason() const
@@ -112,7 +167,40 @@ void PhoneConnection::handleBackground()
 void PhoneConnection::handleWake()
 {
     watch.noteWokeUp(readClock());
+    redialUnreachableOverviewHosts();
     handleTick();
+}
+
+// The shown host has the link watch; the others only need waking from backoff.
+void PhoneConnection::redialUnreachableOverviewHosts()
+{
+    for (const auto& overviewHost: overviewHosts)
+    {
+        auto& remote = *RemoteHosts::find(overviewHost);
+
+        if (overviewHost != host && remote.getStatus() == RemoteHost::Status::Unreachable)
+            remote.reconnectNow();
+    }
+}
+
+const std::string& PhoneConnection::findShownHost() const
+{
+    if (chosenPane)
+        return chosenPane->host;
+
+    return host;
+}
+
+std::optional<std::string> PhoneConnection::openSession(const overview::OverviewRow& row)
+{
+    const auto paneId = overview.findPaneToOpen(row);
+
+    if (!paneId)
+        return std::nullopt;
+
+    chosenPane = ChosenPane {row.host, *paneId, row.sessionName, row.paneIds};
+    onPaneChosen(*chosenPane);
+    return paneId;
 }
 
 RemoteHost& PhoneConnection::getRemoteHost() const
@@ -120,10 +208,13 @@ RemoteHost& PhoneConnection::getRemoteHost() const
     return *RemoteHosts::find(host);
 }
 
-std::unique_ptr<BridgeLink> PhoneConnection::makeWatchedLink()
+std::unique_ptr<BridgeLink> PhoneConnection::makeWatchedLink(const std::string& requestedHost)
 {
-    auto link = makeLink(host);
-    link->onBytesReceived = [this] { watch.noteBytesHeard(readClock()); };
+    auto link = makeLink(requestedHost);
+
+    if (requestedHost == host)
+        link->onBytesReceived = [this] { watch.noteBytesHeard(readClock()); };
+
     return link;
 }
 
@@ -161,9 +252,14 @@ void PhoneConnection::askForLastInput()
     daemon.send(proto::make("info"));
 }
 
-void PhoneConnection::handleUnhandledMessage(const std::string& verb, const std::string& body)
+void PhoneConnection::handleUnhandledMessage(const std::string& fromHost,
+                                             const std::string& verb,
+                                             const std::string& body)
 {
-    if (verb != "last-input")
+    if (verb == "activity")
+        return overview.handleActivity(fromHost, proto::parse(body).payload);
+
+    if (verb != "last-input" || fromHost != host)
         return;
 
     lastInputPane = parseLastInputPane(body);
@@ -203,12 +299,10 @@ void PhoneConnection::storeShownScreenWhileLive(Milliseconds now)
 
 void PhoneConnection::choosePaneWhenKnown()
 {
-    const auto panes = listPanes();
-
     if (!chosenPane)
     {
         const auto isReadyToChoose = !settings.explicitPaneId.empty() || hasLastInputAnswer;
-        const auto paneId = choosePaneToOpen(settings.explicitPaneId, lastInputPane, panes);
+        const auto paneId = choosePaneToOpen(settings.explicitPaneId, lastInputPane, listPanes(host));
 
         if (!isReadyToChoose || !paneId)
             return;
@@ -216,7 +310,9 @@ void PhoneConnection::choosePaneWhenKnown()
         chosenPane = ChosenPane {host, *paneId, {}, {}};
     }
 
-    chosenPane->sessionName = getRemoteHost().getDaemon().infoFor(chosenPane->paneId).sessionName;
+    const auto panes = listPanes(chosenPane->host);
+    auto& daemon = RemoteHosts::find(chosenPane->host)->getDaemon();
+    chosenPane->sessionName = daemon.infoFor(chosenPane->paneId).sessionName;
     chosenPane->sessionPaneIds = listPanesOfSession(panes, chosenPane->sessionName);
     onPaneChosen(*chosenPane);
 }
@@ -236,9 +332,9 @@ bool PhoneConnection::choosePaneOfSession(const std::string& paneId)
     return true;
 }
 
-std::vector<ListedPane> PhoneConnection::listPanes() const
+std::vector<ListedPane> PhoneConnection::listPanes(const std::string& onHost) const
 {
-    auto& daemon = getRemoteHost().getDaemon();
+    auto& daemon = RemoteHosts::find(onHost)->getDaemon();
     auto panes = std::vector<ListedPane> {};
 
     for (const auto& id: daemon.listShellIds())
@@ -258,7 +354,7 @@ void PhoneConnection::storeShownScreen()
         sessionName = chosenPane->sessionName;
 
     saveStoredScreen(settings.storedScreenPath,
-                     {host, shownPaneId, sessionName, getMillisecondsSinceEpoch(), mirror->model.captureState()});
+                     {findShownHost(), shownPaneId, sessionName, getMillisecondsSinceEpoch(), mirror->model.captureState()});
 }
 
 void PhoneConnection::updateLinkState()
