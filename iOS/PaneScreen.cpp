@@ -99,11 +99,12 @@ PaneScreen::PaneScreen(const term::TerminalConfig& config, const std::string& pa
 
     bottomBar.actions.onPreviousSession = [this] { actions.onPreviousSession(); };
     bottomBar.actions.onChoosePane = [this](int index) { actions.onChoosePane(index); };
-    bottomBar.actions.onKeyboard = [this] { showSoftwareKeyboard(); };
+    bottomBar.actions.onKeyboard = [this] { raiseKeyboard(); };
     bottomBar.actions.onOpenMenu = [this] { openMenu(); };
     bottomBar.actions.onOverview = [this] { actions.onOverview(); };
     pill.onReturnToBottom = [this] { returnToLiveBottom(); };
     menu.onClose = [this] { closeMenu(); };
+    typing.onLayoutChanged = [this] { layOutParts(); };
 
     pillHost.setVisible(false);
     menuHost.setVisible(false);
@@ -128,7 +129,10 @@ void PaneScreen::showPane(const term::TerminalConfig& config, const std::string&
     terminal->onScrolledBackStateChanged = [this](term::ScrolledBackState state)
     { showScrolledBackState(state); };
 
-    addChildren({*terminal, touchSurface, topLineHost, bottomBarHost, pillHost, menuHost});
+    addChildren({*terminal, touchSurface, topLineHost, bottomBarHost, pillHost});
+    typing.addTo(*this);
+    typing.connectTerminal(*terminal);
+    addSubview(menuHost);
     pillHost.setVisible(false);
     showLinkStateOnPane();
     layOutParts();
@@ -169,8 +173,13 @@ void PaneScreen::setSoftwareKeyboardChange(const Graphics::SoftwareKeyboardChang
 {
     softwareKeyboardCoveredHeight = change.coveredHeight;
 
+    // The tallest keyboard seen, so moving between the composer's keyboard and
+    // raw mode's, which has no suggestion bar, never resizes the shell.
     if (change.coveredHeight > 0.0f && !isLandscape())
-        portraitSoftwareKeyboardHeight = change.coveredHeight;
+    {
+        portraitSoftwareKeyboardHeight =
+            std::max(portraitSoftwareKeyboardHeight.value_or(0.0f), change.coveredHeight);
+    }
 
     layOutParts();
 }
@@ -228,16 +237,38 @@ Graphics::Insets PaneScreen::calculateInsetsAroundParts() const
     return insets;
 }
 
+bool PaneScreen::isKeyboardUp() const
+{
+    return softwareKeyboardCoveredHeight > 0.0f;
+}
+
+// With the keyboard up the bottom bar gives way to the composer and key row.
 void PaneScreen::layOutParts()
 {
     const auto bounds = getLocalBounds();
-    const auto rects = calculatePaneScreenRects(bounds, calculateInsetsAroundParts());
+    const auto insets = calculateInsetsAroundParts();
+    auto paneArea = Graphics::Rect {};
 
-    terminal->setBounds(rects.pane);
-    touchSurface.setBounds(rects.pane);
-    topLineHost.setBounds(rects.topLine);
-    bottomBarHost.setBounds(rects.bottomBar.withHeight(bounds.bottom() - rects.bottomBar.y));
-    pillHost.setBounds(calculateNewLinesPillBounds(rects.pane, pillWidth));
+    if (isKeyboardUp())
+    {
+        const auto rects = calculateTypingRects(bounds, insets, typing.showsComposer());
+        paneArea = rects.pane;
+        topLineHost.setBounds(rects.topLine);
+        typing.layOut(rects, true);
+    }
+    else
+    {
+        const auto rects = calculatePaneScreenRects(bounds, insets);
+        paneArea = rects.pane;
+        topLineHost.setBounds(rects.topLine);
+        bottomBarHost.setBounds(rects.bottomBar.withHeight(bounds.bottom() - rects.bottomBar.y));
+        typing.layOut({}, false);
+    }
+
+    bottomBarHost.setVisible(!isKeyboardUp());
+    terminal->setBounds(paneArea);
+    touchSurface.setBounds(paneArea);
+    pillHost.setBounds(calculateNewLinesPillBounds(paneArea, pillWidth));
     menuHost.setBounds(bounds.inset(getSafeAreaInsets()));
     fixGridAtKeyboardUpSize();
 }
@@ -256,10 +287,14 @@ void PaneScreen::refreshWhatChangesOverTime()
         topLine.repaint();
 }
 
-void PaneScreen::showSoftwareKeyboard()
+void PaneScreen::raiseKeyboard()
 {
-    terminal->setWantsTextInput(true);
-    terminal->focus();
+    typing.raiseKeyboard();
+}
+
+void PaneScreen::switchToRawMode()
+{
+    typing.switchToRawMode();
 }
 
 void PaneScreen::returnToLiveBottom()
@@ -274,7 +309,7 @@ std::vector<MenuAction> PaneScreen::listMenuActions()
     const auto previousPane = std::max(pane.activePaneIndex - 1, 0);
 
     return {
-        {"Keyboard", "\xe2\x8c\xa8", true, [this] { showSoftwareKeyboard(); }},
+        {"Keyboard", "\xe2\x8c\xa8", true, [this] { raiseKeyboard(); }},
         {"Back to the bottom", "\xe2\x86\x93 n new", true, [this] { returnToLiveBottom(); }},
         {"Next pane", "swipe left on bar", hasOtherPanes,
          [this, nextPane] { actions.onChoosePane(nextPane); }},

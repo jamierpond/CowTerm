@@ -112,6 +112,7 @@ struct LaunchOptions
     bool opensMenu = false;
     bool streamsOutput = false;
     bool scrollsBack = false;
+    bool typesRaw = false;
     bool showsOverview = false;
     cowterm::mobile::LinkState linkState = cowterm::mobile::LinkState::Live;
     int paneCount = samplePaneCount;
@@ -146,6 +147,7 @@ constexpr LaunchSwitch launchSwitches[] = {
     {"--menu", &LaunchOptions::opensMenu},
     {"--stream", &LaunchOptions::streamsOutput},
     {"--scroll-back", &LaunchOptions::scrollsBack},
+    {"--raw", &LaunchOptions::typesRaw},
     {"--overview", &LaunchOptions::showsOverview},
 };
 
@@ -318,11 +320,11 @@ struct CowTermMobileApp
 
     void applyLaunchOptions()
     {
+        if (launchOptions.typesRaw)
+            screen.switchToRawMode();
+
         if (launchOptions.raisesSoftwareKeyboard)
-        {
-            screen.getTerminal().setWantsTextInput(true);
-            screen.getTerminal().focus();
-        }
+            screen.raiseKeyboard();
 
         if (launchOptions.turnsToLandscape)
             cowterm::mobile::requestLandscapeInterfaceOrientation(window);

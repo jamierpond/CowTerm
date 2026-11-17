@@ -2,6 +2,7 @@
 
 #include "PaneScreenInputs.h"
 #include "PaneScreenLayout.h"
+#include "Typing.h"
 
 #include "Emulator/TermTypes.h"
 
@@ -90,6 +91,28 @@ public:
     std::function<void()> onReturnToBottom = [] {};
 
 private:
+    term::Theme theme;
+};
+
+// The key row above the keyboard: Esc, Tab, Ctrl and the arrows, the symbols
+// on a second page with the raw mode switch and the key that puts the
+// keyboard away. A latched Ctrl and raw mode are lit.
+class KeyRow final : public eacp::UI::Component
+{
+public:
+    explicit KeyRow(const term::Theme& themeToUse);
+
+    void paint(eacp::UI::Graphics& g) override;
+    void mouseUp(const eacp::UI::MouseEvent& event) override;
+
+    int page = 0;
+    bool isControlLatched = false;
+    bool isRawMode = false;
+    std::function<void(KeyRowKey)> onKey = [](KeyRowKey) {};
+
+private:
+    bool isLit(KeyRowKey key) const;
+
     term::Theme theme;
 };
 

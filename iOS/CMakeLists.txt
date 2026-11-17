@@ -13,6 +13,8 @@ eacp_add_app(CowTermMobile
         PhoneLaunch.cpp
         PhonePaneBinding.cpp
         StoredScreenShell.cpp
+        Typing.cpp
+        TypingControls.cpp
         BUNDLE_ID audio.pond.cowterm.mobile
         DISPLAY_NAME "CowTerm")
 

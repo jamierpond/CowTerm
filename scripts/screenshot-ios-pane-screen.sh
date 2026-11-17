@@ -33,7 +33,9 @@ for device_name in "iPhone 17e" "iPhone 18 Pro Max"; do
             $rotate --link=stalled --panes=1
         take "$device_name" "scrolled-back-$orientation" \
             "$seconds_for_scrolling_back_with_output_arriving" $rotate --stream --scroll-back
-        take "$device_name" "keyboard-$orientation" "$seconds_for_the_screen_to_settle" \
+        take "$device_name" "composer-$orientation" "$seconds_for_the_screen_to_settle" \
             $rotate --raise-keyboard
+        take "$device_name" "raw-keyboard-$orientation" "$seconds_for_the_screen_to_settle" \
+            $rotate --raw --raise-keyboard
     done
 done

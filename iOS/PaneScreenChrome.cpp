@@ -26,6 +26,7 @@ constexpr auto hostMarkSize = 8.0f;
 constexpr auto hostMarkGap = 8.0f;
 constexpr auto chipPadding = 10.0f;
 constexpr auto chipCornerRadius = 8.0f;
+constexpr auto keyGap = 3.0f;
 constexpr auto paneDotSize = 8.0f;
 constexpr auto ringThickness = 1.5f;
 constexpr auto barDividerThickness = 1.0f;
@@ -316,6 +317,56 @@ void NewLinesPill::paint(UI::Graphics& g)
 void NewLinesPill::mouseUp(const UI::MouseEvent&)
 {
     onReturnToBottom();
+}
+
+KeyRow::KeyRow(const term::Theme& themeToUse)
+    : theme(themeToUse)
+{
+    setInterceptsMouseClicks(true);
+}
+
+bool KeyRow::isLit(KeyRowKey key) const
+{
+    if (key == KeyRowKey::Control)
+        return isControlLatched;
+
+    if (key == KeyRowKey::RawMode)
+        return isRawMode;
+
+    return false;
+}
+
+void KeyRow::paint(UI::Graphics& g)
+{
+    const auto foreground = term::toColor(theme.foreground);
+    g.setColour(term::toColor(theme.background).brighter(barBrightening));
+    g.fillAll();
+    g.setFont(makeFont(barFontSize));
+
+    for (const auto& slot: calculateKeyRowLayout(getLocalBounds(), page))
+    {
+        const auto keyFace = slot.bounds.inset(keyGap);
+
+        if (isLit(slot.key))
+            g.setColour(term::toColor(theme.ansi[ansiBlue]));
+        else
+            g.setColour(foreground.withAlpha(chipFillAlpha));
+
+        g.fillRoundedRect(keyFace, chipCornerRadius);
+        g.setColour(foreground);
+        g.drawText(getKeyRowLabel(slot.key), keyFace, UI::Justification::Centred);
+    }
+}
+
+void KeyRow::mouseUp(const UI::MouseEvent& event)
+{
+    if (hasMovedBeyondTapSlop(event.downPosition, event.position))
+        return;
+
+    const auto slots = calculateKeyRowLayout(getLocalBounds(), page);
+
+    if (const auto key = findKeyRowKeyAt(slots, event.position))
+        onKey(*key);
 }
 
 ActionMenu::ActionMenu(const term::Theme& themeToUse)

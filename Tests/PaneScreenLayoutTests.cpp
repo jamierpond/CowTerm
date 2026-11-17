@@ -184,3 +184,28 @@ auto tTitle = test("PaneScreenLayout/titleNamesHostLabelAndSession") = []
     check(describePaneTitle("jamiepond@macprorack", "") == "macprorack");
     check(describePaneTitle("tamby", "CowTerm") == "tamby/CowTerm");
 };
+
+auto tTypingRects = test("PaneScreenLayout/typingStacksComposerAndKeyRowOnTheKeyboard") = []
+{
+    const auto keyboardUp =
+        Insets {.top = iPhone17eSafeAreaTop, .bottom = measuredIPhone17eKeyboardHeight};
+    const auto rects = calculateTypingRects(iPhone17eBounds, keyboardUp, true);
+
+    check(rects.keyRow.bottom() == iPhone17eHeight - measuredIPhone17eKeyboardHeight);
+    check(rects.composer.bottom() == rects.keyRow.y);
+    check(rects.pane.bottom() == rects.composer.y);
+    check(rects.pane.h
+          == calculateKeyboardUpPaneHeight({.screenHeight = iPhone17eHeight,
+                                            .safeAreaTop = iPhone17eSafeAreaTop,
+                                            .softwareKeyboardHeight = measuredIPhone17eKeyboardHeight}));
+};
+
+auto tTypingRectsRaw = test("PaneScreenLayout/rawModeHasNoComposer") = []
+{
+    const auto keyboardUp =
+        Insets {.top = iPhone17eSafeAreaTop, .bottom = measuredIPhone17eKeyboardHeight};
+    const auto rects = calculateTypingRects(iPhone17eBounds, keyboardUp, false);
+
+    check(rects.composer.h == 0.0f);
+    check(rects.pane.bottom() == rects.keyRow.y);
+};

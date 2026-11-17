@@ -22,10 +22,10 @@ inline constexpr auto bottomBarHeight = 52.0f;
 inline constexpr auto keyRowHeight = 48.0f;
 inline constexpr auto composerHeight = 44.0f;
 
-// The iPhone 17e's keyboard in portrait, as eacp reported it in the simulator
-// (the iPhone 18 Pro Max's is 320): the keyboard-up row count until the real
-// keyboard has shown once.
-inline constexpr auto defaultSoftwareKeyboardHeight = 301.0f;
+// The iPhone 17e's keyboard in portrait with its suggestion bar, as the
+// composer brings it up, measured in the simulator: the keyboard-up row count
+// until the real keyboard has shown once.
+inline constexpr auto defaultSoftwareKeyboardHeight = 328.0f;
 
 struct PaneScreenRects
 {
@@ -37,6 +37,19 @@ struct PaneScreenRects
 // Top line under the status bar, bottom bar above the home indicator, and the
 // pane between them, all inside the safe area.
 PaneScreenRects calculatePaneScreenRects(Rect bounds, Insets safeArea);
+
+struct TypingRects
+{
+    Rect topLine;
+    Rect pane;
+    Rect composer;
+    Rect keyRow;
+};
+
+// With the keyboard up: the top line, the pane, then the composer (none in raw
+// mode) and the key row sitting on the keyboard. insetsAroundParts has the
+// keyboard's height as its bottom.
+TypingRects calculateTypingRects(Rect bounds, Insets insetsAroundParts, bool showsComposer);
 
 // The pill's place: centred, just above the bottom of the pane.
 Rect calculateNewLinesPillBounds(Rect pane, float pillWidth);

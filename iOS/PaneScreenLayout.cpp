@@ -67,6 +67,20 @@ PaneScreenRects calculatePaneScreenRects(Rect bounds, Insets safeArea)
     return rects;
 }
 
+TypingRects calculateTypingRects(Rect bounds, Insets insetsAroundParts, bool showsComposer)
+{
+    auto inside = bounds.inset(insetsAroundParts);
+    auto rects = TypingRects {};
+    rects.topLine = inside.removeFromTop(topLineHeight);
+    rects.keyRow = inside.removeFromBottom(keyRowHeight);
+
+    if (showsComposer)
+        rects.composer = inside.removeFromBottom(composerHeight);
+
+    rects.pane = inside;
+    return rects;
+}
+
 Rect calculateNewLinesPillBounds(Rect pane, float pillWidth)
 {
     const auto top = pane.bottom() - pillGapAbovePaneBottom - pillHeight;

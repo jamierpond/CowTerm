@@ -2,6 +2,7 @@
 
 #include "PaneScreenChrome.h"
 #include "PaneScreenInputs.h"
+#include "TypingControls.h"
 
 #include "TerminalView/TerminalView.h"
 
@@ -63,6 +64,10 @@ public:
     // What a long press on the bottom bar opens.
     void openMenu();
 
+    // ⌨: the composer with the keyboard up, or the pane itself in raw mode.
+    void raiseKeyboard();
+    void switchToRawMode();
+
     void resized() override;
     void safeAreaInsetsChanged() override;
 
@@ -75,7 +80,6 @@ public:
 
 private:
     void layOutParts();
-    void showSoftwareKeyboard();
     void returnToLiveBottom();
     void refreshWhatChangesOverTime();
     void showScrolledBackState(term::ScrolledBackState state);
@@ -84,6 +88,7 @@ private:
     std::vector<MenuAction> listMenuActions();
     eacp::Graphics::Insets calculateInsetsAroundParts() const;
     bool isLive() const;
+    bool isKeyboardUp() const;
     void showLinkStateOnPane();
 
     term::Theme theme;
@@ -106,6 +111,8 @@ private:
 
     eacp::UI::ComponentHost menuHost;
     ActionMenu menu {theme};
+
+    TypingControls typing {theme, [this]() -> term::TerminalView& { return *terminal; }};
 
     eacp::Threads::Timer refreshTimer;
 };
