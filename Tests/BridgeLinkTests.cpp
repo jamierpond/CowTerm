@@ -74,11 +74,22 @@ auto messagesAfterHelloReachOnMessage = test("BridgeLink/messagesAfterHelloReach
     check(watched.messages == std::vector<std::string> {"output pane\nhi"});
 };
 
-auto otherProtocolVersionNamesTheInstallFix = test("BridgeLink/otherProtocolVersionNamesTheInstallFix") = []
+auto neighbouringProtocolVersionIsAccepted = test("BridgeLink/neighbouringProtocolVersionIsAccepted") = []
 {
     auto watched = WatchedLink {};
     const auto newerVersion = bridge::protocolVersion + 1;
     const auto hello = "bridge-hello " + std::to_string(newerVersion) + " " + ctVersion;
+    watched.link.deliverBytes(bridge::encodeFrame(hello));
+
+    check(watched.isReady);
+};
+
+auto distantProtocolVersionNamesTheInstallFix = test("BridgeLink/distantProtocolVersionNamesTheInstallFix") = []
+{
+    constexpr auto versionsAhead = 2;
+    auto watched = WatchedLink {};
+    const auto muchNewerVersion = bridge::protocolVersion + versionsAhead;
+    const auto hello = "bridge-hello " + std::to_string(muchNewerVersion) + " " + ctVersion;
     watched.link.deliverBytes(bridge::encodeFrame(hello));
 
     check(!watched.isReady);
