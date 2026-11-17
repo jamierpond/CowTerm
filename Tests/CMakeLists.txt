@@ -120,7 +120,7 @@ nano_add_executable(CowTermPaneScreenTests
             OverviewLayoutTests.cpp
             ../iOS/PaneScreenLayout.cpp
             ../iOS/OverviewLayout.cpp
-        TARGETS eacp-graphics CowTerm::Multiplexer)
+        TARGETS eacp-graphics CowTerm::Phone)
 
 target_include_directories(CowTermPaneScreenTests PRIVATE ../iOS)
 

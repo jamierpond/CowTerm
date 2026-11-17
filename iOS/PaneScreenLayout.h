@@ -4,6 +4,7 @@
 
 #include <eacp/Graphics/Primitives/Primitives.h>
 
+#include <cstdint>
 #include <optional>
 #include <string>
 #include <vector>
@@ -106,13 +107,12 @@ bool hasMovedBeyondTapSlop(Point start, Point current);
 // The pane after a sideways swipe or a dot tap, kept within the session.
 int choosePaneAfterSwipe(int activePane, int paneCount, BottomBarGesture gesture);
 
-// "12 s ago", "4 min ago", "2 h ago": how old the picture of a pane that is not
-// live is.
-std::string formatPictureAge(double seconds);
-
 // "● live", "connecting · 12 s ago", "stalled · 3 min ago", "unreachable · …": the top line's
 // right end. A pane that is not live says how old its picture is.
-std::string describeLinkStatus(LinkState state, double pictureAgeSeconds);
+std::string describeLinkStatus(LinkState state, std::int64_t pictureAgeMilliseconds);
+
+// "macprorack/Grazer": the host's label, then the session when it has a name.
+std::string describePaneTitle(const std::string& host, const std::string& sessionName);
 
 // "↓ 214 new"
 std::string formatNewLinesPill(std::uint64_t lineCount);

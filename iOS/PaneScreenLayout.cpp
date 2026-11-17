@@ -1,5 +1,8 @@
 #include "PaneScreenLayout.h"
 
+#include "Multiplexer/RemoteLocation.h"
+#include "Phone/StoredScreen.h"
+
 #include <algorithm>
 #include <cmath>
 
@@ -21,8 +24,6 @@ constexpr auto swipeMinimumDistance = 40.0f;
 // across it, so a sloppy diagonal is neither.
 constexpr auto swipeAxisDominance = 2.0f;
 
-constexpr auto secondsPerMinute = 60.0;
-constexpr auto secondsPerHour = 3600.0;
 
 float calculateDistance(Point from, Point to)
 {
@@ -157,25 +158,12 @@ int choosePaneAfterSwipe(int activePane, int paneCount, BottomBarGesture gesture
     return activePane;
 }
 
-std::string formatPictureAge(double seconds)
-{
-    const auto wholeSeconds = (long) std::max(seconds, 0.0);
-
-    if (seconds < secondsPerMinute)
-        return std::to_string(wholeSeconds) + " s ago";
-
-    if (seconds < secondsPerHour)
-        return std::to_string((long) (seconds / secondsPerMinute)) + " min ago";
-
-    return std::to_string((long) (seconds / secondsPerHour)) + " h ago";
-}
-
-std::string describeLinkStatus(LinkState state, double pictureAgeSeconds)
+std::string describeLinkStatus(LinkState state, std::int64_t pictureAgeMilliseconds)
 {
     if (state == LinkState::Live)
         return "\xe2\x97\x8f live";
 
-    const auto age = " \xc2\xb7 " + formatPictureAge(pictureAgeSeconds);
+    const auto age = " \xc2\xb7 " + term::phone::describeStoredScreenAge(pictureAgeMilliseconds);
 
     if (state == LinkState::Connecting)
         return "connecting" + age;
@@ -184,6 +172,16 @@ std::string describeLinkStatus(LinkState state, double pictureAgeSeconds)
         return "unreachable" + age;
 
     return "stalled" + age;
+}
+
+std::string describePaneTitle(const std::string& host, const std::string& sessionName)
+{
+    const auto label = term::remote::getHostLabel(host);
+
+    if (sessionName.empty())
+        return label;
+
+    return label + "/" + sessionName;
 }
 
 std::string formatNewLinesPill(std::uint64_t lineCount)

@@ -22,7 +22,7 @@ namespace cowterm::mobile
 class PaneTouchSurface final : public eacp::Graphics::View
 {
 public:
-    explicit PaneTouchSurface(term::TerminalView& terminalToUse);
+    explicit PaneTouchSurface(std::function<term::TerminalView&()> findTerminalToUse);
 
     void touchBegan(const eacp::Graphics::TouchEvent& event) override;
     void touchMoved(const eacp::Graphics::TouchEvent& event) override;
@@ -31,7 +31,7 @@ public:
 private:
     void clickTerminalAt(const eacp::Graphics::TouchEvent& event);
 
-    term::TerminalView& terminal;
+    std::function<term::TerminalView&()> findTerminal;
     std::optional<eacp::Graphics::TouchEvent> fingerDown;
     bool isScrolling = false;
 };
@@ -40,6 +40,7 @@ struct PaneScreenActions
 {
     std::function<void()> onPreviousSession = [] {};
     std::function<void(int paneIndex)> onChoosePane = [](int) {};
+    std::function<void()> onOverview = [] {};
 };
 
 class PaneScreen final : public eacp::Graphics::View
@@ -65,7 +66,11 @@ public:
     void resized() override;
     void safeAreaInsetsChanged() override;
 
-    term::TerminalView terminal;
+    // Shows another pane in place of the one on screen.
+    void showPane(const term::TerminalConfig& config, const std::string& paneId);
+
+    term::TerminalView& getTerminal();
+
     PaneScreenActions actions;
 
 private:
@@ -79,6 +84,7 @@ private:
     std::vector<MenuAction> listMenuActions();
     eacp::Graphics::Insets calculateInsetsAroundParts() const;
     bool isLive() const;
+    void showLinkStateOnPane();
 
     term::Theme theme;
     PaneDescription pane;
@@ -86,7 +92,8 @@ private:
     float softwareKeyboardCoveredHeight = 0.0f;
     std::optional<float> portraitSoftwareKeyboardHeight;
 
-    PaneTouchSurface touchSurface {terminal};
+    std::unique_ptr<term::TerminalView> terminal;
+    PaneTouchSurface touchSurface {[this]() -> term::TerminalView& { return *terminal; }};
 
     eacp::UI::ComponentHost topLineHost;
     TopLine topLine {theme};

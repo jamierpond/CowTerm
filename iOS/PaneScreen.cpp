@@ -32,8 +32,8 @@ Graphics::MouseEvent makeTapMouseEvent(const TouchEvent& touch,
 }
 } // namespace
 
-PaneTouchSurface::PaneTouchSurface(term::TerminalView& terminalToUse)
-    : terminal(terminalToUse)
+PaneTouchSurface::PaneTouchSurface(std::function<term::TerminalView&()> findTerminalToUse)
+    : findTerminal(std::move(findTerminalToUse))
 {
     setHandlesTouchEvents(true);
 }
@@ -55,11 +55,11 @@ void PaneTouchSurface::touchMoved(const TouchEvent& event)
     if (!isScrolling && hasMovedBeyondTapSlop(fingerDown->pos, event.pos))
     {
         isScrolling = true;
-        terminal.beginTouchScroll(*fingerDown);
+        findTerminal().beginTouchScroll(*fingerDown);
     }
 
     if (isScrolling)
-        terminal.moveTouchScroll(event);
+        findTerminal().moveTouchScroll(event);
 }
 
 void PaneTouchSurface::touchEnded(const TouchEvent& event)
@@ -68,7 +68,7 @@ void PaneTouchSurface::touchEnded(const TouchEvent& event)
         return;
 
     if (isScrolling)
-        terminal.endTouchScroll(event);
+        findTerminal().endTouchScroll(event);
     else if (event.phase == Graphics::TouchPhase::Ended)
         clickTerminalAt(event);
 
@@ -78,13 +78,13 @@ void PaneTouchSurface::touchEnded(const TouchEvent& event)
 
 void PaneTouchSurface::clickTerminalAt(const TouchEvent& event)
 {
+    auto& terminal = findTerminal();
     terminal.dispatchMouseEvent(makeTapMouseEvent(event, Graphics::MouseEventType::Down));
     terminal.dispatchMouseEvent(makeTapMouseEvent(event, Graphics::MouseEventType::Up));
 }
 
 PaneScreen::PaneScreen(const term::TerminalConfig& config, const std::string& paneId)
-    : terminal(config, {}, paneId)
-    , theme(config.theme)
+    : theme(config.theme)
     , refreshTimer([this] { refreshWhatChangesOverTime(); }, refreshesPerSecond)
 {
     const auto background = term::toColor(theme.background);
@@ -101,14 +101,37 @@ PaneScreen::PaneScreen(const term::TerminalConfig& config, const std::string& pa
     bottomBar.actions.onChoosePane = [this](int index) { actions.onChoosePane(index); };
     bottomBar.actions.onKeyboard = [this] { showSoftwareKeyboard(); };
     bottomBar.actions.onOpenMenu = [this] { openMenu(); };
+    bottomBar.actions.onOverview = [this] { actions.onOverview(); };
     pill.onReturnToBottom = [this] { returnToLiveBottom(); };
-    terminal.onScrolledBackStateChanged = [this](term::ScrolledBackState state)
-    { showScrolledBackState(state); };
     menu.onClose = [this] { closeMenu(); };
 
-    addChildren({terminal, touchSurface, topLineHost, bottomBarHost, pillHost, menuHost});
     pillHost.setVisible(false);
     menuHost.setVisible(false);
+    showPane(config, paneId);
+}
+
+term::TerminalView& PaneScreen::getTerminal()
+{
+    return *terminal;
+}
+
+// The old view's shell detaches as it goes, which releases the old pane to
+// the daemon; the new one adopts its pane and claims its size.
+void PaneScreen::showPane(const term::TerminalConfig& config, const std::string& paneId)
+{
+    const auto children = getSubviews();
+
+    for (auto* child: children)
+        removeSubview(*child);
+
+    terminal = std::make_unique<term::TerminalView>(config, std::string {}, paneId);
+    terminal->onScrolledBackStateChanged = [this](term::ScrolledBackState state)
+    { showScrolledBackState(state); };
+
+    addChildren({*terminal, touchSurface, topLineHost, bottomBarHost, pillHost, menuHost});
+    pillHost.setVisible(false);
+    showLinkStateOnPane();
+    layOutParts();
 }
 
 void PaneScreen::setPaneDescription(const PaneDescription& paneToShow)
@@ -126,11 +149,15 @@ void PaneScreen::setLinkStatus(const LinkStatus& linkToShow)
     link = linkToShow;
     topLine.link = link;
     topLine.repaint();
+    showLinkStateOnPane();
+}
 
+void PaneScreen::showLinkStateOnPane()
+{
     if (isLive())
-        terminal.setOpacity(1.0f);
+        terminal->setOpacity(1.0f);
     else
-        terminal.setOpacity(notLiveOpacity);
+        terminal->setOpacity(notLiveOpacity);
 }
 
 bool PaneScreen::isLive() const
@@ -157,14 +184,14 @@ bool PaneScreen::isLandscape() const
 // few to fix a shell at, so there the grid follows the pane instead.
 void PaneScreen::fixGridAtKeyboardUpSize()
 {
-    const auto paneWidth = terminal.getLocalBounds().w;
+    const auto paneWidth = terminal->getLocalBounds().w;
 
     if (paneWidth <= 0.0f)
         return;
 
     if (isLandscape())
     {
-        terminal.setFixedGridSize(std::nullopt);
+        terminal->setFixedGridSize(std::nullopt);
         return;
     }
 
@@ -175,9 +202,9 @@ void PaneScreen::fixGridAtKeyboardUpSize()
         portraitSoftwareKeyboardHeight.value_or(defaultSoftwareKeyboardHeight);
 
     const auto keyboardUpHeight = calculateKeyboardUpPaneHeight(heights);
-    const auto grid = terminal.calculateGridSizeFor({paneWidth, keyboardUpHeight});
+    const auto grid = terminal->calculateGridSizeFor({paneWidth, keyboardUpHeight});
     LOG("pane grid ", grid.cols, " x ", grid.rows, " (keyboard-up height ", keyboardUpHeight, ")");
-    terminal.setFixedGridSize(grid);
+    terminal->setFixedGridSize(grid);
 }
 
 void PaneScreen::resized()
@@ -206,7 +233,7 @@ void PaneScreen::layOutParts()
     const auto bounds = getLocalBounds();
     const auto rects = calculatePaneScreenRects(bounds, calculateInsetsAroundParts());
 
-    terminal.setBounds(rects.pane);
+    terminal->setBounds(rects.pane);
     touchSurface.setBounds(rects.pane);
     topLineHost.setBounds(rects.topLine);
     bottomBarHost.setBounds(rects.bottomBar.withHeight(bounds.bottom() - rects.bottomBar.y));
@@ -231,13 +258,13 @@ void PaneScreen::refreshWhatChangesOverTime()
 
 void PaneScreen::showSoftwareKeyboard()
 {
-    terminal.setWantsTextInput(true);
-    terminal.focus();
+    terminal->setWantsTextInput(true);
+    terminal->focus();
 }
 
 void PaneScreen::returnToLiveBottom()
 {
-    terminal.scrollToLiveBottom();
+    terminal->scrollToLiveBottom();
 }
 
 std::vector<MenuAction> PaneScreen::listMenuActions()
@@ -255,7 +282,7 @@ std::vector<MenuAction> PaneScreen::listMenuActions()
          [this, previousPane] { actions.onChoosePane(previousPane); }},
         {"Previous session", "\xe2\x80\xb9 or edge swipe",
          false},
-        {"Overview", "\xe2\x98\xb0 or swipe up", false},
+        {"Overview", "\xe2\x98\xb0 or swipe up", true, [this] { actions.onOverview(); }},
         {"Select", "long press", false},
         {"Search", "", false},
         {"Text size", "pinch", false},

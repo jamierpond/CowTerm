@@ -26,8 +26,13 @@ public:
     // The pane view's config: its shell is the daemon's pane on the host.
     term::TerminalConfig makeTerminalConfig();
 
+    const std::string& getHost() const { return connection.getHost(); }
+
     // The pane to open at once; empty until the daemon has chosen one.
     std::string getPaneToOpen() const;
+
+    // Another pane of the shown session; false when it is not one.
+    bool choosePaneOfSession(const std::string& paneId);
 
     // From Apps::setSuspendHandler.
     void handleSuspended(bool isSuspended);

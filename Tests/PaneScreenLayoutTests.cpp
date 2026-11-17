@@ -160,14 +160,6 @@ auto tPaneAfterSwipe = test("PaneScreenLayout/swipesStopAtTheSessionsEnds") = []
     check(choosePaneAfterSwipe(1, 3, BottomBarGesture::SwipeUp) == 1);
 };
 
-auto tAge = test("PaneScreenLayout/picturesAgeInSecondsMinutesAndHours") = []
-{
-    check(formatPictureAge(12.4) == "12 s ago");
-    check(formatPictureAge(-1.0) == "0 s ago");
-    check(formatPictureAge(4.0 * 60.0 + 30.0) == "4 min ago");
-    check(formatPictureAge(2.0 * 3600.0 + 59.0) == "2 h ago");
-};
-
 auto tPillText = test("PaneScreenLayout/pillCountsTheNewLines") = []
 {
     check(formatNewLinesPill(214) == "\xe2\x86\x93 214 new");
@@ -175,7 +167,7 @@ auto tPillText = test("PaneScreenLayout/pillCountsTheNewLines") = []
 
 auto tLinkStatus = test("PaneScreenLayout/notLivePanesSayHowOldTheirPictureIs") = []
 {
-    constexpr auto twelveSeconds = 12.0;
+    constexpr auto twelveSeconds = std::int64_t {12000};
 
     check(describeLinkStatus(LinkState::Live, twelveSeconds) == "\xe2\x97\x8f live");
     check(describeLinkStatus(LinkState::Connecting, twelveSeconds)
@@ -184,4 +176,11 @@ auto tLinkStatus = test("PaneScreenLayout/notLivePanesSayHowOldTheirPictureIs") 
           == "stalled \xc2\xb7 12 s ago");
     check(describeLinkStatus(LinkState::Unreachable, twelveSeconds)
           == "unreachable \xc2\xb7 12 s ago");
+};
+
+auto tTitle = test("PaneScreenLayout/titleNamesHostLabelAndSession") = []
+{
+    check(describePaneTitle("jamiepond@macprorack", "Grazer") == "macprorack/Grazer");
+    check(describePaneTitle("jamiepond@macprorack", "") == "macprorack");
+    check(describePaneTitle("tamby", "CowTerm") == "tamby/CowTerm");
 };

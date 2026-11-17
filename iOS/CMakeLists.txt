@@ -11,6 +11,8 @@ eacp_add_app(CowTermMobile
         PaneScreenChrome.cpp
         PaneScreenLayout.cpp
         PhoneLaunch.cpp
+        PhonePaneBinding.cpp
+        StoredScreenShell.cpp
         BUNDLE_ID audio.pond.cowterm.mobile
         DISPLAY_NAME "CowTerm")
 

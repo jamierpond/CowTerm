@@ -3,6 +3,7 @@
 #include "OverviewScreen.h"
 #include "PaneScreen.h"
 #include "PhoneLaunch.h"
+#include "PhonePaneBinding.h"
 
 #include "TerminalView/GlyphAtlas.h"
 #include "TerminalView/TerminalView.h"
@@ -250,7 +251,7 @@ term::TerminalConfig makePaneTerminalConfig(const std::unique_ptr<cowterm::mobil
                                             const LaunchOptions& launchOptions)
 {
     if (isOpeningAPhonePane(phone))
-        return phone->makeTerminalConfig();
+        return cowterm::mobile::PhonePaneBinding::makeFirstPaneConfig(*phone);
 
     return makeSampleTextTerminalConfig(launchOptions.streamsOutput);
 }
@@ -261,41 +262,6 @@ std::string getPaneId(const std::unique_ptr<cowterm::mobile::PhoneLaunch>& phone
         return phone->getPaneToOpen();
 
     return {};
-}
-
-cowterm::mobile::LinkState toPaneScreenLinkState(term::phone::PhoneLinkState state)
-{
-    using term::phone::PhoneLinkState;
-    using cowterm::mobile::LinkState;
-
-    switch (state)
-    {
-        case PhoneLinkState::Live:
-            return LinkState::Live;
-        case PhoneLinkState::Connecting:
-            return LinkState::Connecting;
-        case PhoneLinkState::Stalled:
-            return LinkState::Stalled;
-        case PhoneLinkState::Unreachable:
-            return LinkState::Unreachable;
-    }
-
-    return LinkState::Connecting;
-}
-
-cowterm::mobile::PaneDescription describeChosenPane(const term::phone::ChosenPane& chosen)
-{
-    auto pane = cowterm::mobile::PaneDescription {};
-    pane.hostName = chosen.host;
-    pane.sessionName = chosen.sessionName;
-    pane.paneCount = std::max((int) chosen.sessionPaneIds.size(), 1);
-
-    const auto found = std::ranges::find(chosen.sessionPaneIds, chosen.paneId);
-
-    if (found != chosen.sessionPaneIds.end())
-        pane.activePaneIndex = (int) std::distance(chosen.sessionPaneIds.begin(), found);
-
-    return pane;
 }
 
 struct CowTermMobileApp
@@ -329,10 +295,11 @@ struct CowTermMobileApp
         };
 
         if (phone != nullptr)
-            showWhatThePhoneConnectionHears();
+            phoneBinding.emplace(*phone, screen);
         else
             showSamplePane();
 
+        connectOverview();
         applyLaunchOptions();
     }
 
@@ -349,35 +316,12 @@ struct CowTermMobileApp
         };
     }
 
-    // The picture stays as it was when the link stopped being live, so its
-    // age counts from then.
-    void showWhatThePhoneConnectionHears()
-    {
-        auto pane = cowterm::mobile::PaneDescription {};
-        pane.hostName = launchOptions.phoneSettings->destination.host;
-        screen.setPaneDescription(pane);
-
-        phone->onLinkStateChanged = [this](term::phone::PhoneLinkState state)
-        {
-            const auto linkState = toPaneScreenLinkState(state);
-
-            if (linkState == cowterm::mobile::LinkState::Live || isLive)
-                pictureTakenAt = std::chrono::steady_clock::now();
-
-            isLive = linkState == cowterm::mobile::LinkState::Live;
-            screen.setLinkStatus({linkState, pictureTakenAt});
-        };
-
-        phone->onPaneChosen = [this](const term::phone::ChosenPane& chosen)
-        { screen.setPaneDescription(describeChosenPane(chosen)); };
-    }
-
     void applyLaunchOptions()
     {
         if (launchOptions.raisesSoftwareKeyboard)
         {
-            screen.terminal.setWantsTextInput(true);
-            screen.terminal.focus();
+            screen.getTerminal().setWantsTextInput(true);
+            screen.getTerminal().focus();
         }
 
         if (launchOptions.turnsToLandscape)
@@ -389,18 +333,22 @@ struct CowTermMobileApp
         if (launchOptions.scrollsBack)
         {
             Threads::callAfter(scrollBackDelay,
-                               [this] { dragPaneDownToScrollBack(screen.terminal); });
+                               [this] { dragPaneDownToScrollBack(screen.getTerminal()); });
         }
 
-        if (launchOptions.showsOverview)
-            showSampleOverview();
     }
 
-    void showSampleOverview()
+    // Sample rows until the connection layer feeds real ones; opening a
+    // session goes back to the pane screen.
+    void connectOverview()
     {
         overview.setInputs(cowterm::mobile::makeSampleOverviewInputs());
-        overview.onOpenSession = [](const term::overview::OverviewRow& session)
-        { LOG("overview: open ", session.host, "/", session.sessionName); };
+        overview.onOpenSession = [this](const term::overview::OverviewRow& session)
+        {
+            LOG("overview: open ", session.host, "/", session.sessionName);
+            window.setContentView(screen);
+        };
+        screen.actions.onOverview = [this] { window.setContentView(overview); };
     }
 
     Graphics::View& chooseRootView()
@@ -422,8 +370,7 @@ struct CowTermMobileApp
     LaunchOptions launchOptions;
     std::unique_ptr<cowterm::mobile::PhoneLaunch> phone;
     cowterm::mobile::PaneScreen screen;
-    std::chrono::steady_clock::time_point pictureTakenAt = std::chrono::steady_clock::now();
-    bool isLive = false;
+    std::optional<cowterm::mobile::PhonePaneBinding> phoneBinding;
     cowterm::mobile::OverviewScreen overview;
     Graphics::Window window {chooseRootView(), makeWindowOptions()};
 };

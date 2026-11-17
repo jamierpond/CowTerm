@@ -55,10 +55,10 @@ constexpr auto keyboardGlyph = "\xe2\x8c\xa8";
 constexpr auto gitLabel = "git";
 constexpr auto menuGlyph = "\xe2\x98\xb0";
 
-double calculateSecondsSince(std::chrono::steady_clock::time_point then)
+std::int64_t calculateMillisecondsSince(std::chrono::steady_clock::time_point then)
 {
     const auto elapsed = std::chrono::steady_clock::now() - then;
-    return std::chrono::duration<double>(elapsed).count();
+    return std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count();
 }
 
 term::Rgb pickLinkStateColour(const term::Theme& theme, LinkState state)
@@ -107,8 +107,10 @@ TopLine::TopLine(const term::Theme& themeToUse)
 void TopLine::paint(UI::Graphics& g)
 {
     auto area = getLocalBounds().inset(sidePadding, 0.0f);
-    g.setColour(term::toColor(theme.background));
+    g.setColour(term::toColor(theme.background).brighter(barBrightening));
     g.fillAll();
+    g.setColour(term::toColor(theme.foreground).withAlpha(dividerAlpha));
+    g.fillRect(getLocalBounds().fromBottom(barDividerThickness));
 
     g.setColour(term::toColor(hostColour));
     fillCircle(g, {area.x + hostMarkSize / 2.0f, area.center().y}, hostMarkSize);
@@ -116,14 +118,14 @@ void TopLine::paint(UI::Graphics& g)
 
     g.setFont(makeFont(topLineFontSize));
     const auto status =
-        describeLinkStatus(link.state, calculateSecondsSince(link.pictureTakenAt));
+        describeLinkStatus(link.state, calculateMillisecondsSince(link.pictureTakenAt));
     const auto statusArea = area.removeFromRight(g.measureText(status));
 
     g.setColour(term::toColor(pickLinkStateColour(theme, link.state)));
     g.drawText(status, statusArea, UI::Justification::Right);
 
     g.setColour(term::toColor(theme.foreground));
-    g.drawText(pane.hostName + "/" + pane.sessionName, area);
+    g.drawText(describePaneTitle(pane.hostName, pane.sessionName), area);
 }
 
 BottomBar::BottomBar(const term::Theme& themeToUse)

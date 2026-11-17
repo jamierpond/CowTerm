@@ -5,6 +5,7 @@
 
 #include <eacp/Core/Threads/Async.h>
 
+#include <algorithm>
 #include <chrono>
 
 namespace term::phone
@@ -218,6 +219,21 @@ void PhoneConnection::choosePaneWhenKnown()
     chosenPane->sessionName = getRemoteHost().getDaemon().infoFor(chosenPane->paneId).sessionName;
     chosenPane->sessionPaneIds = listPanesOfSession(panes, chosenPane->sessionName);
     onPaneChosen(*chosenPane);
+}
+
+bool PhoneConnection::choosePaneOfSession(const std::string& paneId)
+{
+    if (!chosenPane)
+        return false;
+
+    const auto& sessionPanes = chosenPane->sessionPaneIds;
+
+    if (std::ranges::find(sessionPanes, paneId) == sessionPanes.end())
+        return false;
+
+    chosenPane->paneId = paneId;
+    onPaneChosen(*chosenPane);
+    return true;
 }
 
 std::vector<ListedPane> PhoneConnection::listPanes() const

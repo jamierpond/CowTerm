@@ -54,6 +54,11 @@ public:
     // last-input wait and storing the screen.
     void handleTick();
 
+    // Moves to another pane of the chosen pane's session (the dots, a swipe
+    // along the bar); false for a pane not in that session. The caller then
+    // shows it through makeShell.
+    bool choosePaneOfSession(const std::string& paneId);
+
     // The app went to the background: store the shown screen now.
     void handleBackground();
 
