@@ -105,6 +105,7 @@ Graphics::WindowOptions makeTestWindowOptions()
     options.title = "CowTerm session memory test";
     options.width = (int) sessionWidth;
     options.height = (int) sessionHeight;
+
     return options;
 }
 
@@ -168,7 +169,12 @@ auto tHiddenSessionsFreeTheirFrames =
     auto config = AppConfig {};
     auto host = Graphics::View {};
     auto window = Graphics::Window {makeTestWindowOptions()};
+
+    // Hidden before the event loop runs: on screen it flashed over Jamie's
+    // desktop on every run. The panes' drawables, all the test needs, still come.
+    window.setVisible(false);
     window.setContentView(host);
+    check(!window.isVisible(), "the test window stays off the screen");
 
     auto sessions = std::vector<std::unique_ptr<SessionView>> {};
     auto* previous = (SessionView*) nullptr;
