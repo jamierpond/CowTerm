@@ -19,7 +19,6 @@ add_library(CowTermMultiplexer STATIC
         DaemonDialer.cpp
         DataDirectories.cpp
         HostColours.cpp
-        MruStore.cpp
         NotifyUserClient.cpp
         NotifyUserProtocol.cpp
         ProjectScan.cpp
@@ -39,6 +38,13 @@ else ()
     target_sources(CowTermMultiplexer PRIVATE StandardStreams-Posix.cpp)
 endif ()
 
+# emberstore watches files with FSEvents, which iOS does not have, so it does
+# not build there. Only the Mac app's palette uses MruStore.
+if (NOT IOS)
+    target_sources(CowTermMultiplexer PRIVATE MruStore.cpp)
+    target_link_libraries(CowTermMultiplexer PUBLIC emberstore)
+endif ()
+
 target_include_directories(CowTermMultiplexer
         PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/..
         PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/generated)
@@ -46,7 +52,6 @@ target_link_libraries(CowTermMultiplexer PUBLIC
         CowTerm::Emulator
         CowTerm::Shell
         eacp-network
-        emberstore
         PondApp
         SessionLog)
 

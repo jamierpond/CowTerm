@@ -1,6 +1,11 @@
 cmake_minimum_required(VERSION 3.31)
 
-set(CMAKE_OSX_DEPLOYMENT_TARGET "11.0" CACHE STRING "")
+# iOS 15 is the oldest iOS eacp supports and the oldest Xcode 27 builds for.
+if (CMAKE_SYSTEM_NAME STREQUAL "iOS")
+    set(CMAKE_OSX_DEPLOYMENT_TARGET "15.0" CACHE STRING "")
+else ()
+    set(CMAKE_OSX_DEPLOYMENT_TARGET "11.0" CACHE STRING "")
+endif ()
 set(CMAKE_PROJECT_TOP_LEVEL_INCLUDES ${CMAKE_CURRENT_LIST_DIR}/cmake/lockstep.cmake)
 
 project(CowTerm VERSION 0.1.0 LANGUAGES C CXX)
@@ -126,6 +131,15 @@ pond_add_version_library(CowTermVersion)
 
 # The libraries (see Lib/CMakeLists.txt), then the product built on them.
 add_subdirectory(Lib)
+
+# iOS forbids starting processes, so the phone build has none of the daemon,
+# ct, the Mac app, the fuzzers or the tests: only the libraries and the iPhone
+# app (docs/iOSApp.md).
+if (IOS)
+    add_subdirectory(iOS)
+    return()
+endif ()
+
 add_subdirectory(Daemon)
 add_subdirectory(Remote)
 
