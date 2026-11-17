@@ -7,7 +7,7 @@
 # ("size-owner ... owner=iPhone" at its own width); when the phone quits the
 # pane must go back to 150 columns. Then the pane is killed and the test daemon
 # quits. Saves a screenshot of the phone holding the pane.
-# Build the app first with scripts/build-ios-simulator.sh (EACP_SOURCE as it says).
+# Build the app first with scripts/build-ios-simulator.sh.
 #
 #   scripts/run-ios-size-owner-test.sh <user@host> <folder there | installed> <screenshot.png> ["iPhone 17 Pro"]
 set -eu

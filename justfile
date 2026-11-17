@@ -196,13 +196,12 @@ format:
 
 # ---- CowTerm for iPhone (iOS/, docs/iOSDesign.md) ----
 
-eacp_with_ios_branches := env("EACP_SOURCE", home_directory() / "projects/eacp-ios-integration")
 smallest_iphone := "iPhone 17e"
 screenshot_folder := "build-ios-sim/screenshots"
 
-# Build the iPhone app for the simulator, against the eacp checkout that has the iOS branches
+# Build the iPhone app for the simulator
 ios-build *cmake_build_arguments:
-    EACP_SOURCE={{eacp_with_ios_branches}} scripts/build-ios-simulator.sh {{cmake_build_arguments}}
+    scripts/build-ios-simulator.sh {{cmake_build_arguments}}
 
 # Install and launch the iPhone app, and open the Simulator window on it
 ios-run device=smallest_iphone *app_arguments:
@@ -269,7 +268,7 @@ ios-probe-ssh *arguments:
 
 # Build the iPhone app for a real phone, install it and launch it (the phone plugged in and unlocked)
 ios-device phone="pond" *app_arguments:
-    EACP_SOURCE={{eacp_with_ios_branches}} scripts/install-ios-device.sh "{{phone}}" {{app_arguments}}
+    scripts/install-ios-device.sh "{{phone}}" {{app_arguments}}
 
 # Give the phone a key, the hosts and their host keys, and put its key on this Mac, tamby and macprorack
 ios-pair phone="pond":

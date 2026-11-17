@@ -815,12 +815,10 @@ there:
 
 ## What eacp lacks on iOS
 
-Each gap is a local branch of eacp off Eyal's develop, in its own worktree,
-not pushed and with no pull request. `jp/ios-integration`
-(`~/projects/eacp-ios-integration`) is jp/develop with the five commits
-cherry-picked on top; the phone app builds against it with
-`EACP_SOURCE=~/projects/eacp-ios-integration scripts/build-ios-simulator.sh`,
-and CowTerm's pin is unchanged.
+Each gap was a branch of eacp off Eyal's develop. All of them are now on
+jp/develop, and CowTerm pins jp/develop at eadf45af (tag
+jp/develop/2026-11-17.1). The phone app builds from the pin alone; the local
+`~/projects/eacp-ios-integration` checkout and `EACP_SOURCE` are gone.
 
 | Gap | Branch | Commit |
 | --- | --- | --- |

@@ -8,7 +8,7 @@
 # it relaunches the app with --open-session=<host>/<the other session>, which
 # opens that row the way a tap does, and saves a screenshot of the pane screen
 # as <screenshot>-opened.png. Last, it kills both panes and stops the test daemon.
-# Build the app first with scripts/build-ios-simulator.sh (EACP_SOURCE as it says).
+# Build the app first with scripts/build-ios-simulator.sh.
 #
 #   scripts/run-ios-overview-test.sh <user@host> <folder there> <screenshot.png> ["iPhone 17 Pro"]
 set -eu

@@ -8,7 +8,7 @@
 # stored, and kills the throwaway pane.
 # The app signs in with $SSH_AUTH_SOCK's agent (the simulator reaches the Mac's
 # unix sockets), or with PHONE_KEY_FILE, and checks ~/.ssh/known_hosts.
-# Build the app first with scripts/build-ios-simulator.sh (EACP_SOURCE as it says).
+# Build the app first with scripts/build-ios-simulator.sh.
 #
 #   scripts/run-ios-against-host.sh <user@host> <screenshot.png> ["iPhone 17 Pro"]
 # It defaults to iPhone 17 Pro, so it never replaces the app another run has

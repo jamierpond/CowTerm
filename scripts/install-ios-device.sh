@@ -7,8 +7,7 @@
 #   scripts/install-ios-device.sh [pond] [app arguments]
 #
 # The signing team is COWTERM_IOS_TEAM, else the first team Xcode has signed
-# into, else Jamie's Personal Team. EACP_SOURCE builds against a local eacp
-# checkout, as in scripts/build-ios-simulator.sh.
+# into, else Jamie's Personal Team.
 set -eu
 cd "$(dirname "$0")/.."
 phone="${1:-pond}"
@@ -35,19 +34,13 @@ for account in teams.values():
 team="${COWTERM_IOS_TEAM:-$(find_team_xcode_is_signed_into)}"
 team="${team:-$jamies_personal_team}"
 
-if [ -n "${EACP_SOURCE:-}" ]; then
-    eacp_source_flag="-DLOCKSTEP_eacp_SOURCE=$EACP_SOURCE"
-else
-    eacp_source_flag="-ULOCKSTEP_eacp_SOURCE"
-fi
-
 cmake -G Xcode -B "$build_dir" \
     -DCMAKE_SYSTEM_NAME=iOS \
     -DCMAKE_OSX_SYSROOT=iphoneos \
     -DCMAKE_OSX_ARCHITECTURES=arm64 \
     -DCMAKE_XCODE_ATTRIBUTE_CODE_SIGN_STYLE=Automatic \
     -DCMAKE_XCODE_ATTRIBUTE_DEVELOPMENT_TEAM="$team" \
-    "$eacp_source_flag"
+    -ULOCKSTEP_eacp_SOURCE
 
 cmake --build "$build_dir" --config "$configuration" --target CowTermMobile -- \
     -allowProvisioningUpdates -allowProvisioningDeviceRegistration -quiet
