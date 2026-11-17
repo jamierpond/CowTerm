@@ -88,6 +88,10 @@ ios-device-test-live-output phone="pond":
 ios-device-test-key-row destination="jamiepond@macprorack" phone="pond":
     scripts/check-ios-device-key-row.sh "{{destination}}" "{{phone}}"
 
+# Show on a separate daemon instance on a host what an update does to running shells
+check-update-keeps-shells destination folder:
+    scripts/check-update-keeps-shells.sh {{destination}} {{folder}}
+
 # Print the log the app wrote on the phone on its last launch, or with "previous" the one before
 ios-device-log phone="pond" which="":
     scripts/read-ios-device-log.sh "{{phone}}" {{which}}
