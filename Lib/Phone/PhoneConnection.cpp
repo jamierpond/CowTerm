@@ -457,6 +457,9 @@ std::optional<PaneOnHostId> PhoneConnection::findLaunchPane() const
     if (!settings.explicitPaneId.empty())
         return PaneOnHostId {host, settings.explicitPaneId};
 
+    if (!settings.choosesPaneAtLaunch)
+        return std::nullopt;
+
     const auto hasLaunchPassed = readClock() - startedAt > launchPaneChoiceWindow;
 
     if (hasLaunchPassed || !isReadyToChooseLaunchPane())

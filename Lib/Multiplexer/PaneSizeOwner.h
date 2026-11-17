@@ -28,7 +28,8 @@ public:
     std::optional<PtySize> reclaimSize(ClientId client);
 
     // The client stopped showing the pane. When it owned it, the client that
-    // owned it before (and still shows it) takes it back at its size.
+    // owned it before (and still shows it) takes it back at its size; when no
+    // other client owned it before, one that still shows it takes it.
     std::optional<PtySize> forgetClient(ClientId client);
 
     std::optional<ClientId> getOwner() const;

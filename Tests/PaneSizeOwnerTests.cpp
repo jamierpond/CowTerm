@@ -127,3 +127,13 @@ auto tNeighbouringVersionsTalk = test("Protocol/neighbouringVersionsTalk") = []
     check(!term::proto::isNeighbouringProtocolVersion(ours, tooOld));
     check(!term::proto::isNeighbouringProtocolVersion(ours, tooNew));
 };
+
+auto tMacThatOpenedLaterGetsThePaneBack = test("PaneSizeOwner/aMacThatOpenedThePaneWhileThePhoneHeldItGetsItBack") = []
+{
+    auto owner = PaneSizeOwner {};
+    owner.claimSize(phone, phoneSize);
+    check(!owner.requestSize(mac, desktopSize).has_value(), "the phone holds it");
+
+    check(isSize(owner.forgetClient(phone), desktopSize));
+    check(owner.isOwnedBy(mac));
+};

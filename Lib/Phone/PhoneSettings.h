@@ -29,6 +29,12 @@ struct PhoneSettings
     // Where the shown pane's last screen is kept between launches.
     std::filesystem::path storedScreenPath;
 
+    // Whether the phone opens on the pane typed into last (or shown last time)
+    // when no pane is named. Off for a launch that names its host itself (a
+    // simulator run by a script), so a test never takes the size of a pane
+    // someone is using.
+    bool choosesPaneAtLaunch = true;
+
     // What runs `ct bridge` on the host; a test instance passes its own.
     std::string bridgeCommand = remote::bridgeCommand;
 };

@@ -146,7 +146,10 @@ std::optional<PhoneSettings> PhoneLaunch::readSettings(int argc, char* argv[])
     const auto storedScreenPath = term::getDataDirectory() / storedScreenFileName;
 
     if (auto fromLaunch = parsePhoneSettings(arguments, readEnvironment, storedScreenPath))
+    {
+        fromLaunch->choosesPaneAtLaunch = false;
         return fromLaunch;
+    }
 
     const auto pairingFolder = term::getDataDirectory() / pairingFolderName;
     auto paired = parsePhoneSettings(arguments, makePairedSetupReader(pairingFolder), storedScreenPath);

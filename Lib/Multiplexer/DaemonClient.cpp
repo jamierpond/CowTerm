@@ -307,13 +307,14 @@ std::vector<DaemonClient::ReturnedSize> DaemonClient::returnBorrowedSizes()
     return returned;
 }
 
+// Every pane, not only those it gave back: a daemon with size owners takes a
+// pane from a client that went quiet (an app iOS suspended) on its own.
 void DaemonClient::claimReturnedSizesAgain()
 {
-    for (const auto& id: std::exchange(panesWithSizeReturned, {}))
-    {
-        if (auto found = routes.find(id); found != routes.end())
-            sendResizeAndClaim(id, found->second.request.size);
-    }
+    panesWithSizeReturned.clear();
+
+    for (const auto& [id, route]: routes)
+        sendResizeAndClaim(id, route.request.size);
 }
 
 std::optional<PtySize> DaemonClient::findBorrowedSize(const std::string& id) const

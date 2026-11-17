@@ -154,7 +154,8 @@ public:
     // by hand, here and on release; only these are listed.
     std::vector<ReturnedSize> returnBorrowedSizes();
 
-    // Claims again, at this client's size, each pane returnBorrowedSizes gave back.
+    // Claims again, at this client's size, every pane it shows: those
+    // returnBorrowedSizes gave back, and those a daemon took while it was quiet.
     void claimReturnedSizesAgain();
 
     // The size the pane had when this client adopted it; empty when it has none.

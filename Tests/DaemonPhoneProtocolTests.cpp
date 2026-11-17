@@ -193,6 +193,32 @@ auto tPhoneInTheBackgroundYieldsThePane = test("DaemonPhoneProtocol/phoneInTheBa
     mac.messenger.send(term::proto::make("kill", {paneId}));
 };
 
+auto tSilentPhoneLosesThePane = test("DaemonPhoneProtocol/aPhoneThatGoesSilentLosesThePane") = []
+{
+    // A Mac showing a pane asks for info about this often; the phone, frozen
+    // as iOS suspends it with its link still open, sends nothing at all.
+    constexpr auto macInfoInterval = Time::MS {500};
+    auto daemon = TestDaemon {"daemon-silent-phone-test"};
+    auto mac = DaemonConversation {daemon.instance};
+    auto phone = DaemonConversation {daemon.instance};
+    check(mac.waitForConnection() && phone.waitForConnection());
+    introduce(mac, "Mac");
+    introduce(phone, "iPhone");
+
+    createPane(mac, paneId, desktopColumns);
+    openPane(phone, paneId, phoneColumns);
+    phone.messenger.send(term::proto::make(
+        "claim-size", {paneId, toArgument(phoneColumns), toArgument(rows)}));
+    mac.waitForMessage("size-owner");
+    check(readPaneColumns(daemon.instance) == phoneColumns);
+
+    auto macKeepsAsking = Threads::Timer {[&mac] { mac.messenger.send(term::proto::make("info")); }, macInfoInterval};
+    check(isSizeOwnerNotice(mac.waitForMessage("size-owner"), {desktopColumns, true, "Mac"}),
+          "the Mac has its size back without the phone saying goodbye");
+
+    mac.messenger.send(term::proto::make("kill", {paneId}));
+};
+
 auto tPhoneLeavingHandsThePaneBack = test("DaemonPhoneProtocol/phoneLeavingHandsThePaneBack") = []
 {
     auto daemon = TestDaemon {"daemon-owner-leaves-test"};

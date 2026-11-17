@@ -34,7 +34,15 @@ std::optional<PtySize> PaneSizeOwner::forgetClient(ClientId client)
     requestedSizes.erase(client);
     std::erase(owners, client);
 
-    if (!wasOwner || owners.empty())
+    if (!wasOwner)
+        return std::nullopt;
+
+    // A client that opened the pane while another held it never owned it;
+    // it is the one still showing the pane, so it takes it.
+    if (owners.empty() && !requestedSizes.empty())
+        return takeOwnership(requestedSizes.begin()->first);
+
+    if (owners.empty())
         return std::nullopt;
 
     return requestedSizes.at(owners.back());

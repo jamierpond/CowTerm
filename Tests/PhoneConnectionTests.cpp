@@ -156,6 +156,18 @@ auto paneHeldWhenKilledGetsItsSizeBackNextLaunch =
     check(!loadHeldPane(heldPanePath), "given back once");
 };
 
+auto scriptedLaunchOpensNoPaneOnItsOwn = test("PhoneConnection/aScriptedLaunchNeverOpensAPaneOnItsOwn") = []
+{
+    auto settings = makeSettings({});
+    settings.choosesPaneAtLaunch = false;
+    auto phone = PhoneOnRecordedHost {settings};
+    phone.bringLinkUp();
+    phone.answerInfo(makeInfoLine("pane-a", "tamby/x"));
+
+    phone.answer("last-input pane-a 1794906370945");
+    check(phone.chosenPaneId.empty(), "a test must not take the size of the pane someone typed in");
+};
+
 auto quietPhoneLinkStallsThenRedials =
     test("PhoneConnection/quietLinkStallsThenRedials") = []
 {

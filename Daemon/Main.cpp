@@ -40,6 +40,11 @@ using namespace eacp;
 namespace
 {
 constexpr auto idleCheckInterval = Time::MS {10000};
+constexpr auto silentClientCheckInterval = Time::MS {1000};
+
+// Five missed info requests: long enough for a stalled network, short enough
+// that the Mac gets a pane back within seconds of the phone going quiet.
+constexpr auto silenceThatLosesThePanes = std::chrono::seconds {5};
 constexpr int idleChecksBeforeExit = 6;
 constexpr int saveIntervalMilliseconds = 5000;
 
@@ -92,6 +97,11 @@ struct ConnectedClient
     term::PaneSizeOwner::ClientId id = 0;
     int protocolVersion = term::proto::sizeOwnerProtocolVersion - 1;
     std::string name;
+
+    // A client showing panes asks for info every second; one that stops (a
+    // phone iOS suspended with its link still open) loses the panes it holds.
+    std::chrono::steady_clock::time_point lastHeardAt = std::chrono::steady_clock::now();
+    bool hasYieldedForSilence = false;
 };
 
 struct LastInput
@@ -195,6 +205,8 @@ struct Daemon
 
     void handle(IPC::Messenger& sender, const term::proto::Message& message)
     {
+        noteClientHeard(sender);
+
         static constexpr auto handlers = std::array {
             MessageHandler {"hello", 0, &Daemon::handleHello},
             MessageHandler {"spawn", 3, &Daemon::handleSpawn},
@@ -671,6 +683,41 @@ struct Daemon
     }
 
     // A daemon with nothing to hold and nobody attached retires itself.
+    void noteClientHeard(IPC::Messenger& sender)
+    {
+        auto& client = clients.at(&sender);
+        client.lastHeardAt = std::chrono::steady_clock::now();
+        client.hasYieldedForSilence = false;
+    }
+
+    bool hasGoneSilent(const ConnectedClient& client) const
+    {
+        const auto silence = std::chrono::steady_clock::now() - client.lastHeardAt;
+        return !client.hasYieldedForSilence && silence > silenceThatLosesThePanes;
+    }
+
+    // As yield-size does for each pane the silent client holds; it claims them
+    // again itself when it speaks.
+    void yieldPanesOfSilentClients()
+    {
+        for (auto& [messenger, client]: clients)
+        {
+            if (!hasGoneSilent(client))
+                continue;
+
+            client.hasYieldedForSilence = true;
+
+            for (auto& [id, pane]: panes)
+            {
+                if (!pane->sizeOwner.isOwnedBy(client.id))
+                    continue;
+
+                if (auto size = pane->sizeOwner.forgetClient(client.id))
+                    applySize(id, *pane, *size);
+            }
+        }
+    }
+
     void checkIdle()
     {
         if (clients.empty() && panes.empty())
@@ -694,6 +741,7 @@ struct Daemon
 
     IPC::MessageServer server {term::proto::serverName()};
     Threads::Timer idleTimer {[this] { checkIdle(); }, idleCheckInterval};
+    Threads::Timer silentClientTimer {[this] { yieldPanesOfSilentClients(); }, silentClientCheckInterval};
     Threads::Timer saveTimer {[this] { saveChangedPanes(); }, Time::MS {saveIntervalMilliseconds}};
 };
 } // namespace

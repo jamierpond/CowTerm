@@ -501,6 +501,18 @@ launched with `--landscape`, which is how landscape screenshots are taken.
   protocol 5; older daemons ignore it) when it goes to the background or its
   link stalls, so the client that held the pane before takes it back while
   the phone still watches it; it claims again on coming back.
+- That rule needs its other half, found when the Mac showed "on iPhone, 102
+  columns" on a pane with no phone connected: a pane the Mac opened while the
+  phone held it never had the Mac as an owner, so when the phone left nobody
+  took it back, and the Mac, which sends no size while a pane is held
+  elsewhere, stayed narrow. Now a pane whose holder leaves goes to a client
+  still showing it, and the daemon takes the panes of a client that has said
+  nothing for 5 seconds (a phone iOS suspended with its link still open; a
+  client showing panes asks for info every second). The phone claims every
+  pane it shows again when it comes back to the foreground.
+- A launch that names its host itself (a simulator started by a script) never
+  opens a pane on its own, so no test takes the size of a pane Jamie typed in;
+  only the paired app does.
 - The ssh link's hello and failure wording moved from `SshBridgeLink` into a
   `BridgeLink` base both links share, and `RemoteHost` takes a link factory.
   libssh2 is its own library (`CowTerm::EmbeddedSsh`), so ct, the daemon and
