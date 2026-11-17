@@ -6,6 +6,7 @@
 add_library(CowTermTerminal STATIC
         GlyphAtlas.cpp
         TerminalView.cpp
+        TerminalViewGridSize.cpp
         TerminalViewScrolling.cpp
         CellText.cpp
         CopyMode.cpp

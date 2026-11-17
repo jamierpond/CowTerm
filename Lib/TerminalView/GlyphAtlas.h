@@ -51,7 +51,7 @@ struct GlyphSlot
 class GlyphAtlas
 {
 public:
-    // scale <= 0 uses the main display's backing scale.
+    // scale <= 0 rasterizes at 2x.
     GlyphAtlas(const std::string& fontName, float pointSize, float scale = 0);
 
     // All in points.

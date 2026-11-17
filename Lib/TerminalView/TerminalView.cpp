@@ -38,22 +38,6 @@ std::unique_ptr<Shell> shellFor(const TerminalConfig& config,
     return config.makeCommandShell(shellId);
 }
 
-bool isPositiveSize(float width, float height)
-{
-    return width > 0 && height > 0;
-}
-
-constexpr auto minimumGridColumns = 2;
-constexpr auto minimumGridRows = 1;
-
-// How many whole cells fit along a length after a margin at each end.
-int countWholeCellsThatFit(float length, float margin, float cellSize)
-{
-    const auto cellsThatFit = std::floor((length - 2 * margin) / cellSize);
-    const auto wholeCells = static_cast<int>(cellsThatFit);
-    return wholeCells;
-}
-
 std::vector<EnvironmentVariable> environmentFor(const TerminalConfig& config,
                                                 const std::string& shellId,
                                                 const std::string& command)
@@ -90,7 +74,8 @@ TerminalView::TerminalView(const TerminalConfig& config,
     setHandlesMouseEvents(true);
     setGrabsFocusOnMouseDown(true);
 
-    atlas.emplace(fontName, fontSize);
+    createGlyphAtlasAtBackingScale();
+    onBackingScaleChanged = [this](float) { rebuildGlyphAtlasForNewBackingScale(); };
 
     connectParserToUiThread();
     startOutputParserThread();
@@ -343,8 +328,13 @@ void TerminalView::resized()
     {
         sprites.emplace(Graphics::Point {bounds.w, bounds.h}, sampleCount());
 
+        // The first layout is when the view knows its display; the scale it
+        // was built at was a guess, and eacp reports no change from it.
         if (!glyphs)
+        {
             glyphs.emplace();
+            createGlyphAtlasAtBackingScale();
+        }
 
         glyphs->setViewportSize({bounds.w, bounds.h});
     }
@@ -393,67 +383,6 @@ void TerminalView::runAfterDelayUnlessRestarted(Time::MS delay,
                        });
 }
 
-void TerminalView::applyGridSize()
-{
-    const auto bounds = getLocalBounds();
-    const auto cellW = atlas->cellWidth();
-    const auto cellH = atlas->cellHeight();
-
-    if (!isPositiveSize(cellW, cellH) || !isPositiveSize(bounds.w, bounds.h))
-        return;
-
-    const auto size = fixedGridSize.value_or(calculateGridSizeFromBounds());
-    const auto cols = size.cols;
-    const auto rows = size.rows;
-    hasGridSizeFromBounds = true;
-
-    if (commandTerminal)
-        debugLog("[grid] popup bounds w=%.1f h=%.1f cell=%.2fx%.2f font=%.1f -> %dx%d\n",
-                 bounds.w, bounds.h, cellW, cellH, fontSize, cols, rows);
-
-    if (cols == screen.columns() && rows == screen.rows())
-        return;
-
-    // A resize reflows and renumbers every row, so the view keeps its distance
-    // from the bottom instead.
-    syncScrollPositionWithScrollback();
-    const auto linesFromBottom = calculateLinesFromBottom();
-    screen.resize(cols, rows);
-    shell->resize({cols, rows});
-    syncScrollPositionWithScrollback();
-
-    if (!scrollPosition.isFollowingLiveBottom())
-        scrollPosition.showLinesFromBottom(linesFromBottom, calculateScrollRange());
-}
-
-PtySize TerminalView::calculateGridSizeFromBounds() const
-{
-    const auto bounds = getLocalBounds();
-    const auto cols = countWholeCellsThatFit(bounds.w, marginX, atlas->cellWidth());
-    const auto rows = countWholeCellsThatFit(bounds.h, marginY, atlas->cellHeight());
-    return {std::max(minimumGridColumns, cols), std::max(minimumGridRows, rows)};
-}
-
-// With a fixed grid, the rows the view's height holds; otherwise the grid's.
-int TerminalView::countViewportRows() const
-{
-    if (!fixedGridSize)
-        return screen.rows();
-
-    const auto bounds = getLocalBounds();
-    const auto rows = countWholeCellsThatFit(bounds.h, marginY, atlas->cellHeight());
-    return std::max(minimumGridRows, rows);
-}
-
-void TerminalView::setFixedGridSize(std::optional<PtySize> size)
-{
-    const auto lock = lockTerminal();
-    fixedGridSize = size;
-    applyGridSize();
-    rowDrawings.invalidateAllRows();
-    repaintIfShown();
-}
-
 void TerminalView::restoreTerminalState(const std::string& serialized)
 {
     const auto state = parseTerminalState(serialized);
@@ -485,10 +414,31 @@ void TerminalView::setFontSize(float newSize)
         return;
 
     fontSize = clamped;
-    atlas.emplace(fontName, fontSize);
+    createGlyphAtlasAtBackingScale();
     rowDrawings.invalidateAllRows();
     applyGridSize();
     repaint();
+}
+
+// Glyphs are rasterized for the display's pixels: 3x on an iPhone, and
+// whatever a Mac's screen is, so text is never scaled up or down.
+void TerminalView::createGlyphAtlasAtBackingScale()
+{
+    atlas.emplace(fontName, fontSize, backingScale());
+}
+
+void TerminalView::rebuildGlyphAtlasForNewBackingScale()
+{
+    const auto lock = lockTerminal();
+    createGlyphAtlasAtBackingScale();
+    rowDrawings.invalidateAllRows();
+    applyGridSize();
+    repaintIfShown();
+}
+
+bool TerminalView::isPositiveSize(float width, float height)
+{
+    return width > 0 && height > 0;
 }
 
 // ---- rendering -------------------------------------------------------------

@@ -249,6 +249,9 @@ private:
     void startShell(const TerminalConfig& config,
                     const std::string& workingDirectory,
                     const std::string& commandToRun);
+    static bool isPositiveSize(float width, float height);
+    void createGlyphAtlasAtBackingScale();
+    void rebuildGlyphAtlasForNewBackingScale();
     void scrollBy(int lines);
     ScrollEdgeContact scrollByRows(double rows);
     ScrollEdgeContact scrollByPixels(double pixels);
