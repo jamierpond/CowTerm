@@ -239,6 +239,23 @@ add_executable(CowTermRunRemotePopup
 target_include_directories(CowTermRunRemotePopup PRIVATE ../Terminal)
 target_link_libraries(CowTermRunRemotePopup PRIVATE CowTerm::TerminalView CowTerm::Multiplexer SessionLog PondApp CowTermVersion)
 
+# Not a test: an in-process ssh link (EmbeddedSshLink) to a host's daemon,
+# printing a throwaway pane's screen (scripts/probe-embedded-ssh.sh). Where
+# libssh2 is built, with the parsing of its command line tested beside it.
+if (TARGET CowTerm::EmbeddedSsh)
+    add_executable(CowTermEmbeddedSshProbe
+            ../Bench/EmbeddedSshProbe.cpp
+            ../Bench/EmbeddedSshProbeArguments.cpp)
+    target_link_libraries(CowTermEmbeddedSshProbe PRIVATE CowTerm::EmbeddedSsh CowTerm::TerminalView)
+
+    nano_add_executable(CowTermEmbeddedSshTests
+            SOURCES
+                EmbeddedSshTests.cpp
+                ../Bench/EmbeddedSshProbeArguments.cpp
+            TARGETS CowTerm::EmbeddedSsh)
+    target_include_directories(CowTermEmbeddedSshTests PRIVATE ../Bench)
+endif ()
+
 # The headless ct a remote host runs, and the app's own ct mode.
 pond_add_version_test(CowTermCli ct)
 get_directory_property(appExecutableTarget

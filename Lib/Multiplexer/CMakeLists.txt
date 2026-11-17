@@ -59,3 +59,13 @@ target_link_libraries(CowTermMultiplexer PUBLIC
 add_library(CowTerm::Multiplexer ALIAS CowTermMultiplexer)
 
 set_default_target_setting(CowTermMultiplexer)
+
+# The ssh client inside the process, for the iPhone, which cannot run the
+# system ssh. A separate library so ct, the daemon and the Mac app never link
+# libssh2; it exists where the top-level CMakeLists adds libssh2.
+if (TARGET libssh2_static)
+    add_library(CowTermEmbeddedSsh STATIC EmbeddedSshLink.cpp)
+    target_link_libraries(CowTermEmbeddedSsh PUBLIC CowTerm::Multiplexer PRIVATE libssh2_static)
+    add_library(CowTerm::EmbeddedSsh ALIAS CowTermEmbeddedSsh)
+    set_default_target_setting(CowTermEmbeddedSsh)
+endif ()
