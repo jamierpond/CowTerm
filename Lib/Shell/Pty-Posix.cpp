@@ -1,4 +1,5 @@
 #include "Pty.h"
+#include "InheritedEnvironment.h"
 
 #include <cerrno>
 #include <csignal>
@@ -17,6 +18,9 @@
 #else
 #include <pty.h>
 #endif
+
+// POSIX names it; macOS's unistd.h does not declare it.
+extern char** environ;
 
 namespace term
 {
@@ -41,8 +45,28 @@ bool isRetryableFailure(long result)
     return result < 0 && (errno == EINTR || errno == EAGAIN);
 }
 
+// Names first, then unsetenv: removing while walking environ skips entries.
+void removeVariablesAPaneMustNotInherit()
+{
+    auto names = std::vector<std::string> {};
+
+    for (auto** entry = environ; *entry != nullptr; ++entry)
+    {
+        const auto line = std::string_view {*entry};
+        const auto name = line.substr(0, line.find('='));
+
+        if (isVariableAPaneMustNotInherit(name))
+            names.emplace_back(name);
+    }
+
+    for (const auto& name: names)
+        unsetenv(name.c_str());
+}
+
 void setChildEnvironment(const std::vector<EnvironmentVariable>& environment)
 {
+    removeVariablesAPaneMustNotInherit();
+
     setenv("TERM", "xterm-256color", 1);
     setenv("COLORTERM", "truecolor", 1);
     unsetenv("TERM_PROGRAM");

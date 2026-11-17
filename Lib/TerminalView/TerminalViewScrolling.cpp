@@ -235,10 +235,10 @@ void TerminalView::drawScrollIndicator(GridPainter& painter)
     const auto thumb = calculateScrollIndicatorThumb(layout);
     const auto thumbTop = static_cast<float>(thumb.top);
     const auto thumbHeight = static_cast<float>(thumb.height);
-    const auto opacity = static_cast<float>(scrollIndicatorFade.calculateOpacity());
+    const auto indicatorOpacity = static_cast<float>(scrollIndicatorFade.calculateOpacity());
     const auto left = bounds.w - indicatorInset - indicatorWidth;
 
-    painter.drawScrollIndicator({left, thumbTop, indicatorWidth, thumbHeight}, opacity);
+    painter.drawScrollIndicator({left, thumbTop, indicatorWidth, thumbHeight}, indicatorOpacity);
 }
 
 void TerminalView::beginTouchScroll(const TouchEvent& touch)

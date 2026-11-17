@@ -1,4 +1,5 @@
 #include "Pty.h"
+#include "InheritedEnvironment.h"
 
 #include <eacp/Core/Utils/WinInclude.h>
 #include <eacp/Core/Utils/FilePath.h>
@@ -53,6 +54,21 @@ bool isVariableNamed(const std::wstring& entry, const std::wstring& name)
            && _wcsnicmp(entry.c_str(), name.c_str(), name.size()) == 0;
 }
 
+// Variable names are ASCII; anything else cannot match a name we look for.
+std::string narrowVariableName(const std::wstring& entry)
+{
+    constexpr auto lastAsciiCharacter = 0x7f;
+    auto name = std::string {};
+
+    for (const auto character: entry.substr(0, entry.find(L'=')))
+    {
+        const auto asciiCharacter = static_cast<char>(character <= lastAsciiCharacter ? character : '?');
+        name.push_back(asciiCharacter);
+    }
+
+    return name;
+}
+
 // A CreateProcessW environment block: this process's variables with `extras`
 // set over them, each NUL-terminated, the block ending in one more NUL.
 std::wstring environmentBlockWith(const std::vector<EnvironmentVariable>& extras)
@@ -78,7 +94,7 @@ std::wstring environmentBlockWith(const std::vector<EnvironmentVariable>& extras
         {
             const auto line = std::wstring {entry};
 
-            if (isOverridden(line))
+            if (isOverridden(line) || isVariableAPaneMustNotInherit(narrowVariableName(line)))
                 continue;
 
             block += line;

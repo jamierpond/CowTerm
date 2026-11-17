@@ -14,13 +14,16 @@ if (WIN32)
             SOURCES
                 PtyTests.cpp
                 PtyTests-Windows.cpp
+                InheritedEnvironmentTests.cpp
             TARGETS CowTerm::Shell)
 else ()
     nano_add_executable(CowTermTests
             SOURCES
                 PtyTests.cpp
                 PtyTests-Posix.cpp
-                ../Lib/Shell/Pty-Posix.cpp)
+                InheritedEnvironmentTests.cpp
+                ../Lib/Shell/Pty-Posix.cpp
+                ../Lib/Shell/InheritedEnvironment.cpp)
 endif ()
 
 target_include_directories(CowTermTests PRIVATE ../Lib/Shell)

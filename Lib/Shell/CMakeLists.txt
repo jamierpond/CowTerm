@@ -1,6 +1,6 @@
 # The process behind a pane: the PTY (forkpty or ConPTY) and the Shell
 # interface a pane talks to, with LocalShell running it in-process.
-add_library(CowTermShell STATIC)
+add_library(CowTermShell STATIC InheritedEnvironment.cpp)
 
 if (WIN32)
     target_sources(CowTermShell PRIVATE Pty-Windows.cpp)
