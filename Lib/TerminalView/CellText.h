@@ -13,6 +13,10 @@ namespace term
 // The line at an absolute row (see CellRef), scrollback or grid.
 const Line& findLineAtAbsoluteRow(const TermScreen& screen, long row);
 
+// The active screen's first row: the oldest scrollback line, or under a
+// full-screen program the top of its screen, which has no history.
+long findFirstAbsoluteRow(const TermScreen& screen);
+
 long findLastAbsoluteRow(const TermScreen& screen);
 
 bool isAbsoluteRowStored(const TermScreen& screen, long row);

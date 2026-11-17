@@ -966,7 +966,8 @@ void TerminalView::setCopyCursor(CellRef target)
 
 void TerminalView::placeCopyCursor(CellRef target)
 {
-    copyCursor.row = std::clamp(target.row, 0L, findLastAbsoluteRow(screen));
+    copyCursor.row =
+        std::clamp(target.row, findFirstAbsoluteRow(screen), findLastAbsoluteRow(screen));
     copyCursor.col = std::clamp(target.col, 0, screen.columns() - 1);
 
     const auto visualRow = calculateVisualRow(copyCursor.row);
@@ -1049,8 +1050,8 @@ void TerminalView::updateCopySelection()
 
     if (copyLineSelect)
     {
-        start.col = 0;
-        end.col = screen.columns() - 1;
+        start = {findSoftWrappedLineRows(screen, start.row).first, 0};
+        end = {findSoftWrappedLineRows(screen, end.row).last, screen.columns() - 1};
     }
 
     selection = {start, end, true};

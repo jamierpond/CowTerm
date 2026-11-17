@@ -105,6 +105,7 @@ public:
     BufferWalker(const TermScreen& screenToWalk, CellRef start)
         : screen(screenToWalk)
         , position(start)
+        , firstRow(findFirstAbsoluteRow(screenToWalk))
         , lastRow(findLastAbsoluteRow(screenToWalk))
     {
     }
@@ -146,7 +147,7 @@ public:
             return true;
         }
 
-        if (position.row <= 0)
+        if (position.row <= firstRow)
             return false;
 
         --position.row;
@@ -165,6 +166,7 @@ private:
 
     const TermScreen& screen;
     CellRef position;
+    long firstRow;
     long lastRow;
 };
 
@@ -210,15 +212,19 @@ constexpr auto motionRules = std::array {
                     return CellRef {cursor.row, cursor.col + 1};
                 }},
     MotionRule {CopyModeMotion::LineStart,
-                [](CellRef cursor, const TermScreen&) { return CellRef {cursor.row, 0}; }},
+                [](CellRef cursor, const TermScreen& screen) {
+                    return CellRef {findSoftWrappedLineRows(screen, cursor.row).first, 0};
+                }},
     MotionRule {CopyModeMotion::LineEnd,
                 [](CellRef cursor, const TermScreen& screen)
                 {
-                    const auto& line = findLineAtAbsoluteRow(screen, cursor.row);
-                    return CellRef {cursor.row, std::max(0, measureInkLength(line) - 1)};
+                    const auto lastRow = findSoftWrappedLineRows(screen, cursor.row).last;
+                    const auto& line = findLineAtAbsoluteRow(screen, lastRow);
+                    return CellRef {lastRow, std::max(0, measureInkLength(line) - 1)};
                 }},
     MotionRule {CopyModeMotion::Top,
-                [](CellRef, const TermScreen&) { return CellRef {0, 0}; }},
+                [](CellRef, const TermScreen& screen)
+                { return CellRef {findFirstAbsoluteRow(screen), 0}; }},
     MotionRule {CopyModeMotion::Bottom,
                 [](CellRef, const TermScreen& screen)
                 { return CellRef {findLastAbsoluteRow(screen), 0}; }},

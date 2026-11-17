@@ -71,12 +71,9 @@ void appendCellText(std::string& out, const TermScreen& screen, const Cell& cell
         appendUtf8(out, codepoint);
 }
 
-// Grid rows sit past the scrollback and resolve to negative offsets, down to
-// -(rows - 1) for the bottom line.
 bool isAbsoluteRowStored(const TermScreen& screen, long row)
 {
-    const auto offset = (int) (screen.scrollbackSize() - row);
-    return offset > -screen.rows() && offset <= screen.scrollbackSize();
+    return row >= findFirstAbsoluteRow(screen) && row <= findLastAbsoluteRow(screen);
 }
 
 bool doesRowRunOntoNextRow(const TermScreen& screen, long row)
@@ -163,6 +160,14 @@ void appendSelectedRowText(const TermScreen& screen,
 const Line& findLineAtAbsoluteRow(const TermScreen& screen, long row)
 {
     return screen.lineAt(0, (int) ((long) screen.scrollbackSize() - row));
+}
+
+long findFirstAbsoluteRow(const TermScreen& screen)
+{
+    if (screen.modes.altScreen)
+        return screen.scrollbackSize();
+
+    return 0;
 }
 
 long findLastAbsoluteRow(const TermScreen& screen)

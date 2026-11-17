@@ -1049,6 +1049,12 @@ int countVisibleColumns()
     return (int) ((viewWidth - 2 * marginX) / referenceAtlas().cellWidth());
 }
 
+std::string makeLineWrappingOntoASecondRow()
+{
+    constexpr auto columnsOnTheSecondRow = 5;
+    return std::string ((std::size_t) (countVisibleColumns() + columnsOnTheSecondRow), 'x');
+}
+
 Graphics::MouseEvent shiftMouseAtCell(int col, int row)
 {
     auto event = mouseAtCell(col, row);
@@ -1128,9 +1134,7 @@ auto tWordAcrossSoftWrap = test("Select/doubleClickTakesAWordTheTerminalWrapped"
 auto tRowAcrossSoftWrap = test("Select/tripleClickTakesTheWholeWrappedLine") = []
 {
     auto pane = TestPane {};
-    constexpr auto columnsOnTheSecondRow = 5;
-    const auto longLine =
-        std::string ((std::size_t) (countVisibleColumns() + columnsOnTheSecondRow), 'x');
+    const auto longLine = makeLineWrappingOntoASecondRow();
     pane.showOutput("before\r\n" + longLine + "\r\nafter");
 
     pane.view->mouseDown(clicksAtCell(1, 2, tripleClick));
@@ -1222,4 +1226,56 @@ auto tRewrapDropsSelection = test("Select/rewrappingForANewWidthDropsTheSelectio
                                settleTimeout);
 
     check(pane.view->getSelectedText().empty(), "the rows it named now hold other text");
+};
+
+// ---- copy mode: what y copies -------------------------------------------------
+
+auto tCopyModeStaysInAFullScreenProgram = test("CopyMode/inAFullScreenProgramTheTopIsTheProgramsTopRow") = []
+{
+    auto pane = TestPane {};
+    pane.showOutput(makeNumberedLines(0, linesOfHistory));
+    pane.showOutput("\033[?1049h\033[Happ top row\r\napp second row");
+
+    pane.view->enterCopyMode();
+    pane.view->keyDown(typedKey("g"));
+    pane.view->keyDown(typedKey("V"));
+
+    check(pane.view->getSelectedText() == "app top row",
+          "the shell's history behind a full-screen program is not on its screen");
+};
+
+auto tCopyModeCrossesTheWrap = test("CopyMode/dollarAndLineSelectionReachTheEndOfAWrappedLine") = []
+{
+    auto pane = TestPane {};
+    const auto longLine = makeLineWrappingOntoASecondRow();
+    pane.showOutput(longLine + "\r\nnext");
+
+    pane.view->enterCopyMode();
+    pane.view->keyDown(typedKey("g"));
+    pane.view->keyDown(typedKey("v"));
+    pane.view->keyDown(typedKey("$"));
+    check(pane.view->getSelectedText() == longLine, "$ from the first row");
+
+    pane.view->keyDown(keyWithCode(Graphics::KeyCode::Escape));
+    pane.view->keyDown(typedKey("V"));
+    check(pane.view->getSelectedText() == longLine, "V on the second row");
+};
+
+auto tCopyModeReattach = test("CopyMode/aReattachDropsTheSelectionInsteadOfCopyingOtherRows") = []
+{
+    const auto visibleRows = (int) ((viewHeight - 2 * marginY) / referenceAtlas().cellHeight());
+    auto daemonSide = TerminalModel {countVisibleColumns(), visibleRows, Theme {}};
+    daemonSide.feed(makeNumberedLines(0, linesOfHistory));
+
+    auto pane = TestPane {};
+    pane.showOutput(makeNumberedLines(0, linesOfHistory / 2));
+    pane.view->enterCopyMode();
+    pane.view->keyDown(typedKey("k"));
+    pane.view->keyDown(typedKey("V"));
+    check(!pane.view->getSelectedText().empty());
+
+    pane.recording->deliverRestoredState(serializeTerminalState(daemonSide.captureState()));
+
+    check(pane.view->inCopyMode());
+    check(pane.view->getSelectedText().empty());
 };
