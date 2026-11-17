@@ -1,7 +1,7 @@
 #pragma once
 
 #include "OverlayPanel.h"
-#include "PaletteItem.h"
+#include "Multiplexer/PaletteItem.h"
 
 #include <cstdint>
 #include <string>

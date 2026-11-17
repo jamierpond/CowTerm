@@ -1,8 +1,9 @@
 # Sessions across processes and machines: the session daemon's protocol and
 # the app's client of it, the ssh link and `ct bridge` framing to a remote
 # daemon, remote hosts and their projects, and the config, data directories
-# and `ct` plumbing that the daemon, `ct` and the app all share. No GPU: the
-# headless build (ct and cowtermd for a remote machine) links this.
+# and `ct` plumbing that the daemon, `ct` and the app all share, and the
+# palette's ranking the Mac and the phone share. No GPU: the headless build
+# (ct and cowtermd for a remote machine) links this.
 file(READ ${PROJECT_SOURCE_DIR}/scripts/remote-bootstrap.sh REMOTE_BOOTSTRAP_SCRIPT)
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
         ${PROJECT_SOURCE_DIR}/scripts/remote-bootstrap.sh)
@@ -22,6 +23,7 @@ add_library(CowTermMultiplexer STATIC
         HostColours.cpp
         NotifyUserClient.cpp
         NotifyUserProtocol.cpp
+        PaletteRanking.cpp
         PaneSizeOwner.cpp
         PaneStateCommand.cpp
         ProjectScan.cpp
@@ -31,6 +33,7 @@ add_library(CowTermMultiplexer STATIC
         RemoteInstall.cpp
         RemoteLocation.cpp
         SessionOverview.cpp
+        SessionOverviewSearch.cpp
         SshBridgeLink.cpp
         TextLayout.cpp
         UsageLog.cpp)
@@ -56,6 +59,7 @@ target_link_libraries(CowTermMultiplexer PUBLIC
         CowTerm::Emulator
         CowTerm::Shell
         eacp-network
+        FrecencySearch
         PondApp
         SessionLog)
 

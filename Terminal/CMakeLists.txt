@@ -23,7 +23,6 @@ add_executable(${COWTERM_EXECUTABLE_TARGET}
         NotifyUserServer.cpp
         OverlayPanel.cpp
         Palette.cpp
-        PaletteRanking.cpp
         PaletteUsageStore.cpp
         PasteConfirmation.cpp
         CowTermPermissions.cpp

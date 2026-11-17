@@ -1,4 +1,4 @@
-#include "PaletteRanking.h"
+#include "Multiplexer/PaletteRanking.h"
 
 #include <NanoTest/NanoTest.h>
 

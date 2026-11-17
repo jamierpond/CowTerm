@@ -1,6 +1,6 @@
 #include "Palette.h"
 
-#include "PaletteRanking.h"
+#include "Multiplexer/PaletteRanking.h"
 #include "Multiplexer/HostColours.h"
 #include "Multiplexer/Projects.h"
 #include "Multiplexer/RemoteHosts.h"

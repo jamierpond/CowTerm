@@ -2,7 +2,7 @@
 
 #include "Multiplexer/Config.h"
 #include "Multiplexer/MruStore.h"
-#include "PaletteRanking.h"
+#include "Multiplexer/PaletteRanking.h"
 #include "PaletteUsageStore.h"
 #include "SessionView.h"
 

@@ -163,10 +163,7 @@ nano_add_executable(CowTermCliTests
 nano_add_executable(CowTermPaletteRankingTests
         SOURCES
             PaletteRankingTests.cpp
-            ../Terminal/PaletteRanking.cpp
-        TARGETS FrecencySearch CowTerm::Multiplexer)
-
-target_include_directories(CowTermPaletteRankingTests PRIVATE ../Terminal)
+        TARGETS CowTerm::Multiplexer)
 
 # Not a test: `cat` of a large file through a real pane, timing the output and
 # the UI thread's responsiveness meanwhile. Run it by hand before and after a
@@ -205,6 +202,7 @@ nano_add_executable(CowTermPaneSizeOwnerTests
             PaneSizeOwnerTests.cpp
             DaemonClientSizeOwnerTests.cpp
             SessionOverviewTests.cpp
+            SessionOverviewSearchTests.cpp
         TARGETS CowTerm::Multiplexer)
 
 # Remote sessions: searchDirs host entries and the framing `ct bridge` speaks
@@ -235,7 +233,6 @@ add_executable(CowTermRenderPicker
         ../Terminal/PaneTerminalConfig.cpp
         ../Terminal/OverlayPanel.cpp
         ../Terminal/Palette.cpp
-        ../Terminal/PaletteRanking.cpp
         ../Terminal/PaletteUsageStore.cpp
         ../Terminal/SearchField.cpp
         ../Terminal/Session.cpp
