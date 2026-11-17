@@ -29,6 +29,12 @@ probe="build/Tests/CowTermEmbeddedSshProbe"
 "$probe" "$destination" --leave-pane "$pane" | grep -v "^  "
 
 device=$(scripts/find-ios-simulator.sh "$device_name")
+
+# Booted here, before any SIMCTL_CHILD_ variable is set: a simulator booted
+# with them keeps those values for every later launch, whatever the launch sets.
+if ! xcrun simctl list devices booted | grep -q "$device"; then
+    xcrun simctl boot "$device"
+fi
 trap 'xcrun simctl terminate "$device" "$bundle_id" 2> /dev/null || true; "$probe" "$destination" --kill-pane "$pane" | grep -v "^  "' EXIT
 
 launch_app() {
