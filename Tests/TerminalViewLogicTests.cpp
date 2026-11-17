@@ -383,6 +383,141 @@ auto tOsc8AcrossSoftWrap = test("Links/osc8LinkSpansItsCellsAcrossTheWrap") = []
     check(!findLinkAt(parsed.screen, {secondRow, 7}));
 };
 
+namespace
+{
+constexpr auto claudeCodeColumns = 60;
+constexpr auto claudeCodeRows = 6;
+
+struct ClaudeCodeScreen
+{
+    explicit ClaudeCodeScreen(const std::string& output)
+    {
+        parser.feed(output);
+    }
+
+    Theme theme;
+    TermScreen screen {claudeCodeColumns, claudeCodeRows, theme};
+    TermParser parser {screen, theme};
+};
+
+// Claude Code 2.1.326 in a 60-column terminal, recorded with
+// scripts/record-fuzz-corpus.py: its prompt box echoing a typed URL, broken one
+// column short of the edge, the box's grey background padding each row.
+const auto claudeCodePromptEcho = std::string {
+    "\033[48;2;55;55;55m\033[38;2;153;153;153m\xe2\x9d\xaf \033[38;2;255;255;255m"
+    "Use the Bash tool to run exactly: echo \"PR: \033[39m              \r\033[1B"
+    "  \033[38;2;255;255;255mhttps://github.com/jamierpond/CowTerm/pull/123456789/file"
+    "\033[39m \r\033[1B"
+    "  \033[38;2;255;255;255ms/abcdef0123456789abcdef#diff-deadbeef\" and then reply "
+    "\033[39m   "};
+
+// The same session's Bash tool line, broken right at the edge and indented by five.
+const auto claudeCodeToolLine = std::string {
+    "\033[38;2;153;153;153m  \xe2\x8e\xbf  $ echo \"PR: https://github.com/jamierpond/CowTerm/pull/"
+    "\r\033[5C\033[1B123456789/files/abcdef0123456789abcdef#diff-deadbeef\"\033[39m"};
+
+constexpr auto toolLineIndent = 5;
+constexpr auto onTheToolLinesUrl = CellRef {0, 40};
+
+const auto claudeCodeBrokenUrl = std::string {
+    "https://github.com/jamierpond/CowTerm/pull/123456789/files/abcdef0123456789abcdef"
+    "#diff-deadbeef"};
+
+// Text that reaches one column short of the edge, ending in a URL, and a line break.
+const auto rowEndingInUrlAtTheEdge =
+    std::string {"see https://example.com/a/path/that/reaches/the/edge/of/xyz\r\n"};
+} // namespace
+
+auto tUrlInClaudeCodePrompt = test("Links/urlRunsOnIntoTheIndentedRowClaudeCodeBrokeItOnto") = []
+{
+    const auto parsed = ClaudeCodeScreen {claudeCodePromptEcho};
+    constexpr auto firstRow = 1L;
+    constexpr auto secondRow = 2L;
+    constexpr auto indent = 2;
+    constexpr auto lastUrlColumn = 39;
+    constexpr auto wordsAfterTheUrl = lastUrlColumn + 3;
+    constexpr auto onTheFirstPart = CellRef {firstRow, 30};
+    constexpr auto onTheSecondPart = CellRef {secondRow, 10};
+
+    const auto fromFirstRow = findLinkAt(parsed.screen, onTheFirstPart);
+    const auto fromSecondRow = findLinkAt(parsed.screen, onTheSecondPart);
+
+    check(fromFirstRow && fromFirstRow->uri == claudeCodeBrokenUrl);
+    check(fromSecondRow && fromSecondRow->uri == claudeCodeBrokenUrl);
+    check(fromFirstRow->span.start == CellRef {firstRow, indent});
+    check(fromFirstRow->span.end == CellRef {secondRow, lastUrlColumn});
+    check(!findLinkAt(parsed.screen, {secondRow, wordsAfterTheUrl}), "the words after it");
+};
+
+auto tUrlInClaudeCodeTool = test("Links/urlRunsOnIntoAClaudeCodeToolLineIndentedByFive") = []
+{
+    const auto parsed = ClaudeCodeScreen {claudeCodeToolLine};
+    const auto link = findLinkAt(parsed.screen, onTheToolLinesUrl);
+
+    check(link && link->uri == claudeCodeBrokenUrl);
+    check(findLinkAt(parsed.screen, {1, toolLineIndent})->uri == claudeCodeBrokenUrl);
+};
+
+auto tIndentIsNotUnderlined = test("Links/theIndentBeforeAContinuedUrlIsNotPartOfTheLink") = []
+{
+    const auto parsed = ClaudeCodeScreen {claudeCodeToolLine};
+    const auto span = findLinkAt(parsed.screen, onTheToolLinesUrl)->span;
+
+    check(span.contains(onTheToolLinesUrl));
+    check(span.contains({1, toolLineIndent}));
+    check(!span.contains({1, 0}));
+    check(!span.contains({1, toolLineIndent - 1}));
+    check(!findLinkAt(parsed.screen, {1, 1}), "a click on the indent opens nothing");
+};
+
+auto tOrdinaryRowsAreNotJoined = test("Links/aUrlDoesNotTakeInTheNextRowUnlessItWasBroken") = []
+{
+    const auto urlEndingAtTheEdge = std::string {
+        "https://example.com/a/path/that/reaches/the/edge/of/xyz"};
+    constexpr auto onTheUrl = CellRef {0, 10};
+
+    const auto continued = ClaudeCodeScreen {rowEndingInUrlAtTheEdge + "  more/path"};
+    check(findLinkAt(continued.screen, onTheUrl)->uri == urlEndingAtTheEdge + "more/path");
+
+    const auto notIndented = ClaudeCodeScreen {rowEndingInUrlAtTheEdge + "more"};
+    check(findLinkAt(notIndented.screen, onTheUrl)->uri == urlEndingAtTheEdge);
+
+    const auto listItem = ClaudeCodeScreen {rowEndingInUrlAtTheEdge + "  - item"};
+    check(findLinkAt(listItem.screen, onTheUrl)->uri == urlEndingAtTheEdge);
+
+    const auto numberedItem = ClaudeCodeScreen {rowEndingInUrlAtTheEdge + "  2. item"};
+    check(findLinkAt(numberedItem.screen, onTheUrl)->uri == urlEndingAtTheEdge);
+
+    const auto newUrl = ClaudeCodeScreen {rowEndingInUrlAtTheEdge + "  https://b.test/"};
+    check(findLinkAt(newUrl.screen, onTheUrl)->uri == urlEndingAtTheEdge);
+
+    const auto deepIndent = ClaudeCodeScreen {rowEndingInUrlAtTheEdge + "          far"};
+    check(findLinkAt(deepIndent.screen, onTheUrl)->uri == urlEndingAtTheEdge);
+
+    const auto shortRow = ClaudeCodeScreen {"see https://example.com/short\r\n  more"};
+    check(findLinkAt(shortRow.screen, onTheUrl)->uri == "https://example.com/short");
+
+    const auto sentenceEnd = ClaudeCodeScreen {
+        "see https://example.com/a/path/that/reaches/the/edge/of/xy.\r\n  Then"};
+    check(findLinkAt(sentenceEnd.screen, onTheUrl)->uri
+          == "https://example.com/a/path/that/reaches/the/edge/of/xy");
+};
+
+auto tOsc8IgnoresIndentedRows = test("Links/osc8LinkStillSpansOnlyItsSoftWrappedCells") = []
+{
+    const auto parsed = ClaudeCodeScreen {
+        "\033]8;;https://x.test/full\033\\0123456789012345678901234567890123456789"
+        "01234567890123456789\033]8;;\033\\\r\n  \033]8;;https://x.test/full\033\\tail"
+        "\033]8;;\033\\"};
+    constexpr auto onTheLinkText = CellRef {0, 3};
+
+    const auto link = findLinkAt(parsed.screen, onTheLinkText);
+
+    check(link && link->uri == "https://x.test/full");
+    check(link->span.end == CellRef {0, claudeCodeColumns - 1});
+    check(link->span.indentedRowStarts.empty());
+};
+
 auto tVisibleRowText = test("ViewLogic/visibleRowTextStopsAtTheColumns") = []
 {
     const auto parsed = ParsedScreen {"abcdef  "};

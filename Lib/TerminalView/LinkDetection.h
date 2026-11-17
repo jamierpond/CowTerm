@@ -7,9 +7,11 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <vector>
 
 // Finding the link under a cell: an OSC 8 hyperlink, or a URL written as plain
-// text, either one running across soft-wrapped rows.
+// text, either one running across soft-wrapped rows. A text URL also runs on
+// into an indented row when a program broke the line itself, as Claude Code does.
 namespace term
 {
 // Cells of a link, inclusive at both ends, in reading order.
@@ -18,7 +20,11 @@ struct LinkSpan
     CellRef start;
     CellRef end;
 
-    bool contains(CellRef cell) const { return !(cell < start) && !(end < cell); }
+    // Where each later row's part of the link begins, for rows that start
+    // with an indent; the indent cells are not part of the link.
+    std::vector<CellRef> indentedRowStarts;
+
+    bool contains(CellRef cell) const;
 };
 
 struct DetectedLink
