@@ -48,6 +48,18 @@ void crashIfAskedToForTesting(int argc, char** argv)
 }
 #endif
 
+// What a phone or another Mac shows over a pane this app holds ("on Mac, 150 columns").
+std::string getClientNameForThisPlatform()
+{
+    if constexpr (Platform::isMac())
+        return "Mac";
+
+    if constexpr (Platform::isWindows())
+        return "Windows";
+
+    return "Linux";
+}
+
 Graphics::WindowOptions windowOptions()
 {
     auto options = Graphics::WindowOptions {};
@@ -119,6 +131,7 @@ struct TerminalApp
 
         // Sessions restore once the daemon dial resolves, so panes with
         // still-running shells re-adopt them instead of spawning fresh.
+        term::DaemonClient::setClientName(getClientNameForThisPlatform());
         term::DaemonClient::initialize([this] { shell.start(); });
     }
 

@@ -33,7 +33,22 @@ inline std::string appServerName()
 // What the daemon answers to "hello". Bumped when the daemon's messages
 // change, so a newer `ct bridge` restarts an older daemon (its panes come back
 // through the saved-state restore) instead of talking past it.
-inline constexpr auto daemonProtocolVersion = 4;
+inline constexpr auto daemonProtocolVersion = 5;
+
+// The first version whose clients say who they are in "hello" and claim pane
+// sizes; a client that says nothing is treated as the version before it.
+inline constexpr auto sizeOwnerProtocolVersion = 5;
+
+// The Mac, the daemons and the phone are rebuilt at different times, so each
+// side talks to a peer one version older or newer.
+inline bool isNeighbouringProtocolVersion(int ours, int theirs)
+{
+    return ours - theirs <= 1 && theirs - ours <= 1;
+}
+
+// "write <id> input": bytes the user typed or pasted, as against a terminal's
+// automatic replies. The daemon remembers the pane and the time.
+inline constexpr auto userInputMarker = "input";
 
 // spawn's payload: the working directory, then optionally a newline and a
 // command to run in place of an interactive shell.

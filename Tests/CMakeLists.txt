@@ -187,6 +187,23 @@ target_compile_definitions(CowTermDaemonRestoreTests
         PRIVATE COWTERM_DAEMON_PATH="$<TARGET_FILE:CowTermDaemon>")
 add_dependencies(CowTermDaemonRestoreTests CowTermDaemon)
 
+# The daemon's side of the phone: size owners, the pane last typed into,
+# local sessions and clients a protocol version apart, over IPC as above.
+nano_add_executable(CowTermDaemonPhoneProtocolTests
+        SOURCES
+            DaemonPhoneProtocolTests.cpp
+        TARGETS CowTerm::Multiplexer eacp-network PondApp)
+
+target_compile_definitions(CowTermDaemonPhoneProtocolTests
+        PRIVATE COWTERM_DAEMON_PATH="$<TARGET_FILE:CowTermDaemon>")
+add_dependencies(CowTermDaemonPhoneProtocolTests CowTermDaemon)
+
+# Who sets a pane's size when the Mac and the phone both show it.
+nano_add_executable(CowTermPaneSizeOwnerTests
+        SOURCES
+            PaneSizeOwnerTests.cpp
+        TARGETS CowTerm::Multiplexer)
+
 # Remote sessions: searchDirs host entries and the framing `ct bridge` speaks
 # over ssh.
 nano_add_executable(CowTermRemoteTests

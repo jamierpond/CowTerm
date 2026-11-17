@@ -17,9 +17,16 @@ namespace
 {
 std::unique_ptr<DaemonClient> instance;
 
+std::string& getClientName()
+{
+    static auto name = std::string {};
+    return name;
+}
+
 bool isPaneMessage(const std::string& verb)
 {
-    return verb == "output" || verb == "state" || verb == "exit" || verb == "missing-command";
+    return verb == "output" || verb == "state" || verb == "exit" || verb == "missing-command"
+           || verb == "size-owner";
 }
 
 std::string toString(int value)
@@ -43,6 +50,11 @@ void DaemonClient::initialize(const Callback& whenReady)
         });
 }
 
+void DaemonClient::setClientName(const std::string& name)
+{
+    getClientName() = name;
+}
+
 DaemonClient* DaemonClient::get()
 {
     return instance.get();
@@ -58,7 +70,15 @@ DaemonClient::DaemonClient(std::unique_ptr<DaemonLink> linkToUse, bool keepsPane
     , keepsPanesWhenLinkDrops(keepsPanes)
 {
     wireLink();
+    sendHello();
     infoTimer = std::make_unique<Threads::Timer>([this] { requestInfo(); }, 1);
+}
+
+void DaemonClient::sendHello()
+{
+    send(proto::make("hello",
+                     {toString(proto::daemonProtocolVersion),
+                      proto::encodeArgument(getClientName())}));
 }
 
 void DaemonClient::wireLink()
@@ -99,6 +119,8 @@ void DaemonClient::replaceLink(std::unique_ptr<DaemonLink> linkToUse)
 
 void DaemonClient::reattachPanes()
 {
+    sendHello();
+
     for (const auto& [id, route]: routes)
         sendSpawn(route.request);
 }
@@ -127,7 +149,9 @@ void DaemonClient::handleMessage(const std::string& body)
     if (message.args.empty())
         return;
 
-    if (message.verb == "output")
+    if (message.verb == "size-owner")
+        handleSizeOwner(message);
+    else if (message.verb == "output")
         handleOutput(message.args[0], std::move(message.payload));
     else if (message.verb == "state")
         handleState(message.args[0], message.payload);
@@ -147,6 +171,31 @@ void DaemonClient::handleState(const std::string& id, const std::string& payload
 {
     if (auto found = routes.find(id); found != routes.end())
         found->second.routes.onState(payload);
+}
+
+// size-owner <id> <cols> <rows> <1 when this client owns it> [owner's name]
+void DaemonClient::handleSizeOwner(const proto::Message& message)
+{
+    constexpr auto argumentCountWithoutName = std::size_t {4};
+    constexpr auto nameArgument = std::size_t {4};
+
+    if (message.args.size() < argumentCountWithoutName)
+        return;
+
+    const auto& id = message.args[0];
+    auto notice = SizeOwnerNotice {};
+    notice.size = {std::stoi(message.args[1]), std::stoi(message.args[2])};
+    notice.isThisClientTheOwner = message.args[3] == "1";
+    if (message.args.size() > nameArgument)
+        notice.ownerName = proto::decodeArgument(message.args[nameArgument]);
+
+    if (notice.isThisClientTheOwner)
+        panesHeldElsewhere.erase(id);
+    else
+        panesHeldElsewhere.insert(id);
+
+    if (auto found = routes.find(id); found != routes.end())
+        found->second.routes.onSizeOwnerChanged(notice);
 }
 
 void DaemonClient::handleExit(const std::string& id)
@@ -232,6 +281,30 @@ void DaemonClient::write(const std::string& id, std::string_view data)
         link->send(proto::make("write", {id}, data));
 }
 
+void DaemonClient::writeUserInput(const std::string& id, std::string_view data)
+{
+    if (isConnected())
+        link->send(proto::make("write", {id, proto::userInputMarker}, data));
+}
+
+void DaemonClient::claimSize(const std::string& id, const PtySize& size)
+{
+    if (auto found = routes.find(id); found != routes.end())
+        found->second.request.size = size;
+
+    send(proto::make("claim-size", {id, toString(size.cols), toString(size.rows)}));
+}
+
+void DaemonClient::reclaimSizes()
+{
+    send(proto::make("reclaim-sizes"));
+}
+
+bool DaemonClient::hasPanesHeldElsewhere() const
+{
+    return !panesHeldElsewhere.empty();
+}
+
 void DaemonClient::resize(const std::string& id, const PtySize& size)
 {
     if (auto found = routes.find(id); found != routes.end())
@@ -243,12 +316,14 @@ void DaemonClient::resize(const std::string& id, const PtySize& size)
 void DaemonClient::kill(const std::string& id)
 {
     routes.erase(id);
+    panesHeldElsewhere.erase(id);
     send(proto::make("kill", {id}));
 }
 
 void DaemonClient::release(const std::string& id)
 {
     routes.erase(id);
+    panesHeldElsewhere.erase(id);
     send(proto::make("release", {id}));
 }
 
@@ -271,6 +346,37 @@ void DaemonClient::killServer()
 namespace
 {
 using FindDaemon = std::function<DaemonClient*()>;
+
+// Typing in any pane takes back every pane a phone or another Mac holds, on
+// every machine, so the whole window returns to this client's sizes at once.
+void reclaimSizesOnEveryDaemon()
+{
+    auto daemons = std::vector<DaemonClient*> {DaemonClient::get()};
+
+    for (auto* host: RemoteHosts::all())
+        daemons.push_back(&host->getDaemon());
+
+    for (auto* daemon: daemons)
+    {
+        if (daemon != nullptr && daemon->hasPanesHeldElsewhere())
+            daemon->reclaimSizes();
+    }
+}
+
+// Shown over a pane whose size another client sets; cleared when it is back.
+std::string describeSizeOwner(const DaemonClient::SizeOwnerNotice& notice)
+{
+    if (notice.isThisClientTheOwner)
+        return {};
+
+    auto owner = notice.ownerName;
+
+    if (owner.empty())
+        owner = "another device";
+
+    return "on " + owner + ", " + std::to_string(notice.size.cols)
+           + " columns; type here to take it back";
+}
 
 // A pane's shell living in a daemon, here or on another machine. The pane
 // talks to it exactly like a local PTY; detach() leaves the process running
@@ -309,6 +415,8 @@ public:
         };
         routes.onExit = onExit;
         routes.onLinkLost = onStatusChanged;
+        routes.onSizeOwnerChanged = [status = onStatusChanged](const DaemonClient::SizeOwnerNotice& notice)
+        { status(describeSizeOwner(notice)); };
         routes.onMissingCommand = [this, onOutput](const std::string& program)
         {
             closeOnNextKey = std::move(exitAfterNotice);
@@ -332,6 +440,17 @@ public:
 
         if (auto* client = findDaemon())
             client->write(id, data);
+    }
+
+    void writeUserInput(std::string_view data) override
+    {
+        if (closeOnNextKey)
+            return write(data);
+
+        reclaimSizesOnEveryDaemon();
+
+        if (auto* client = findDaemon())
+            client->writeUserInput(id, data);
     }
 
     void resize(const PtySize& size) override
@@ -395,13 +514,13 @@ private:
 };
 } // namespace
 
-std::unique_ptr<Shell> makeLocalShell(const std::string& shellId)
+std::unique_ptr<Shell> makeLocalShell(const std::string& shellId, const std::string& sessionName)
 {
     auto* client = DaemonClient::get();
 
     if (client != nullptr && client->isConnected())
         return std::make_unique<DaemonShell>(
-            shellId, std::string {}, std::string {"this machine"}, [] { return DaemonClient::get(); });
+            shellId, sessionName, std::string {"this machine"}, [] { return DaemonClient::get(); });
 
     return std::make_unique<LocalShell>();
 }

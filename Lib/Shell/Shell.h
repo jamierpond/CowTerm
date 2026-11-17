@@ -27,6 +27,10 @@ public:
     virtual void write(std::string_view data) = 0;
     virtual void resize(const PtySize& size) = 0;
 
+    // Bytes the user typed or pasted, as against the terminal's own replies.
+    // A daemon shell tells the daemon, which remembers the pane last typed into.
+    virtual void writeUserInput(std::string_view data) { write(data); }
+
     virtual std::string foregroundProcess() const = 0;
     virtual std::string currentWorkingDirectory() const = 0;
 

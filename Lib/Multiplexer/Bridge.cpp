@@ -117,7 +117,9 @@ struct BridgeApp
 
         const auto version = parseDaemonHello(body);
 
-        if (version == proto::daemonProtocolVersion)
+        // A daemon one version apart keeps running, so an update does not end
+        // the shells it holds; only an older one than that is restarted.
+        if (version && proto::isNeighbouringProtocolVersion(proto::daemonProtocolVersion, *version))
             return startRelaying();
 
         if (version)

@@ -293,7 +293,7 @@ void TerminalView::sendAndScrollToBottom(std::string_view bytes)
     scrollToLiveBottom();
     blinkOn = true;
     rowDrawings.invalidateRowsWithBlinkingText();
-    send(bytes);
+    shell->writeUserInput(bytes);
     repaintIfShown();
 }
 

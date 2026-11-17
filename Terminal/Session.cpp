@@ -25,6 +25,14 @@ std::string getProjectHost(const std::string& projectDir)
     return remote ? remote->host : std::string {};
 }
 
+DaemonClient* findDaemonOfHost(const std::string& host)
+{
+    if (host.empty())
+        return DaemonClient::get();
+
+    return RemoteHosts::findDaemon(host);
+}
+
 // The directory a session's first pane starts in: a remote project's path
 // on its host, or the project itself.
 std::string getStartDirectory(const std::string& projectDir, const std::string& startCwd)
@@ -480,18 +488,18 @@ void SessionManager::writeState()
                     state.activeIndex = (int) i;
         });
 
-    publishRemoteLayouts(saved.peek());
+    publishLayouts(saved.peek());
 }
 
-// The daemon on each remote host keeps its sessions' layouts, so another
-// Mac attaching there opens the same panes.
-void SessionManager::publishRemoteLayouts(const SavedState& state) const
+// The daemon of each session's machine keeps its layout, so another Mac or
+// the phone attaching there knows which panes form the session.
+void SessionManager::publishLayouts(const SavedState& state) const
 {
     for (const auto& session: state.sessions)
     {
         const auto host = getProjectHost(session.projectDir);
 
-        if (auto* daemon = RemoteHosts::findDaemon(host))
+        if (auto* daemon = findDaemonOfHost(host))
         {
             daemon->send(proto::make(
                 "layout", {proto::encodeArgument(session.name)}, Miro::toJSONString(session)));

@@ -146,7 +146,7 @@ private:
     // the write itself.
     void persist();
     void writeState();
-    void publishRemoteLayouts(const SavedState& state) const;
+    void publishLayouts(const SavedState& state) const;
 
     const AppConfig& config;
     emberstore::Database db;

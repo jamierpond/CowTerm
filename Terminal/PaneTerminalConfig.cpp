@@ -16,7 +16,7 @@ TerminalConfig terminalConfig(const AppConfig& config,
     result.makeShell = [host, sessionName](const std::string& shellId)
     {
         if (host.empty())
-            return makeLocalShell(shellId);
+            return makeLocalShell(shellId, sessionName);
 
         return makeRemoteShell(shellId, host, sessionName);
     };

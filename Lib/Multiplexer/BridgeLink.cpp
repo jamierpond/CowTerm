@@ -1,5 +1,6 @@
 #include "BridgeLink.h"
 
+#include "Protocol.h"
 #include "RemoteInstall.h"
 
 namespace term
@@ -82,7 +83,7 @@ void BridgeLink::receiveMessage(std::string message)
 
 void BridgeLink::acceptHello(const bridge::BridgeHello& hello)
 {
-    if (hello.protocolVersion != bridge::protocolVersion)
+    if (!proto::isNeighbouringProtocolVersion(bridge::protocolVersion, hello.protocolVersion))
     {
         return fail("ct on " + host + " speaks bridge protocol " + std::to_string(hello.protocolVersion)
                     + ", this CowTerm " + std::to_string(bridge::protocolVersion) + "; run: "

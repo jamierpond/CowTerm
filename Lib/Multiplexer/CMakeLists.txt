@@ -22,6 +22,7 @@ add_library(CowTermMultiplexer STATIC
         HostColours.cpp
         NotifyUserClient.cpp
         NotifyUserProtocol.cpp
+        PaneSizeOwner.cpp
         ProjectScan.cpp
         Projects.cpp
         RemoteCommands.cpp

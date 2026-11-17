@@ -1,6 +1,7 @@
 #pragma once
 
 #include "DaemonLink.h"
+#include "Protocol.h"
 
 #include "Shell/Shell.h"
 
@@ -10,12 +11,13 @@
 #include <memory>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 
 namespace term
 {
-// A pane's shell in this machine's daemon, or in-process when the daemon
-// is unreachable.
-std::unique_ptr<Shell> makeLocalShell(const std::string& shellId);
+// A pane's shell in this machine's daemon, in its session sessionName, or
+// in-process when the daemon is unreachable.
+std::unique_ptr<Shell> makeLocalShell(const std::string& shellId, const std::string& sessionName);
 
 // A pane's shell in host's daemon, in that daemon's session sessionName.
 std::unique_ptr<Shell> makeRemoteShell(const std::string& shellId,
@@ -35,6 +37,13 @@ std::unique_ptr<Shell> makeRemoteShell(const std::string& shellId,
 class DaemonClient
 {
 public:
+    struct SizeOwnerNotice
+    {
+        PtySize size;
+        bool isThisClientTheOwner = true;
+        std::string ownerName;
+    };
+
     struct Routes
     {
         std::function<void(std::string)> onOutput = [](const std::string&) {};
@@ -46,6 +55,9 @@ public:
 
         // The pane's command isn't installed on the daemon's machine.
         std::function<void(const std::string& program)> onMissingCommand = [](const std::string&) {};
+
+        // Another client (or this one) now sets the pane's size.
+        std::function<void(const SizeOwnerNotice&)> onSizeOwnerChanged = [](const SizeOwnerNotice&) {};
     };
 
     struct ShellInfo
@@ -73,6 +85,10 @@ public:
     // answers null until then — and permanently when the daemon is
     // unreachable, which drops every local pane back to in-process shells.
     static void initialize(const eacp::Callback& whenReady);
+
+    // What other clients see this process called ("Mac", "iPhone") when it
+    // holds a pane's size. Set once at startup, before any client connects.
+    static void setClientName(const std::string& name);
     static DaemonClient* get();
     static void teardown();
 
@@ -94,7 +110,15 @@ public:
 
     void spawn(const SpawnRequest& request, Routes routes);
     void write(const std::string& id, std::string_view data);
+    void writeUserInput(const std::string& id, std::string_view data);
     void resize(const std::string& id, const PtySize& size);
+
+    // Sets the pane's size from now on, whoever set it before.
+    void claimSize(const std::string& id, const PtySize& size);
+
+    // Takes back every pane another client holds, at this client's sizes.
+    void reclaimSizes();
+    bool hasPanesHeldElsewhere() const;
     void kill(const std::string& id);
     void release(const std::string& id);
 
@@ -122,7 +146,9 @@ private:
     };
 
     void wireLink();
+    void sendHello();
     void handleLinkDropped();
+    void handleSizeOwner(const proto::Message& message);
     void sendSpawn(const SpawnRequest& request);
     void handleMessage(const std::string& body);
     void handleOutput(const std::string& id, std::string payload);
@@ -137,6 +163,7 @@ private:
     bool keepsPanesWhenLinkDrops = false;
     std::unordered_map<std::string, Route> routes;
     std::unordered_map<std::string, ShellInfo> info;
+    std::unordered_set<std::string> panesHeldElsewhere;
     std::unique_ptr<eacp::Threads::Timer> infoTimer;
 };
 } // namespace term

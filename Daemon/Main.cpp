@@ -7,6 +7,7 @@
 // pane comes back with its screen and history after the daemon restarts.
 
 #include "Multiplexer/DataDirectories.h"
+#include "Multiplexer/PaneSizeOwner.h"
 #include "Multiplexer/Protocol.h"
 #include "Signals.h"
 #include "CommandLookup.h"
@@ -26,6 +27,7 @@
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cstdio>
 #include <map>
 #include <memory>
@@ -65,10 +67,32 @@ struct DaemonPane
     bool alive = false;
     bool hasUnsavedChanges = false;
     std::string sessionName;
+    term::PaneSizeOwner sizeOwner;
 
     // The clients showing this pane: its output, state and exit go to them.
     std::vector<IPC::Messenger*> watchers;
 };
+
+// What a client said about itself in "hello". One that said nothing speaks
+// the protocol from before clients introduced themselves.
+struct ConnectedClient
+{
+    term::PaneSizeOwner::ClientId id = 0;
+    int protocolVersion = term::proto::sizeOwnerProtocolVersion - 1;
+    std::string name;
+};
+
+struct LastInput
+{
+    std::string paneId;
+    std::int64_t millisecondsSinceEpoch = 0;
+};
+
+std::int64_t getMillisecondsSinceEpoch()
+{
+    using namespace std::chrono;
+    return duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count();
+}
 
 // Moves the panes from where an older daemon kept them, before opening them.
 emberstore::Database openPaneStore()
@@ -112,7 +136,9 @@ struct Daemon
     // of its own; a pane's messages go only to the clients showing it.
     void adoptClient(IPC::Messenger& messenger)
     {
-        clients.push_back(&messenger);
+        auto client = ConnectedClient {};
+        client.id = ++lastClientId;
+        clients[&messenger] = client;
 
         messenger.onMessage = [this, &messenger](const std::string& body)
         { handle(messenger, term::proto::parse(body)); };
@@ -122,10 +148,18 @@ struct Daemon
 
     void forgetClient(IPC::Messenger& messenger)
     {
-        std::erase(clients, &messenger);
-
         for (auto& [id, pane]: panes)
-            std::erase(pane->watchers, &messenger);
+            stopWatching(id, *pane, messenger);
+
+        clients.erase(&messenger);
+    }
+
+    void stopWatching(const std::string& id, DaemonPane& pane, IPC::Messenger& messenger)
+    {
+        std::erase(pane.watchers, &messenger);
+
+        if (auto size = pane.sizeOwner.forgetClient(clients.at(&messenger).id))
+            applySize(id, pane, *size);
     }
 
     void sendToWatchers(const DaemonPane& pane, const std::string& message)
@@ -155,6 +189,9 @@ struct Daemon
             MessageHandler {"release", 1, &Daemon::handleRelease},
             MessageHandler {"write", 1, &Daemon::handleWrite},
             MessageHandler {"resize", 3, &Daemon::handleResize},
+            MessageHandler {"claim-size", 3, &Daemon::handleClaimSize},
+            MessageHandler {"reclaim-sizes", 0, &Daemon::handleReclaimSizes},
+            MessageHandler {"last-input", 0, &Daemon::handleLastInput},
             MessageHandler {"kill", 1, &Daemon::handleKill},
             MessageHandler {"info", 0, &Daemon::handleInfo},
             MessageHandler {"layout", 1, &Daemon::handleLayout},
@@ -170,8 +207,17 @@ struct Daemon
         (this->*(found->handle))(sender, message);
     }
 
-    void handleHello(IPC::Messenger& sender, const term::proto::Message&)
+    // hello [protocol version] [client name]
+    void handleHello(IPC::Messenger& sender, const term::proto::Message& message)
     {
+        auto& client = clients.at(&sender);
+
+        if (!message.args.empty())
+            client.protocolVersion = std::stoi(message.args[0]);
+
+        if (message.args.size() > 1)
+            client.name = term::proto::decodeArgument(message.args[1]);
+
         sender.send(term::proto::make(
             "daemon-hello", {std::to_string(term::proto::daemonProtocolVersion)}));
     }
@@ -193,17 +239,120 @@ struct Daemon
     void handleRelease(IPC::Messenger& sender, const term::proto::Message& message)
     {
         if (auto found = panes.find(message.args[0]); found != panes.end())
-            std::erase(found->second->watchers, &sender);
+            stopWatching(found->first, *found->second, sender);
     }
 
+    // write <id> [input], payload the bytes.
     void handleWrite(IPC::Messenger&, const term::proto::Message& message)
     {
-        write(message.args[0], message.payload);
+        const auto& id = message.args[0];
+        constexpr auto markerArgument = std::size_t {1};
+        const auto isUserInput = message.args.size() > markerArgument
+                                 && message.args[markerArgument] == term::proto::userInputMarker;
+
+        if (isUserInput && panes.contains(id))
+            lastInput = {id, getMillisecondsSinceEpoch()};
+
+        write(id, message.payload);
     }
 
-    void handleResize(IPC::Messenger&, const term::proto::Message& message)
+    static term::PtySize readSize(const term::proto::Message& message)
     {
-        resize(message.args[0], std::stoi(message.args[1]), std::stoi(message.args[2]));
+        return {std::stoi(message.args[1]), std::stoi(message.args[2])};
+    }
+
+    // A client from before size owners resizes the way it always did: the
+    // last one to resize sets the size.
+    void handleResize(IPC::Messenger& sender, const term::proto::Message& message)
+    {
+        const auto& client = clients.at(&sender);
+
+        if (client.protocolVersion < term::proto::sizeOwnerProtocolVersion)
+            return claimSize(message.args[0], client, readSize(message));
+
+        if (auto found = panes.find(message.args[0]); found != panes.end())
+        {
+            if (auto size = found->second->sizeOwner.requestSize(client.id, readSize(message)))
+                applySize(found->first, *found->second, *size);
+        }
+    }
+
+    // claim-size <id> <cols> <rows>: the sender sets this pane's size from now on.
+    void handleClaimSize(IPC::Messenger& sender, const term::proto::Message& message)
+    {
+        claimSize(message.args[0], clients.at(&sender), readSize(message));
+    }
+
+    void claimSize(const std::string& id, const ConnectedClient& client, const term::PtySize& size)
+    {
+        if (auto found = panes.find(id); found != panes.end())
+            applySize(id, *found->second, found->second->sizeOwner.claimSize(client.id, size));
+    }
+
+    // The sender takes back every pane it shows, at the sizes it last asked for.
+    void handleReclaimSizes(IPC::Messenger& sender, const term::proto::Message&)
+    {
+        const auto& client = clients.at(&sender);
+
+        for (auto& [id, pane]: panes)
+        {
+            if (std::ranges::find(pane->watchers, &sender) == pane->watchers.end())
+                continue;
+
+            if (auto size = pane->sizeOwner.reclaimSize(client.id))
+                applySize(id, *pane, *size);
+        }
+    }
+
+    // last-input [<id> <milliseconds since 1970>]: the pane the user last typed
+    // into, through any client, and when; no arguments when nobody has.
+    void handleLastInput(IPC::Messenger& sender, const term::proto::Message&)
+    {
+        if (lastInput.paneId.empty() || !panes.contains(lastInput.paneId))
+            return sender.send(term::proto::make("last-input"));
+
+        sender.send(term::proto::make(
+            "last-input", {lastInput.paneId, std::to_string(lastInput.millisecondsSinceEpoch)}));
+    }
+
+    void applySize(const std::string& id, DaemonPane& pane, const term::PtySize& size)
+    {
+        resize(id, size.cols, size.rows);
+        announceSizeOwner(id, pane);
+    }
+
+    // size-owner <id> <cols> <rows> <1 when it is the receiver> [owner's name],
+    // to every watcher that knows the message.
+    void announceSizeOwner(const std::string& id, const DaemonPane& pane)
+    {
+        const auto owner = pane.sizeOwner.getOwner();
+
+        for (auto* watcher: pane.watchers)
+        {
+            const auto& client = clients.at(watcher);
+
+            if (client.protocolVersion < term::proto::sizeOwnerProtocolVersion)
+                continue;
+
+            const auto isReceiverTheOwner = owner == client.id;
+            watcher->send(term::proto::make("size-owner",
+                                            {id,
+                                             std::to_string(pane.size.cols),
+                                             std::to_string(pane.size.rows),
+                                             isReceiverTheOwner ? "1" : "0",
+                                             term::proto::encodeArgument(findClientName(owner))}));
+        }
+    }
+
+    std::string findClientName(std::optional<term::PaneSizeOwner::ClientId> clientId) const
+    {
+        for (const auto& [messenger, client]: clients)
+        {
+            if (client.id == clientId)
+                return client.name;
+        }
+
+        return {};
     }
 
     void handleKill(IPC::Messenger&, const term::proto::Message& message)
@@ -277,12 +426,18 @@ struct Daemon
             environment.push_back({"PATH", searchPath});
         }
 
+        const auto& client = clients.at(&sender);
+
         if (auto found = panes.find(id); found != panes.end())
         {
             if (found->second->alive)
             {
                 watch(*found->second, sender);
                 adopt(id, *found->second);
+
+                if (auto size = found->second->sizeOwner.requestSize(client.id, request.size))
+                    applySize(id, *found->second, *size);
+
                 return;
             }
 
@@ -291,6 +446,7 @@ struct Daemon
 
         auto& pane = *(panes[id] = std::make_unique<DaemonPane>(request.size));
         pane.sessionName = request.sessionName;
+        pane.sizeOwner.claimSize(client.id, request.size);
         watch(pane, sender);
         restoreSavedPane(id, pane);
 
@@ -459,7 +615,9 @@ struct Daemon
     }
 
     std::map<std::string, std::unique_ptr<DaemonPane>> panes;
-    std::vector<IPC::Messenger*> clients;
+    std::map<IPC::Messenger*, ConnectedClient> clients;
+    term::PaneSizeOwner::ClientId lastClientId = 0;
+    LastInput lastInput;
     std::map<std::string, std::string> layouts;
     int idleTicks = 0;
     emberstore::Database paneStore = openPaneStore();
