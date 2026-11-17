@@ -303,7 +303,7 @@ void TerminalView::sendText(std::string_view text)
     sendAndScrollToBottom(bytes);
 }
 
-std::string TerminalView::debugScreenText() const
+std::string TerminalView::captureVisibleText() const
 {
     const auto lock = lockTerminal();
     auto out = std::string {};

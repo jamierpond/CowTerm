@@ -66,7 +66,7 @@ void Popup::show(const std::string& command,
                     return;
 
                 debugLog("[popup] screen @1.5s:\n%s----\n",
-                         terminal->debugScreenText().c_str());
+                         terminal->captureVisibleText().c_str());
             });
 }
 

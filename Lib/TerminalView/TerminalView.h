@@ -89,8 +89,9 @@ public:
     // Debug tracing: is this the ephemeral command terminal (the popup)?
     bool isCommandTerminal() const { return commandTerminal; }
 
-    // Debug tracing: the visible grid as plain text, blanks trimmed.
-    std::string debugScreenText() const;
+    // The grid as plain text, one line per row, blanks trimmed: for debug
+    // tracing, tests, and the phone reading a Claude prompt off the screen.
+    std::string captureVisibleText() const;
 
     // Blocks until every byte the shell has sent so far is on the screen; its
     // repaint is then the next thing queued for the UI thread. For tests.

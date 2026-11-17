@@ -75,7 +75,7 @@ Graphics::Image renderAfter(const std::string& command)
     view.resized();
 
     Threads::runEventLoopUntil(
-        [&view] { return view.debugScreenText().find("HELLO") != std::string::npos; },
+        [&view] { return view.captureVisibleText().find("HELLO") != std::string::npos; },
         Time::MS {8000});
 
     return view.renderToImage(1.f);

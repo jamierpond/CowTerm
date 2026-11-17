@@ -91,7 +91,7 @@ int main(int argc, char** argv)
     latency.postPing();
 
     const auto finished = Threads::runEventLoopUntil(
-        [&] { return view.debugScreenText().find(endMarker) != std::string::npos; },
+        [&] { return view.captureVisibleText().find(endMarker) != std::string::npos; },
         benchTimeout,
         pollSlice);
 
