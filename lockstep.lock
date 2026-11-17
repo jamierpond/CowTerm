@@ -194,6 +194,44 @@
       "usesGitLfs": false
     },
     {
+      "commit": "a312b43325e3383c865a87bb1d26cb52e3292641",
+      "hash": "6148c5db56832268a7d23db415ae21fdcd14e356cea9d18f022f004155932625",
+      "kind": "git",
+      "name": "libssh2",
+      "patches": [],
+      "requestedRef": "libssh2-1.11.1",
+      "submoduleSelection": {
+        "isRecursive": true,
+        "isRestricted": false,
+        "paths": []
+      },
+      "submodules": [],
+      "url": "https://github.com/libssh2/libssh2.git",
+      "usesGitLfs": false
+    },
+    {
+      "commit": "82e69999f91126589a28b70dd75b69fbcabe2711",
+      "hash": "09bf769215e9a04dc29ee3e5fbdec84f754ff11fd8b692a7e45d25187933b530",
+      "kind": "git",
+      "name": "mbedtls",
+      "patches": [],
+      "requestedRef": "mbedtls-3.6.8",
+      "submoduleSelection": {
+        "isRecursive": true,
+        "isRestricted": false,
+        "paths": []
+      },
+      "submodules": [
+        {
+          "commit": "ced31491c5ec907a6be533512f19dc1779230ac1",
+          "path": "framework",
+          "url": "https://github.com/Mbed-TLS/mbedtls-framework"
+        }
+      ],
+      "url": "https://github.com/Mbed-TLS/mbedtls.git",
+      "usesGitLfs": false
+    },
+    {
       "commit": "4e9b368bfc071e97206ea5c6adba68dd0cbf8897",
       "hash": "d24808a20ae66a97f67f56f72ebcb56a201b3391d052c701012f1b49838030fc",
       "kind": "git",
@@ -242,6 +280,6 @@
       "usesGitLfs": false
     }
   ],
-  "root": "46810406bf21d37477bec8ada60bf32148e05258941d454b889516aa9e3538bf",
+  "root": "20b4eda3c8770d87e50529d41e0f3bfe07755f81e942ea19431d8858195e99b1",
   "version": 1
 }

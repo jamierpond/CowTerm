@@ -6,6 +6,7 @@
 
 #include "Palette.h"
 #include "Multiplexer/RemoteHosts.h"
+#include "Multiplexer/SshBridgeLink.h"
 #include "Session.h"
 
 #include <eacp/Core/App/App.h>
@@ -64,7 +65,7 @@ void moveSelectionDown(term::Palette& palette, int rows)
 int renderPicker(const std::string& outputPath, const std::string& query, int selectedRow)
 {
     const auto config = term::loadConfig();
-    term::RemoteHosts::configure(config);
+    term::RemoteHosts::configure(config, term::makeSshBridgeLink);
     Threads::runEventLoopUntil(haveAllHostsAnswered, waitForHosts);
 
     auto sessions = term::SessionManager {config};

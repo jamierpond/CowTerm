@@ -3,7 +3,6 @@
 #include "HostColours.h"
 #include "Protocol.h"
 #include "RemoteLocation.h"
-#include "SshBridgeLink.h"
 #include "UsageLog.h"
 
 #include <algorithm>
@@ -50,9 +49,12 @@ std::vector<std::string> splitLines(const std::string& text)
 }
 } // namespace
 
-RemoteHost::RemoteHost(std::string hostToUse, std::vector<std::string> searchPathsToUse)
+RemoteHost::RemoteHost(std::string hostToUse,
+                       std::vector<std::string> searchPathsToUse,
+                       BridgeLinkFactory makeLinkToUse)
     : host(std::move(hostToUse))
     , searchPaths(std::move(searchPathsToUse))
+    , makeLink(std::move(makeLinkToUse))
     , daemon(std::make_unique<DaemonClient>(nullptr, true))
 {
     daemon->onOtherMessage = [this](const std::string& verb, const std::string& body)
@@ -71,7 +73,7 @@ void RemoteHost::connect()
     reconnectTimer.reset();
     status = Status::Connecting;
 
-    auto link = std::make_unique<SshBridgeLink>(host);
+    auto link = makeLink(host);
     link->onReady = [this] { handleConnected(); };
     link->onFailed = [this](const std::string& reason) { handleFailed(reason); };
     daemon->replaceLink(std::move(link));
@@ -178,7 +180,7 @@ void RemoteHost::readLayouts(const std::string& payload)
 
 namespace RemoteHosts
 {
-void configure(const AppConfig& config)
+void configure(const AppConfig& config, const BridgeLinkFactory& makeLink)
 {
     auto pathsByHost = std::map<std::string, std::vector<std::string>> {};
 
@@ -189,7 +191,7 @@ void configure(const AppConfig& config)
     }
 
     for (auto& [host, paths]: pathsByHost)
-        getHosts()[host] = std::make_unique<RemoteHost>(host, paths);
+        getHosts()[host] = std::make_unique<RemoteHost>(host, paths, makeLink);
 }
 
 void teardown()

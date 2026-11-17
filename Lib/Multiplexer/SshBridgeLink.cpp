@@ -1,6 +1,5 @@
 #include "SshBridgeLink.h"
 
-#include "RemoteInstall.h"
 #include "RemoteLocation.h"
 
 #include <eacp/Core/Process/Process.h>
@@ -14,28 +13,9 @@ using namespace eacp;
 
 namespace
 {
-constexpr int sshFailedExitCode = 255;
-constexpr int commandNotFoundExitCode = 127;
 constexpr auto serverAliveIntervalSeconds = "ServerAliveInterval=5";
 constexpr auto serverAliveCountMax = "ServerAliveCountMax=3";
 constexpr auto connectTimeout = "ConnectTimeout=10";
-
-bool contains(const std::string& text, std::string_view part)
-{
-    return text.find(part) != std::string::npos;
-}
-
-std::string lastLine(const std::string& text)
-{
-    auto end = text.find_last_not_of("\r\n");
-
-    if (end == std::string::npos)
-        return {};
-
-    const auto previousNewline = text.find_last_of('\n', end);
-    const auto first = previousNewline == std::string::npos ? 0 : previousNewline + 1;
-    return text.substr(first, end + 1 - first);
-}
 
 Processes::ProcessOptions makeBridgeProcessOptions(const std::string& host)
 {
@@ -51,32 +31,10 @@ Processes::ProcessOptions makeBridgeProcessOptions(const std::string& host)
 }
 } // namespace
 
-std::string describeBridgeFailure(const std::string& host,
-                                  int exitCode,
-                                  const std::string& errorOutput)
-{
-    const auto fix = remote::describeInstallFix(host);
-    const auto detail = lastLine(errorOutput);
-
-    if (detail.empty())
-        return "connection lost";
-
-    if (contains(errorOutput, "Permission denied") || contains(errorOutput, "Host key verification"))
-        return "ssh to " + host + " refused key auth: " + detail;
-
-    if (exitCode == commandNotFoundExitCode || contains(errorOutput, "No such file"))
-        return "ct is not installed on " + host + "; run: " + fix;
-
-    if (exitCode == sshFailedExitCode)
-        return "unreachable (" + detail + ")";
-
-    return "ct bridge on " + host + " stopped: " + detail;
-}
-
 SshBridgeLink::SshBridgeLink(std::string hostToUse)
-    : host(std::move(hostToUse))
+    : BridgeLink(std::move(hostToUse))
 {
-    auto options = makeBridgeProcessOptions(host);
+    auto options = makeBridgeProcessOptions(getHost());
     options.onOutput = [guard = std::weak_ptr<bool> {alive}, this](std::string_view chunk)
     {
         Threads::callAsync([guard, this, bytes = std::string {chunk}]
@@ -122,66 +80,27 @@ SshBridgeLink::~SshBridgeLink()
         process->kill();
 }
 
-void SshBridgeLink::send(const std::string& message)
+void SshBridgeLink::writeBytes(const std::string& bytes)
 {
-    if (connected)
-        process->writeToInput(bridge::encodeFrame(message));
+    process->writeToInput(bytes);
 }
 
-void SshBridgeLink::receiveBytes(const std::string& bytes)
+void SshBridgeLink::stopTransport()
 {
-    for (auto& message: decoder.append(bytes))
-        receiveMessage(std::move(message));
-
-    if (decoder.hasFailed() && !finished)
-        fail("ct bridge on " + host + " sent something else: " + lastLine(decoder.getUnparsedBytes()));
-}
-
-void SshBridgeLink::receiveMessage(std::string message)
-{
-    if (connected)
-        return onMessage(std::move(message));
-
-    if (const auto hello = bridge::parseHelloMessage(message))
-        return acceptHello(*hello);
-
-    if (const auto reason = bridge::parseErrorMessage(message))
-        fail(*reason + " on " + host);
-}
-
-void SshBridgeLink::acceptHello(const bridge::BridgeHello& hello)
-{
-    if (hello.protocolVersion != bridge::protocolVersion)
-    {
-        return fail("ct on " + host + " speaks bridge protocol " + std::to_string(hello.protocolVersion)
-                    + ", this CowTerm " + std::to_string(bridge::protocolVersion) + "; run: "
-                    + remote::describeInstallFix(host));
-    }
-
-    connected = true;
-    onReady();
+    if (process != nullptr)
+        process->kill();
 }
 
 void SshBridgeLink::handleExit(int exitCode, const std::string& errorOutput)
 {
-    if (finished)
+    if (hasFinished())
         return;
 
-    fail(describeBridgeFailure(host, exitCode, errorOutput));
+    fail(describeBridgeFailure(getHost(), exitCode, errorOutput));
 }
 
-void SshBridgeLink::fail(const std::string& reason)
+std::unique_ptr<BridgeLink> makeSshBridgeLink(const std::string& host)
 {
-    if (finished)
-        return;
-
-    finished = true;
-    connected = false;
-
-    if (process != nullptr)
-        process->kill();
-
-    onFailed(reason);
-    onDisconnected();
+    return std::make_unique<SshBridgeLink>(host);
 }
 } // namespace term

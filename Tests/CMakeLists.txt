@@ -195,11 +195,15 @@ nano_add_executable(CowTermRemoteTests
             BridgeRelayTests.cpp
         TARGETS CowTerm::Multiplexer)
 
-# Host colours and what an ssh or ct bridge failure means for the user.
+# Host colours, what an ssh or ct bridge failure means for the user, the
+# bridge's hello and framing under every link, and the seam RemoteHost makes
+# its link through.
 nano_add_executable(CowTermRemoteAppTests
         SOURCES
             HostColoursTests.cpp
             SshBridgeLinkTests.cpp
+            BridgeLinkTests.cpp
+            RemoteHostLinkFactoryTests.cpp
         TARGETS CowTerm::Multiplexer)
 
 # Not a test: Ctrl+A F rendered off screen to a PNG with the user's config

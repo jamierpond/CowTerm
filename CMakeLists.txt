@@ -101,6 +101,36 @@ lockstep_add_package(
         GIT_TAG main
         OPTIONS "RUDDER_CLIENT_ONLY ON")
 
+# An ssh client inside the process (Lib/Multiplexer/EmbeddedSshLink), for the
+# iPhone, which cannot run the system ssh. libssh2 does its crypto through
+# mbedTLS. The mbedtls-* tags carry the generated sources, so no Python is
+# needed to build them.
+if (APPLE AND NOT COWTERM_HEADLESS)
+    lockstep_add_package(
+            NAME mbedtls
+            GITHUB_REPOSITORY Mbed-TLS/mbedtls
+            GIT_TAG mbedtls-3.6.8
+            SYSTEM YES
+            OPTIONS "ENABLE_TESTING OFF" "ENABLE_PROGRAMS OFF" "MBEDTLS_FATAL_WARNINGS OFF"
+                    "USE_SHARED_MBEDTLS_LIBRARY OFF" "USE_STATIC_MBEDTLS_LIBRARY ON"
+                    "DISABLE_PACKAGE_CONFIG_AND_INSTALL OFF")
+
+    # lockstep answers libssh2's find_package(MbedTLS) with the mbedtls package
+    # above, so FindMbedTLS.cmake never runs: its result variables are given
+    # here. CMP0126 NEW keeps CRYPTO_BACKEND when libssh2 declares it a cache entry.
+    lockstep_add_package(
+            NAME libssh2
+            GITHUB_REPOSITORY libssh2/libssh2
+            GIT_TAG libssh2-1.11.1
+            SYSTEM YES
+            OPTIONS "CRYPTO_BACKEND mbedTLS" "BUILD_SHARED_LIBS OFF" "BUILD_STATIC_LIBS ON"
+                    "BUILD_EXAMPLES OFF" "BUILD_TESTING OFF" "ENABLE_ZLIB_COMPRESSION OFF"
+                    "LINT OFF" "PICKY_COMPILER OFF" "CMAKE_POLICY_DEFAULT_CMP0126 NEW"
+                    "MBEDTLS_FOUND ON"
+                    "MBEDTLS_INCLUDE_DIRS ${mbedtls_SOURCE_DIR}/include"
+                    "MBEDTLS_LIBRARIES mbedcrypto")
+endif ()
+
 # eacp runs eacp_default_setup() only when it is the root project. We are the
 # root now, so point its target helper at CowTerm's own plist (the deployment
 # target eacp would set is at the top: it only takes effect before project()). A terminal is the responsible application for many

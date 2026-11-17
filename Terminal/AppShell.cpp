@@ -4,6 +4,7 @@
 #include <PondVersion.h>
 #include "Multiplexer/DaemonClient.h"
 #include "Multiplexer/RemoteHosts.h"
+#include "Multiplexer/SshBridgeLink.h"
 #include "LeaderKeys.h"
 #include "Notifier.h"
 #include "Multiplexer/TextLayout.h"
@@ -191,7 +192,7 @@ void AppShell::start()
     if (auto* daemon = DaemonClient::get())
         daemon->onInfoChanged = [this] { rudderChanged(); };
 
-    RemoteHosts::configure(config);
+    RemoteHosts::configure(config, makeSshBridgeLink);
     wireRemoteHosts();
     manager.restoreOrCreateInitial();
 }

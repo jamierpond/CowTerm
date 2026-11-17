@@ -6,6 +6,7 @@
 
 #include "Popup.h"
 #include "Multiplexer/RemoteHosts.h"
+#include "Multiplexer/SshBridgeLink.h"
 #include "Multiplexer/RemoteLocation.h"
 
 #include <eacp/Core/App/App.h>
@@ -28,7 +29,7 @@ int runRemotePopup(const std::string& host, const std::string& directory)
 {
     auto config = term::AppConfig {};
     config.searchDirs = {term::remote::makeRemoteProjectDir(host, directory)};
-    term::RemoteHosts::configure(config);
+    term::RemoteHosts::configure(config, term::makeSshBridgeLink);
 
     auto* remote = term::RemoteHosts::find(host);
     Threads::runEventLoopUntil([remote] { return remote->getStatus() != term::RemoteHost::Status::Connecting; },

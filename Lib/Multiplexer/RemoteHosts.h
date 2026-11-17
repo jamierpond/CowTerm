@@ -1,5 +1,6 @@
 #pragma once
 
+#include "BridgeLink.h"
 #include "Config.h"
 #include "DaemonClient.h"
 #include "Projects.h"
@@ -14,7 +15,7 @@
 
 namespace term
 {
-// One machine in searchDirs: its link (`ssh host ct bridge`), the daemon
+// One machine in searchDirs: its link (`ct bridge` over ssh), the daemon
 // client riding on it, and the last project scan. Reconnects with backoff
 // while anything is configured for it; main-thread object.
 class RemoteHost
@@ -27,7 +28,9 @@ public:
         Unreachable
     };
 
-    RemoteHost(std::string hostToUse, std::vector<std::string> searchPathsToUse);
+    RemoteHost(std::string hostToUse,
+               std::vector<std::string> searchPathsToUse,
+               BridgeLinkFactory makeLinkToUse);
     ~RemoteHost();
 
     const std::string& getHost() const { return host; }
@@ -72,6 +75,7 @@ private:
 
     std::string host;
     std::vector<std::string> searchPaths;
+    BridgeLinkFactory makeLink;
     std::unique_ptr<DaemonClient> daemon;
     Status status = Status::Connecting;
     std::string failureReason;
@@ -81,10 +85,11 @@ private:
     std::shared_ptr<bool> alive = std::make_shared<bool>(true);
 };
 
-// Every remote host named in the config, made once at startup.
+// Every remote host named in the config, made once at startup, each reached
+// through a link makeLink makes.
 namespace RemoteHosts
 {
-void configure(const AppConfig& config);
+void configure(const AppConfig& config, const BridgeLinkFactory& makeLink);
 void teardown();
 
 RemoteHost* find(const std::string& host);

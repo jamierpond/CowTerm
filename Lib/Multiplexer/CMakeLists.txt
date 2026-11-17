@@ -12,6 +12,7 @@ configure_file(RemoteBootstrapScript.h.in
 add_library(CowTermMultiplexer STATIC
         Bridge.cpp
         BridgeFraming.cpp
+        BridgeLink.cpp
         BridgeRelay.cpp
         CliParsing.cpp
         Config.cpp
