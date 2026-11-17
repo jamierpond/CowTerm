@@ -816,6 +816,50 @@ ios-pair` now gives it all three, and the sample needs `--sample`.
   silence is not a stall then; only the shown pane's host stalls and is
   redialled for being quiet.
 
+### Push notifications
+
+When a Claude in one of Jamie's panes finishes its turn or asks him something
+while he is away from the desk, his phone shows it on the lock screen with a
+sound, and a tap opens that pane.
+
+- Claude Code's hooks run `ct pane-state --claude-hook` on UserPromptSubmit
+  (working), Notification for permission and input questions (waiting, with
+  the question) and Stop (finished, with Claude's last line). `just
+  claude-hooks-add [user@host]` adds exactly those entries to
+  `~/.claude/settings.json` and `just claude-hooks-remove` takes them out; Jamie
+  agreed them for big-cow, tamby and macprorack on 17 November.
+- The daemon posts a finished or waiting report to the relay in
+  `cowterm.json`'s `pushRelay`, titled with `pushHostName` (both Macs' host
+  names read "daily-driver", so the name is set, not looked up; `just
+  push-relay-set-host`). It does not post while the phone holds the pane's
+  size (the phone shows it in the foreground), while a client other than the
+  phone typed into the pane in the last minute, or when the same state and
+  text were posted already; a working report lets the next one through.
+- `ct push-relay` runs on macprorack as a systemd user service (`just
+  push-relay-install`), listening on its tailnet address only (eacp's
+  `ServerOptions::bindAddress`). Apple's key is in Jamie's 1Password, vault
+  CowTerm Push, item APNs Key (`key id`, `team id`, `private key`); a read-only
+  service account for that vault alone has its token in
+  `~/.config/cowterm-push-relay/op-service-account-token` (mode 600, `just
+  push-relay-store-token`), and `op run` hands the key to the relay at start,
+  so it is never on disk. The relay signs ES256 tokens with mbedTLS and renews
+  them every 40 minutes or when Apple says they expired; it forgets a phone
+  Apple calls unknown or unregistered, retries rate limits and Apple's server
+  errors twice with a growing wait, and logs every answer (`just push-relay-log`).
+- The phone asks once, at launch with a relay set up, with its own alert
+  explaining what the notifications are for before iOS asks; "Not now" asks
+  again on the next launch. It registers its device token with the relay on
+  every launch. It learns the relay from `push-relay` and `device-name` in its
+  pairing folder (`just ios-set-push-relay`).
+- The notification's title is `host/session`, its body Claude's line,
+  grouped by that title, with `ba-ding.caf`: two notes made from sine waves by
+  `scripts/make-ba-ding-sound.py`, so no one else's sound ships. A tap opens
+  the overview, then the session holding the pane, then the pane.
+- Push needs a paid team's profile, so the entitlement is off unless the
+  build sets `COWTERM_IOS_PUSH_NOTIFICATIONS`; `COWTERM_IOS_APNS_ENVIRONMENT`
+  says whether the device token is the sandbox's (development) or production's
+  (TestFlight).
+
 ### Touch on a real phone
 
 On Jamie's phone no touch reached the pane screen: no tap on the bar, no

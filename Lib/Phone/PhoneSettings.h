@@ -37,6 +37,11 @@ struct PhoneSettings
 
     // What runs `ct bridge` on the host; a test instance passes its own.
     std::string bridgeCommand = remote::bridgeCommand;
+
+    // Where the phone registers for pushes ("http://macprorack:8742"), and
+    // the name the relay knows it by ("pond"). No relay: no pushes asked for.
+    std::string pushRelayAddress;
+    std::string deviceName;
 };
 
 using EnvironmentReader = std::function<std::string(const std::string& name)>;

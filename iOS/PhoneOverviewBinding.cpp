@@ -91,6 +91,7 @@ void PhoneOverviewBinding::showReport(const term::phone::OverviewReport& report)
 {
     logHostsAnsweringWhenChanged(report);
     screen.setInputs(makeOverviewInputs(report, phone.getSessionOpenings()));
+    openNotificationTargetWhenListed(report);
 
     if (sessionToOpen.empty())
         return;
@@ -116,6 +117,28 @@ void PhoneOverviewBinding::logHostsAnsweringWhenChanged(const term::phone::Overv
 void PhoneOverviewBinding::openSessionOnceListed(const std::string& hostAndSession)
 {
     sessionToOpen = hostAndSession;
+}
+
+void PhoneOverviewBinding::openNotificationTargetOnceListed(const term::phone::NotificationTarget& target)
+{
+    notificationTargetToOpen = target;
+}
+
+void PhoneOverviewBinding::openNotificationTargetWhenListed(const term::phone::OverviewReport& report)
+{
+    if (!notificationTargetToOpen)
+        return;
+
+    const auto row = term::phone::findRowForNotification(report.sessions, *notificationTargetToOpen);
+
+    if (!row)
+        return;
+
+    const auto paneId = notificationTargetToOpen->paneId;
+    notificationTargetToOpen.reset();
+    LOG("push: opening ", row->host, "/", row->sessionName, " for pane ", paneId);
+    openSession(*row);
+    phone.choosePaneOfSession(paneId);
 }
 
 void PhoneOverviewBinding::setShown(bool isShown)

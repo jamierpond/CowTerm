@@ -40,6 +40,8 @@ public:
 
     const std::string& getHost() const { return connection.getHost(); }
 
+    const term::phone::PhoneSettings& getSettings() const { return settings; }
+
     // The pane to open at once; empty until the daemon has chosen one.
     std::string getPaneToOpen() const;
 

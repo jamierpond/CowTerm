@@ -20,6 +20,8 @@ struct SettingsText
     std::string knownHostsPath;
     std::string paneId;
     std::string bridgeCommand;
+    std::string pushRelayAddress;
+    std::string deviceName;
 };
 
 struct SettingSource
@@ -37,6 +39,8 @@ constexpr auto settingSources = std::array {
     SettingSource {"--known-hosts", "COWTERM_KNOWN_HOSTS", &SettingsText::knownHostsPath},
     SettingSource {"--pane", "COWTERM_PANE", &SettingsText::paneId},
     SettingSource {"--bridge-command", "COWTERM_BRIDGE_COMMAND", &SettingsText::bridgeCommand},
+    SettingSource {"--push-relay", "COWTERM_PUSH_RELAY", &SettingsText::pushRelayAddress},
+    SettingSource {"--device-name", "COWTERM_DEVICE_NAME", &SettingsText::deviceName},
 };
 
 std::optional<std::string> findFlagValue(const std::vector<std::string>& arguments, std::string_view flag)
@@ -126,6 +130,8 @@ std::optional<PhoneSettings> parsePhoneSettings(const std::vector<std::string>& 
     settings.credentials = {text.agentSocketPath, text.privateKeyPath, text.knownHostsPath, text.publicKeyPath};
     settings.explicitPaneId = text.paneId;
     settings.storedScreenPath = storedScreenPath;
+    settings.pushRelayAddress = eacp::Strings::trim(text.pushRelayAddress);
+    settings.deviceName = eacp::Strings::trim(text.deviceName);
 
     if (!text.bridgeCommand.empty())
         settings.bridgeCommand = text.bridgeCommand;

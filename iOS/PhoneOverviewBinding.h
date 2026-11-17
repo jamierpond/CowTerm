@@ -3,6 +3,8 @@
 #include "OverviewScreen.h"
 #include "PhoneLaunch.h"
 
+#include "Phone/PushTarget.h"
+
 #include <functional>
 #include <optional>
 #include <string>
@@ -27,16 +29,21 @@ public:
     // (a headless simulator).
     void openSessionOnceListed(const std::string& hostAndSession);
 
+    // Opens a tapped notification's pane once a report lists its session.
+    void openNotificationTargetOnceListed(const term::phone::NotificationTarget& target);
+
 private:
     void showReport(const term::phone::OverviewReport& report);
     void logHostsAnsweringWhenChanged(const term::phone::OverviewReport& report);
     void openSession(const term::overview::OverviewRow& row);
     std::optional<std::string> openRow(const term::overview::OverviewRow& row);
+    void openNotificationTargetWhenListed(const term::phone::OverviewReport& report);
 
     PhoneLaunch& phone;
     OverviewScreen& screen;
     eacp::Callback showPaneScreen;
     std::string sessionToOpen;
+    std::optional<term::phone::NotificationTarget> notificationTargetToOpen;
     std::string loggedHostsAnswering;
 };
 

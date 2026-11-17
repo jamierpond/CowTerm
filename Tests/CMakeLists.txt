@@ -332,6 +332,7 @@ if (TARGET CowTerm::EmbeddedSsh)
                 PhoneTests.cpp
                 PhoneConnectionTests.cpp
                 PhoneOverviewTests.cpp
+                PushTargetTests.cpp
             TARGETS CowTerm::Phone)
 endif ()
 

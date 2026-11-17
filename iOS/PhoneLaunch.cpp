@@ -23,6 +23,8 @@ constexpr auto sessionOpeningsFileName = "session-openings.json";
 // What `just ios-pair` copies into the app's container, under the data folder.
 constexpr auto pairingFolderName = "pairing";
 constexpr auto pairedHostsFileName = "hosts";
+constexpr auto pairedPushRelayFileName = "push-relay";
+constexpr auto pairedDeviceNameFileName = "device-name";
 constexpr auto pairedKeyFileName = "phone-key";
 constexpr auto pairedPublicKeyFileName = "phone-key.pub";
 constexpr auto pairedKnownHostsFileName = "known_hosts";
@@ -76,6 +78,8 @@ EnvironmentReader makePairedSetupReader(const std::filesystem::path& folder)
         {"COWTERM_KEY_FILE", describePathIfPresent(folder / pairedKeyFileName)},
         {"COWTERM_PUBLIC_KEY_FILE", describePathIfPresent(folder / pairedPublicKeyFileName)},
         {"COWTERM_KNOWN_HOSTS", describePathIfPresent(folder / pairedKnownHostsFileName)},
+        {"COWTERM_PUSH_RELAY", readFileIfPresent(folder / pairedPushRelayFileName)},
+        {"COWTERM_DEVICE_NAME", readFileIfPresent(folder / pairedDeviceNameFileName)},
     };
 
     return [values](const std::string& name) -> std::string

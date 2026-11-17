@@ -12,6 +12,7 @@ eacp_add_app(CowTermMobile
         PaneScreenChrome.cpp
         PaneScreenLayout.cpp
         PhoneLaunch.cpp PhoneOverviewBinding.cpp
+        PhonePushNotifications.cpp
         PhonePaneBinding.cpp
         PhoneDiffViewBinding.cpp
         DiffViewScreen.cpp
@@ -39,6 +40,32 @@ set_source_files_properties(Resources/Assets.xcassets PROPERTIES MACOSX_PACKAGE_
 set_target_properties(CowTermMobile PROPERTIES
         MACOSX_BUNDLE TRUE
         XCODE_ATTRIBUTE_ASSETCATALOG_COMPILER_APPICON_NAME AppIcon)
+
+# Push notifications need a paid team's signing profile; Jamie's free Personal
+# Team cannot sign the entitlement, so it is off unless asked for. Xcode signs
+# a TestFlight build's "development" as production on its own.
+option(COWTERM_IOS_PUSH_NOTIFICATIONS "Sign the iPhone app with the push notifications entitlement" OFF)
+set(COWTERM_IOS_APNS_ENVIRONMENT "sandbox" CACHE STRING
+        "Which Apple push service this build's device token belongs to: sandbox for a development build, production for TestFlight")
+
+if (COWTERM_IOS_PUSH_NOTIFICATIONS)
+    set_target_properties(CowTermMobile PROPERTIES
+            XCODE_ATTRIBUTE_CODE_SIGN_ENTITLEMENTS "${CMAKE_CURRENT_SOURCE_DIR}/CowTermMobile.entitlements")
+endif ()
+
+target_compile_definitions(CowTermMobile PRIVATE
+        COWTERM_IOS_APNS_ENVIRONMENT="${COWTERM_IOS_APNS_ENVIRONMENT}")
+
+# The phone registers its push token with the relay over plain HTTP on the
+# tailnet, at an unqualified name ("macprorack"), which App Transport Security
+# allows only with local networking on.
+eacp_append_plist_xml(CowTermMobile
+        "\t<key>NSAppTransportSecurity</key>\n\t<dict>\n\t\t<key>NSAllowsLocalNetworking</key>\n\t\t<true/>\n\t</dict>\n")
+
+# The push's sound, made by scripts/make-ba-ding-sound.py.
+set(push_sound Resources/ba-ding.caf)
+target_sources(CowTermMobile PRIVATE ${push_sound})
+set_source_files_properties(${push_sound} PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
 
 # The Mac app's JetBrains Mono, embedded the same way.
 res_embed_add(CowTermMobile DIRECTORY ${PROJECT_SOURCE_DIR}/Terminal/Resources)

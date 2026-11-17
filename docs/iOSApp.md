@@ -225,7 +225,8 @@ needs something holding the `.p8` key.
 The tailnet lets that be one of Jamie's own machines, with no public
 server:
 
-- **`ct push-relay`** runs on one always-on host (tamby) and listens only on
+- **`ct push-relay`** runs on one always-on host (macprorack, Jamie's choice
+  on 17 November) and listens only on
   its tailnet address. It holds the `.p8` key and is the only thing that talks
   to Apple. It's about 100 lines: a small HTTP endpoint plus an
   ES256-signed APNs request.
@@ -233,7 +234,7 @@ server:
   `http://<relay>.<tailnet>.ts.net` when a pane rings (OSC 9/777) or asks
   (`nu-request`). It only does this when no interactive client has had
   input in the last few minutes, so the phone stays quiet at the desk. The relay's
-  address goes in `cowterm.json` (`"pushRelay": "tamby"`).
+  address goes in `cowterm.json` (`"pushRelay": "http://macprorack:8742"`).
 - No auth beyond the tailnet itself: Tailscale ACLs decide who may reach the
   relay's port.
 - The phone registers its APNs token once, with the relay, over the tailnet.
@@ -353,8 +354,7 @@ the lock screen.
 Decided: the phone and every host are on the tailnet; iPhone first; a C++
 eacp app in this repo (`iOS/`).
 
-1. **Which host runs `ct push-relay`?** It needs to be always on and on the
-   tailnet; tamby is assumed above.
+1. **Which host runs `ct push-relay`?** Answered: macprorack, which is always on.
 2. **The phone's name in the app:** `CowTermMobile` as the target, but what
    goes on the home screen?
 3. It needs an Apple Developer account for TestFlight and APNs; eacp's

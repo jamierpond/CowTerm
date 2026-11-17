@@ -9,8 +9,6 @@
 #include <algorithm>
 #include <array>
 #include <cstdio>
-#include <iostream>
-#include <iterator>
 #include <memory>
 #include <string_view>
 
@@ -27,11 +25,6 @@ constexpr int exitOk = 0;
 constexpr int exitUsage = 2;
 constexpr int exitDaemonUnreachable = 4;
 constexpr auto claudeHookFlag = std::string_view {"--claude-hook"};
-
-std::string readStandardInput()
-{
-    return {std::istreambuf_iterator<char> {std::cin}, std::istreambuf_iterator<char> {}};
-}
 
 struct ValueOption
 {
@@ -158,7 +151,7 @@ int runPaneStateCommand(const std::vector<std::string>& args, const std::string&
     if (!parsed.readsClaudeHookInput)
         return Apps::run<PaneStateSender>(*parsed.report);
 
-    const auto hookReport = readClaudeHookReport(readStandardInput(), parsed.report->paneId);
+    const auto hookReport = readClaudeHookReportFromStandardInput(parsed.report->paneId);
 
     if (!hookReport)
         return exitOk;

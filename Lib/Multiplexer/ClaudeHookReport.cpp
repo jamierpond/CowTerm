@@ -4,6 +4,8 @@
 
 #include <algorithm>
 #include <array>
+#include <iostream>
+#include <iterator>
 #include <sstream>
 #include <string_view>
 
@@ -80,5 +82,12 @@ std::optional<PaneStateReport> readClaudeHookReport(const std::string& hookInput
         report.message = findLastNonBlankLine(input.lastAssistantMessage);
 
     return report;
+}
+
+std::optional<PaneStateReport> readClaudeHookReportFromStandardInput(const std::string& paneId)
+{
+    const auto hookInputJson =
+        std::string {std::istreambuf_iterator<char> {std::cin}, std::istreambuf_iterator<char> {}};
+    return readClaudeHookReport(hookInputJson, paneId);
 }
 } // namespace term::cli

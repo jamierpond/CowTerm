@@ -31,4 +31,4 @@ OP_SERVICE_ACCOUNT_TOKEN="$(<"$token_file")"
 export OP_SERVICE_ACCOUNT_TOKEN
 
 exec "$relay_folder/op" run --env-file="$config_folder/apns.env" -- \
-    env -u OP_SERVICE_ACCOUNT_TOKEN "$relay_folder/ct" push-relay --listen "$address" --port "$port"
+    env -u OP_SERVICE_ACCOUNT_TOKEN "$relay_folder/ct" push-relay --listen "$address" --port "$port" --sound ba-ding.caf

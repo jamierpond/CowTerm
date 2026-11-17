@@ -7,6 +7,7 @@
 #include "PhoneDiffViewBinding.h"
 #include "PhoneLaunch.h"
 #include "PhoneOverviewBinding.h"
+#include "PhonePushNotifications.h"
 #include "PhonePaneBinding.h"
 #include "SampleShell.h"
 
@@ -368,6 +369,33 @@ struct CowTermMobileApp
 
         connectOverview();
         applyLaunchOptions();
+        startPushNotifications();
+    }
+
+    // Once the first screen is up, so the question about notifications has
+    // the app behind it rather than a blank window.
+    void startPushNotifications()
+    {
+        constexpr auto pushStartDelay = Time::MS {2000};
+
+        if (phone == nullptr)
+            return;
+
+        const auto& settings = phone->getSettings();
+        pushNotifications.emplace(cowterm::mobile::PushRegistrationSettings {
+            settings.pushRelayAddress, settings.deviceName, COWTERM_IOS_APNS_ENVIRONMENT});
+        pushNotifications->onOpened = [this](const term::phone::NotificationTarget& target)
+        { openNotificationTarget(target); };
+        Threads::callAfter(pushStartDelay, [this] { pushNotifications->start(); });
+    }
+
+    void openNotificationTarget(const term::phone::NotificationTarget& target)
+    {
+        if (!phoneOverview)
+            return;
+
+        showOverview();
+        phoneOverview->openNotificationTargetOnceListed(target);
     }
 
     void showSamplePane()
@@ -512,6 +540,7 @@ struct CowTermMobileApp
     std::optional<cowterm::mobile::PhonePaneBinding> phoneBinding;
     std::optional<cowterm::mobile::PhoneOverviewBinding> phoneOverview;
     std::optional<cowterm::mobile::PhoneDiffViewBinding> diffViewBinding;
+    std::optional<cowterm::mobile::PhonePushNotifications> pushNotifications;
     cowterm::mobile::OverviewScreen overview;
     cowterm::mobile::DiffViewScreen diffView;
     ScreenStack screens {screen, overview, diffView, isShowingOverviewFirst()};

@@ -12,11 +12,12 @@ add_library(CowTermPhone STATIC
         PhoneOverview.cpp
         PhoneSettings.cpp
         ProjectSession.cpp
+        PushTarget.cpp
         SessionOpenings.cpp
         StoredScreen.cpp)
 
 target_include_directories(CowTermPhone PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/..)
-target_link_libraries(CowTermPhone PUBLIC CowTerm::EmbeddedSsh CowTerm::Multiplexer)
+target_link_libraries(CowTermPhone PUBLIC CowTerm::EmbeddedSsh CowTerm::Multiplexer CowTerm::Push)
 
 add_library(CowTerm::Phone ALIAS CowTermPhone)
 

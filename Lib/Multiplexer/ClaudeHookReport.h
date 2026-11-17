@@ -13,4 +13,7 @@ namespace term::cli
 // Nullopt for any other hook event, or input that is not a hook's JSON.
 std::optional<PaneStateReport> readClaudeHookReport(const std::string& hookInputJson,
                                                     const std::string& paneId);
+
+// The same, read from this process's standard input, as a hook hands it over.
+std::optional<PaneStateReport> readClaudeHookReportFromStandardInput(const std::string& paneId);
 } // namespace term::cli

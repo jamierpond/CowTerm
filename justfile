@@ -345,3 +345,23 @@ push-relay-restart host="jamiepond@macprorack":
 # Print the push relay's last log lines: registrations, notices and Apple's answers
 push-relay-log host="jamiepond@macprorack" lines="40":
     ssh {{host}} 'journalctl --user -u cowterm-push-relay -n {{lines}} --no-pager -o short-iso'
+
+# Point a machine's daemon at the push relay and name it as the phone dials it (takes effect at the daemon's next start)
+push-relay-set-host host name *relay:
+    scripts/set-push-relay-on-host.sh {{host}} {{name}} {{relay}}
+
+# Tell the iPhone app where the push relay is (the phone plugged in and unlocked)
+ios-set-push-relay phone="pond" relay="http://macprorack:8742":
+    scripts/set-ios-push-relay.sh "{{phone}}" "{{relay}}"
+
+# Remake iOS/Resources/ba-ding.caf, the push notification's two-note sound
+ios-make-push-sound:
+    scripts/make-ba-ding-sound.py
+
+# Print the push relay's address as daemons use it (its full tailnet name)
+push-relay-address:
+    scripts/find-push-relay-address.sh
+
+# Ring the phone from a throwaway pane on a host's test daemon and print the relay's log of it
+push-check-on-phone destination="jamiepond@macprorack" folder="$HOME/tmp/cowterm-push-check":
+    scripts/check-push-on-phone.sh {{destination}} '{{folder}}'
