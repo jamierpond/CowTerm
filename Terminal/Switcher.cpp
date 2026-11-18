@@ -276,6 +276,7 @@ void Switcher::paintCard(UI::Graphics& g, int index, Rect card)
 
     g.setColour(toColor(colours.text));
     paintCardMark(g, session, {cx, card.y + iconBaseline});
+    g.setColour(toColor(colours.text));
 
     const auto maxChars = (std::size_t) std::max(
         minimumNameLength, (int) (card.w / averageNameCharacterWidth));

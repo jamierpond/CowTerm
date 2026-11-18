@@ -35,10 +35,9 @@ probe="build/Tests/CowTermEmbeddedSshProbe"
 
 device=$(scripts/find-ios-simulator.sh "$device_name")
 
-# Booted before any SIMCTL_CHILD_ variable is set (see run-ios-against-host.sh).
-if ! xcrun simctl list devices booted | grep -q "$device"; then
-    xcrun simctl boot "$device"
-fi
+# Booted before any SIMCTL_CHILD_ variable is set (see run-ios-against-host.sh);
+# bootstatus -b boots it only if it is not up, and waits until it is.
+xcrun simctl bootstatus "$device" -b > /dev/null
 
 clean_up() {
     xcrun simctl terminate "$device" "$bundle_id" 2> /dev/null || true
