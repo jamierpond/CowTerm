@@ -68,13 +68,16 @@ else ()
     target_sources(CowTermRenderTests PRIVATE RenderBackgroundTests-Posix.cpp)
 endif ()
 
-# The split tree, with real (in-process) panes. SessionView lives in the app
-# rather than a library, so its sources compile straight in; the test supplies
+# The split tree, with real (in-process) panes, and the window chrome strip.
+# SessionView lives in the app rather than a library, so its sources compile
+# straight in; the test supplies
 # its own terminalConfig() so no pane ever talks to the session daemon.
 nano_add_executable(CowTermSessionViewTests
         SOURCES
             SessionViewTests.cpp
+            WindowChromeTests.cpp
             ../Terminal/SessionView.cpp
+            ../Terminal/WindowChrome.cpp
         TARGETS CowTerm::TerminalView CowTerm::Multiplexer eacp-ui SessionLog PondApp)
 
 target_include_directories(CowTermSessionViewTests PRIVATE ../Terminal)
@@ -284,7 +287,8 @@ add_executable(CowTermRenderHostColours
         ../Terminal/SearchField.cpp
         ../Terminal/Session.cpp
         ../Terminal/SessionView.cpp
-        ../Terminal/Switcher.cpp)
+        ../Terminal/Switcher.cpp
+        ../Terminal/WindowChrome.cpp)
 if (WIN32)
     target_sources(CowTermRenderHostColours PRIVATE ../Terminal/Command-Windows.cpp)
     target_compile_options(CowTermRenderHostColours PRIVATE /utf-8)

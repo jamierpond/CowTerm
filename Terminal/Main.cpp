@@ -81,6 +81,17 @@ Graphics::WindowOptions windowOptions()
     // Closing the window backgrounds the terminal (the tray keeps it
     // reachable); shells and sessions stay alive until an explicit quit.
     options.hidesOnClose = true;
+
+    // The content runs up under a title bar with no background or title, so
+    // the window chrome strip is the title bar, beside the real traffic lights.
+    if constexpr (Platform::isMac())
+    {
+        options.flags.add(Graphics::WindowFlags::FullSizeContentView);
+        options.titlebarTransparent = true;
+        options.showTitle = false;
+        options.showTitlebarSeparator = false;
+    }
+
     return options;
 }
 } // namespace

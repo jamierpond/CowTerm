@@ -1,7 +1,7 @@
-// Not a test: renders the palette, the switcher and a session's panes off
-// screen to PNGs, with sessions on Jamie's hosts and a local one, so the host
-// colours can be looked at without a window. The shells are scripted: no
-// daemon, no ssh, no real program runs. Run it under an isolated instance
+// Not a test: renders the palette, the switcher and a session's panes under
+// the window chrome strip off screen to PNGs, with sessions on Jamie's hosts
+// and a local one, so the host colours can be looked at without a window. The
+// shells are scripted: no daemon, no ssh, no real program runs. Run it under an isolated instance
 // (COWTERM_INSTANCE) by scripts/render-host-colours.sh.
 // usage: CowTermRenderHostColours <output directory>
 
@@ -9,6 +9,7 @@
 #include "Palette.h"
 #include "Session.h"
 #include "Switcher.h"
+#include "WindowChrome.h"
 
 #include <eacp/Core/App/App.h>
 #include <eacp/Core/Threads/EventLoop.h>
@@ -36,8 +37,9 @@ struct WindowShape
     float height = 0.0f;
 };
 
-const auto windowShapes = std::array {WindowShape {"narrow", 560.0f, 700.0f},
-                                      WindowShape {"normal", 1280.0f, 800.0f},
+const auto windowShapes = std::array {WindowShape {"minimum", 300.0f, 200.0f},
+                                      WindowShape {"tall-narrow", 420.0f, 1000.0f},
+                                      WindowShape {"default", 1100.0f, 700.0f},
                                       WindowShape {"ultrawide", 2560.0f, 900.0f}};
 
 const auto projectsToOpen = std::array {std::string {"/tmp/CowTerm"},
@@ -84,26 +86,37 @@ private:
     std::string host;
 };
 
-// The app's window in miniature: the active session's panes with an overlay
-// over them.
+// The app's window in miniature: the window chrome strip, and the active
+// session's panes under it with an overlay over them.
 class RenderWindow final : public Graphics::View
 {
 public:
-    void show(term::SessionView& sessionView, Graphics::Rect bounds)
+    explicit RenderWindow(const term::AppConfig& config)
+        : chrome(config)
+    {
+        chromeHost.setRootComponent(chrome);
+        addSubview(chromeHost);
+    }
+
+    void show(term::TermSession& session, Graphics::Rect bounds)
     {
         clear();
-        shown = &sessionView;
-        addSubview(sessionView);
+        shown = &session.view;
+        addSubview(session.view);
         setBounds(bounds);
-        sessionView.setBounds(bounds);
-        layOutOffScreen(sessionView);
+        chrome.showSession(session.host, session.name);
+        chromeHost.setBounds(term::calculateWindowChromeBounds(bounds));
+        chromeHost.resized();
+        session.view.setBounds(term::calculateAreaUnderWindowChrome(bounds));
+        layOutOffScreen(session.view);
     }
 
     void showOverlay(UI::Component& overlay)
     {
         overlayHost.setRootComponent(overlay);
         addSubview(overlayHost);
-        overlayHost.setBounds(getLocalBounds());
+        overlayHost.setBounds(
+            term::calculateAreaUnderWindowChrome(getLocalBounds()));
         overlayHost.resized();
     }
 
@@ -128,6 +141,8 @@ public:
 
 private:
     term::SessionView* shown = nullptr;
+    term::WindowChrome chrome;
+    UI::ComponentHost chromeHost;
     UI::ComponentHost overlayHost;
 };
 
@@ -183,10 +198,15 @@ void renderShape(term::SessionManager& sessions,
                  const std::filesystem::path& directory)
 {
     const auto bounds = Graphics::Rect {0.0f, 0.0f, shape.width, shape.height};
-    auto window = RenderWindow {};
+    auto window = RenderWindow {config};
     auto& tamby = findSession(sessions, sessionWithTheNote);
+    auto& local = findSession(sessions, "");
 
-    window.show(tamby.view, bounds);
+    window.show(local, bounds);
+    saveImage(window.renderToImage(pictureScale),
+              directory / ("session-local-" + shape.name + ".png"));
+
+    window.show(tamby, bounds);
     saveImage(window.renderToImage(pictureScale), directory / ("session-lone-pane-" + shape.name + ".png"));
 
     auto palette = term::Palette {config, sessions};
@@ -197,7 +217,7 @@ void renderShape(term::SessionManager& sessions,
 
     auto switcher = term::Switcher {config, sessions};
     window.clear();
-    window.show(tamby.view, bounds);
+    window.show(tamby, bounds);
     switcher.begin(false);
     window.showOverlay(switcher);
     saveImage(window.renderToImage(pictureScale), directory / ("switcher-" + shape.name + ".png"));
@@ -206,7 +226,7 @@ void renderShape(term::SessionManager& sessions,
 
     tamby.view.splitActive(true);
     window.clear();
-    window.show(tamby.view, bounds);
+    window.show(tamby, bounds);
     Threads::runEventLoopUntil([&sessions] { return hasEveryPaneDrawnItsPrompt(sessions); }, waitForOutput);
     saveImage(window.renderToImage(pictureScale), directory / ("session-split-" + shape.name + ".png"));
     tamby.view.closeActivePane();

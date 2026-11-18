@@ -670,38 +670,6 @@ auto tCopyModeBadge = test("View/copyModeShowsItsPositionBadge") = []
     check(matches(afterExit.at(badgeRight, badgeTop), defaultTheme.background));
 };
 
-auto tEdgeSitsInTheMargin = test("View/anEdgeColourDrawsInTheMarginAndLeavesTheGridAndNoteAlone") = []
-{
-    constexpr auto edgeColour = Rgb {0x0072b2};
-    constexpr auto pixelInsideTheEdge = 1;
-    constexpr auto noteText = "on iPhone, 45 columns; click here to take it back";
-    auto pane = TestPane {};
-    const auto gridBefore = pane.recording->resizes.back();
-    pane.recording->showStatus(noteText);
-    pane.view->setEdgeColour(edgeColour);
-
-    const auto image = pane.view->renderToImage(1.f);
-
-    if (image.width() == 0)
-        return;
-
-    const auto right = (int) viewWidth - 1 - pixelInsideTheEdge;
-    const auto bottom = (int) viewHeight - 1 - pixelInsideTheEdge;
-    check(matches(image.at(pixelInsideTheEdge, pixelInsideTheEdge), edgeColour));
-    check(matches(image.at(right, bottom), edgeColour));
-    check(isCellPainted(image, 0, 1, defaultTheme.background), "the grid keeps its cells");
-    check(pane.recording->resizes.back().cols == gridBefore.cols);
-    check(pane.recording->resizes.back().rows == gridBefore.rows);
-
-    const auto noteTop = (int) std::ceil(marginY + samplingInsetInPoints);
-    const auto noteRight = (int) (viewWidth - marginX - 2.f);
-    check(matches(image.at(noteRight, noteTop), defaultTheme.ansi[3]), "the note keeps its own colour");
-
-    pane.view->setEdgeColour(std::nullopt);
-    const auto withoutEdge = pane.view->renderToImage(1.f);
-    check(matches(withoutEdge.at(pixelInsideTheEdge, pixelInsideTheEdge), defaultTheme.background));
-};
-
 auto tDoubleClickSelectsWord = test("View/doubleClickSelectsAWord") = []
 {
     auto pane = TestPane {};

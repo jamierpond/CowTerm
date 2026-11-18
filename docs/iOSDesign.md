@@ -607,15 +607,21 @@ launched with `--landscape`, which is how landscape screenshots are taken.
   the phone dials it as `big-cow`, so the two differ (reddish purple against
   orange) unless `hosts.daily-driver.color` in cowterm.json says otherwise;
   `daily-driver` also shares its entry with `tamby-windows`.
-- Inside a remote session, a pane that fills the window on its own (a single
-  pane or a zoomed one) has a 3-point edge in its host's colour, drawn in the
-  margin round the grid, so it takes no row or column and no program can draw
-  there. With splits the gutters and the active pane's ring carry the colour,
-  as before. Local sessions have no edge, so the edge alone says "remote". The
-  "on iPhone" note stays a filled gold box with text inside the edge.
+- The window's machine is shown in a strip across its top, not round the
+  terminal: a remote session's strip is filled with its host's colour and its
+  name starts with the host ("tamby/tamber-web"), so the text says the machine
+  without telling hues apart; a local session's strip is the theme's
+  background with its name. On macOS the strip is the title bar: the window
+  has no title-bar background or title, and the strip sits beside the real
+  traffic lights, 32 points tall to cover macOS 26's title bar. On Windows and
+  Linux eacp has no way yet to drag a window by a native view or to keep the
+  caption buttons without the frame, so the strip sits under the native title
+  bar. The panes, their gutters and the active pane's ring are in the theme's
+  own colours for every session.
   `scripts/render-host-colours.sh` renders the palette, the switcher and a
-  session at narrow, normal and ultrawide sizes, with protanopia,
-  deuteranopia and greyscale views of each, into `build/renders/host-colours`.
+  session under the strip at minimum, tall narrow, default and ultrawide
+  sizes, with protanopia, deuteranopia and greyscale views of each, into
+  `build/renders/host-colours`.
 - `ColourBlindHostColoursTests` checks the palette as protanopia and
   deuteranopia (Machado 2009, severity 1.0) and greyscale see it: every pair
   at least CIE76 ΔE 10 apart in each simulation and 4.5 L* apart in greyscale,

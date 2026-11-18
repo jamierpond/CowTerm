@@ -1,7 +1,8 @@
 #!/bin/sh
-# Renders the palette, the switcher and a session's panes at narrow, normal and
-# ultrawide window sizes, with sessions on Jamie's hosts and a local one, then
-# writes protanopia, deuteranopia and greyscale views of each. Runs in an
+# Renders the palette, the switcher and a session's panes under the window
+# chrome strip at minimum, tall narrow, default and ultrawide window sizes,
+# with sessions on Jamie's hosts and a local one, then writes protanopia,
+# deuteranopia and greyscale views of each. Runs in an
 # isolated instance with an empty session store, removed afterwards; the
 # shells are scripted, so no daemon or ssh is touched.
 # usage: scripts/render-host-colours.sh [output directory]

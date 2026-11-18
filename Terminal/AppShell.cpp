@@ -26,6 +26,9 @@ namespace KeyCode = Graphics::KeyCode;
 
 AppShell::AppShell()
 {
+    windowChromeHost.setRootComponent(windowChrome);
+    addSubview(windowChromeHost);
+
     wireSessionManager();
     wireTray();
     wireOverlays();
@@ -271,7 +274,8 @@ void AppShell::attachActive(TermSession& session)
         raiseOverlay();
     }
 
-    session.view.setBounds(getLocalBounds());
+    session.view.setBounds(calculateSessionArea());
+    windowChrome.showSession(session.host, session.name);
 
     if (!anyOverlayShown())
         session.view.focusActive();
@@ -295,7 +299,8 @@ void AppShell::setWindowFocused(bool focused)
 
 void AppShell::resized()
 {
-    const auto bounds = getLocalBounds();
+    windowChromeHost.setBounds(calculateWindowChromeBounds(getLocalBounds()));
+    const auto bounds = calculateSessionArea();
 
     if (attached != nullptr)
         attached->view.setBounds(bounds);
@@ -304,6 +309,11 @@ void AppShell::resized()
 
     if (auto* popup = findAttachedPopup())
         popup->setBounds(bounds);
+}
+
+Graphics::Rect AppShell::calculateSessionArea() const
+{
+    return calculateAreaUnderWindowChrome(getLocalBounds());
 }
 
 void AppShell::setGlobalFontSize(float size)
@@ -367,7 +377,7 @@ void AppShell::showOverlay(eacp::UI::Component& overlay)
     overlayHost.setRootComponent(overlay);
     removeSubview(overlayHost);
     addSubview(overlayHost);
-    overlayHost.setBounds(getLocalBounds());
+    overlayHost.setBounds(calculateSessionArea());
     overlay.grabKeyboardFocus();
 
     // Taking the host out of the view tree above dropped it as the window's
@@ -423,7 +433,7 @@ void AppShell::raisePopup()
     removeSubview(*popup);
     popup->setVisible(true);
     addSubview(*popup);
-    popup->setBounds(getLocalBounds());
+    popup->setBounds(calculateSessionArea());
     popup->focusTerminal();
 }
 
@@ -532,7 +542,7 @@ void AppShell::showPopup(const std::string& command)
     popupPrefixArmed = false;
     logUsage("popup.open", {{"command", command}, {"host", active->host}});
     addSubview(popup);
-    popup.setBounds(getLocalBounds());
+    popup.setBounds(calculateSessionArea());
     popup.show(command, active->activeWorkingDirectory(), active->host);
 }
 

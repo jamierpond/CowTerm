@@ -98,8 +98,6 @@ public:
     };
 
     void updateChrome();
-    bool isSplitShown() const;
-    void markHostRoundLonePane();
 
     eacp::UI::ComponentHost chromeHost;
     Chrome chrome;
@@ -146,10 +144,6 @@ private:
     std::string fallbackDir;
     ShellHome home;
     Theme theme;
-
-    // A remote session's host colour, edging a pane that fills the view on
-    // its own; none for this machine.
-    std::optional<Rgb> lonePaneEdgeColour;
     std::unique_ptr<Node> root;
     Node* active = nullptr;
     Node* zoomed = nullptr;

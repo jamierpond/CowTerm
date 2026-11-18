@@ -33,7 +33,8 @@ add_executable(${COWTERM_EXECUTABLE_TARGET}
         SessionView.cpp
         Switcher.cpp
         TrayController.cpp
-        PaneTerminalConfig.cpp)
+        PaneTerminalConfig.cpp
+        WindowChrome.cpp)
 
 # Per-platform halves of ct, shell commands, the places watcher,
 # notifications and trash. Privacy grants come from Rudder's PermissionsPanel.

@@ -1,5 +1,4 @@
 #include "SessionView.h"
-#include "Multiplexer/HostColours.h"
 
 #include <eacp/Core/Threads/EventLoop.h>
 
@@ -267,31 +266,4 @@ auto tClosingAnInactivePaneInsideASplit =
 
     view.focusDirection('h');
     check(view.activePane() == fixture.left());
-};
-
-auto tALonePaneShowsItsHost = test("SessionView/aLoneRemotePaneIsEdgedInItsHostsColourAndASplitIsNot") = []
-{
-    constexpr auto viewWidth = 600.f;
-    constexpr auto viewHeight = 300.f;
-    const auto viewSize = Graphics::Rect {0.f, 0.f, viewWidth, viewHeight};
-    const auto config = AppConfig {};
-    const auto tambyColour = getColourBlindSafeHostRowColours(config, "jamiepond@tamby").stripe;
-    auto remote = SessionView {config, "/tmp", {"jamiepond@tamby", "tamber-web"}};
-    remote.restore({});
-    remote.setBounds(viewSize);
-
-    check(remote.activePane()->getEdgeColour() == std::optional<Rgb> {tambyColour});
-
-    remote.splitActive(true);
-
-    for (auto* pane: remote.panes())
-        check(!pane->getEdgeColour().has_value(), "the gutters and the ring carry the host instead");
-
-    remote.toggleZoom();
-    check(remote.activePane()->getEdgeColour() == std::optional<Rgb> {tambyColour}, "a zoomed pane is alone");
-
-    auto local = SessionView {config, "/tmp"};
-    local.restore({});
-    local.setBounds(viewSize);
-    check(!local.activePane()->getEdgeColour().has_value());
 };

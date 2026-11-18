@@ -8,7 +8,6 @@
 
 #include <eacp/Sprites/Sprites.h>
 
-#include <array>
 #include <string>
 #include <vector>
 
@@ -112,9 +111,6 @@ struct BadgeMetrics
 // Where the note at the pane's top right goes, so a click can find it.
 eacp::Graphics::Rect calculateBadgeBounds(const std::string& indicator, const BadgeMetrics& metrics);
 
-// The four strips, thickness wide, along the inside of the view's edges.
-std::array<eacp::Graphics::Rect, 4> calculateEdgeStrips(eacp::Graphics::Rect view, float thickness);
-
 class GridPainter
 {
 public:
@@ -145,9 +141,6 @@ public:
 
     // tmux's position badge, top right.
     void drawCopyModeBadge(const std::string& indicator, float viewWidth);
-
-    // A line round the inside of the view's edges.
-    void drawEdge(eacp::Graphics::Rect view, float thickness, Rgb colour);
 
     // The scroll position bar on the right edge, at this opacity.
     void drawScrollIndicator(const eacp::Graphics::Rect& thumb, float opacity);

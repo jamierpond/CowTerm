@@ -10,6 +10,7 @@
 #include "Session.h"
 #include "Switcher.h"
 #include "TrayController.h"
+#include "WindowChrome.h"
 
 #include <eacp/UI/UI.h>
 
@@ -117,6 +118,7 @@ private:
     void detachPopupOf(const TermSession* session);
     void closePopupsOfClosedSessions();
     bool anyOverlayShown() const;
+    eacp::Graphics::Rect calculateSessionArea() const;
     void attachActive(TermSession& session);
     void setGlobalFontSize(float size);
     void updateTitle();
@@ -139,6 +141,8 @@ private:
     std::map<const TermSession*, std::unique_ptr<Popup>> popupsBySession;
     pond::PermissionsPanel permissions {permissions::makePermissionsPanelSettings(config)};
     eacp::UI::ComponentHost overlayHost;
+    WindowChrome windowChrome {config};
+    eacp::UI::ComponentHost windowChromeHost;
     TrayController tray {manager};
     NotifyUserServer notifyUserServer {config};
     PasteConfirmation pasteConfirmation {config};

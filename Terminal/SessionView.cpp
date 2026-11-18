@@ -1,6 +1,5 @@
 #include "SessionView.h"
 #include "PaneTerminalConfig.h"
-#include "Multiplexer/HostColours.h"
 #include "Multiplexer/UsageLog.h"
 
 #include <algorithm>
@@ -102,29 +101,6 @@ bool isGrowingDirection(char direction)
     return direction == 'l' || direction == 'j';
 }
 
-// A remote session's gutters and active-pane ring take its host's colour.
-Theme themeForShellHome(const AppConfig& config, const std::string& host)
-{
-    constexpr auto gutterTintAmount = 0.35f;
-    auto theme = themeByName(config.theme);
-
-    if (host.empty())
-        return theme;
-
-    const auto hostColour = getColourBlindSafeHostRowColours(config, host).stripe;
-    theme.paneBorder = blendColours(theme.paneBorder, hostColour, gutterTintAmount);
-    theme.paneBorderActive = hostColour;
-    return theme;
-}
-
-std::optional<Rgb> findLonePaneEdgeColour(const AppConfig& config, const SessionView::ShellHome& home)
-{
-    if (home.host.empty())
-        return std::nullopt;
-
-    return getColourBlindSafeHostRowColours(config, home.host).stripe;
-}
-
 bool isValidSavedIndex(const std::vector<SavedPane>& saved, int index)
 {
     return index >= 0 && index < (int) saved.size();
@@ -137,8 +113,7 @@ SessionView::SessionView(const AppConfig& configToUse,
     : config(configToUse)
     , fallbackDir(std::move(fallbackDirToUse))
     , home(std::move(homeToUse))
-    , theme(themeForShellHome(configToUse, home.host))
-    , lonePaneEdgeColour(findLonePaneEdgeColour(configToUse, home))
+    , theme(themeByName(configToUse.theme))
 {
     setHandlesMouseEvents(true);
 
@@ -709,18 +684,14 @@ void SessionView::Chrome::paint(eacp::UI::Graphics& g)
     g.fillRect(activeBounds);
 }
 
-// A single pane, or a zoomed one, covers the view whole: there is no gutter to
-// show or to put a ring in.
-bool SessionView::isSplitShown() const
-{
-    return root != nullptr && !root->isLeaf() && zoomed == nullptr;
-}
-
 void SessionView::updateChrome()
 {
-    chrome.showActive = isSplitShown() && active != nullptr;
+    // A single pane, or a zoomed one, covers the view whole: there is no gutter
+    // to show and no ring to put round the only thing on screen.
+    const auto split = root != nullptr && !root->isLeaf() && zoomed == nullptr;
+
+    chrome.showActive = split && active != nullptr;
     chrome.activeBorder = toColor(theme.paneBorderActive);
-    markHostRoundLonePane();
 
     if (chrome.showActive)
     {
@@ -729,17 +700,5 @@ void SessionView::updateChrome()
     }
 
     chrome.repaint();
-}
-
-// With splits the gutters and the active ring carry the host's colour; a pane
-// alone has none, so it gets an edge of that colour instead.
-void SessionView::markHostRoundLonePane()
-{
-    auto leaves = std::vector<Node*> {};
-    collectLeaves(root.get(), leaves);
-    const auto edge = isSplitShown() ? std::optional<Rgb> {} : lonePaneEdgeColour;
-
-    for (auto* leaf: leaves)
-        leaf->view->setEdgeColour(edge);
 }
 } // namespace term
