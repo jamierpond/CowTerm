@@ -47,6 +47,11 @@ std::filesystem::path getPaneStoreDirectory()
     return getDataDirectory() / addInstanceSuffix("panes");
 }
 
+std::filesystem::path getLineCoverageDirectory()
+{
+    return getDataDirectory() / addInstanceSuffix("coverage");
+}
+
 std::vector<pondapp::DataDirectoryMove> moveOldAppData()
 {
     auto moves = std::vector<pondapp::DataDirectoryMove> {};

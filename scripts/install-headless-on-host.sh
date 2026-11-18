@@ -6,22 +6,24 @@
 # older running. `ct update-remotes` installs origin/main instead; this
 # installs a branch.
 #
-#   scripts/install-headless-on-host.sh <host> [folder there]
+#   scripts/install-headless-on-host.sh <host> [folder there [install-headless.sh arguments...]]
 set -eu
 cd "$(dirname "$0")/.."
 host="$1"
 folder="${2:-\$HOME/tmp/cowterm-headless-install}"
+shift $(($# < 2 ? $# : 2))
 
 git archive --format=tar HEAD | ssh -o BatchMode=yes "$host" \
     "rm -rf $folder && mkdir -p $folder && tar -x -C $folder"
-ssh -o BatchMode=yes "$host" bash -l -s "$folder" <<'REMOTE'
+ssh -o BatchMode=yes "$host" bash -l -s "$folder" "$@" <<'REMOTE'
 folder="$1"
+shift
 export PATH="$HOME/.nix-profile/bin:$PATH"
 cd "$(eval echo "$folder")"
 deps=""
 if [ "$(uname -s)" = Linux ]; then
     deps=scripts/with-linux-deps.sh
 fi
-$deps scripts/install-headless.sh 2>&1 | tail -3
+$deps scripts/install-headless.sh "$@" 2>&1 | tail -3
 "$HOME/.local/bin/ct" version
 REMOTE

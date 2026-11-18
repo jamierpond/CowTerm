@@ -7,10 +7,13 @@
 # A running daemon keeps running on its old binary, so installing never kills
 # a session; `ct bridge` restarts it through the pane-restore path only when
 # the daemon protocol changed.
+#
+#   scripts/install-headless.sh [build directory [cmake arguments...]]
 set -e
 
 cd "$(dirname "$0")/.."
-build_directory="build-headless"
+build_directory="${1:-build-headless}"
+[ $# -gt 0 ] && shift
 install_directory="$HOME/.local/libexec/cowterm-remote"
 bin_directory="$HOME/.local/bin"
 
@@ -24,8 +27,10 @@ case "$(uname -s)" in
         executable_suffix=".exe" ;;
 esac
 
+extra_cmake_arguments="$*"
+
 configure() {
-    $compiler_environment cmake -S . -B "$build_directory" -G Ninja -DCMAKE_BUILD_TYPE=Release -DCOWTERM_HEADLESS=ON "$@" >/dev/null
+    $compiler_environment cmake -S . -B "$build_directory" -G Ninja -DCMAKE_BUILD_TYPE=Release -DCOWTERM_HEADLESS=ON $extra_cmake_arguments "$@" >/dev/null
 }
 
 # eacp's network library needs libcurl on Linux. When CMake can't find one

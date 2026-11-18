@@ -390,3 +390,41 @@ ios-check-hidden-views device="iPhone 17e":
 # Print one line per thing the push relay needs on its host, ready or not, and what to run for each that is not
 push-relay-check-ready host="jamiepond@macprorack":
     scripts/check-push-relay-ready.sh {{host}}
+
+# ---- Line coverage: which lines of CowTerm's own code a normal day runs ----
+
+coverage_build_dir := "build-coverage"
+coverage_cmake_arguments := "-DCOWTERM_LINE_COVERAGE=ON -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++"
+
+[doc('Build the app with line-coverage counters, in build-coverage')]
+coverage-build:
+    {{deps}} cmake -S . -B {{coverage_build_dir}} -G "{{generator}}" -DCMAKE_BUILD_TYPE={{build_type}} {{coverage_cmake_arguments}}
+    just build_dir={{coverage_build_dir}} build
+
+[doc('Install the line-coverage build in place of the normal app (just install puts the normal one back)')]
+install-coverage: coverage-build
+    just build_dir={{coverage_build_dir}} install
+
+[doc("Install a line-coverage headless ct and cowtermd on a host in place of its normal ones; its running daemon keeps running")]
+coverage-install-headless-on-host host:
+    scripts/install-headless-on-host.sh {{host}} '$HOME/tmp/cowterm-coverage-install' build-headless-coverage {{coverage_cmake_arguments}}
+
+[doc('Print the code that never ran, largest first, from this machine and every collected host')]
+coverage-report *arguments:
+    scripts/line-coverage.py report {{arguments}}
+
+[doc("Copy a host's line-coverage counts and its programs here, for coverage-report")]
+coverage-collect-from-host host *arguments:
+    scripts/line-coverage.py collect {{host}} {{arguments}}
+
+[doc('Delete the line-coverage counts here, or on user@host')]
+coverage-reset host="" *arguments:
+    scripts/line-coverage.py reset {{host}} {{arguments}}
+
+[doc("Kill a throwaway instrumented daemon (instance coverage-check) without a clean exit and show its counts survived")]
+coverage-check:
+    {{deps}} scripts/check-line-coverage.sh {{coverage_build_dir}} {{coverage_cmake_arguments}}
+
+[doc("The same check on user@host, detached there, then collect and report its counts here")]
+coverage-check-on-host host:
+    scripts/check-line-coverage-on-host.sh {{host}} {{coverage_cmake_arguments}}

@@ -101,6 +101,7 @@ set_target_properties(${COWTERM_EXECUTABLE_TARGET} PROPERTIES
 
 eacp_set_gui_subsystem(${COWTERM_EXECUTABLE_TARGET})
 set_default_target_setting(${COWTERM_EXECUTABLE_TARGET})
+cowterm_write_line_coverage(${COWTERM_EXECUTABLE_TARGET})
 eacp_set_app_icon(${COWTERM_EXECUTABLE_TARGET}
         IMAGE "${CMAKE_CURRENT_SOURCE_DIR}/Icon.png")
 

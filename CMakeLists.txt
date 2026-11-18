@@ -161,6 +161,23 @@ lockstep_add_package(
         GITHUB_REPOSITORY tamber-inc/emberstore
         GIT_TAG main)
 
+# Counts which lines of CowTerm's own code run, so code nobody uses can be found
+# (just coverage-report). Set after the packages, so only CowTerm is counted.
+option(COWTERM_LINE_COVERAGE "Count which lines of CowTerm's code run (clang only)" OFF)
+if (COWTERM_LINE_COVERAGE)
+    if (NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+        message(FATAL_ERROR "COWTERM_LINE_COVERAGE needs clang: configure with -DCMAKE_CXX_COMPILER=clang++")
+    endif ()
+    add_compile_options(-fprofile-instr-generate -fcoverage-mapping)
+    add_link_options(-fprofile-instr-generate)
+endif ()
+
+function(cowterm_write_line_coverage target)
+    if (COWTERM_LINE_COVERAGE)
+        target_sources(${target} PRIVATE ${PROJECT_SOURCE_DIR}/LineCoverage/LineCoverageWriter.cpp)
+    endif ()
+endfunction()
+
 # ct, the daemon and the app report one version: <semver>+<commit>, from Rudder.
 pond_add_version_library(CowTermVersion)
 
