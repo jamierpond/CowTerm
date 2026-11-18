@@ -295,7 +295,7 @@ auto tLastInputNamesThePaneTypedInto = test("DaemonPhoneProtocol/lastInputNamesT
 
 auto tActivityCarriesWhatThePaneSaid = test("DaemonPhoneProtocol/activityCarriesWhatThePaneSaid") = []
 {
-    constexpr auto activityColumnCount = std::size_t {6};
+    constexpr auto activityColumnCount = std::size_t {9};
     auto daemon = TestDaemon {"daemon-activity-test"};
     auto mac = DaemonConversation {daemon.instance};
     check(mac.waitForConnection());
@@ -332,6 +332,9 @@ auto tActivityCarriesWhatThePaneSaid = test("DaemonPhoneProtocol/activityCarries
             check(std::stoll(columns[2]) > 0, "output is recorded");
             check(columns[3] == "waiting");
             check(columns[5] == "Claude needs your permission ", "the message stays on one line");
+            check(columns[6] == "waiting", "nobody viewed the pane, so the question is unread");
+            check(std::stoll(columns[7]) > 0);
+            check(columns[8] == "Claude needs your permission ", "the unread text stays on one line");
         }
     }
 

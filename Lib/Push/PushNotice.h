@@ -1,22 +1,22 @@
 #pragma once
 
+#include "Multiplexer/PaneReadState.h"
+
 #include <Miro/Reflect.h>
 
 #include <optional>
 #include <string>
 
-// What a daemon tells the push relay when a Claude in one of its panes
-// finished its turn or is asking something: the relay turns it into a push.
+// What a daemon tells the push relay when one of its panes has a new unread
+// event (PaneReadState): the relay turns it into a push.
 namespace term::push
 {
-constexpr auto finishedEvent = "finished";
-constexpr auto waitingEvent = "waiting";
-
 struct PushNotice
 {
     std::string host;
     std::string session;
     std::string paneId;
+    // One of the unread events: finished, waiting, bell, notification.
     std::string event;
     std::string text;
 

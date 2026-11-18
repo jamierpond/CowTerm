@@ -19,6 +19,12 @@ struct PaneActivityReport
     std::string state;
     std::int64_t stateSinceMilliseconds = 0;
     std::string stateMessage;
+
+    // What Jamie has not seen there (PaneReadState): finished, waiting, bell or
+    // notification, empty when read. Daemons from before unread send none.
+    std::string unreadEvent;
+    std::int64_t unreadSinceMilliseconds = 0;
+    std::string unreadText;
 };
 
 std::vector<PaneActivityReport> parseActivityReport(const std::string& payload);

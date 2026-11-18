@@ -2,6 +2,7 @@
 
 #include <Multiplexer/Protocol.h>
 #include <PondApp/DataDirectory.h>
+#include <Multiplexer/SessionOverview.h>
 #include <Push/PushNotice.h>
 
 #include <NanoTest/NanoTest.h>
@@ -25,7 +26,6 @@ constexpr auto quietPaneId = "push-quiet-pane";
 constexpr auto sessionName = "Grazer";
 constexpr auto hostName = "test-host";
 constexpr auto columns = 80;
-constexpr auto phoneColumns = 49;
 constexpr auto rows = 24;
 constexpr auto okStatus = 200;
 constexpr auto relayWait = Time::MS {15000};
@@ -92,8 +92,21 @@ struct PushingDaemon
     PushingDaemon(const std::string& testName, const FakeRelay& relay)
         : instance(makeInstanceName(testName))
         , configPath(writeConfig(instance, relay))
-        , process(launchDaemon(instance))
     {
+        process.emplace(launchDaemon(instance));
+    }
+
+    // Quits the daemon the way an update does and starts it again; panes come
+    // back when a client spawns them again.
+    void restart()
+    {
+        auto last = DaemonConversation {instance};
+
+        if (last.waitForConnection())
+            last.quitDaemon();
+
+        process->wait();
+        process.emplace(launchDaemon(instance));
     }
 
     ~PushingDaemon()
@@ -103,7 +116,7 @@ struct PushingDaemon
         if (last.waitForConnection())
             last.quitDaemon();
 
-        process.wait();
+        process->wait();
         std::filesystem::remove(configPath);
         std::filesystem::remove_all(pondapp::getPondAppDataDirectory("CowTerm")
                                     / ("panes-" + instance));
@@ -120,7 +133,7 @@ struct PushingDaemon
 
     std::string instance;
     std::filesystem::path configPath;
-    Processes::Process process;
+    std::optional<Processes::Process> process;
 };
 
 void introduce(DaemonConversation& client, const std::string& name)
@@ -146,6 +159,31 @@ void reportState(DaemonConversation& client,
     client.messenger.send(term::proto::make("pane-state", {id, state}, message));
 }
 
+void viewPane(DaemonConversation& client, const std::string& id)
+{
+    client.messenger.send(term::proto::make("viewing", {id}));
+}
+
+// The daemon's activity line for the pane, as a client reads it. The daemon
+// answers each client in order, but not two clients in each other's order, so a
+// test reads on the client that sent last before another client reads.
+term::overview::PaneActivityReport readActivity(DaemonConversation& client, const std::string& id)
+{
+    client.messenger.send(term::proto::make("activity"));
+    const auto answer = client.waitForMessage("activity");
+
+    if (!answer)
+        return {};
+
+    for (const auto& report: term::overview::parseActivityReport(answer->payload))
+    {
+        if (report.paneId == id)
+            return report;
+    }
+
+    return {};
+}
+
 // Every notice the daemon will post for what came before has been posted once
 // a later, unsuppressed one arrives: the daemon handles messages in order.
 std::vector<term::push::PushNotice> pushOnceMoreAndCollect(DaemonConversation& client,
@@ -158,7 +196,7 @@ std::vector<term::push::PushNotice> pushOnceMoreAndCollect(DaemonConversation& c
 }
 } // namespace
 
-auto tFinishedPaneIsPostedToTheRelay = test("DaemonPush/finishedPaneIsPostedToTheRelay") = []
+auto tFinishedPaneIsPostedToTheRelay = test("DaemonUnread/finishedPaneIsPostedToTheRelay") = []
 {
     auto relay = FakeRelay {};
     check(relay.isListening);
@@ -184,7 +222,7 @@ auto tFinishedPaneIsPostedToTheRelay = test("DaemonPush/finishedPaneIsPostedToTh
     mac.messenger.send(term::proto::make("kill", {paneId}));
 };
 
-auto tTheSameEventIsPostedOnce = test("DaemonPush/theSameEventIsPostedOnce") = []
+auto tTheSameEventIsPostedOnce = test("DaemonUnread/theSameEventIsPostedOnce") = []
 {
     auto relay = FakeRelay {};
     auto daemon = PushingDaemon {"daemon-push-once-test", relay};
@@ -201,58 +239,163 @@ auto tTheSameEventIsPostedOnce = test("DaemonPush/theSameEventIsPostedOnce") = [
     check(notices.size() == 2 && notices[1].paneId == quietPaneId);
 };
 
-auto tPaneShownOnThePhoneIsNotPosted = test("DaemonPush/paneShownOnThePhoneIsNotPosted") = []
+auto tAFinishedPaneIsUnreadForEveryClient = test("DaemonUnread/aFinishedPaneIsUnreadForEveryClient") = []
 {
     auto relay = FakeRelay {};
-    auto daemon = PushingDaemon {"daemon-push-phone-test", relay};
+    auto daemon = PushingDaemon {"daemon-unread-finished-test", relay};
     auto mac = DaemonConversation {daemon.instance};
     auto phone = DaemonConversation {daemon.instance};
     check(mac.waitForConnection() && phone.waitForConnection());
     introduce(mac, "Mac");
     introduce(phone, term::proto::phoneClientName);
     createPane(mac, paneId);
-    phone.messenger.send(term::proto::make(
-        "claim-size", {paneId, std::to_string(phoneColumns), std::to_string(rows)}));
-    phone.waitForMessage("size-owner");
 
-    reportState(mac, paneId, "finished", "Done.");
+    reportState(mac, paneId, "finished", "All 420 tests pass.");
+    readActivity(mac, paneId);
 
-    const auto notices = pushOnceMoreAndCollect(mac, relay, 1);
-    check(notices.size() == 1 && notices[0].paneId == quietPaneId,
-          "only the marker pane, which the phone does not show");
+    const auto seenByPhone = readActivity(phone, paneId);
+    check(seenByPhone.unreadEvent == "finished", seenByPhone.unreadEvent);
+    check(seenByPhone.unreadText == "All 420 tests pass.");
+    check(seenByPhone.unreadSinceMilliseconds > 0);
+    check(relay.waitForNotices(1).size() == 1, "an unread event is what a push announces");
 };
 
-auto tPaneTypedIntoOnTheDesktopIsNotPosted = test("DaemonPush/paneTypedIntoOnTheDesktopIsNotPosted") = []
+auto tSeenOnTheMacIsReadOnThePhone = test("DaemonUnread/seenOnTheMacIsReadOnThePhone") = []
 {
     auto relay = FakeRelay {};
-    auto daemon = PushingDaemon {"daemon-push-desktop-test", relay};
+    auto daemon = PushingDaemon {"daemon-unread-seen-mac-test", relay};
+    auto mac = DaemonConversation {daemon.instance};
+    auto phone = DaemonConversation {daemon.instance};
+    check(mac.waitForConnection() && phone.waitForConnection());
+    introduce(mac, "Mac");
+    introduce(phone, term::proto::phoneClientName);
+    createPane(mac, paneId);
+    reportState(mac, paneId, "finished", "Done.");
+
+    viewPane(mac, paneId);
+    readActivity(mac, paneId);
+
+    check(readActivity(phone, paneId).unreadEvent.empty());
+};
+
+auto tSeenOnThePhoneIsReadOnTheMac = test("DaemonUnread/seenOnThePhoneIsReadOnTheMac") = []
+{
+    auto relay = FakeRelay {};
+    auto daemon = PushingDaemon {"daemon-unread-seen-phone-test", relay};
+    auto mac = DaemonConversation {daemon.instance};
+    auto phone = DaemonConversation {daemon.instance};
+    check(mac.waitForConnection() && phone.waitForConnection());
+    introduce(mac, "Mac");
+    introduce(phone, term::proto::phoneClientName);
+    createPane(mac, paneId);
+    reportState(mac, paneId, "waiting", "Allow Bash?");
+
+    viewPane(phone, paneId);
+    readActivity(phone, paneId);
+
+    check(readActivity(mac, paneId).unreadEvent.empty());
+};
+
+auto tFinishingWhileViewedIsNeitherUnreadNorPushed = test("DaemonUnread/finishingWhileViewedIsNeitherUnreadNorPushed") = []
+{
+    auto relay = FakeRelay {};
+    auto daemon = PushingDaemon {"daemon-unread-viewed-test", relay};
+    auto phone = DaemonConversation {daemon.instance};
+    check(phone.waitForConnection());
+    introduce(phone, term::proto::phoneClientName);
+    createPane(phone, paneId);
+    viewPane(phone, paneId);
+
+    reportState(phone, paneId, "finished", "Done.");
+
+    check(readActivity(phone, paneId).unreadEvent.empty());
+    const auto notices = pushOnceMoreAndCollect(phone, relay, 1);
+    check(notices.size() == 1 && notices[0].paneId == quietPaneId,
+          "only the marker pane, which nobody was viewing");
+};
+
+auto tAPromptSubmittedIsRead = test("DaemonUnread/aPromptSubmittedIsRead") = []
+{
+    auto relay = FakeRelay {};
+    auto daemon = PushingDaemon {"daemon-unread-prompt-test", relay};
     auto mac = DaemonConversation {daemon.instance};
     check(mac.waitForConnection());
     introduce(mac, "Mac");
     createPane(mac, paneId);
-    mac.messenger.send(term::proto::make("write", {paneId, term::proto::userInputMarker}, "\r"));
+    reportState(mac, paneId, "waiting", "Allow Bash?");
 
-    reportState(mac, paneId, "finished", "Done.");
+    reportState(mac, paneId, "working", "");
 
-    const auto notices = pushOnceMoreAndCollect(mac, relay, 1);
-    check(notices.size() == 1 && notices[0].paneId == quietPaneId,
-          "only the marker pane, which nobody typed into");
+    check(readActivity(mac, paneId).unreadEvent.empty());
 };
 
-auto tPhoneTypingDoesNotSuppress = test("DaemonPush/phoneTypingDoesNotSuppress") = []
+auto tAViewerThatDisconnectsStopsViewing = test("DaemonUnread/aViewerThatDisconnectsStopsViewing") = []
 {
     auto relay = FakeRelay {};
-    auto daemon = PushingDaemon {"daemon-push-phone-typing-test", relay};
+    auto daemon = PushingDaemon {"daemon-unread-disconnect-test", relay};
     auto mac = DaemonConversation {daemon.instance};
-    auto phone = DaemonConversation {daemon.instance};
-    check(mac.waitForConnection() && phone.waitForConnection());
+    check(mac.waitForConnection());
     introduce(mac, "Mac");
-    introduce(phone, term::proto::phoneClientName);
     createPane(mac, paneId);
-    phone.messenger.send(term::proto::make("write", {paneId, term::proto::userInputMarker}, "\r"));
 
-    reportState(mac, paneId, "finished", "Done.");
+    {
+        auto phone = DaemonConversation {daemon.instance};
+        check(phone.waitForConnection());
+        introduce(phone, term::proto::phoneClientName);
+        viewPane(phone, paneId);
+        readActivity(phone, paneId);
+    }
+
+    // The daemon hears of the disconnect on its own time, so report until it has.
+    constexpr auto mostReports = 50;
+    auto activity = term::overview::PaneActivityReport {};
+
+    for (auto report = 0; report < mostReports && activity.unreadEvent.empty(); ++report)
+    {
+        reportState(mac, paneId, "finished", "Done " + std::to_string(report));
+        activity = readActivity(mac, paneId);
+    }
+
+    check(activity.unreadEvent == "finished");
+};
+
+auto tUnreadSurvivesADaemonRestart = test("DaemonUnread/unreadSurvivesADaemonRestart") = []
+{
+    auto relay = FakeRelay {};
+    auto daemon = PushingDaemon {"daemon-unread-restart-test", relay};
+
+    {
+        auto mac = DaemonConversation {daemon.instance};
+        check(mac.waitForConnection());
+        introduce(mac, "Mac");
+        createPane(mac, paneId);
+        reportState(mac, paneId, "finished", "Kept across the restart.");
+        readActivity(mac, paneId);
+    }
+
+    daemon.restart();
+    auto mac = DaemonConversation {daemon.instance};
+    check(mac.waitForConnection());
+    introduce(mac, "Mac");
+    createPane(mac, paneId);
+
+    const auto activity = readActivity(mac, paneId);
+    check(activity.unreadEvent == "finished", activity.unreadEvent);
+    check(activity.unreadText == "Kept across the restart.");
+};
+
+auto tAShellBellIsUnread = test("DaemonUnread/aShellBellIsUnread") = []
+{
+    auto relay = FakeRelay {};
+    auto daemon = PushingDaemon {"daemon-unread-bell-test", relay};
+    auto mac = DaemonConversation {daemon.instance};
+    check(mac.waitForConnection());
+    introduce(mac, "Mac");
+    createPane(mac, paneId);
+
+    mac.messenger.send(term::proto::make("write", {paneId}, "printf '\\a'\r"));
 
     const auto notices = relay.waitForNotices(1);
-    check(notices.size() == 1 && notices[0].paneId == paneId);
+    check(notices.size() == 1 && notices[0].event == "bell");
+    check(readActivity(mac, paneId).unreadEvent == "bell");
 };

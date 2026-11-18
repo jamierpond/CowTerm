@@ -16,6 +16,7 @@ namespace
 {
 constexpr auto millisecondsPerMinute = std::int64_t {60000};
 constexpr auto activityColumnCount = 6;
+constexpr auto activityColumnCountWithUnread = 9;
 constexpr auto waitingState = "waiting";
 constexpr auto workingState = "working";
 constexpr auto finishedState = "finished";
@@ -153,12 +154,22 @@ std::vector<PaneActivityReport> parseActivityReport(const std::string& payload)
         if (columns.size() < activityColumnCount)
             continue;
 
-        reports.push_back({columns[0],
-                           readMilliseconds(columns[1]),
-                           readMilliseconds(columns[2]),
-                           columns[3],
-                           readMilliseconds(columns[4]),
-                           columns[5]});
+        auto report = PaneActivityReport {};
+        report.paneId = columns[0];
+        report.lastInputMilliseconds = readMilliseconds(columns[1]);
+        report.lastOutputMilliseconds = readMilliseconds(columns[2]);
+        report.state = columns[3];
+        report.stateSinceMilliseconds = readMilliseconds(columns[4]);
+        report.stateMessage = columns[5];
+
+        if (columns.size() >= activityColumnCountWithUnread)
+        {
+            report.unreadEvent = columns[6];
+            report.unreadSinceMilliseconds = readMilliseconds(columns[7]);
+            report.unreadText = columns[8];
+        }
+
+        reports.push_back(report);
     }
 
     return reports;

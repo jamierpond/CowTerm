@@ -342,21 +342,22 @@ get_directory_property(appExecutableTarget
         DIRECTORY ${PROJECT_SOURCE_DIR}/Terminal DEFINITION COWTERM_EXECUTABLE_TARGET)
 pond_add_version_test(${appExecutableTarget} ct)
 
-# When a Claude's finishing or asking rings the phone, the notification it
+# When a pane is unread, which is when the phone rings, the notification it
 # becomes, and the push relay: ES256 tokens, Apple's answers, retries.
 nano_add_executable(CowTermPushTests
         SOURCES
             PushTests.cpp
             PushRelayTests.cpp
+            PaneReadStateTests.cpp
         TARGETS CowTerm::Push CowTerm::PushRelay mbedcrypto)
 
-# The daemon's side of ringing the phone, over IPC against a stand-in relay:
-# what it posts, and what it keeps quiet about.
-nano_add_executable(CowTermDaemonPushTests
+# Unread panes in the daemon, over IPC against a stand-in relay: what becomes
+# unread and is pushed, what reads it, and that it survives a restart.
+nano_add_executable(CowTermDaemonUnreadTests
         SOURCES
-            DaemonPushTests.cpp
+            DaemonUnreadTests.cpp
         TARGETS CowTerm::Multiplexer CowTerm::Push eacp-network PondApp)
 
-target_compile_definitions(CowTermDaemonPushTests
+target_compile_definitions(CowTermDaemonUnreadTests
         PRIVATE COWTERM_DAEMON_PATH="$<TARGET_FILE:CowTermDaemon>")
-add_dependencies(CowTermDaemonPushTests CowTermDaemon)
+add_dependencies(CowTermDaemonUnreadTests CowTermDaemon)

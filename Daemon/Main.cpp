@@ -12,7 +12,7 @@
 #include "Multiplexer/Protocol.h"
 #include "Signals.h"
 #include "CommandLookup.h"
-#include "PanePushNotifier.h"
+#include "UnreadPanes.h"
 #include "Shell/Pty.h"
 #include "Emulator/TerminalModel.h"
 
@@ -49,6 +49,9 @@ constexpr auto silentClientCheckInterval = Time::MS {1000};
 constexpr auto silenceThatLosesThePanes = std::chrono::seconds {5};
 constexpr int idleChecksBeforeExit = 6;
 constexpr int saveIntervalMilliseconds = 5000;
+constexpr auto unreadPanesDocumentName = "unread-panes";
+constexpr auto workingState = "working";
+constexpr auto claudeProgramName = "claude";
 
 // Default-coloured cells are re-coloured by the app's theme on restore; the
 // daemon has no config, so it resolves everything else with the built-in one.
@@ -59,7 +62,6 @@ const term::Theme daemonTheme {};
 struct PaneActivity
 {
     std::int64_t lastInputMilliseconds = 0;
-    std::int64_t lastDesktopInputMilliseconds = 0;
     std::int64_t lastOutputMilliseconds = 0;
     std::string state;
     std::int64_t stateSinceMilliseconds = 0;
@@ -142,7 +144,7 @@ struct SpawnRequest
 struct Daemon
 {
     explicit Daemon(const PushRelayTarget& pushRelayTarget)
-        : pushNotifier(pushRelayTarget)
+        : unreadPanes(paneStore.document<term::UnreadPanes>(unreadPanesDocumentName), pushRelayTarget)
     {
         term::ignoreHangups();
         term::releaseInheritedStreams();
@@ -177,6 +179,7 @@ struct Daemon
         for (auto& [id, pane]: panes)
             stopWatching(id, *pane, messenger);
 
+        unreadPanes.stopViewingEverything(clients.at(&messenger).id);
         clients.erase(&messenger);
     }
 
@@ -222,6 +225,8 @@ struct Daemon
             MessageHandler {"yield-size", 1, &Daemon::handleYieldSize},
             MessageHandler {"last-input", 0, &Daemon::handleLastInput},
             MessageHandler {"pane-state", 2, &Daemon::handlePaneState},
+            MessageHandler {"viewing", 1, &Daemon::handleViewing},
+            MessageHandler {"not-viewing", 1, &Daemon::handleNotViewing},
             MessageHandler {"activity", 0, &Daemon::handleActivity},
             MessageHandler {"kill", 1, &Daemon::handleKill},
             MessageHandler {"info", 0, &Daemon::handleInfo},
@@ -274,7 +279,7 @@ struct Daemon
     }
 
     // write <id> [input], payload the bytes.
-    void handleWrite(IPC::Messenger& sender, const term::proto::Message& message)
+    void handleWrite(IPC::Messenger&, const term::proto::Message& message)
     {
         const auto& id = message.args[0];
         constexpr auto markerArgument = std::size_t {1};
@@ -285,9 +290,6 @@ struct Daemon
         {
             lastInput = {id, getMillisecondsSinceEpoch()};
             found->second->activity.lastInputMilliseconds = lastInput.millisecondsSinceEpoch;
-
-            if (clients.at(&sender).name != term::proto::phoneClientName)
-                found->second->activity.lastDesktopInputMilliseconds = lastInput.millisecondsSinceEpoch;
         }
 
         write(id, message.payload);
@@ -375,27 +377,67 @@ struct Daemon
             activity.state = message.args[1];
             activity.stateMessage = message.payload;
             activity.stateSinceMilliseconds = getMillisecondsSinceEpoch();
-            reportPaneStateForPush(found->first, *found->second);
+            reportStateToUnread(found->first, *found->second);
         }
     }
 
-    void reportPaneStateForPush(const std::string& id, DaemonPane& pane)
+    // Working means Claude was given a prompt there, so it has been seen.
+    void reportStateToUnread(const std::string& id, const DaemonPane& pane)
     {
         const auto& activity = pane.activity;
-        pushNotifier.reportPaneState(
-            {id, pane.sessionName, pane.pty.currentWorkingDirectory()},
-            {activity.state, activity.stateMessage, activity.stateSinceMilliseconds},
-            {activity.lastDesktopInputMilliseconds, isPaneShownOnPhone(pane)});
+
+        if (activity.state == workingState)
+            return unreadPanes.markRead(id);
+
+        unreadPanes.reportEvent(describeForPush(id, pane),
+                                {activity.state, activity.stateMessage, activity.stateSinceMilliseconds});
     }
 
-    bool isPaneShownOnPhone(const DaemonPane& pane) const
+    PaneForPush describeForPush(const std::string& id, const DaemonPane& pane)
     {
-        const auto owner = pane.sizeOwner.getOwner();
-        return owner && findClientName(owner) == term::proto::phoneClientName;
+        return {id, pane.sessionName, pane.pty.currentWorkingDirectory()};
     }
 
-    // One "<id>\t<last input>\t<last output>\t<state>\t<state since>\t<message>"
-    // line per pane; times in milliseconds since 1970, 0 for never.
+    // A shell's bell or OSC 9/777 notification, unless Claude runs there: its
+    // hooks already report it, and Claude rings too.
+    void watchForShellEvents(const std::string& id, DaemonPane& pane)
+    {
+        pane.terminal.parser.onBell = [this, id] { reportShellEvent(id, term::bellUnreadEvent, {}); };
+        pane.terminal.parser.onNotify = [this, id](const std::string& text)
+        { reportShellEvent(id, term::notificationUnreadEvent, text); };
+    }
+
+    void reportShellEvent(const std::string& id, const std::string& event, const std::string& text)
+    {
+        const auto found = panes.find(id);
+
+        if (found == panes.end() || isClaudeRunning(*found->second))
+            return;
+
+        unreadPanes.reportEvent(describeForPush(id, *found->second), {event, text, getMillisecondsSinceEpoch()});
+    }
+
+    static bool isClaudeRunning(DaemonPane& pane)
+    {
+        return pane.pty.foregroundProcess().find(claudeProgramName) != std::string::npos;
+    }
+
+    // viewing <id>: the sender shows the pane to a person now.
+    void handleViewing(IPC::Messenger& sender, const term::proto::Message& message)
+    {
+        if (panes.contains(message.args[0]))
+            unreadPanes.startViewing(message.args[0], clients.at(&sender).id);
+    }
+
+    // not-viewing <id>: the sender stopped showing it.
+    void handleNotViewing(IPC::Messenger& sender, const term::proto::Message& message)
+    {
+        unreadPanes.stopViewing(message.args[0], clients.at(&sender).id);
+    }
+
+    // One "<id>\t<last input>\t<last output>\t<state>\t<state since>\t<message>
+    // \t<unread event>\t<unread since>\t<unread text>" line per pane; times in
+    // milliseconds since 1970, 0 for never; the unread columns empty when read.
     void handleActivity(IPC::Messenger& sender, const term::proto::Message&)
     {
         auto payload = std::string {};
@@ -406,7 +448,8 @@ struct Daemon
             payload += id + "\t" + std::to_string(activity.lastInputMilliseconds) + "\t"
                        + std::to_string(activity.lastOutputMilliseconds) + "\t" + activity.state
                        + "\t" + std::to_string(activity.stateSinceMilliseconds) + "\t"
-                       + flattenToOneLine(activity.stateMessage) + "\n";
+                       + flattenToOneLine(activity.stateMessage) + "\t"
+                       + unreadPanes.describeForActivity(id) + "\n";
         }
 
         sender.send(term::proto::make("activity", {}, payload));
@@ -553,6 +596,7 @@ struct Daemon
         pane.sizeOwner.claimSize(client.id, request.size);
         watch(pane, sender);
         restoreSavedPane(id, pane);
+        watchForShellEvents(id, pane);
 
         const auto started = pane.pty.start(
             {request.size,
@@ -633,7 +677,7 @@ struct Daemon
         const auto watchers = std::move(found->second->watchers);
         panes.erase(found);
         forgetSavedPane(id);
-        pushNotifier.forgetPane(id);
+        unreadPanes.forgetPane(id);
 
         for (auto* watcher: watchers)
             watcher->send(term::proto::make("exit", {id}));
@@ -660,7 +704,7 @@ struct Daemon
     {
         panes.erase(id);
         forgetSavedPane(id);
-        pushNotifier.forgetPane(id);
+        unreadPanes.forgetPane(id);
     }
 
     emberstore::Document<term::TerminalState> paneDocument(const std::string& id) const
@@ -763,7 +807,7 @@ struct Daemon
     std::map<std::string, std::string> layouts;
     int idleTicks = 0;
     emberstore::Database paneStore = openPaneStore();
-    PanePushNotifier pushNotifier;
+    UnreadPanes unreadPanes;
 
     IPC::MessageServer server {term::proto::serverName()};
     Threads::Timer idleTimer {[this] { checkIdle(); }, idleCheckInterval};

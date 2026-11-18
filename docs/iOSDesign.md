@@ -828,13 +828,25 @@ sound, and a tap opens that pane.
   claude-hooks-add [user@host]` adds exactly those entries to
   `~/.claude/settings.json` and `just claude-hooks-remove` takes them out; Jamie
   agreed them for big-cow, tamby and macprorack on 17 November.
-- The daemon posts a finished or waiting report to the relay in
+- A pane is unread when a Claude there finished or asked while no client was
+  showing it to Jamie, or a shell there (not Claude) rang its bell or sent an
+  OSC 9/777 notification. It keeps the event, one line of text and the time.
+  It is read once any client sends `viewing <id>` for it (the phone shows the
+  pane in the foreground; the Mac has it as the focused pane of its focused
+  window and is not idle), or when Claude is given a prompt there. While a
+  client is viewing a pane, what happens there is seen as it happens.
+  `not-viewing <id>` or a disconnect ends that. The state lives in the pane's
+  daemon (`PaneReadState`, `Daemon/UnreadPanes`), so seeing it on one client
+  clears it on all, and it is kept in the daemon's pane store, so it survives
+  a daemon restart. `activity` carries it in three more columns: the event,
+  since when, and the text.
+- A push is exactly a new unread event: the daemon posts it to the relay in
   `cowterm.json`'s `pushRelay`, titled with `pushHostName` (both Macs' host
   names read "daily-driver", so the name is set, not looked up; `just
-  push-relay-set-host`). It does not post while the phone holds the pane's
-  size (the phone shows it in the foreground), while a client other than the
-  phone typed into the pane in the last minute, or when the same state and
-  text were posted already; a working report lets the next one through.
+  push-relay-set-host`). The same event again while still unread is not
+  posted. This replaced an earlier rule (the phone holding the pane's size, or
+  a desktop typing into it in the last minute), so nothing decides pushes but
+  unread.
 - `ct push-relay` runs on macprorack as a systemd user service (`just
   push-relay-install`), listening on its tailnet address only (eacp's
   `ServerOptions::bindAddress`). Apple's key is in Jamie's 1Password, vault

@@ -1,16 +1,13 @@
 #pragma once
 
-#include <Push/PanePushGate.h>
-#include <Push/PushNotice.h>
+#include "Multiplexer/PaneReadState.h"
 
-#include <map>
 #include <string>
 
-// The daemon's half of ringing the phone: each `ct pane-state` report goes
-// through the pane's gate, and a report that passes is posted to the relay.
+// Posts a pane's new unread event to the push relay, which rings the phone.
 struct PushRelayTarget
 {
-    // "http://macprorack:8742"; empty when this machine has no relay set.
+    // "http://macprorack.<tailnet>.ts.net:8742"; empty when this machine has no relay set.
     std::string relayAddress;
 
     // This machine as the phone dials it ("big-cow").
@@ -29,15 +26,8 @@ class PanePushNotifier
 public:
     explicit PanePushNotifier(PushRelayTarget targetToUse);
 
-    void reportPaneState(const PaneForPush& pane,
-                         const term::push::PaneStateChange& change,
-                         const term::push::PaneAttention& attention);
-
-    void forgetPane(const std::string& paneId);
+    void postNotice(const PaneForPush& pane, const term::UnreadEvent& event) const;
 
 private:
-    void postToRelay(const term::push::PushNotice& notice) const;
-
     PushRelayTarget target;
-    std::map<std::string, term::push::PanePushGate> gates;
 };

@@ -1,13 +1,27 @@
 #include "ApnsPayload.h"
 
+#include <algorithm>
+#include <array>
+#include <string_view>
+
 namespace term::push
 {
 namespace
 {
 constexpr auto maximumBodyBytes = std::size_t {240};
 constexpr auto ellipsis = "…";
-constexpr auto finishedWithoutText = "Claude finished.";
-constexpr auto waitingWithoutText = "Claude is waiting for you.";
+struct EventWithoutText
+{
+    std::string_view event;
+    std::string_view text;
+};
+
+constexpr auto textsWhenNoneGiven = std::array {
+    EventWithoutText {finishedUnreadEvent, "Claude finished."},
+    EventWithoutText {waitingUnreadEvent, "Claude is waiting for you."},
+    EventWithoutText {bellUnreadEvent, "The terminal rang its bell."},
+    EventWithoutText {notificationUnreadEvent, "A program in the pane sent a notification."},
+};
 
 struct ApnsAlert
 {
@@ -64,12 +78,14 @@ std::string cutToWholeCharacters(const std::string& text, std::size_t maximumByt
     return text.substr(0, end) + ellipsis;
 }
 
-std::string getTextWhenClaudeGaveNone(const PushNotice& notice)
+std::string getTextWhenNoneGiven(const PushNotice& notice)
 {
-    if (notice.event == waitingEvent)
-        return waitingWithoutText;
+    const auto found = std::ranges::find(textsWhenNoneGiven, notice.event, &EventWithoutText::event);
 
-    return finishedWithoutText;
+    if (found == textsWhenNoneGiven.end())
+        return {};
+
+    return std::string {found->text};
 }
 } // namespace
 
@@ -84,7 +100,7 @@ std::string getNotificationTitle(const PushNotice& notice)
 std::string getNotificationBody(const PushNotice& notice)
 {
     if (notice.text.empty())
-        return getTextWhenClaudeGaveNone(notice);
+        return getTextWhenNoneGiven(notice);
 
     return cutToWholeCharacters(notice.text, maximumBodyBytes);
 }

@@ -1,12 +1,21 @@
 #include "PushNotice.h"
 
+#include <algorithm>
+#include <array>
+#include <string_view>
+
 namespace term::push
 {
 namespace
 {
+constexpr auto unreadEvents = std::array {std::string_view {finishedUnreadEvent},
+                                          std::string_view {waitingUnreadEvent},
+                                          std::string_view {bellUnreadEvent},
+                                          std::string_view {notificationUnreadEvent}};
+
 bool isKnownEvent(const std::string& event)
 {
-    return event == finishedEvent || event == waitingEvent;
+    return std::ranges::find(unreadEvents, event) != unreadEvents.end();
 }
 
 bool isComplete(const PushNotice& notice)

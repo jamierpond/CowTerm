@@ -26,6 +26,7 @@ add_library(CowTermMultiplexer STATIC
         NotifyUserProtocol.cpp
         PaletteItem.cpp
         PaletteRanking.cpp
+        PaneReadState.cpp
         PaneSizeOwner.cpp
         ClaudeHookReport.cpp
         PaneStateCommand.cpp
