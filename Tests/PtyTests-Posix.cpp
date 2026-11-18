@@ -66,11 +66,21 @@ auto environmentReachesShell = test("Pty sets the extra environment in the shell
 {
     constexpr auto variableValue = "pane-0123abcd";
 
+    const auto home = std::filesystem::temp_directory_path() / "cowterm-environment-home";
+    std::filesystem::remove_all(home);
+    std::filesystem::create_directories(home);
+
+    // An empty home: the user's own rc files are not what this test is about,
+    // and some take longer than the test waits (Ubuntu's .bashrc loads bash
+    // completion, seconds under the nix build shell's bash).
     auto options = term::PtyOptions {};
     options.command = "printf '<%s>' \"$COWTERM_TEST_VARIABLE\"";
-    options.environment = {{"COWTERM_TEST_VARIABLE", variableValue}};
+    options.environment = {{"COWTERM_TEST_VARIABLE", variableValue},
+                           {"HOME", home.string()},
+                           {"ZDOTDIR", home.string()}};
 
     const auto output = runCommandAndReadItsOutput(options);
+    std::filesystem::remove_all(home);
     check(output.find(std::string {"<"} + variableValue + ">") != std::string::npos);
 };
 
