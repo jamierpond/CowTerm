@@ -3,7 +3,6 @@
 #include "Multiplexer/RemoteLocation.h"
 #include "Multiplexer/TextLayout.h"
 
-#include <eacp/Core/Threads/EventLoop.h>
 #include <eacp/Core/Utils/Logging.h>
 
 #include <algorithm>
@@ -132,14 +131,20 @@ DiffViewScreen::DiffViewScreen()
     chrome.onClose = [this] { close(); };
     chrome.onKeyboard = [this] { raiseKeyboard(); };
     typing.onLayoutChanged = [this] { layOutParts(); };
-    touchSurface.onSwipeFromTheLeftEdge = [this]
+    addChildren({chromeHost});
+    typing.addTo(*this);
+}
+
+// The touch surface comes and goes with dv's pane: with no pane under it, a
+// drag or a tap would have no terminal to reach.
+void DiffViewScreen::makeTouchSurface()
+{
+    touchSurface = std::make_unique<PaneTouchSurface>([this]() -> term::TerminalView& { return getTerminal(); });
+    touchSurface->onSwipeFromTheLeftEdge = [this]
     {
         LOG("dv: closed by a swipe from the left edge");
         close();
     };
-    addChildren({chromeHost, touchSurface});
-    typing.addTo(*this);
-    touchSurface.setVisible(false);
 }
 
 void DiffViewScreen::open(const term::TerminalConfig& config, const term::phone::DiffViewPane& paneToOpen)
@@ -165,15 +170,15 @@ void DiffViewScreen::open(const term::TerminalConfig& config, const term::phone:
     terminal->onShellExit = [this] { handleDiffViewEnded(); };
     makeLinksOpenOnTap(*terminal);
     typing.connectTerminal(*terminal);
+    makeTouchSurface();
 
     const auto children = getSubviews();
 
     for (auto* child: children)
         removeSubview(*child);
 
-    addChildren({chromeHost, *terminal, touchSurface});
+    addChildren({chromeHost, *terminal, *touchSurface});
     typing.addTo(*this);
-    touchSurface.setVisible(true);
     chrome.showsKeyboardButton = true;
     layOutParts();
 }
@@ -220,7 +225,7 @@ void DiffViewScreen::close()
 // The keyboard goes with the terminal it typed into.
 void DiffViewScreen::removeTerminal()
 {
-    touchSurface.setVisible(false);
+    removeViewAndDestroyItSoon(*this, touchSurface);
     chrome.showsKeyboardButton = false;
 
     if (terminal == nullptr)
@@ -228,8 +233,7 @@ void DiffViewScreen::removeTerminal()
 
     typing.lowerKeyboard();
     typing.layOut({}, false);
-    removeSubview(*terminal);
-    Threads::callAsync([leaving = std::shared_ptr<term::TerminalView> {std::move(terminal)}] {});
+    removeViewAndDestroyItSoon(*this, terminal);
 }
 
 term::TerminalView& DiffViewScreen::getTerminal()
@@ -284,7 +288,9 @@ void DiffViewScreen::layOutParts()
     }();
 
     chromeHost.setBounds(bounds);
-    touchSurface.setBounds(paneArea);
+
+    if (touchSurface != nullptr)
+        touchSurface->setBounds(paneArea);
 
     if (terminal != nullptr)
         terminal->setBounds(paneArea);
@@ -334,9 +340,9 @@ void DiffViewScreen::tapTextOnScreen(const std::string& text)
     touch.id = tapFingerId;
     touch.pos = terminal->calculateGridCellCentre(position->row, position->column);
     touch.downPos = touch.pos;
-    touchSurface.touchBegan(touch);
+    touchSurface->touchBegan(touch);
     touch.phase = Graphics::TouchPhase::Ended;
-    touchSurface.touchEnded(touch);
+    touchSurface->touchEnded(touch);
 }
 
 // Each character as a key the keyboard sends, so a latched Ctrl takes the first.

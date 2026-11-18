@@ -118,13 +118,11 @@ PaneScreen::PaneScreen(const term::TerminalConfig& config, const std::string& pa
 {
     const auto background = term::toColor(theme.background);
 
-    for (auto* host: {&topLineHost, &bottomBarHost, &pillHost, &promptHost, &menuHost})
+    for (auto* host: {&topLineHost, &bottomBarHost, &promptHost})
         host->setBackgroundColour(background);
 
     topLineHost.setRootComponent(topLine);
     bottomBarHost.setRootComponent(bottomBar);
-    pillHost.setRootComponent(pill);
-    menuHost.setRootComponent(menu);
     promptHost.setRootComponent(promptButtons);
     promptButtons.onChoose = [this](const PermissionPrompt& drawnFor, int optionNumber)
     { answerPrompt(drawnFor, optionNumber); };
@@ -152,12 +150,8 @@ PaneScreen::PaneScreen(const term::TerminalConfig& config, const std::string& pa
         LOG("bottom bar: overview");
         actions.onOverview();
     };
-    pill.onReturnToBottom = [this] { returnToLiveBottom(); };
-    menu.onClose = [this] { closeMenu(); };
     typing.onLayoutChanged = [this] { layOutParts(); };
 
-    pillHost.setVisible(false);
-    menuHost.setVisible(false);
     showPane(config, paneId);
 }
 
@@ -186,11 +180,11 @@ void PaneScreen::showPane(const term::TerminalConfig& config, const std::string&
     { pasteConfirmation.ask(text, paste); };
     makeLinksOpenOnTap(*terminal);
 
-    addChildren({*terminal, touchSurface, topLineHost, bottomBarHost, pillHost, promptHost});
+    addChildren({*terminal, touchSurface, topLineHost, bottomBarHost, promptHost});
     typing.addTo(*this);
     typing.connectTerminal(*terminal);
-    addSubview(menuHost);
-    pillHost.setVisible(false);
+    removeViewAndDestroyItSoon(*this, pill);
+    raiseMenu();
     promptButtons.prompt.reset();
     showLinkStateOnPane();
     layOutParts();
@@ -286,12 +280,16 @@ void PaneScreen::layOutParts()
     // In landscape with the keyboard up the buttons can be all the pane has room for.
     const auto promptHeight = std::min(calculatePromptButtonsHeight(), paneArea.h);
     promptHost.setBounds(paneArea.removeFromBottom(promptHeight));
-    promptHost.setVisible(promptButtons.prompt.has_value());
-    bottomBarHost.setVisible(!isKeyboardUp());
+    showOrHideLettingTouchesThrough(promptHost, promptButtons.prompt.has_value());
+    showOrHideLettingTouchesThrough(bottomBarHost, !isKeyboardUp());
     terminal->setBounds(paneArea);
     touchSurface.setBounds(paneArea);
-    pillHost.setBounds(calculateNewLinesPillBounds(paneArea, pillWidth));
-    menuHost.setBounds(bounds.inset(getSafeAreaInsets()));
+
+    if (pill != nullptr)
+        pill->setBounds(calculateNewLinesPillBounds(paneArea, pillWidth));
+
+    if (menu != nullptr)
+        menu->setBounds(bounds.inset(getSafeAreaInsets()));
 
     // A new width rewraps the screen with no output to say so: read it again.
     outputArrived->hasArrived = true;
@@ -356,9 +354,34 @@ void PaneScreen::answerPrompt(const PermissionPrompt& drawnFor, int optionNumber
 
 void PaneScreen::showScrolledBackState(term::ScrolledBackState state)
 {
-    pill.newLineCount = state.linesArrivedWhileScrolledBack;
-    pill.repaint();
-    pillHost.setVisible(state.isScrolledBack);
+    if (!state.isScrolledBack)
+        return removeViewAndDestroyItSoon(*this, pill);
+
+    showNewLinesPill();
+    pill->component.newLineCount = state.linesArrivedWhileScrolledBack;
+    pill->component.repaint();
+}
+
+// Above the pane, and below the menu when the menu is open.
+void PaneScreen::showNewLinesPill()
+{
+    if (pill != nullptr)
+        return;
+
+    pill = std::make_unique<HostedComponent<NewLinesPill>>(theme);
+    pill->component.onReturnToBottom = [this] { returnToLiveBottom(); };
+    addSubview(*pill);
+    raiseMenu();
+    layOutParts();
+}
+
+void PaneScreen::raiseMenu()
+{
+    if (menu == nullptr)
+        return;
+
+    removeSubview(*menu);
+    addSubview(*menu);
 }
 
 // Only the age of a picture that is not live changes with nothing happening.
@@ -419,13 +442,20 @@ std::vector<MenuAction> PaneScreen::listMenuActions()
 
 void PaneScreen::openMenu()
 {
-    menu.actions = listMenuActions();
-    menu.repaint();
-    menuHost.setVisible(true);
+    if (menu == nullptr)
+    {
+        menu = std::make_unique<HostedComponent<ActionMenu>>(theme);
+        menu->component.onClose = [this] { closeMenu(); };
+        addSubview(*menu);
+        layOutParts();
+    }
+
+    menu->component.actions = listMenuActions();
+    menu->component.repaint();
 }
 
 void PaneScreen::closeMenu()
 {
-    menuHost.setVisible(false);
+    removeViewAndDestroyItSoon(*this, menu);
 }
 } // namespace cowterm::mobile

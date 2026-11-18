@@ -74,23 +74,34 @@ std::string describeHostsAnswering(const term::phone::OverviewReport& report)
 }
 } // namespace
 
-PhoneOverviewBinding::PhoneOverviewBinding(PhoneLaunch& phoneToUse,
-                                           OverviewScreen& screenToUse,
-                                           eacp::Callback showPaneScreenToUse)
+PhoneOverviewBinding::PhoneOverviewBinding(PhoneLaunch& phoneToUse, eacp::Callback showPaneScreenToUse)
     : phone(phoneToUse)
-    , screen(screenToUse)
     , showPaneScreen(std::move(showPaneScreenToUse))
 {
     phone.getOverview().onRowsChanged = [this](const term::phone::OverviewReport& report) { showReport(report); };
+}
 
-    screen.onOpenSession = [this](const term::overview::OverviewRow& row) { openSession(row); };
-    screen.setInputs(makeOverviewInputs(phone.getOverview().buildReport(), phone.getSessionOpenings()));
+void PhoneOverviewBinding::showOn(OverviewScreen& screenToUse)
+{
+    screen = screenToUse;
+    screenToUse.onOpenSession = [this](const term::overview::OverviewRow& row) { openSession(row); };
+    screenToUse.setInputs(makeOverviewInputs(phone.getOverview().buildReport(), phone.getSessionOpenings()));
+    phone.getOverview().setShown(true);
+}
+
+void PhoneOverviewBinding::stopShowing()
+{
+    screen.reset();
+    phone.getOverview().setShown(false);
 }
 
 void PhoneOverviewBinding::showReport(const term::phone::OverviewReport& report)
 {
     logHostsAnsweringWhenChanged(report);
-    screen.setInputs(makeOverviewInputs(report, phone.getSessionOpenings()));
+
+    if (screen)
+        screen->get().setInputs(makeOverviewInputs(report, phone.getSessionOpenings()));
+
     openNotificationTargetWhenListed(report);
 
     if (sessionToOpen.empty())
@@ -99,7 +110,7 @@ void PhoneOverviewBinding::showReport(const term::phone::OverviewReport& report)
     if (const auto row = term::phone::findRowByName(report.sessions, sessionToOpen))
     {
         sessionToOpen.clear();
-        screen.onOpenSession(*row);
+        openSession(*row);
     }
 }
 
@@ -141,11 +152,6 @@ void PhoneOverviewBinding::openNotificationTargetWhenListed(const term::phone::O
     phone.choosePaneOfSession(paneId);
 }
 
-void PhoneOverviewBinding::setShown(bool isShown)
-{
-    phone.getOverview().setShown(isShown);
-}
-
 std::optional<std::string> PhoneOverviewBinding::openRow(const term::overview::OverviewRow& row)
 {
     if (row.isProject)
@@ -164,7 +170,7 @@ void PhoneOverviewBinding::openSession(const term::overview::OverviewRow& row)
     LOG("overview: open ", row.host, "/", row.sessionName, " on pane ", *paneId);
     phone.getSessionOpenings().recordOpening(term::overview::makeOverviewRowKey(row),
                                              term::phone::getMillisecondsSinceEpoch());
-    setShown(false);
+    stopShowing();
     showPaneScreen();
 }
 } // namespace cowterm::mobile

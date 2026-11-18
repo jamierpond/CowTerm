@@ -19,6 +19,7 @@ eacp_add_app(CowTermMobile
         DiffViewLaunchSteps.cpp
         NoPaneYetShell.cpp
         SampleShell.cpp
+        ScreenStack.cpp
         StoredScreenShell.cpp
         Typing.cpp
         TypingControls.cpp

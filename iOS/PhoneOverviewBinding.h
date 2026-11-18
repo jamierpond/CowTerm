@@ -18,11 +18,14 @@ namespace cowterm::mobile
 class PhoneOverviewBinding
 {
 public:
-    PhoneOverviewBinding(PhoneLaunch& phoneToUse, OverviewScreen& screenToUse, eacp::Callback showPaneScreenToUse);
+    PhoneOverviewBinding(PhoneLaunch& phoneToUse, eacp::Callback showPaneScreenToUse);
 
-    // Call with true as the overview comes on screen: the hosts are asked
-    // every few seconds until a session opens.
-    void setShown(bool isShown);
+    // Call as a new overview comes on screen: it gets the sessions, and the
+    // hosts are asked every few seconds until a session opens.
+    void showOn(OverviewScreen& screenToUse);
+
+    // Call before the overview is destroyed.
+    void stopShowing();
 
     // Opens "<host>/<session>" or "<host>/<project>" the first time a report
     // lists it, through the same path as a tap: for a launch that cannot tap
@@ -40,7 +43,7 @@ private:
     void openNotificationTargetWhenListed(const term::phone::OverviewReport& report);
 
     PhoneLaunch& phone;
-    OverviewScreen& screen;
+    std::optional<std::reference_wrapper<OverviewScreen>> screen;
     eacp::Callback showPaneScreen;
     std::string sessionToOpen;
     std::optional<term::phone::NotificationTarget> notificationTargetToOpen;

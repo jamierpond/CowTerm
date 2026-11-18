@@ -4,6 +4,7 @@
 #include "OutputWatchingShell.h"
 #include "PaneScreenInputs.h"
 #include "TypingControls.h"
+#include "ViewsShownSometimes.h"
 
 #include "PasteConfirmation.h"
 #include "TerminalView/TerminalView.h"
@@ -72,8 +73,9 @@ public:
     // Fixes the pane's grid in portrait: columns from the pane's width, rows
     // from its keyboard-up height.
 
-    // What a long press on the bottom bar opens.
+    // What a long press on the bottom bar opens, and what its close does.
     void openMenu();
+    void closeMenu();
 
     // ⌨: the keyboard, typing into the pane, or into the composer when it is on.
     void raiseKeyboard();
@@ -96,7 +98,8 @@ private:
     void returnToLiveBottom();
     void refreshWhatChangesOverTime();
     void showScrolledBackState(term::ScrolledBackState state);
-    void closeMenu();
+    void showNewLinesPill();
+    void raiseMenu();
     std::vector<MenuAction> listMenuActions();
     eacp::Graphics::Insets calculateInsetsAroundParts() const;
     bool isLive() const;
@@ -122,8 +125,7 @@ private:
     eacp::UI::ComponentHost bottomBarHost;
     BottomBar bottomBar {theme};
 
-    eacp::UI::ComponentHost pillHost;
-    NewLinesPill pill {theme};
+    std::unique_ptr<HostedComponent<NewLinesPill>> pill;
 
     eacp::UI::ComponentHost promptHost;
     PromptButtons promptButtons {theme};
@@ -131,8 +133,7 @@ private:
     std::shared_ptr<OutputArrivedFlag> outputArrived = std::make_shared<OutputArrivedFlag>();
     std::chrono::steady_clock::time_point lastOutputAt;
 
-    eacp::UI::ComponentHost menuHost;
-    ActionMenu menu {theme};
+    std::unique_ptr<HostedComponent<ActionMenu>> menu;
 
     TypingControls typing {theme, [this]() -> term::TerminalView& { return *terminal; }};
 

@@ -4,6 +4,7 @@
 #include "PaneScreen.h"
 #include "PaneScreenLayout.h"
 #include "TypingControls.h"
+#include "ViewsShownSometimes.h"
 
 #include "Phone/DiffViewPane.h"
 #include "TerminalView/TerminalView.h"
@@ -85,12 +86,13 @@ private:
     void handleDiffViewEnded();
     void showSentence(const std::string& sentence);
     void removeTerminal();
+    void makeTouchSurface();
     term::TerminalView& getTerminal();
 
     term::Theme theme;
     std::optional<term::phone::DiffViewPane> pane;
     std::unique_ptr<term::TerminalView> terminal;
-    PaneTouchSurface touchSurface {[this]() -> term::TerminalView& { return getTerminal(); }};
+    std::unique_ptr<PaneTouchSurface> touchSurface;
     eacp::UI::ComponentHost chromeHost;
     DiffViewChrome chrome {theme};
     TypingControls typing {theme, [this]() -> term::TerminalView& { return getTerminal(); }};

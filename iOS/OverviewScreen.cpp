@@ -143,8 +143,13 @@ OverviewList::OverviewList()
 void OverviewList::setItems(std::vector<OverviewItem> itemsToShow)
 {
     items = std::move(itemsToShow);
+    setScrollOffset(scrollOffset);
+}
+
+void OverviewList::setScrollOffset(float offset)
+{
     const auto maximum = calculateMaximumOverviewScroll(listOverviewItemHeights(items), getHeight());
-    scrollOffset = std::clamp(scrollOffset, 0.0f, maximum);
+    scrollOffset = std::clamp(offset, 0.0f, maximum);
     repaint();
 }
 

@@ -4,20 +4,18 @@ namespace cowterm::mobile
 {
 PhoneDiffViewBinding::PhoneDiffViewBinding(PhoneLaunch& phoneToUse,
                                            PaneScreen& paneScreen,
-                                           DiffViewScreen& diffViewToUse,
                                            ScreenSwitches switchesToUse)
     : phone(phoneToUse)
-    , diffView(diffViewToUse)
     , switches(std::move(switchesToUse))
 {
     paneScreen.actions.onDiffView = [this] { openDiffView(); };
-    diffView.onClosed = [this](const std::optional<term::phone::DiffViewPane>& pane) { leaveDiffView(pane); };
 }
 
 void PhoneDiffViewBinding::openDiffView()
 {
     const auto opening = phone.openDiffView();
-    switches.showDiffViewScreen();
+    auto& diffView = switches.showDiffViewScreen();
+    diffView.onClosed = [this](const std::optional<term::phone::DiffViewPane>& pane) { leaveDiffView(pane); };
 
     if (opening.pane)
         diffView.open(phone.makeDiffViewConfig(*opening.pane), *opening.pane);

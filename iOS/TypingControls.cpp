@@ -1,4 +1,5 @@
 #include "TypingControls.h"
+#include "ViewsShownSometimes.h"
 
 #include <eacp/Core/Utils/Logging.h>
 
@@ -103,9 +104,9 @@ void TypingControls::layOut(const TypingRects& rects, bool isKeyboardUp)
 
     composer.setBounds(composerArea);
     keyRowHost.setBounds(rects.keyRow);
-    composer.setVisible(isComposerShown);
-    stopButtonHost.setVisible(isComposerShown && showsStopButton);
-    keyRowHost.setVisible(isKeyboardUp);
+    showOrHideLettingTouchesThrough(composer, isComposerShown);
+    showOrHideLettingTouchesThrough(stopButtonHost, isComposerShown && showsStopButton);
+    showOrHideLettingTouchesThrough(keyRowHost, isKeyboardUp);
 }
 
 void TypingControls::raiseKeyboard()

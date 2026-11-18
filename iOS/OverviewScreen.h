@@ -27,6 +27,10 @@ public:
 
     void setItems(std::vector<OverviewItem> itemsToShow);
 
+    // How far the list is scrolled up from its bottom, kept while it is off screen.
+    float getScrollOffset() const { return scrollOffset; }
+    void setScrollOffset(float offset);
+
     void paint(eacp::UI::Graphics& g) override;
     void mouseDown(const eacp::UI::MouseEvent& event) override;
     void mouseDrag(const eacp::UI::MouseEvent& event) override;
@@ -116,6 +120,9 @@ public:
 
     // Coming back to the list always shows all of it: the search is emptied.
     void clearSearch();
+
+    float getScrollOffset() const { return panel.list.getScrollOffset(); }
+    void setScrollOffset(float offset) { panel.list.setScrollOffset(offset); }
 
     void resized() override;
     void safeAreaInsetsChanged() override;

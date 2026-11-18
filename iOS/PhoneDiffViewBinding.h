@@ -6,10 +6,10 @@
 
 namespace cowterm::mobile
 {
-// Brings up one of the app's screens.
+// Brings up one of the app's screens. dv's screen is made as it comes up.
 struct ScreenSwitches
 {
-    eacp::Callback showDiffViewScreen;
+    std::function<DiffViewScreen&()> showDiffViewScreen;
     eacp::Callback showPaneScreen;
 };
 
@@ -18,10 +18,7 @@ struct ScreenSwitches
 class PhoneDiffViewBinding
 {
 public:
-    PhoneDiffViewBinding(PhoneLaunch& phoneToUse,
-                         PaneScreen& paneScreen,
-                         DiffViewScreen& diffViewToUse,
-                         ScreenSwitches switchesToUse);
+    PhoneDiffViewBinding(PhoneLaunch& phoneToUse, PaneScreen& paneScreen, ScreenSwitches switchesToUse);
 
     void openDiffView();
 
@@ -29,7 +26,6 @@ private:
     void leaveDiffView(const std::optional<term::phone::DiffViewPane>& pane);
 
     PhoneLaunch& phone;
-    DiffViewScreen& diffView;
     ScreenSwitches switches;
 };
 } // namespace cowterm::mobile

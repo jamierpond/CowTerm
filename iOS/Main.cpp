@@ -1,4 +1,5 @@
 #include "DiffViewScreen.h"
+#include "FingerOnWindow.h"
 #include "InterfaceOrientation.h"
 #include "NoPaneYetShell.h"
 #include "OverviewSamples.h"
@@ -10,6 +11,7 @@
 #include "PhonePushNotifications.h"
 #include "PhonePaneBinding.h"
 #include "SampleShell.h"
+#include "ScreenStack.h"
 
 #include "Multiplexer/DataDirectories.h"
 
@@ -48,6 +50,12 @@ constexpr auto diffViewCloseDelay = Time::MS {20000};
 constexpr auto diffViewFirstStepDelay = Time::MS {18000};
 constexpr auto diffViewStepInterval = Time::MS {2500};
 
+// --tap-after-overview and --drag-after-menu: the overview or menu opens once
+// the pane has drawn, stays for a screenshot, closes, and then a finger lands.
+constexpr auto hiddenViewCheckOpenDelay = Time::MS {3000};
+constexpr auto hiddenViewCheckCloseDelay = Time::MS {8000};
+constexpr auto hiddenViewCheckFingerDelay = Time::MS {10000};
+
 // Long enough for the host's project scan to answer and the list to be
 // screenshotted before the project opens.
 constexpr auto projectOpenDelay = Time::MS {10000};
@@ -77,6 +85,8 @@ struct LaunchOptions
     bool opensDiffView = false;
     bool closesDiffView = false;
     bool showsClaudePrompt = false;
+    bool tapsPaneAfterOverview = false;
+    bool dragsPaneAfterMenu = false;
     std::string composedText;
     std::vector<cowterm::mobile::DiffViewLaunchStep> diffViewSteps;
     bool showsOverview = false;
@@ -125,6 +135,8 @@ constexpr LaunchSwitch launchSwitches[] = {
     {"--close-diff-view", &LaunchOptions::closesDiffView},
     {"--claude-prompt", &LaunchOptions::showsClaudePrompt},
     {"--overview", &LaunchOptions::showsOverview},
+    {"--tap-after-overview", &LaunchOptions::tapsPaneAfterOverview},
+    {"--drag-after-menu", &LaunchOptions::dragsPaneAfterMenu},
 };
 
 bool applyLaunchSwitch(LaunchOptions& options, std::string_view argument)
@@ -286,56 +298,6 @@ std::string getPaneId(const std::unique_ptr<cowterm::mobile::PhoneLaunch>& phone
     return {};
 }
 
-// The window's one content view: the pane screen and the overview both live
-// in it, and it shows one. eacp sends every touch to the window's root view
-// and hit-tests from there, so the root never changes.
-class ScreenStack final : public Graphics::View
-{
-public:
-    ScreenStack(Graphics::View& paneScreenToUse,
-                Graphics::View& overviewToUse,
-                Graphics::View& diffViewToUse,
-                bool showsOverviewFirst)
-        : paneScreen(paneScreenToUse)
-        , overview(overviewToUse)
-        , diffView(diffViewToUse)
-    {
-        addChildren({paneScreen, overview, diffView});
-        show(chooseScreen(showsOverviewFirst));
-    }
-
-    void showPaneScreen() { show(paneScreen); }
-    void showOverview() { show(overview); }
-    void showDiffView() { show(diffView); }
-
-    void resized() override
-    {
-        paneScreen.setBounds(getLocalBounds());
-        overview.setBounds(getLocalBounds());
-        diffView.setBounds(getLocalBounds());
-    }
-
-private:
-    Graphics::View& chooseScreen(bool showsOverviewFirst)
-    {
-        if (showsOverviewFirst)
-            return overview;
-
-        return paneScreen;
-    }
-
-    void show(Graphics::View& screen)
-    {
-        paneScreen.setVisible(&screen == &paneScreen);
-        overview.setVisible(&screen == &overview);
-        diffView.setVisible(&screen == &diffView);
-    }
-
-    Graphics::View& paneScreen;
-    Graphics::View& overview;
-    Graphics::View& diffView;
-};
-
 struct CowTermMobileApp
 {
     explicit CowTermMobileApp(const LaunchOptions& launchOptionsToUse)
@@ -363,17 +325,23 @@ struct CowTermMobileApp
                 " points, animating ",
                 change.animationSeconds,
                 " s");
+            lastKeyboardChange = change;
             screen.setSoftwareKeyboardChange(change);
-            diffView.setSoftwareKeyboardChange(change);
-            overview.setSoftwareKeyboardCoveredHeight(change.coveredHeight);
+
+            if (auto diffView = screens.findDiffView())
+                diffView->get().setSoftwareKeyboardChange(change);
+
+            if (auto overview = screens.findOverview())
+                overview->get().setSoftwareKeyboardCoveredHeight(change.coveredHeight);
         };
 
         if (phone != nullptr)
         {
-            phoneBinding.emplace(*phone, screen, [this] { screens.showPaneScreen(); });
-            auto switches = cowterm::mobile::ScreenSwitches {[this] { screens.showDiffView(); },
-                                                             [this] { screens.showPaneScreen(); }};
-            diffViewBinding.emplace(*phone, screen, diffView, std::move(switches));
+            phoneBinding.emplace(*phone, screen, [this] { showPaneScreen(); });
+            auto switches = cowterm::mobile::ScreenSwitches {
+                [this]() -> cowterm::mobile::DiffViewScreen& { return showDiffViewScreen(); },
+                [this] { showPaneScreen(); }};
+            diffViewBinding.emplace(*phone, screen, std::move(switches));
         }
         else if (launchOptions.showsSamples)
             showSamplePane();
@@ -440,8 +408,8 @@ struct CowTermMobileApp
         if (launchOptions.showsKeyRowSecondPage)
             screen.showKeyRowSecondPage();
 
-        if (!launchOptions.searchQuery.empty())
-            overview.search(launchOptions.searchQuery);
+        if (auto overview = screens.findOverview(); overview && !launchOptions.searchQuery.empty())
+            overview->get().search(launchOptions.searchQuery);
 
         if (launchOptions.raisesSoftwareKeyboard)
             screen.raiseKeyboard();
@@ -475,9 +443,10 @@ struct CowTermMobileApp
             Threads::callAfter(diffViewOpenDelay, [this] { screen.actions.onDiffView(); });
 
         if (launchOptions.closesDiffView)
-            Threads::callAfter(diffViewCloseDelay, [this] { diffView.close(); });
+            Threads::callAfter(diffViewCloseDelay, [this] { closeDiffView(); });
 
         scheduleDiffViewSteps();
+        scheduleHiddenViewChecks();
 
         if (!launchOptions.composedText.empty())
         {
@@ -498,9 +467,54 @@ struct CowTermMobileApp
 
         for (const auto& step: launchOptions.diffViewSteps)
         {
-            Threads::callAfter(delay, [this, step] { diffView.performLaunchStep(step); });
+            Threads::callAfter(delay,
+                               [this, step]
+                               {
+                                   if (auto diffView = screens.findDiffView())
+                                       diffView->get().performLaunchStep(step);
+                               });
             delay.count += diffViewStepInterval.count;
         }
+    }
+
+    void closeDiffView()
+    {
+        if (auto diffView = screens.findDiffView())
+            diffView->get().close();
+    }
+
+    // --tap-after-overview and --drag-after-menu: a screen or menu comes and
+    // goes, then a finger lands where it was, routed from the window's root as a
+    // real touch is. The pane screen logs what reaches it.
+    void scheduleHiddenViewChecks()
+    {
+        if (launchOptions.tapsPaneAfterOverview)
+        {
+            Threads::callAfter(hiddenViewCheckOpenDelay, [this] { showOverview(); });
+            Threads::callAfter(hiddenViewCheckCloseDelay, [this] { showPaneScreen(); });
+            Threads::callAfter(hiddenViewCheckFingerDelay, [this] { tapPaneCentre(); });
+        }
+
+        if (launchOptions.dragsPaneAfterMenu)
+        {
+            Threads::callAfter(hiddenViewCheckOpenDelay, [this] { screen.openMenu(); });
+            Threads::callAfter(hiddenViewCheckCloseDelay, [this] { screen.closeMenu(); });
+            Threads::callAfter(hiddenViewCheckFingerDelay, [this] { dragPaneDown(); });
+        }
+    }
+
+    void tapPaneCentre()
+    {
+        LOG("hidden view check: a tap on the pane's centre");
+        cowterm::mobile::tapWithFingerOnWindow(screens, screen.getTerminal().getBounds().center());
+    }
+
+    void dragPaneDown()
+    {
+        constexpr auto dragDistance = 240.0f;
+        const auto start = screen.getTerminal().getBounds().center();
+        LOG("hidden view check: a drag down the pane");
+        cowterm::mobile::moveFingerOnWindow(screens, start, {start.x, start.y + dragDistance});
     }
 
     // The hosts' sessions, or the sample rows with --sample; with neither, the
@@ -511,12 +525,31 @@ struct CowTermMobileApp
 
         if (phone != nullptr)
         {
-            phoneOverview.emplace(*phone, overview, [this] { screens.showPaneScreen(); });
+            phoneOverview.emplace(*phone, [this] { showPaneScreen(); });
             phoneOverview->openSessionOnceListed(launchOptions.sessionToOpen);
-            phoneOverview->setShown(isShowingOverviewFirst());
-            return;
         }
 
+        if (isShowingOverviewFirst())
+            showOverview();
+    }
+
+    // A new overview each time, so its search is empty; its scroll is kept.
+    void showOverview()
+    {
+        LOG("overview: shown");
+        auto& overview = screens.showOverview();
+        overview.setSoftwareKeyboardCoveredHeight(lastKeyboardChange.coveredHeight);
+
+        if (phoneOverview)
+            phoneOverview->showOn(overview);
+        else
+            showSampleOverview(overview);
+
+        overview.setScrollOffset(overviewScrollOffset);
+    }
+
+    void showSampleOverview(cowterm::mobile::OverviewScreen& overview)
+    {
         if (!launchOptions.showsSamples)
             return overview.setInputs({});
 
@@ -524,18 +557,31 @@ struct CowTermMobileApp
         overview.onOpenSession = [this](const term::overview::OverviewRow& session)
         {
             LOG("overview: open ", session.host, "/", session.sessionName);
-            screens.showPaneScreen();
+            showPaneScreen();
         };
     }
 
-    void showOverview()
+    void showPaneScreen()
     {
-        LOG("overview: shown");
-        overview.clearSearch();
-        if (phoneOverview)
-            phoneOverview->setShown(true);
+        leaveOverview();
+        screens.showPaneScreen();
+    }
 
-        screens.showOverview();
+    cowterm::mobile::DiffViewScreen& showDiffViewScreen()
+    {
+        leaveOverview();
+        auto& diffView = screens.showDiffView();
+        diffView.setSoftwareKeyboardChange(lastKeyboardChange);
+        return diffView;
+    }
+
+    void leaveOverview()
+    {
+        if (auto overview = screens.findOverview())
+            overviewScrollOffset = overview->get().getScrollOffset();
+
+        if (phoneOverview)
+            phoneOverview->stopShowing();
     }
 
     // The pane screen comes first only with a pane to show: a named one, or the sample.
@@ -565,10 +611,10 @@ struct CowTermMobileApp
     std::optional<cowterm::mobile::PhoneOverviewBinding> phoneOverview;
     std::optional<cowterm::mobile::PhoneDiffViewBinding> diffViewBinding;
     std::optional<cowterm::mobile::PhonePushNotifications> pushNotifications;
-    cowterm::mobile::OverviewScreen overview;
-    cowterm::mobile::DiffViewScreen diffView;
-    ScreenStack screens {screen, overview, diffView, isShowingOverviewFirst()};
+    cowterm::mobile::ScreenStack screens {screen};
     Graphics::Window window {screens, makeWindowOptions()};
+    Graphics::SoftwareKeyboardChange lastKeyboardChange;
+    float overviewScrollOffset = 0.0f;
 };
 } // namespace
 

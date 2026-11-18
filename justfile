@@ -382,3 +382,7 @@ check-unread-on-host destination="jamiepond@macprorack" folder="$HOME/tmp/cowter
 # Run just test on another Mac against this working tree (--ios: and just ios-build; --committed: HEAD only; --remove: delete its folder there)
 test-on-host host name *options:
     scripts/test-working-tree-on-host.sh {{host}} {{name}} {{options}}
+
+# In the simulator: a tap reaches the pane after the overview closes, and a drag scrolls it after the menu closes
+ios-check-hidden-views device="iPhone 17e":
+    scripts/check-ios-hidden-views.sh "{{device}}"

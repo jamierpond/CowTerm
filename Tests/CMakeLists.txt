@@ -130,15 +130,25 @@ nano_add_executable(CowTermPaneScreenTests
             OverviewLayoutTests.cpp
             OverviewScreenTests.cpp
             DiffViewLaunchStepsTests.cpp
+            HiddenViewTouchTests.cpp
             ../iOS/PaneScreenLayout.cpp
             ../iOS/Typing.cpp
             ../iOS/ClaudePrompt.cpp
             ../iOS/OverviewLayout.cpp
             ../iOS/OverviewScreen.cpp
             ../iOS/DiffViewLaunchSteps.cpp
-        TARGETS eacp-graphics eacp-ui CowTerm::Phone CowTerm::TerminalView)
+            ../iOS/PaneScreen.cpp
+            ../iOS/PaneScreenChrome.cpp
+            ../iOS/TypingControls.cpp
+            ../iOS/OutputWatchingShell.cpp
+            ../iOS/DiffViewScreen.cpp
+            ../iOS/ScreenStack.cpp
+            ../iOS/ScreenAwake-Default.cpp
+            ../Terminal/PasteConfirmation.cpp
+            ../Terminal/NotifyUserPrompt.cpp
+        TARGETS eacp-graphics eacp-ui CowTerm::Phone CowTerm::TerminalView CowTerm::Multiplexer)
 
-target_include_directories(CowTermPaneScreenTests PRIVATE ../iOS)
+target_include_directories(CowTermPaneScreenTests PRIVATE ../iOS ../Terminal)
 endif ()
 
 # forkpty/openpty live in libutil on Linux; on Apple they are in libSystem.

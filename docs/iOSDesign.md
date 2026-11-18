@@ -942,20 +942,42 @@ another session. eacp on iOS hands every touch to the window's root view and
 picks the target with `View::hitTest`, which never looked at visibility. The
 session list, hidden but still laid over the pane screen, took every touch:
 the phone's log showed "overview list: finger down" for taps on the pane, and
-the keyboard Jamie raised typed into the list's hidden search field. The fix is
-in eacp: a hidden view takes no touch (`jp/ios-integration` 5266bc64, local,
-not pushed, with a test in `Tests/UI/OverlayViewTests.cpp`). It also frees the
-pane screen's own hidden parts (the menu, which covers the whole pane, the
-pill, the prompt buttons and the key row). A second commit (f5cfb3c0) does
-the same in `View::touchTarget`, which picks the view a finger goes to: the
-hidden menu still took every drag on the pane and turned it into mouse
-events, so a drag selected text instead of scrolling, and no drag reached the
-pane's touch surface. Nothing had ever tapped the app
-before: the simulator checks drove it with launch flags.
+the keyboard Jamie raised typed into the list's hidden search field. The hidden
+action menu, which covers the whole pane, did the same to drags: they became
+mouse events and selected text instead of scrolling. Nothing had ever tapped
+the app before: the simulator checks drove it with launch flags.
 
-Both screens now live in one content view (`ScreenStack` in `iOS/Main.cpp`)
-instead of being swapped in with `Window::setContentView`, so the root view
-that receives touches never changes.
+A view the phone shows only some of the time now exists only while it is
+shown. It was first fixed in eacp, by making a hidden view take no touch, but
+Jamie closed that pull request: eacp's hit-testing stays as it is, and the app
+must not depend on it.
+
+- The overview and dv's screen are made when they open and destroyed when they
+  close (`ScreenStack`, `iOS/ScreenStack.h`). The pane screen is always there,
+  under them, since it holds the pane's link. A new overview starts with an
+  empty search, as before; the app keeps its scroll position and hands it to
+  the next one. The overview binding attaches to each new overview
+  (`PhoneOverviewBinding::showOn`) and dv's binding gets each new dv screen.
+- The action menu and the "↓ n new" pill are made when shown and destroyed when
+  hidden (`HostedComponent`, `iOS/ViewsShownSometimes.h`); dv's touch surface
+  comes and goes with dv's pane. A closed view leaves the view tree at once and
+  is destroyed on the next loop tick, because it usually closes from inside one
+  of its own callbacks.
+- The rest stay alive while hidden, are made invisible and ignore mouse events
+  (`showOrHideLettingTouchesThrough`): the composer, which holds unsent text,
+  its stop button and the key row; the bottom bar while the keyboard is up; the
+  prompt buttons, which take no height when there is no prompt; and the pane
+  screen under the overview or dv. That is only safe where no view that takes
+  touches lies beneath: eacp picks a finger's view by position whether it is
+  shown or not, and ignoring mouse events sends the touch on as a mouse event,
+  never to the pane's touch surface. None of these lies over the pane.
+
+All screens live in one content view instead of being swapped in with
+`Window::setContentView`, so the root view that receives touches never changes.
+`Tests/HiddenViewTouchTests.cpp` routes fingers from that root as eacp does on
+the phone: a tap reaches the pane screen once the overview or dv closes, and a
+drag scrolls the pane once the menu closes. `--tap-after-overview` and
+`--drag-after-menu` do the same in the simulator.
 
 - The app logs each finger that lands on the pane, the bar and the list, and
   each bar action, so `just ios-device-log` shows what a finger did.
@@ -1037,7 +1059,6 @@ jp/develop/2026-11-17.1). The phone app builds from the pin alone; the local
 | The software keyboard's height and animation | `jp/ios-keyboard-frame` (`~/projects/eacp-ios-keyboard-frame`) | 2b287d8f |
 | The status bar was always hidden | `jp/ios-status-bar` (`~/projects/eacp-ios-status-bar`) | c5ce3388 |
 | No native text view, so no dictation or autocorrect for the composer; a hardware key's down event on it | `jp/ios-native-text-view` (`~/projects/eacp-ios-native-text-view`), stacked on `jp/ios-text-input` | eea9e5a7, f06a4c3d |
-| A hidden view still took touches and clicks (`View::hitTest`, `View::touchTarget`) | committed on `jp/ios-integration` only | 5266bc64, f5cfb3c0 |
 
 Lifecycle events, touch timestamps and safe-area insets already exist. The
 keyboard-frame and status-bar branches both change the iOS window's
