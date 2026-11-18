@@ -32,6 +32,13 @@ std::optional<ViewportJump> findViewportJump(const eacp::Graphics::KeyEvent& eve
 std::optional<SpecialKeyResponse>
     encodeSpecialKey(const eacp::Graphics::KeyEvent& event, bool applicationCursorKeys);
 
+// Control characters, Delete and macOS's function-key characters: keys, not text.
+bool isNonTextCode(char32_t codepoint);
+
+// The event with Alt cleared when, on macOS, Option typed a layout character
+// (Option+3 is # on a British layout); Option on a letter or Space stays Alt.
+eacp::Graphics::KeyEvent removeOptionSpentOnText(const eacp::Graphics::KeyEvent& event);
+
 // Ctrl+Space as NUL, Alt as an Escape prefix, else the typed characters.
 std::optional<std::string> encodeTypedKey(const eacp::Graphics::KeyEvent& event);
 

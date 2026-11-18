@@ -1,11 +1,13 @@
 #include <Emulator/KittyKeyboardFlags.h>
 #include <TerminalView/KeyEncoding.h>
 #include <TerminalView/KittyKeyEncoding.h>
+#include <eacp/Core/Platform/Platform.h>
 
 #include <NanoTest/NanoTest.h>
 
 #include <array>
 #include <string>
+#include <variant>
 
 using namespace nano;
 using namespace term;
@@ -358,4 +360,81 @@ auto tFunctionKeysWithoutKittyFlags = test("KittyKeys/macFunctionKeysUnderFlags0
 
     const auto up = encodeSpecialKey(makeMacFunctionKey(macFunctionKeys[0], {}), false);
     check(up && std::get<std::string>(*up) == "\033[A");
+};
+
+namespace
+{
+constexpr auto hash = "#";
+constexpr auto euro = "\xe2\x82\xac";
+constexpr auto pound = "\xc2\xa3";
+constexpr auto integral = "\xe2\x88\xab";
+constexpr auto noBreakSpace = "\xc2\xa0";
+constexpr auto leftArrowCharacter = "\xef\x9c\x82";
+constexpr auto hashAsKittyTextOfKey3 = "\033[51;;35u";
+
+eacp::Graphics::ModifierKeys withAlt(eacp::Graphics::ModifierKeys mods)
+{
+    mods.alt = true;
+    return mods;
+}
+
+std::string typed(const eacp::Graphics::KeyEvent& event)
+{
+    return encodeTypedKey(event).value_or("");
+}
+
+std::string special(const eacp::Graphics::KeyEvent& event)
+{
+    const auto response = encodeSpecialKey(event, false);
+
+    if (!response || !std::holds_alternative<std::string>(*response))
+        return {};
+
+    return std::get<std::string>(*response);
+}
+
+const auto britishOption3 = makeKey(KeyCode::Num3, hash, "3", alt());
+const auto britishOption2 = makeKey(KeyCode::Num2, euro, "2", alt());
+const auto americanShiftOption2 = makeKey(KeyCode::Num2, euro, "@", withAlt(shift()));
+const auto americanOption3 = makeKey(KeyCode::Num3, pound, "3", alt());
+const auto optionB = makeKey(KeyCode::B, integral, "b", alt());
+const auto optionSpace = makeKey(KeyCode::Space, noBreakSpace, " ", alt());
+const auto optionLeftArrow =
+    makeKey(KeyCode::LeftArrow, leftArrowCharacter, leftArrowCharacter, alt());
+} // namespace
+
+auto tOptionTypesLayoutText = test("OptionKey/digitTypesTheLayoutCharacterOnMac") = []
+{
+    if constexpr (!eacp::Platform::isMac())
+    {
+        check(typed(britishOption3) == "\0333", "Alt stays an Escape prefix off macOS");
+        return;
+    }
+
+    check(typed(britishOption3) == hash);
+    check(typed(britishOption2) == euro);
+    check(typed(americanOption3) == pound);
+    check(typed(americanShiftOption2) == euro);
+};
+
+auto tOptionLettersStayAlt = test("OptionKey/letterSpaceAndArrowStayAlt") = []
+{
+    check(typed(optionB) == "\033b");
+    check(typed(optionSpace) == "\033 ");
+    check(special(optionLeftArrow) == "\033[1;3D");
+    check(typed(makeKey(KeyCode::Num3, hash, "3", withAlt(control()))) == "\0333");
+};
+
+auto tOptionTextUnderKitty = test("OptionKey/kittyGetsTheLayoutCharacterOnMac") = []
+{
+    check(pressed(optionB) == "\033[98;3u");
+    check(pressed(optionLeftArrow) == "\033[1;3D");
+
+    if constexpr (!eacp::Platform::isMac())
+        return;
+
+    check(pressed(britishOption3) == hash);
+    check(pressed(britishOption2) == euro);
+    check(pressed(americanShiftOption2) == euro);
+    check(pressed(britishOption3, everything) == hashAsKittyTextOfKey3);
 };

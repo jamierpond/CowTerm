@@ -1,5 +1,7 @@
 #include "KittyKeyEncoding.h"
 
+#include "KeyEncoding.h"
+
 #include <Emulator/KittyKeyboardFlags.h>
 #include <Emulator/Utf8Decoder.h>
 
@@ -15,10 +17,6 @@ namespace KeyCode = eacp::Graphics::KeyCode;
 
 namespace
 {
-constexpr auto deleteCode = char32_t {0x7f};
-constexpr auto firstPrintableCode = char32_t {0x20};
-constexpr auto firstAppleFunctionKeyCode = char32_t {0xF700};
-constexpr auto lastAppleFunctionKeyCode = char32_t {0xF8FF};
 constexpr auto shiftBit = 1;
 constexpr auto altBit = 2;
 constexpr auto controlBit = 4;
@@ -131,19 +129,6 @@ std::optional<Entry> findByKeyCode(const std::array<Entry, size>& table, std::ui
         return std::nullopt;
 
     return *found;
-}
-
-// macOS gives arrows, F-keys, Home/End and paging Private Use Area characters
-// (U+F700 up); they are keys, not text.
-bool isAppleFunctionKeyCode(char32_t codepoint)
-{
-    return codepoint >= firstAppleFunctionKeyCode && codepoint <= lastAppleFunctionKeyCode;
-}
-
-bool isNonTextCode(char32_t codepoint)
-{
-    return codepoint < firstPrintableCode || codepoint == deleteCode
-           || isAppleFunctionKeyCode(codepoint);
 }
 
 bool hasNonTextCode(const std::u32string& codepoints)
@@ -390,8 +375,9 @@ KittySequence buildSequence(const KittyKeyPress& press, const KittyKeyEntry& ent
 }
 } // namespace
 
-std::string encodeKittyKey(const KeyEvent& event, KeyAction action, std::uint8_t flags)
+std::string encodeKittyKey(const KeyEvent& keyEvent, KeyAction action, std::uint8_t flags)
 {
+    const auto event = removeOptionSpentOnText(keyEvent);
     const auto press = KittyKeyPress {
         event, action, flags, decodeUtf8(event.characters), findUnshiftedCodepoint(event)};
 

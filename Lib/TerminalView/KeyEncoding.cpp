@@ -2,6 +2,10 @@
 
 #include "MacKeyCodes.h"
 
+#include <Emulator/Utf8Decoder.h>
+#include <eacp/Core/Platform/Platform.h>
+
+#include <algorithm>
 #include <array>
 #include <cctype>
 #include <cstdio>
@@ -23,6 +27,33 @@ constexpr int sgrMotionFlag = 32;
 constexpr int maximumWheelLinesPerEvent = 40;
 constexpr auto bracketedPasteStart = std::string_view {"\033[200~"};
 constexpr auto bracketedPasteEnd = std::string_view {"\033[201~"};
+constexpr auto deleteCode = char32_t {0x7f};
+constexpr auto firstPrintableCode = char32_t {0x20};
+constexpr auto firstAppleFunctionKeyCode = char32_t {0xF700};
+constexpr auto lastAppleFunctionKeyCode = char32_t {0xF8FF};
+
+// macOS gives arrows, F-keys, Home/End and paging Private Use Area characters
+// (U+F700 up); they are keys, not text.
+bool isAppleFunctionKeyCode(char32_t codepoint)
+{
+    return codepoint >= firstAppleFunctionKeyCode && codepoint <= lastAppleFunctionKeyCode;
+}
+
+bool isLetterOrSpaceKey(const std::string& unmodifiedCharacters)
+{
+    if (unmodifiedCharacters.size() != 1)
+        return false;
+
+    const auto byte = static_cast<unsigned char>(unmodifiedCharacters.front());
+    return std::isalpha(byte) != 0 || byte == ' ';
+}
+
+bool isPrintableText(const std::string& characters)
+{
+    const auto codepoints = decodeUtf8(characters);
+    return !codepoints.empty()
+           && std::none_of(codepoints.begin(), codepoints.end(), isNonTextCode);
+}
 
 // xterm's modifier parameter: 1 plus a bit for each of Shift, Alt and Ctrl.
 int calculateModifierCode(const ModifierKeys& mods)
@@ -281,8 +312,48 @@ std::optional<SpecialKeyResponse> encodeSpecialKey(const KeyEvent& event,
     return std::nullopt;
 }
 
-std::optional<std::string> encodeTypedKey(const KeyEvent& event)
+bool isNonTextCode(char32_t codepoint)
 {
+    return codepoint < firstPrintableCode || codepoint == deleteCode
+           || isAppleFunctionKeyCode(codepoint);
+}
+
+namespace
+{
+// On macOS, Option without Ctrl or Cmd on a key other than a letter or Space,
+// when the layout made it type a different character (Option+3 is # on a
+// British layout). Option on a letter or Space stays Alt, for word motion.
+bool isOptionHeldWithoutControlOrCommand(const ModifierKeys& mods)
+{
+    return mods.alt && !mods.control && !mods.command;
+}
+
+bool isOptionSpentOnText(const KeyEvent& event)
+{
+    if (!eacp::Platform::isMac() || !isOptionHeldWithoutControlOrCommand(event.modifiers))
+        return false;
+
+    if (isLetterOrSpaceKey(event.charactersIgnoringModifiers))
+        return false;
+
+    return event.characters != event.charactersIgnoringModifiers
+           && isPrintableText(event.characters);
+}
+} // namespace
+
+KeyEvent removeOptionSpentOnText(const KeyEvent& event)
+{
+    auto typed = event;
+
+    if (isOptionSpentOnText(event))
+        typed.modifiers.alt = false;
+
+    return typed;
+}
+
+std::optional<std::string> encodeTypedKey(const KeyEvent& keyEvent)
+{
+    const auto event = removeOptionSpentOnText(keyEvent);
     const auto& mods = event.modifiers;
     const auto& unmodified = event.charactersIgnoringModifiers;
 
