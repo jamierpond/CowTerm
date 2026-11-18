@@ -1,7 +1,7 @@
 #include "OverviewLayout.h"
 
+#include "Multiplexer/AgeText.h"
 #include "Multiplexer/SessionOverviewSearch.h"
-#include "Phone/StoredScreen.h"
 
 #include <algorithm>
 #include <numeric>
@@ -54,7 +54,7 @@ std::string describeLastUse(const OverviewRow& session, const OverviewInputs& in
     if (!lastUse)
         return {};
 
-    return term::phone::describeLastUseAge(inputs.nowMilliseconds - *lastUse);
+    return term::describeLastUseAge(inputs.nowMilliseconds - *lastUse);
 }
 
 OverviewItem makeSessionItem(OverviewItemKind kind, const OverviewRow& session, const OverviewInputs& inputs)

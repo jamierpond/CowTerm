@@ -1,5 +1,6 @@
 #include "PhoneLaunch.h"
 
+#include "Multiplexer/AgeText.h"
 #include "Multiplexer/DataDirectories.h"
 
 #include <eacp/Core/Utils/Files.h>
@@ -122,7 +123,7 @@ void logStoredScreen(const std::optional<StoredScreen>& stored)
         " pane ",
         stored->paneId,
         " from ",
-        describeStoredScreenAge(age));
+        term::describeStoredScreenAge(age));
 }
 // --open-session= and --open-project= name the pane to show, so the launch
 // does not pick the pane typed in last as well.

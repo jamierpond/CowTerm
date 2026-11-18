@@ -1,11 +1,13 @@
 #include "SessionOverview.h"
 
+#include "AgeText.h"
 #include "Projects.h"
 #include "RemoteLocation.h"
 
 #include <eacp/Core/Utils/Strings.h>
 
 #include <algorithm>
+#include <array>
 #include <filesystem>
 #include <map>
 #include <utility>
@@ -20,6 +22,7 @@ constexpr auto activityColumnCountWithUnread = 9;
 constexpr auto waitingState = "waiting";
 constexpr auto workingState = "working";
 constexpr auto finishedState = "finished";
+constexpr auto wordsThatFollowAStateWord = std::array {": ", " "};
 constexpr auto notOpenProjectPrefix = "not open \xc2\xb7 ";
 
 std::int64_t readMilliseconds(const std::string& text)
@@ -35,18 +38,39 @@ std::int64_t calculateWholeMinutesBetween(std::int64_t earlier, std::int64_t lat
 
 std::string describeState(const PaneActivityReport& activity, std::int64_t now)
 {
-    const auto minutes = std::to_string(calculateWholeMinutesBetween(activity.stateSinceMilliseconds, now));
-
     if (activity.state == waitingState)
         return "waiting: " + activity.stateMessage;
 
     if (activity.state == workingState)
+    {
+        const auto minutes = std::to_string(calculateWholeMinutesBetween(activity.stateSinceMilliseconds, now));
         return "working, " + minutes + " min";
+    }
 
     if (activity.state == finishedState)
-        return "finished " + minutes + " min ago";
+        return "finished " + describeLastUseAge(now - activity.stateSinceMilliseconds);
 
     return {};
+}
+
+// "finished 2 min ago" under a "finished" pill reads "2 min ago"; "waiting:
+// what it asked" under a "waiting" pill reads "what it asked".
+std::string removeWordThePillAlreadySays(const std::string& stateLine, const std::optional<UnreadMark>& unread)
+{
+    if (!unread)
+        return stateLine;
+
+    const auto pillWord = describeUnreadMark(*unread);
+
+    for (const auto* separator: wordsThatFollowAStateWord)
+    {
+        const auto repeatedStart = pillWord + separator;
+
+        if (stateLine.starts_with(repeatedStart))
+            return stateLine.substr(repeatedStart.size());
+    }
+
+    return stateLine;
 }
 
 bool isClaudeProcess(const std::string& foregroundProcess)
@@ -102,7 +126,7 @@ OverviewRow makeRow(const SessionPanes& session, std::int64_t now)
     addUnreadMarks(row, session.panes);
     const auto& speaker = findPaneThatSpeaksForSession(session.panes);
     row.isWaiting = speaker.activity.state == waitingState;
-    row.stateLine = describeState(speaker.activity, now);
+    row.stateLine = removeWordThePillAlreadySays(describeState(speaker.activity, now), row.unread);
     return row;
 }
 

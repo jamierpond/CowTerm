@@ -38,6 +38,7 @@ add_library(CowTermMultiplexer STATIC
         RemoteInstall.cpp
         RemoteLocation.cpp
         SessionLayout.cpp
+        AgeText.cpp
         SessionOverview.cpp
         SessionOverviewSearch.cpp
         SshBridgeLink.cpp

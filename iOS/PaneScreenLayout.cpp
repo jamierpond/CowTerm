@@ -1,7 +1,7 @@
 #include "PaneScreenLayout.h"
 
+#include "Multiplexer/AgeText.h"
 #include "Multiplexer/RemoteLocation.h"
-#include "Phone/StoredScreen.h"
 
 #include <algorithm>
 #include <cmath>
@@ -188,7 +188,7 @@ std::string describeLinkStatus(LinkState state, std::int64_t pictureAgeMilliseco
     if (state == LinkState::Live)
         return "\xe2\x97\x8f live";
 
-    const auto age = " \xc2\xb7 " + term::phone::describeStoredScreenAge(pictureAgeMilliseconds);
+    const auto age = " \xc2\xb7 " + term::describeStoredScreenAge(pictureAgeMilliseconds);
 
     if (state == LinkState::Connecting)
         return "connecting" + age;

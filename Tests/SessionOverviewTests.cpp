@@ -241,3 +241,43 @@ auto tSessionTakesItsNewestUnreadPane = test("SessionOverview/sessionShowsItsNew
     check(rows.size() == 1 && rows[0].unread.has_value() && rows[0].unread->event == "bell");
     check(rows.size() == 1 && rows[0].unreadPaneIds == std::vector<std::string> {"p1", "p2"});
 };
+
+auto tFinishedUnderAMinuteIsJustNow = test("SessionOverview/aSessionThatFinishedUnderAMinuteAgoSaysJustNow") = []
+{
+    constexpr auto thirtySeconds = oneMinute / 2;
+    const auto finished = makeActivity(now - thirtySeconds, "finished", now - thirtySeconds);
+
+    const auto rows = buildOverviewRows({{"tamby", {makePane("p1", "Grazer", "claude", finished)}}}, now);
+
+    check(rows.size() == 1 && rows[0].stateLine == "finished just now");
+};
+
+auto tPillWordIsNotRepeated = test("SessionOverview/theStateLineDoesNotRepeatTheWordOnTheUnreadPill") = []
+{
+    auto finished = makeActivity(now - twelveMinutes, "finished", now - twelveMinutes);
+    finished.unreadEvent = "finished";
+    finished.unreadSinceMilliseconds = now - twelveMinutes;
+    auto waiting = makeActivity(now - fourMinutes, "waiting", now - fourMinutes);
+    waiting.stateMessage = "Claude needs your permission to use Bash";
+    waiting.unreadEvent = "waiting";
+    waiting.unreadSinceMilliseconds = now - fourMinutes;
+    auto bell = makeActivity(now - fourMinutes, "finished", now - fourMinutes);
+    bell.unreadEvent = "bell";
+    bell.unreadSinceMilliseconds = now - fourMinutes;
+
+    const auto rows = buildOverviewRows({{"tamby",
+                                          {makePane("p1", "done", "claude", finished),
+                                           makePane("p2", "asks", "claude", waiting),
+                                           makePane("p3", "rang", "zsh", bell)}}},
+                                        now);
+
+    const auto findStateLine = [&rows](const std::string& sessionName)
+    {
+        const auto found = std::ranges::find(rows, sessionName, &OverviewRow::sessionName);
+        return found == rows.end() ? std::string {"no row"} : found->stateLine;
+    };
+
+    check(findStateLine("done") == "12 min ago");
+    check(findStateLine("asks") == "Claude needs your permission to use Bash");
+    check(findStateLine("rang") == "finished 4 min ago", "a pill naming another event leaves the line alone");
+};

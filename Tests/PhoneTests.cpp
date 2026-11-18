@@ -8,6 +8,7 @@
 #include "Phone/SessionOpenings.h"
 #include "Phone/StoredScreen.h"
 
+#include "Multiplexer/AgeText.h"
 #include "Multiplexer/Protocol.h"
 #include "Multiplexer/RemoteLocation.h"
 #include "Multiplexer/SessionLayout.h"
