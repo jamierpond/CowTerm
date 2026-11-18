@@ -5,6 +5,7 @@
 #include <eacp/Core/Utils/Files.h>
 #include <eacp/Core/Utils/Logging.h>
 
+#include <algorithm>
 #include <cstdlib>
 #include <filesystem>
 #include <map>
@@ -119,6 +120,17 @@ void logStoredScreen(const std::optional<StoredScreen>& stored)
         " from ",
         describeStoredScreenAge(age));
 }
+// --open-session= and --open-project= name the pane to show, so the launch
+// does not pick the pane typed in last as well.
+bool doArgumentsNameThePaneToShow(const std::vector<std::string>& arguments)
+{
+    return std::ranges::any_of(arguments,
+                               [](const std::string& argument)
+                               {
+                                   return argument.starts_with("--open-session=")
+                                          || argument.starts_with("--open-project=");
+                               });
+}
 } // namespace
 
 PhoneLaunch::PhoneLaunch(PhoneSettings settingsToUse)
@@ -153,6 +165,9 @@ std::optional<PhoneSettings> PhoneLaunch::readSettings(int argc, char* argv[])
 
     const auto pairingFolder = term::getDataDirectory() / pairingFolderName;
     auto paired = parsePhoneSettings(arguments, makePairedSetupReader(pairingFolder), storedScreenPath);
+
+    if (paired && doArgumentsNameThePaneToShow(arguments))
+        paired->choosesPaneAtLaunch = false;
 
     if (paired)
         LOG("phone: hosts from ", pairingFolder.string(), ": ", describeHostList(*paired));
