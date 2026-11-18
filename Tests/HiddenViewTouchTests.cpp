@@ -101,7 +101,7 @@ auto tTapAfterOverview = test("HiddenViews/aTapReachesThePaneScreenOnceTheOvervi
     auto screens = ScreenStack {paneScreen};
     layOutAsAPhone(screens);
 
-    screens.showOverview();
+    layOutAsAPhone(screens.showOverview());
     tapWithFingerOnWindow(screens, getPhoneCentre());
     check(paneScreen.touchesBegun == 0, "the open overview takes the tap");
 
@@ -117,7 +117,9 @@ auto tTapAfterDiffView = test("HiddenViews/aTapReachesThePaneScreenOnceDiffViewC
     auto screens = ScreenStack {paneScreen};
     layOutAsAPhone(screens);
 
-    screens.showDiffView().showWhyItCannotOpen("dv is not installed on macprorack");
+    auto& diffView = screens.showDiffView();
+    layOutAsAPhone(diffView);
+    diffView.showWhyItCannotOpen("dv is not installed on macprorack");
     tapWithFingerOnWindow(screens, getPhoneCentre());
     check(paneScreen.touchesBegun == 0, "dv's screen takes the tap");
 
