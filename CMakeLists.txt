@@ -168,8 +168,10 @@ if (COWTERM_LINE_COVERAGE)
     if (NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang")
         message(FATAL_ERROR "COWTERM_LINE_COVERAGE needs clang: configure with -DCMAKE_CXX_COMPILER=clang++")
     endif ()
-    add_compile_options(-fprofile-instr-generate -fcoverage-mapping)
-    add_link_options(-fprofile-instr-generate)
+    # With a plain default name every program start creates an empty default.profraw in its working
+    # folder; a %m name makes nothing until LineCoverageWriter.cpp has set the real path.
+    add_compile_options(-fprofile-instr-generate=%m.profraw -fcoverage-mapping)
+    add_link_options(-fprofile-instr-generate=%m.profraw)
 endif ()
 
 function(cowterm_write_line_coverage target)
