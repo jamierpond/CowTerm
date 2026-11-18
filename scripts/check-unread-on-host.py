@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Walks one throwaway pane through unread and read on a test daemon, never
-Jamie's: on <user@host>, the ct and cowtermd that
-scripts/build-headless-instance-on-host.sh built in <folder there> run as
-COWTERM_INSTANCE=unread-check. The script opens a pane there through `ct
+Jamie's: on <user@host>, <ct there> and the cowtermd beside it run as
+COWTERM_INSTANCE=unread-check, with ~/.config/cowterm.unread-check.json as
+their config (scripts/check-push-on-phone.sh writes one that names the relay). The script opens a pane there through `ct
 bridge` and types Claude Code's own hook command into it, fed the JSON Claude
 Code gives its hooks, so the pane reports itself exactly as a Claude in it
 would. After each step it reads the daemon's activity line for the pane and
@@ -10,7 +10,7 @@ prints its unread columns: a finished turn is unread, viewing reads it, a
 question while not viewed is unread, a prompt submitted reads it, a shell bell
 is unread. Then it kills the pane and stops the test daemon.
 
-usage: scripts/check-unread-on-host.py <user@host> <folder there>
+usage: scripts/check-unread-on-host.py <user@host> <ct there>
 Exit 0 when every step showed what it should.
 """
 import importlib.util
@@ -36,9 +36,9 @@ probe_spec.loader.exec_module(probe_bridge)
 
 
 class UnreadCheck:
-    def __init__(self, host, folder):
-        self.folder = folder
-        bridge = f"COWTERM_INSTANCE={INSTANCE} exec {folder}/bin/ct bridge"
+    def __init__(self, host, ct):
+        self.ct = ct
+        bridge = f"COWTERM_INSTANCE={INSTANCE} exec {ct} bridge"
         self.bridge = subprocess.Popen(["ssh", "-o", "BatchMode=yes", host, bridge],
                                        stdin=subprocess.PIPE, stdout=subprocess.PIPE)
         self.decoder = probe_bridge.Decoder()
@@ -75,7 +75,7 @@ class UnreadCheck:
 
     def run_hook(self, hook_input):
         hook = json.dumps(hook_input).replace("'", "'\\''")
-        self.send(f"write {self.pane}\nprintf '%s' '{hook}' | {self.folder}/bin/ct pane-state --claude-hook\r")
+        self.send(f"write {self.pane}\nprintf '%s' '{hook}' | {self.ct} pane-state --claude-hook\r")
 
     def read_unread(self):
         deadline = time.time() + STEP_SECONDS
@@ -134,8 +134,8 @@ class UnreadCheck:
 def main():
     if len(sys.argv) != 3:
         sys.exit(__doc__)
-    host, folder = sys.argv[1], sys.argv[2]
-    sys.exit(0 if UnreadCheck(host, folder).run() else 1)
+    host, ct = sys.argv[1], sys.argv[2]
+    sys.exit(0 if UnreadCheck(host, ct).run() else 1)
 
 
 if __name__ == "__main__":

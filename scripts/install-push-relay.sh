@@ -55,4 +55,4 @@ systemctl --user enable cowterm-push-relay.service cowterm-push-relay.path >/dev
 systemctl --user start cowterm-push-relay.path
 systemctl --user reset-failed cowterm-push-relay.service 2>/dev/null || true
 systemctl --user restart cowterm-push-relay.service"
-scripts/check-push-relay-ready.sh "$host"
+scripts/check-push-relay-ready.sh "$host" || true

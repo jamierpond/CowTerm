@@ -370,14 +370,14 @@ ios-make-push-sound:
 push-relay-address:
     scripts/find-push-relay-address.sh
 
-# Ring the phone from a throwaway pane on a host's test daemon and print the relay's log of it
-push-check-on-phone destination="jamiepond@macprorack" folder="$HOME/tmp/cowterm-push-check":
-    scripts/check-push-on-phone.sh {{destination}} '{{folder}}'
+# Ring the phone from a throwaway pane on a separate daemon on the relay host, and print the relay's log of it
+push-check-on-phone destination="jamiepond@macprorack":
+    scripts/check-push-on-phone.sh {{destination}}
 
 # Walk a throwaway pane on a host's test daemon through unread and read with Claude Code's own hook command
 check-unread-on-host destination="jamiepond@macprorack" folder="$HOME/tmp/cowterm-unread-check":
     scripts/build-headless-instance-on-host.sh {{destination}} '{{folder}}'
-    scripts/check-unread-on-host.py {{destination}} '{{folder}}'
+    scripts/check-unread-on-host.py {{destination}} '{{folder}}/bin/ct'
 
 # Run just test on another Mac against this working tree (--ios: and just ios-build; --committed: HEAD only; --remove: delete its folder there)
 test-on-host host name *options:

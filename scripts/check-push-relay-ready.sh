@@ -87,6 +87,35 @@ daemon_pid="$(pgrep -x cowtermd | head -n 1)"
 [ -n "$daemon_pid" ] && ! readlink "/proc/$daemon_pid/exe" | grep -q deleted
 report $? "the running daemon is the installed build" "restart it with just restart-daemon-on-host (ends programs in its panes)"
 
+daemon_answers="$(python3 -I - "$ct" <<'PYTHON' 2>/dev/null
+import os, select, subprocess, sys, time
+answer_seconds = 10
+unread_columns = 9
+bridge = subprocess.Popen([sys.argv[1], "bridge"], stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+def send(message):
+    data = message.encode()
+    bridge.stdin.write(str(len(data)).encode() + b"\n" + data)
+    bridge.stdin.flush()
+send("activity")
+send("spawn push-relay-check-missing-command 80 24 push-relay-check\n/tmp\nno-such-program-for-the-push-relay-check")
+buffer = b""
+deadline = time.time() + answer_seconds
+while b"missing-command" not in buffer and time.time() < deadline:
+    if select.select([bridge.stdout], [], [], 0.2)[0]:
+        buffer += os.read(bridge.stdout.fileno(), 1 << 20)
+bridge.kill()
+activity = buffer.split(b"activity\n", 1)[-1].split(b"\n")[0]
+print("unread" if activity.count(b"\t") + 1 >= unread_columns else "no-unread")
+print("local-bin" if b"/.local/bin" in buffer.split(b"missing-command", 1)[-1] else "no-local-bin")
+PYTHON
+)"
+
+echo "$daemon_answers" | grep -qx unread
+report $? "the running daemon keeps unread marks" "restart it with just restart-daemon-on-host (ends programs in its panes)"
+
+echo "$daemon_answers" | grep -qx local-bin
+report $? "the daemon finds programs in ~/.local/bin" "restart it with just restart-daemon-on-host (ends programs in its panes)"
+
 [ "$(grep -c 'ct pane-state --claude-hook' "$HOME/.claude/settings.json" 2>/dev/null)" -ge 3 ]
 report $? "Claude Code's hooks report to the daemon" "run just claude-hooks-add"
 

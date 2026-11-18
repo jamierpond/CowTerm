@@ -1,54 +1,40 @@
 #!/bin/sh
 # Rings Jamie's phone from a throwaway pane, never one of his: on <user@host>,
-# the ct and cowtermd that scripts/build-headless-instance-on-host.sh built in
-# <folder there> run as COWTERM_INSTANCE=push-check, with a config of their own
-# that sends notices to the relay. The probe leaves one pane there in session
-# push-check, and Claude Code's own hook command, fed the JSON Claude Code
-# gives it, reports the pane working and then finished. The daemon posts to the
-# relay, the relay to Apple, and the script prints the relay's log of it. Last,
-# it kills the pane, stops the test daemon and removes its config.
+# the installed ct and cowtermd run as a separate daemon (COWTERM_INSTANCE=
+# unread-check) whose config sends its notices to the relay. In one throwaway
+# pane, Claude Code's own hook command reports a finished turn and then a
+# question (scripts/check-unread-on-host.py), each a new unread event the
+# daemon posts to the relay. The script says first whether the relay answers
+# at all, and last prints the relay's log of the last minute, with Apple's
+# answer for each push. The test daemon and its config are removed after.
 #
-#   scripts/check-push-on-phone.sh [user@host] [folder there] [relay]
+#   scripts/check-push-on-phone.sh [user@host]
 set -eu
 cd "$(dirname "$0")/.."
 destination="${1:-jamiepond@macprorack}"
-folder="${2:-\$HOME/tmp/cowterm-push-check}"
-relay="${3:-$(scripts/find-push-relay-address.sh)}"
+relay="$(scripts/find-push-relay-address.sh)"
 host_name="${destination#*@}"
-instance="push-check"
-pane="push-check-$$"
+instance="unread-check"
+installed_ct='$HOME/.local/libexec/cowterm-remote/ct'
+health_wait_seconds=5
 seconds_for_the_relay=8
-finished_line="Push check at $(date +%H:%M): a throwaway pane on $host_name finished."
-
-COWTERM_BRIDGE_COMMAND="COWTERM_INSTANCE=$instance exec $folder/bin/ct bridge"
-export COWTERM_BRIDGE_COMMAND
-
-cmake --build build --target CowTermEmbeddedSshProbe > /dev/null
-probe="build/Tests/CowTermEmbeddedSshProbe"
 
 clean_up() {
-    "$probe" "$destination" --kill-pane "$pane" | grep -v "^  " || true
-    "$probe" "$destination" --quit-server | grep -v "^  " || true
     ssh -o BatchMode=yes "$destination" "rm -f ~/.config/cowterm.$instance.json"
 }
 trap clean_up EXIT
 
+if curl -sS --max-time "$health_wait_seconds" "$relay/health" 2> /dev/null | grep -q ok; then
+    echo "the relay at $relay answers"
+else
+    echo "the relay at $relay does not answer: it is not running yet (no 1Password token), so the daemon's notices stop at its door"
+fi
+
 ssh -o BatchMode=yes "$destination" \
     "printf '%s' '{\"pushRelay\":\"$relay\",\"pushHostName\":\"$host_name\"}' > ~/.config/cowterm.$instance.json"
 
-"$probe" "$destination" --leave-pane "$pane" "$instance" | grep "left pane"
-
-report_hook() {
-    ssh -o BatchMode=yes "$destination" \
-        "COWTERM_INSTANCE=$instance $folder/bin/ct pane-state --claude-hook --pane $pane" <<HOOK
-$1
-HOOK
-}
-
-report_hook '{"hook_event_name":"UserPromptSubmit","prompt":"check the push"}'
-report_hook "{\"hook_event_name\":\"Stop\",\"last_assistant_message\":\"Checked.\\n$finished_line\"}"
-echo "reported: finished, \"$finished_line\""
+scripts/check-unread-on-host.py "$destination" "$installed_ct"
 
 sleep "$seconds_for_the_relay"
 ssh -o BatchMode=yes "$destination" \
-    "${RELAY_LOG_COMMAND:-journalctl --user -u cowterm-push-relay --since '-1 min' --no-pager -o short-iso}"
+    "journalctl --user -u cowterm-push-relay --since '-1 min' --no-pager -o short-iso | grep 'notice from\|push to\|gave up\|no phone' || echo 'the relay logged no notice in the last minute'"
