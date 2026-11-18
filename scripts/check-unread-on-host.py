@@ -52,17 +52,26 @@ class UnreadCheck:
     def wait_for(self, verb):
         deadline = time.time() + STEP_SECONDS
         while time.time() < deadline:
-            for index, (received_verb, payload) in enumerate(self.received):
-                if received_verb.startswith(verb):
-                    del self.received[: index + 1]
-                    return payload
-            ready, _, _ = select.select([self.bridge.stdout], [], [], POLL_SECONDS)
-            if ready:
-                data = os.read(self.bridge.stdout.fileno(), READ_BYTES)
-                for message in self.decoder.append(data):
-                    verb_line, _, payload = message.partition(b"\n")
-                    self.received.append((verb_line.decode(), payload.decode(errors="replace")))
+            payload = self.take_received(verb)
+            if payload is not None:
+                return payload
+            self.read_available()
         raise RuntimeError(f"no {verb} within {STEP_SECONDS} s")
+
+    def take_received(self, verb):
+        for index, (received_verb, payload) in enumerate(self.received):
+            if received_verb.startswith(verb):
+                del self.received[: index + 1]
+                return payload
+        return None
+
+    def read_available(self):
+        ready, _, _ = select.select([self.bridge.stdout], [], [], POLL_SECONDS)
+        if not ready:
+            return
+        for message in self.decoder.append(os.read(self.bridge.stdout.fileno(), READ_BYTES)):
+            verb_line, _, payload = message.partition(b"\n")
+            self.received.append((verb_line.decode(), payload.decode(errors="replace")))
 
     def run_hook(self, hook_input):
         hook = json.dumps(hook_input).replace("'", "'\\''")
