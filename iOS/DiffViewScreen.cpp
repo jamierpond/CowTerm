@@ -6,6 +6,8 @@
 #include <eacp/Core/Threads/EventLoop.h>
 #include <eacp/Core/Utils/Logging.h>
 
+#include <algorithm>
+
 namespace cowterm::mobile
 {
 using namespace eacp;
@@ -23,6 +25,8 @@ constexpr auto barBrightening = 0.03f;
 constexpr auto dividerAlpha = 0.12f;
 constexpr auto dividerThickness = 1.0f;
 constexpr auto closeLabel = "\xe2\x80\xb9 Back to the pane";
+constexpr auto keyboardGlyph = "\xe2\x8c\xa8";
+constexpr auto tapFingerId = 1;
 constexpr auto ansiYellow = 3;
 
 UI::Font makeFont(float size)
@@ -70,10 +74,18 @@ void DiffViewChrome::paint(UI::Graphics& g)
     const auto measure = [&g](const std::string& text) { return g.measureText(text); };
     g.drawText(term::truncateTextToWidth(title, titleArea.w, measure), titleArea);
 
-    g.setFont(makeFont(barFontSize));
-    g.drawText(closeLabel, rects.bottomBar.inset(sidePadding, 0.0f));
-
+    paintBar(g, bar);
     paintSentence(g, rects.pane);
+}
+
+void DiffViewChrome::paintBar(UI::Graphics& g, Rect bar)
+{
+    g.setFont(makeFont(barFontSize));
+
+    if (showsKeyboardButton)
+        g.drawText(keyboardGlyph, bar.removeFromRight(barButtonWidth), UI::Justification::Centred);
+
+    g.drawText(closeLabel, bar.inset(sidePadding, 0.0f));
 }
 
 void DiffViewChrome::paintSentence(UI::Graphics& g, Rect pane)
@@ -94,14 +106,23 @@ void DiffViewChrome::paintSentence(UI::Graphics& g, Rect pane)
         g.drawText(line, lineBounds.removeFromTop(sentenceLineHeight), UI::Justification::Centred);
 }
 
-// All of the bar closes dv.
+// The keyboard button raises the keyboard; the rest of the bar closes dv.
 void DiffViewChrome::mouseUp(const UI::MouseEvent& event)
 {
-    if (calculateRects().bottomBar.contains(event.position))
+    auto bar = calculateRects().bottomBar;
+
+    if (!bar.contains(event.position))
+        return;
+
+    if (showsKeyboardButton && bar.removeFromRight(barButtonWidth).contains(event.position))
     {
-        LOG("dv: closed from the bar");
-        onClose();
+        LOG("dv: keyboard");
+        onKeyboard();
+        return;
     }
+
+    LOG("dv: closed from the bar");
+    onClose();
 }
 
 DiffViewScreen::DiffViewScreen()
@@ -109,12 +130,15 @@ DiffViewScreen::DiffViewScreen()
     chromeHost.setBackgroundColour(term::toColor(theme.background));
     chromeHost.setRootComponent(chrome);
     chrome.onClose = [this] { close(); };
+    chrome.onKeyboard = [this] { raiseKeyboard(); };
+    typing.onLayoutChanged = [this] { layOutParts(); };
     touchSurface.onSwipeFromTheLeftEdge = [this]
     {
         LOG("dv: closed by a swipe from the left edge");
         close();
     };
     addChildren({chromeHost, touchSurface});
+    typing.addTo(*this);
     touchSurface.setVisible(false);
 }
 
@@ -140,12 +164,18 @@ void DiffViewScreen::open(const term::TerminalConfig& config, const term::phone:
     terminal = std::make_unique<term::TerminalView>(configWithNotice, paneToOpen.workingDirectory, paneToOpen.paneId, term::phone::diffViewCommand);
     terminal->onShellExit = [this] { handleDiffViewEnded(); };
     makeLinksOpenOnTap(*terminal);
+    typing.connectTerminal(*terminal);
 
-    removeSubview(touchSurface);
-    addChildren({*terminal, touchSurface});
+    const auto children = getSubviews();
+
+    for (auto* child: children)
+        removeSubview(*child);
+
+    addChildren({chromeHost, *terminal, touchSurface});
+    typing.addTo(*this);
     touchSurface.setVisible(true);
-    resized();
-    chrome.repaint();
+    chrome.showsKeyboardButton = true;
+    layOutParts();
 }
 
 // dv leaves the screen blank when it quits; text left there says why it could
@@ -187,13 +217,17 @@ void DiffViewScreen::close()
     onClosed(std::exchange(pane, std::nullopt));
 }
 
+// The keyboard goes with the terminal it typed into.
 void DiffViewScreen::removeTerminal()
 {
     touchSurface.setVisible(false);
+    chrome.showsKeyboardButton = false;
 
     if (terminal == nullptr)
         return;
 
+    typing.lowerKeyboard();
+    typing.layOut({}, false);
     removeSubview(*terminal);
     Threads::callAsync([leaving = std::shared_ptr<term::TerminalView> {std::move(terminal)}] {});
 }
@@ -205,19 +239,112 @@ term::TerminalView& DiffViewScreen::getTerminal()
 
 void DiffViewScreen::resized()
 {
-    const auto bounds = getLocalBounds();
-    const auto rects = calculatePaneScreenRects(bounds, getSafeAreaInsets());
-    chromeHost.setBounds(bounds);
-    touchSurface.setBounds(rects.pane);
-
-    if (terminal != nullptr)
-        terminal->setBounds(rects.pane);
-
-    chrome.repaint();
+    layOutParts();
 }
 
 void DiffViewScreen::safeAreaInsetsChanged()
 {
-    resized();
+    layOutParts();
+}
+
+void DiffViewScreen::setSoftwareKeyboardChange(const Graphics::SoftwareKeyboardChange& change)
+{
+    softwareKeyboardCoveredHeight = change.coveredHeight;
+    layOutParts();
+}
+
+// The keyboard, while it is up, takes the place of the home indicator's inset.
+Graphics::Insets DiffViewScreen::calculateInsetsAroundParts() const
+{
+    auto insets = getSafeAreaInsets();
+    insets.bottom = std::max(insets.bottom, softwareKeyboardCoveredHeight);
+    return insets;
+}
+
+bool DiffViewScreen::isKeyboardUp() const
+{
+    return softwareKeyboardCoveredHeight > 0.0f && terminal != nullptr;
+}
+
+// With the keyboard up the composer and key row sit on it, over the bar.
+void DiffViewScreen::layOutParts()
+{
+    const auto bounds = getLocalBounds();
+    const auto paneArea = [&]
+    {
+        if (!isKeyboardUp())
+        {
+            typing.layOut({}, false);
+            return calculatePaneScreenRects(bounds, getSafeAreaInsets()).pane;
+        }
+
+        const auto rects = calculateTypingRects(bounds, calculateInsetsAroundParts(), typing.showsComposer());
+        typing.layOut(rects, true);
+        return rects.pane;
+    }();
+
+    chromeHost.setBounds(bounds);
+    touchSurface.setBounds(paneArea);
+
+    if (terminal != nullptr)
+        terminal->setBounds(paneArea);
+
+    chrome.repaint();
+}
+
+void DiffViewScreen::raiseKeyboard()
+{
+    if (terminal != nullptr)
+        typing.raiseKeyboard();
+}
+
+void DiffViewScreen::performLaunchStep(const DiffViewLaunchStep& step)
+{
+    if (terminal == nullptr)
+        return;
+
+    switch (step.action)
+    {
+        case DiffViewLaunchAction::RaiseKeyboard:
+            return raiseKeyboard();
+        case DiffViewLaunchAction::TapText:
+            return tapTextOnScreen(step.text);
+        case DiffViewLaunchAction::TypeText:
+            return typeText(step.text);
+        case DiffViewLaunchAction::PressKeyRowKey:
+            return typing.pressKeyRowKey(step.key);
+        case DiffViewLaunchAction::ComposeAndSend:
+            return typing.composeAndSend(step.text);
+    }
+}
+
+// A finger down and up again on the text, through the touch surface a real tap reaches.
+void DiffViewScreen::tapTextOnScreen(const std::string& text)
+{
+    const auto position = findLastTextOnScreen(terminal->captureVisibleText(), text);
+
+    if (!position)
+    {
+        LOG("dv step: no \"", text, "\" on screen to tap");
+        return;
+    }
+
+    LOG("dv step: tap \"", text, "\" at row ", position->row, " column ", position->column);
+    auto touch = Graphics::TouchEvent {};
+    touch.id = tapFingerId;
+    touch.pos = terminal->calculateGridCellCentre(position->row, position->column);
+    touch.downPos = touch.pos;
+    touchSurface.touchBegan(touch);
+    touch.phase = Graphics::TouchPhase::Ended;
+    touchSurface.touchEnded(touch);
+}
+
+// Each character as a key the keyboard sends, so a latched Ctrl takes the first.
+void DiffViewScreen::typeText(const std::string& text)
+{
+    LOG("dv step: type ", text.size(), " bytes");
+
+    for (const auto& character: splitIntoCharacters(text))
+        terminal->dispatchKeyEvent(makeTypedKeyEvent(character));
 }
 } // namespace cowterm::mobile

@@ -324,6 +324,14 @@ std::string TerminalView::captureVisibleText() const
     return out;
 }
 
+Graphics::Point TerminalView::calculateGridCellCentre(int gridRow, int column) const
+{
+    const auto lock = lockTerminal();
+    const auto visualRow = gridRow + countViewportRows() - screen.rows();
+    const auto origin = calculateCellOrigin(visualRow, column);
+    return {origin.x + atlas->cellWidth() / 2.0f, origin.y + atlas->cellHeight() / 2.0f};
+}
+
 void TerminalView::resized()
 {
     const auto lock = lockTerminal();

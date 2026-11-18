@@ -14,7 +14,6 @@ constexpr auto pillHeight = 32.0f;
 constexpr auto pillGapAbovePaneBottom = 10.0f;
 
 constexpr auto barSidePadding = 8.0f;
-constexpr auto barButtonWidth = 52.0f;
 constexpr auto widestPaneDotSpacing = 28.0f;
 
 constexpr auto tapSlop = 10.0f;

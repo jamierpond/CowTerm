@@ -44,6 +44,10 @@ constexpr auto secondPaneIndex = 1;
 constexpr auto diffViewOpenDelay = Time::MS {10000};
 constexpr auto diffViewCloseDelay = Time::MS {20000};
 
+// --diff-view-steps= starts once dv has drawn and leaves dv time to answer each step.
+constexpr auto diffViewFirstStepDelay = Time::MS {18000};
+constexpr auto diffViewStepInterval = Time::MS {2500};
+
 // Long enough for the host's project scan to answer and the list to be
 // screenshotted before the project opens.
 constexpr auto projectOpenDelay = Time::MS {10000};
@@ -74,6 +78,7 @@ struct LaunchOptions
     bool closesDiffView = false;
     bool showsClaudePrompt = false;
     std::string composedText;
+    std::vector<cowterm::mobile::DiffViewLaunchStep> diffViewSteps;
     bool showsOverview = false;
     std::string sessionToOpen;
     std::string projectToOpen;
@@ -144,6 +149,7 @@ void applyLaunchValue(LaunchOptions& options, std::string_view argument)
     constexpr auto openSessionPrefix = std::string_view {"--open-session="};
     constexpr auto openProjectPrefix = std::string_view {"--open-project="};
     constexpr auto searchPrefix = std::string_view {"--search="};
+    constexpr auto diffViewStepsPrefix = std::string_view {"--diff-view-steps="};
 
     if (argument.starts_with(linkPrefix))
     {
@@ -162,6 +168,10 @@ void applyLaunchValue(LaunchOptions& options, std::string_view argument)
     else if (argument.starts_with(openProjectPrefix))
     {
         options.projectToOpen = std::string {argument.substr(openProjectPrefix.size())};
+    }
+    else if (argument.starts_with(diffViewStepsPrefix))
+    {
+        options.diffViewSteps = cowterm::mobile::parseDiffViewLaunchSteps(argument.substr(diffViewStepsPrefix.size()));
     }
     else if (argument.starts_with(searchPrefix))
     {
@@ -354,6 +364,7 @@ struct CowTermMobileApp
                 change.animationSeconds,
                 " s");
             screen.setSoftwareKeyboardChange(change);
+            diffView.setSoftwareKeyboardChange(change);
             overview.setSoftwareKeyboardCoveredHeight(change.coveredHeight);
         };
 
@@ -466,6 +477,8 @@ struct CowTermMobileApp
         if (launchOptions.closesDiffView)
             Threads::callAfter(diffViewCloseDelay, [this] { diffView.close(); });
 
+        scheduleDiffViewSteps();
+
         if (!launchOptions.composedText.empty())
         {
             Threads::callAfter(composeDelay,
@@ -476,6 +489,17 @@ struct CowTermMobileApp
         {
             Threads::callAfter(scrollBackDelay,
                                [this] { dragPaneDownToScrollBack(screen.getTerminal()); });
+        }
+    }
+
+    void scheduleDiffViewSteps()
+    {
+        auto delay = diffViewFirstStepDelay;
+
+        for (const auto& step: launchOptions.diffViewSteps)
+        {
+            Threads::callAfter(delay, [this, step] { diffView.performLaunchStep(step); });
+            delay.count += diffViewStepInterval.count;
         }
     }
 

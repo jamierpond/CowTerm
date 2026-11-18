@@ -686,6 +686,27 @@ phone's size.
   folder for `--leave-pane`. On 17 November it passed on macprorack. big-cow
   and tamby refused the simulator's ssh key, so neither was checked there.
 
+### Typing in dv
+
+Jamie could open dv's comment box from the phone but not type in it: dv's
+screen had only the close bar. Its bar now has the keyboard button at its
+right, and typing works as on the pane screen.
+
+- Keys go straight into dv. The key row gives Esc (dv's normal mode), Tab,
+  the arrows and Ctrl (Ctrl then s saves and closes the comment); its
+  compose switch brings up the composer for dictation. The composer sends a
+  bracketed paste then Enter, as on the pane screen; dv trims the trailing
+  newline from a comment.
+- The pane screen's `TypingControls`, key row and `calculateTypingRects` are
+  used as they are. `TypingControls` made `lowerKeyboard` and
+  `pressKeyRowKey` public; the keyboard goes down with dv's pane, so no key
+  reaches a pane that is gone.
+- `--diff-view-steps=` plays taps on text on dv's screen, typed text, key
+  row keys and composed text (iOS/DiffViewLaunchSteps.h), so the simulator
+  can do the review a finger does. `just ios-test-diff-view-review` types one
+  comment, composes another, submits, and prints the round dv wrote to
+  `.diffview/latest.md` in a throwaway repository on the host.
+
 ### Projects with no session
 
 Jamie could not find macprorack's `~/projects/iac` on the phone: the list

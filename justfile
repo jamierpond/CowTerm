@@ -254,6 +254,10 @@ ios-test-stored-screen *arguments:
 ios-test-diff-view *arguments:
     scripts/check-ios-diff-view.sh {{arguments}}
 
+# Review a throwaway repository on a host through dv in the simulator: a typed comment, a composed one, submit, and print the round dv wrote
+ios-test-diff-view-review destination="jamiepond@macprorack" prefix="build-ios-sim/diff-view-review":
+    scripts/check-ios-diff-view-review.sh "{{destination}}" "{{prefix}}"
+
 [doc("Open a throwaway project that has no session on <user@host> from the phone's list, screenshot the list and the pane, and check the pane is gone after cleanup")]
 ios-test-project-opening destination prefix=(screenshot_folder / "project") device="iPhone 17 Pro":
     scripts/check-ios-project-opening.sh {{destination}} {{prefix}} "{{device}}"

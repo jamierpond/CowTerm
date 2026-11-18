@@ -129,11 +129,13 @@ nano_add_executable(CowTermPaneScreenTests
             ClaudePromptTests.cpp
             OverviewLayoutTests.cpp
             OverviewScreenTests.cpp
+            DiffViewLaunchStepsTests.cpp
             ../iOS/PaneScreenLayout.cpp
             ../iOS/Typing.cpp
             ../iOS/ClaudePrompt.cpp
             ../iOS/OverviewLayout.cpp
             ../iOS/OverviewScreen.cpp
+            ../iOS/DiffViewLaunchSteps.cpp
         TARGETS eacp-graphics eacp-ui CowTerm::Phone CowTerm::TerminalView)
 
 target_include_directories(CowTermPaneScreenTests PRIVATE ../iOS)

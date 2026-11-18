@@ -93,6 +93,10 @@ public:
     // tracing, tests, and the phone reading a Claude prompt off the screen.
     std::string captureVisibleText() const;
 
+    // Where in the view the middle of a cell of captureVisibleText's grid is
+    // drawn, at the live bottom: where a tap on that cell lands.
+    eacp::Graphics::Point calculateGridCellCentre(int gridRow, int column) const;
+
     // Blocks until every byte the shell has sent so far is on the screen; its
     // repaint is then the next thing queued for the UI thread. For tests.
     void waitForParsedOutput();

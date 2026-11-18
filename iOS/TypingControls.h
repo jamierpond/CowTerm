@@ -34,6 +34,10 @@ public:
     bool showsComposer() const { return isComposerOn; }
 
     void raiseKeyboard();
+    void lowerKeyboard();
+
+    // What a finger lifting off a key row key does.
+    void pressKeyRowKey(KeyRowKey key);
 
     // Puts text in the composer and sends it, as return would.
     void composeAndSend(const std::string& text);
@@ -55,7 +59,6 @@ public:
     std::function<void()> onLayoutChanged = [] {};
 
 private:
-    void pressKeyRowKey(KeyRowKey key);
     bool takeIncomingComposerText(const std::string& incoming);
     void sendComposedText();
     bool recallFromHistory(KeyRowKey key);
@@ -63,7 +66,6 @@ private:
     bool recallOnHardwareArrow(const eacp::Graphics::KeyEvent& key);
     void sendKeyToPane(const eacp::Graphics::KeyEvent& key);
     void toggleComposer();
-    void lowerKeyboard();
     void showKeyRowState();
     void showWhetherUnsent();
 

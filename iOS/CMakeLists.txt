@@ -16,6 +16,7 @@ eacp_add_app(CowTermMobile
         PhonePaneBinding.cpp
         PhoneDiffViewBinding.cpp
         DiffViewScreen.cpp
+        DiffViewLaunchSteps.cpp
         NoPaneYetShell.cpp
         SampleShell.cpp
         StoredScreenShell.cpp
