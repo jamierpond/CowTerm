@@ -1048,8 +1048,8 @@ there:
 ## What eacp lacks on iOS
 
 Each gap was a branch of eacp off Eyal's develop. All of them are now on
-jp/develop, and CowTerm pins jp/develop at eadf45af (tag
-jp/develop/2026-11-17.1). The phone app builds from the pin alone; the local
+jp/develop, and CowTerm pins jp/develop at 0b43002a (tag
+jp/develop/2026-11-17.2), which no longer carries eacp's hidden-view change. The phone app builds from the pin alone; the local
 `~/projects/eacp-ios-integration` checkout and `EACP_SOURCE` are gone.
 
 | Gap | Branch | Commit |
