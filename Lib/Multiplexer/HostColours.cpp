@@ -117,6 +117,11 @@ Rgb blendChannel(Rgb base, Rgb over, int shift, float amount)
 }
 } // namespace
 
+Rgb getUnreadMarkFillColour()
+{
+    return okabeItoYellow;
+}
+
 std::optional<Rgb> parseHexColour(const std::string& text)
 {
     if (text.size() != hexDigitCount + 1 || text[0] != '#')

@@ -17,8 +17,9 @@ using SessionOpeningUsage = std::function<double(const std::string& rowKey)>;
 std::string makeOverviewRowKey(const OverviewRow& row);
 
 // The rows `query` matches, in the Mac palette's order and by its match rules
-// (rankPaletteItems), sessions and projects alike; an empty query keeps every
-// row, sessions then projects, each ordered by usage. A row's
+// (rankPaletteItems), sessions and projects alike, unread or not; an empty
+// query keeps every row, unread sessions first (newest first), then the other
+// sessions, then projects, each ordered by usage. A row's
 // usage is how often and how recently it was opened on the phone, plus its
 // last typing as one use; rows with equal usage keep the overview's order.
 std::vector<OverviewRow> searchOverviewRows(const std::vector<OverviewRow>& rows,

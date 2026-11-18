@@ -196,3 +196,48 @@ auto tSessionOnAnotherHostDoesNotHideProject = test("SessionOverview/sessionOnAn
 
     check(listNamesAndKinds(rows) == std::vector<std::string> {"session macprorack/iac", "project iac"});
 };
+
+auto tUnreadSessionsComeBeforeWaitingOnes = test("SessionOverview/unreadSessionsComeFirstNewestFirstThenWaitingOnes") = []
+{
+    auto waiting = makeActivity(now - oneMinute, "waiting", now - oneMinute);
+    auto olderUnread = makeActivity(now - twelveMinutes, "finished", now - twelveMinutes);
+    olderUnread.unreadEvent = "finished";
+    olderUnread.unreadSinceMilliseconds = now - twelveMinutes;
+    auto newerUnread = makeActivity(now - twelveMinutes, "finished", now - fourMinutes);
+    newerUnread.unreadEvent = "finished";
+    newerUnread.unreadSinceMilliseconds = now - fourMinutes;
+    newerUnread.unreadText = "All tests pass.";
+
+    const auto rows = buildOverviewRows({{"tamby",
+                                          {makePane("p1", "asks", "claude", waiting),
+                                           makePane("p2", "older", "claude", olderUnread),
+                                           makePane("p3", "newer", "claude", newerUnread)}}},
+                                        now);
+
+    check(rows.size() == 3);
+
+    if (rows.size() == 3)
+    {
+        check(rows[0].sessionName == "newer" && rows[0].unread.has_value());
+        check(rows[0].unread->text == "All tests pass.");
+        check(rows[0].unreadPaneIds == std::vector<std::string> {"p3"});
+        check(rows[1].sessionName == "older");
+        check(rows[2].sessionName == "asks" && !rows[2].unread.has_value());
+    }
+};
+
+auto tSessionTakesItsNewestUnreadPane = test("SessionOverview/sessionShowsItsNewestUnreadPaneAndListsEveryUnreadPane") = []
+{
+    auto bell = makeActivity(0, {}, 0);
+    bell.unreadEvent = "bell";
+    bell.unreadSinceMilliseconds = now - oneMinute;
+    auto finished = makeActivity(0, "finished", 0);
+    finished.unreadEvent = "finished";
+    finished.unreadSinceMilliseconds = now - fourMinutes;
+
+    const auto rows = buildOverviewRows(
+        {{"tamby", {makePane("p1", "Grazer", "zsh", bell), makePane("p2", "Grazer", "claude", finished)}}}, now);
+
+    check(rows.size() == 1 && rows[0].unread.has_value() && rows[0].unread->event == "bell");
+    check(rows.size() == 1 && rows[0].unreadPaneIds == std::vector<std::string> {"p1", "p2"});
+};

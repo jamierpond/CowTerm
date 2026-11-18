@@ -30,6 +30,7 @@ constexpr auto blockCaretAlpha = 0.55f;
 constexpr auto modeLabelGap = 12.0f;
 constexpr auto searchPrompt = "› ";
 constexpr auto thinCaret = "▏";
+constexpr auto unreadPillSidePadding = 7.0f;
 constexpr auto listCardStyle =
     OverlayCardStyle {.backgroundBrightening = 0.04f, .cornerRadius = 12.0f};
 } // namespace
@@ -121,6 +122,25 @@ void paintHostFill(UI::Graphics& g, const HostRowColours& colours, Rect area, fl
     g.fillRoundedRect(area, cornerRadius);
     g.setColour(toColor(colours.stripe));
     g.fillRect(area.fromLeft(hostStripeWidth).inset(0.0f, cornerRadius));
+}
+
+float measureUnreadPillWidth(UI::Graphics& g, const UnreadMark& mark, const UI::Font& font)
+{
+    return measureTextInFont(g, describeUnreadMark(mark), font) + 2.0f * unreadPillSidePadding;
+}
+
+float paintUnreadPill(UI::Graphics& g, const UnreadMark& mark, UnreadPillPlace place, const UI::Font& font)
+{
+    const auto word = describeUnreadMark(mark);
+    const auto width = measureUnreadPillWidth(g, mark, font);
+    const auto pill = Rect {place.right - width, place.middle - place.height / 2.0f, width, place.height};
+
+    g.setColour(toColor(getUnreadMarkFillColour()));
+    g.fillRoundedRect(pill, place.height / 2.0f);
+    g.setColour(toColor(getUnreadMarkTextColour()));
+    g.setFont(font);
+    g.drawText(word, pill, UI::Justification::Centred);
+    return width;
 }
 
 void paintHighlightOutline(UI::Graphics& g, const HostRowColours& colours, Rect area, float cornerRadius)

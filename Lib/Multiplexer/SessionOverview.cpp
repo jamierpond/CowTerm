@@ -74,6 +74,18 @@ struct SessionPanes
     std::vector<const PaneOnHost*> panes;
 };
 
+void addUnreadMarks(OverviewRow& row, const std::vector<const PaneOnHost*>& panes)
+{
+    for (const auto* pane: panes)
+    {
+        if (const auto mark = findUnreadMark(pane->activity))
+        {
+            row.unread = chooseNewerUnreadMark(row.unread, mark);
+            row.unreadPaneIds.push_back(pane->paneId);
+        }
+    }
+}
+
 OverviewRow makeRow(const SessionPanes& session, std::int64_t now)
 {
     auto row = OverviewRow {};
@@ -87,6 +99,7 @@ OverviewRow makeRow(const SessionPanes& session, std::int64_t now)
         row.lastUsedMilliseconds = std::max(row.lastUsedMilliseconds, pane->activity.lastInputMilliseconds);
     }
 
+    addUnreadMarks(row, session.panes);
     const auto& speaker = findPaneThatSpeaksForSession(session.panes);
     row.isWaiting = speaker.activity.state == waitingState;
     row.stateLine = describeState(speaker.activity, now);
@@ -136,6 +149,12 @@ void addProjectsWithNoSessionOpen(const std::vector<HostPanes>& hosts, std::vect
 
 bool shouldRowComeFirst(const OverviewRow& first, const OverviewRow& second)
 {
+    if (first.unread.has_value() != second.unread.has_value())
+        return first.unread.has_value();
+
+    if (first.unread && first.unread->sinceMilliseconds != second.unread->sinceMilliseconds)
+        return first.unread->sinceMilliseconds > second.unread->sinceMilliseconds;
+
     if (first.isWaiting != second.isWaiting)
         return first.isWaiting;
 
@@ -173,6 +192,14 @@ std::vector<PaneActivityReport> parseActivityReport(const std::string& payload)
     }
 
     return reports;
+}
+
+std::optional<UnreadMark> findUnreadMark(const PaneActivityReport& activity)
+{
+    if (activity.unreadEvent.empty())
+        return std::nullopt;
+
+    return UnreadMark {activity.unreadEvent, activity.unreadSinceMilliseconds, activity.unreadText};
 }
 
 std::string nameSessionOfPane(const std::string& sessionName,

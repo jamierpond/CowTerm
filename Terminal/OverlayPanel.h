@@ -2,6 +2,7 @@
 
 #include "Multiplexer/Config.h"
 #include "Multiplexer/HostColours.h"
+#include "Multiplexer/UnreadMark.h"
 #include "SearchField.h"
 #include "Session.h"
 
@@ -74,6 +75,24 @@ void paintHighlightOutline(eacp::UI::Graphics& g,
                            const HostRowColours& colours,
                            eacp::UI::Rect area,
                            float cornerRadius);
+
+// Where the unread pill goes: its right edge, the middle of its height, and
+// its height.
+struct UnreadPillPlace
+{
+    float right = 0.0f;
+    float middle = 0.0f;
+    float height = 0.0f;
+};
+
+float measureUnreadPillWidth(eacp::UI::Graphics& g, const UnreadMark& mark, const eacp::UI::Font& font);
+
+// The unread mark (UnreadMark.h) as a yellow pill naming the event in black
+// text, the same mark the phone draws. Returns its width.
+float paintUnreadPill(eacp::UI::Graphics& g,
+                      const UnreadMark& mark,
+                      UnreadPillPlace place,
+                      const eacp::UI::Font& font);
 
 // What the palette and switcher share: the session
 // list they drive, the theme, three fonts, and the dimmed backdrop and card

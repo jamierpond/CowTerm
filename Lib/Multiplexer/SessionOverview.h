@@ -1,11 +1,14 @@
 #pragma once
 
+#include "UnreadMark.h"
+
 #include <cstdint>
 #include <string>
 #include <vector>
 
 // The phone's overview, without drawing: every session on every machine as one
-// row, waiting ones first, then by most recent typing, then every project
+// row, unread ones first (newest first), then waiting ones, then by most
+// recent typing, then every project
 // folder with no session open. Built from what each daemon answers to `info`
 // and `activity`, and each host's project scan.
 namespace term::overview
@@ -28,6 +31,9 @@ struct PaneActivityReport
 };
 
 std::vector<PaneActivityReport> parseActivityReport(const std::string& payload);
+
+// The pane's unread mark; empty when it is read.
+std::optional<UnreadMark> findUnreadMark(const PaneActivityReport& activity);
 
 // One pane as one machine's daemon describes it.
 struct PaneOnHost
@@ -67,6 +73,10 @@ struct OverviewRow
     // "not open · ~/projects/iac" for a project.
     std::string stateLine;
     std::int64_t lastUsedMilliseconds = 0;
+
+    // The newest unread mark of its panes, and every pane that has one.
+    std::optional<UnreadMark> unread;
+    std::vector<std::string> unreadPaneIds;
 
     // A folder the host's scan found with no session open in it: sessionName
     // is the folder's name, and the row has no panes.

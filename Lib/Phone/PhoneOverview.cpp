@@ -60,6 +60,26 @@ std::optional<overview::OverviewRow> findRowByName(const std::vector<overview::O
     return std::nullopt;
 }
 
+PaneScreenUnread summarisePaneScreenUnread(const std::vector<overview::OverviewRow>& rows,
+                                           const std::string& host,
+                                           const std::string& sessionName)
+{
+    auto summary = PaneScreenUnread {};
+
+    for (const auto& row: rows)
+    {
+        if (!row.unread)
+            continue;
+
+        if (row.host == host && row.sessionName == sessionName)
+            summary.unreadPaneIds = row.unreadPaneIds;
+        else
+            ++summary.unreadSessionsElsewhere;
+    }
+
+    return summary;
+}
+
 PhoneOverview::PhoneOverview(std::vector<std::string> hostsToUse)
     : hosts(std::move(hostsToUse))
 {
@@ -68,12 +88,31 @@ PhoneOverview::PhoneOverview(std::vector<std::string> hostsToUse)
 void PhoneOverview::setShown(bool isShownNow)
 {
     shown = isShownNow;
+
+    if (shown)
+        askConnectedHostsToScan(hosts);
+
+    updateRefreshTimer();
+}
+
+void PhoneOverview::setPaneScreenShown(bool isShownNow)
+{
+    paneScreenShown = isShownNow;
+    updateRefreshTimer();
+}
+
+bool PhoneOverview::isAskingForRows() const
+{
+    return shown || paneScreenShown;
+}
+
+void PhoneOverview::updateRefreshTimer()
+{
     refreshTimer.reset();
 
-    if (!shown)
+    if (!isAskingForRows())
         return;
 
-    askConnectedHostsToScan(hosts);
     refresh();
     refreshTimer = std::make_unique<Threads::Timer>(
         [this, guard = std::weak_ptr<bool> {alive}]
@@ -105,7 +144,7 @@ void PhoneOverview::refresh()
 
 void PhoneOverview::handleInfoChanged()
 {
-    if (shown)
+    if (isAskingForRows())
         report();
 }
 
@@ -113,7 +152,7 @@ void PhoneOverview::handleActivity(const std::string& host, const std::string& p
 {
     activityByHost[host] = overview::parseActivityReport(payload);
 
-    if (shown)
+    if (isAskingForRows())
         report();
 }
 
@@ -125,6 +164,10 @@ std::optional<std::string> PhoneOverview::findPaneToOpen(const overview::Overvie
         return std::nullopt;
 
     const auto listed = remote->getDaemon().listShellIds();
+
+    if (const auto unread = findNewestUnreadListedPane(row, listed))
+        return unread;
+
     auto best = std::optional<std::string> {};
     auto bestLastInput = std::int64_t {0};
 
@@ -143,6 +186,29 @@ std::optional<std::string> PhoneOverview::findPaneToOpen(const overview::Overvie
     }
 
     return best;
+}
+
+std::optional<std::string> PhoneOverview::findNewestUnreadListedPane(const overview::OverviewRow& row,
+                                                                    const std::vector<std::string>& listed) const
+{
+    auto newest = std::optional<std::string> {};
+    auto newestSince = std::int64_t {0};
+
+    for (const auto& paneId: row.unreadPaneIds)
+    {
+        if (std::ranges::find(listed, paneId) == listed.end())
+            continue;
+
+        const auto since = findActivity(row.host, paneId).unreadSinceMilliseconds;
+
+        if (!newest || since > newestSince)
+        {
+            newest = paneId;
+            newestSince = since;
+        }
+    }
+
+    return newest;
 }
 
 OverviewReport PhoneOverview::buildReport() const
@@ -203,6 +269,12 @@ overview::PaneActivityReport PhoneOverview::findActivity(const std::string& host
 
 void PhoneOverview::report()
 {
-    onRowsChanged(buildReport());
+    const auto built = buildReport();
+
+    if (shown)
+        onRowsChanged(built);
+
+    if (paneScreenShown)
+        onRowsChangedUnderPaneScreen(built);
 }
 } // namespace term::phone

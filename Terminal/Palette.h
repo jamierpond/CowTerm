@@ -2,6 +2,7 @@
 
 #include "OverlayPanel.h"
 #include "Multiplexer/PaletteItem.h"
+#include "Multiplexer/UnreadReports.h"
 
 #include <cstdint>
 #include <string>
@@ -13,13 +14,14 @@ class RemoteHost;
 
 // The switcher: one overlay that fuzzy-searches everything — open sessions
 // (Claude sessions surfaced with their conversation title and last notify),
-// then known project dirs that aren't open yet. Empty query lists by
-// recency, Grazer-style; Enter switches or spawns. CPU-painted chrome over the
+// then known project dirs that aren't open yet. Empty query lists unread
+// sessions first (newest first), then by recency, Grazer-style; a typed query
+// ranks by the match alone, the unread pill shown but not moving a row; Enter switches or spawns. CPU-painted chrome over the
 // GPU terminal.
 class Palette final : public SearchablePanel
 {
 public:
-    Palette(const AppConfig& configToUse, SessionManager& sessionsToUse);
+    Palette(const AppConfig& configToUse, SessionManager& sessionsToUse, const UnreadReports& unreadToUse);
 
     void show();
 
@@ -61,6 +63,7 @@ private:
                   eacp::UI::Rect rowArea,
                   const HostRowColours& colours);
 
+    const UnreadReports& unread;
     std::vector<PaletteItem> allItems;
     std::vector<PaletteItem> visible;
     bool shown = false;

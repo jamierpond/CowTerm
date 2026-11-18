@@ -318,3 +318,50 @@ auto projectNotScannedStartsNothing = test("PhoneOverview/aProjectItsHostDidNotS
     check(!overview.shown.phone.connection.openProject(session), "a session row is not a project");
     check(!overview.findSpawnSentToRack());
 };
+
+namespace
+{
+std::string makeUnreadActivityLine(const std::string& paneId, const std::string& event, int since)
+{
+    return paneId + "\t0\t0\t\t0\t\t" + event + "\t" + std::to_string(since) + "\tDone.\n";
+}
+} // namespace
+
+auto openingAnUnreadRowPicksItsNewestUnreadPane = test("PhoneOverview/openingAnUnreadRowPicksItsNewestUnreadPane") = []
+{
+    auto shown = ShownOverview {};
+    shown.answerLaptop(makeInfoLine("a", "tamby/CowTerm") + makeInfoLine("b", "tamby/CowTerm") + makeInfoLine("c", "tamby/CowTerm"),
+                       makeActivityLine("a", laterTyping, "", "") + makeUnreadActivityLine("b", "finished", laterTyping)
+                           + makeUnreadActivityLine("c", "bell", earlierTyping));
+
+    check(shown.phone.connection.openSession(shown.findRow("tamby/CowTerm")) == std::optional<std::string> {"b"});
+};
+
+auto paneScreenSummaryCountsOtherUnreadSessions = test("PhoneOverview/paneScreenCountsOtherUnreadSessionsAndMarksItsOwnPanes") = []
+{
+    auto shown = ShownOverview {};
+    shown.answerLaptop(makeInfoLine("a", "tamby/CowTerm") + makeInfoLine("b", "tamby/CowTerm") + makeInfoLine("c", "tamby/Grazer")
+                           + makeInfoLine("d", "tamby/Miro"),
+                       makeUnreadActivityLine("b", "finished", laterTyping) + makeUnreadActivityLine("c", "waiting", laterTyping)
+                           + makeUnreadActivityLine("d", "bell", earlierTyping));
+
+    const auto summary = summarisePaneScreenUnread(shown.lastReport.sessions, laptop, "tamby/CowTerm");
+
+    check(summary.unreadSessionsElsewhere == 2);
+    check(summary.unreadPaneIds == std::vector<std::string> {"b"});
+};
+
+auto paneScreenKeepsAskingForActivity = test("PhoneOverview/paneScreenKeepsAskingForActivityWithTheOverviewHidden") = []
+{
+    auto shown = ShownOverview {};
+    auto reportsUnderPaneScreen = 0;
+    auto& overview = shown.phone.connection.getOverview();
+    overview.onRowsChangedUnderPaneScreen = [&reportsUnderPaneScreen](const OverviewReport&) { ++reportsUnderPaneScreen; };
+    overview.setShown(false);
+    shown.phone.connection.setPaneScreenShown(true);
+    const auto before = reportsUnderPaneScreen;
+
+    shown.answerLaptop(makeInfoLine("a", "tamby/CowTerm"), makeUnreadActivityLine("a", "finished", laterTyping));
+
+    check(reportsUnderPaneScreen > before);
+};

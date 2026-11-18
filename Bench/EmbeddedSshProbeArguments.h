@@ -33,7 +33,11 @@ enum class ProbeMode
 
     // Print the session layouts the daemon keeps, each with the name the
     // Mac gives its project directory, and change nothing.
-    ListLayouts
+    ListLayouts,
+
+    // Print each pane's unread mark from the daemon's `activity` answer, and
+    // change nothing.
+    ListUnread
 };
 
 // CowTermEmbeddedSshProbe's command line:
@@ -45,6 +49,7 @@ enum class ProbeMode
 //   <user@host[:port]> --quit-server         QuitServer
 //   <user@host[:port]> --list-panes          ListPanes
 //   <user@host[:port]> --list-layouts        ListLayouts
+//   <user@host[:port]> --list-unread         ListUnread
 struct ProbeArguments
 {
     term::SshDestination destination;

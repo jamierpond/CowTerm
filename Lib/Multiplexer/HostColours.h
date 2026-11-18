@@ -32,6 +32,10 @@ HostRowColours getColourBlindSafeHostRowColours(const AppConfig& config, const s
 // Every entry of that palette, in the order host names pick them.
 std::vector<HostRowColours> listColourBlindSafeHostRowColours();
 
+// The unread mark's fill (UnreadMark.h): Okabe-Ito yellow at full strength,
+// lighter than every host's row fill, so it stands out on all of them.
+Rgb getUnreadMarkFillColour();
+
 // "#eb6f92" -> 0xeb6f92; empty for anything else.
 std::optional<Rgb> parseHexColour(const std::string& text);
 

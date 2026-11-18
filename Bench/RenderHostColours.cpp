@@ -1,6 +1,8 @@
 // Not a test: renders the palette, the switcher and a session's panes under
 // the window chrome strip off screen to PNGs, with sessions on Jamie's hosts
 // and a local one, so the host colours can be looked at without a window. The
+// session on tamby is marked unread (finished) and the one on macprorack
+// (waiting), so the unread pills and their order can be looked at too. The
 // shells are scripted: no daemon, no ssh, no real program runs. Run it under an isolated instance
 // (COWTERM_INSTANCE) by scripts/render-host-colours.sh.
 // usage: CowTermRenderHostColours <output directory>
@@ -29,6 +31,17 @@ constexpr auto waitForOutput = Time::MS {4000};
 constexpr std::uint16_t downArrowKeyCode = 125;
 constexpr auto onIPhoneNote = "on iPhone, 49 columns; click here to take it back";
 constexpr auto sessionWithTheNote = "jamiepond@tamby";
+constexpr auto unreadSinceMilliseconds = std::int64_t {1'800'000'000'000};
+
+struct UnreadSession
+{
+    std::string host;
+    std::string event;
+    std::int64_t sinceMilliseconds = 0;
+};
+
+const auto unreadSessions = std::array {UnreadSession {sessionWithTheNote, "finished", unreadSinceMilliseconds},
+                                        UnreadSession {"jamiepond@macprorack", "waiting", unreadSinceMilliseconds - 1}};
 
 struct WindowShape
 {
@@ -192,6 +205,31 @@ term::TermSession& findSession(term::SessionManager& sessions, const std::string
     return *sessions.all().front();
 }
 
+// An `activity` answer as the session's daemon would give it, with every pane
+// of the session unread.
+std::string makeUnreadActivityReport(const term::TermSession& session, const UnreadSession& unread)
+{
+    auto payload = std::string {};
+
+    for (const auto& shellId: session.listShellIds())
+    {
+        payload += shellId + "\t0\t0\t" + unread.event + "\t0\t\t" + unread.event + "\t"
+                   + std::to_string(unread.sinceMilliseconds) + "\tAll tests pass.\n";
+    }
+
+    return payload;
+}
+
+term::UnreadReports makeUnreadReports(term::SessionManager& sessions)
+{
+    auto reports = term::UnreadReports {};
+
+    for (const auto& unread: unreadSessions)
+        reports.takeActivityReport(unread.host, makeUnreadActivityReport(findSession(sessions, unread.host), unread));
+
+    return reports;
+}
+
 void renderShape(term::SessionManager& sessions,
                  const term::AppConfig& config,
                  const WindowShape& shape,
@@ -209,13 +247,14 @@ void renderShape(term::SessionManager& sessions,
     window.show(tamby, bounds);
     saveImage(window.renderToImage(pictureScale), directory / ("session-lone-pane-" + shape.name + ".png"));
 
-    auto palette = term::Palette {config, sessions};
+    const auto unread = makeUnreadReports(sessions);
+    auto palette = term::Palette {config, sessions, unread};
     window.showOverlay(palette);
     palette.show();
     palette.keyDown(makeKeyEvent(downArrowKeyCode));
     saveImage(window.renderToImage(pictureScale), directory / ("palette-" + shape.name + ".png"));
 
-    auto switcher = term::Switcher {config, sessions};
+    auto switcher = term::Switcher {config, sessions, unread};
     window.clear();
     window.show(tamby, bounds);
     switcher.begin(false);

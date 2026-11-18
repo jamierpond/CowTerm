@@ -3,6 +3,7 @@
 #include "Emulator/Debug.h"
 #include <PondVersion.h>
 #include "Multiplexer/DaemonClient.h"
+#include "Multiplexer/MruStore.h"
 #include "Multiplexer/RemoteHosts.h"
 #include "Multiplexer/SshBridgeLink.h"
 #include "LeaderKeys.h"
@@ -12,6 +13,7 @@
 
 #include <eacp/Core/App/App.h>
 #include <eacp/Core/Platform/Platform.h>
+#include <eacp/Core/Threads/Async.h>
 #include <eacp/Core/Threads/EventLoop.h>
 
 #include <algorithm>
@@ -23,6 +25,13 @@ namespace term
 using namespace eacp;
 using Graphics::KeyEvent;
 namespace KeyCode = Graphics::KeyCode;
+
+namespace
+{
+// How often the Mac checks whether Jamie has gone idle at the focused pane.
+constexpr auto viewingCheckInterval = Time::MS {1000};
+constexpr auto activityVerb = "activity";
+} // namespace
 
 AppShell::AppShell()
 {
@@ -43,6 +52,7 @@ void AppShell::wireSessionManager()
         updateTitle();
         tray.refresh();
         rudderChanged();
+        updateViewedPane();
     };
 
     manager.onSessionsChanged = [this]
@@ -52,7 +62,11 @@ void AppShell::wireSessionManager()
         rudderChanged();
     };
 
-    manager.onPanesChanged = [this] { rudderChanged(); };
+    manager.onPanesChanged = [this]
+    {
+        rudderChanged();
+        updateViewedPane();
+    };
 
     manager.onPaneWired = [this](TermSession& session, TerminalView& pane)
     {
@@ -193,16 +207,101 @@ void AppShell::start()
 
     // A pane's running command shows up only in the daemon's info refresh.
     if (auto* daemon = DaemonClient::get())
+    {
         daemon->onInfoChanged = [this] { rudderChanged(); };
+        daemon->onOtherMessage = [this](const std::string& verb, const std::string& body)
+        {
+            if (verb == activityVerb)
+                takeUnreadReport({}, body);
+        };
+    }
 
     RemoteHosts::configure(config, makeSshBridgeLink);
     wireRemoteHosts();
     manager.restoreOrCreateInitial();
+    startWatchingWhatIsViewed();
 }
 
 AppShell::~AppShell()
 {
+    *alive = false;
+    viewingTimer.reset();
     RemoteHosts::teardown();
+}
+
+void AppShell::askDaemonsForUnread()
+{
+    sendToDaemonOf({}, proto::make(activityVerb));
+
+    for (auto* remote: RemoteHosts::all())
+        remote->getDaemon().send(proto::make(activityVerb));
+}
+
+void AppShell::takeUnreadReport(const std::string& host, const std::string& body)
+{
+    unreadReports.takeActivityReport(host, proto::parse(body).payload);
+    palette.refreshRemoteRows();
+
+    if (switcher.isShown())
+        switcher.repaint();
+}
+
+// The focused pane counts as viewed until a minute passes with no key typed;
+// a timer notices the minute running out.
+void AppShell::startWatchingWhatIsViewed()
+{
+    noteUserInput();
+    viewingTimer = std::make_unique<Threads::Timer>(
+        [this, guard = std::weak_ptr<bool> {alive}]
+        {
+            Threads::callAsync([this, guard]
+                               {
+                                   if (!guard.expired())
+                                       updateViewedPane();
+                               });
+        },
+        viewingCheckInterval);
+}
+
+void AppShell::noteUserInput()
+{
+    lastInputMilliseconds = MruStore::nowMs();
+    updateViewedPane();
+}
+
+void AppShell::updateViewedPane()
+{
+    paneViewing.setViewedPane(
+        chooseDesktopViewedPane({findFocusedPane(), windowFocused, lastInputMilliseconds, MruStore::nowMs()}));
+}
+
+std::optional<ViewedPane> AppShell::findFocusedPane()
+{
+    auto* session = manager.active();
+
+    if (session == nullptr)
+        return std::nullopt;
+
+    const auto* pane = session->view.activePane();
+
+    if (pane == nullptr)
+        return std::nullopt;
+
+    return ViewedPane {session->host, pane->shellId()};
+}
+
+void AppShell::sendToDaemonOf(const std::string& host, const std::string& message)
+{
+    if (host.empty())
+    {
+        if (auto* daemon = DaemonClient::get())
+            daemon->send(message);
+
+        return;
+    }
+
+    if (auto* remote = RemoteHosts::find(host))
+        remote->getDaemon().send(message);
 }
 
 // Remote sessions other Macs opened show up here too; the picker refreshes
@@ -211,7 +310,19 @@ void AppShell::wireRemoteHosts()
 {
     for (auto* remote: RemoteHosts::all())
     {
-        remote->onChanged = [this] { palette.refreshRemoteRows(); };
+        remote->onChanged = [this, remote]
+        {
+            palette.refreshRemoteRows();
+
+            if (remote->getStatus() == RemoteHost::Status::Connected)
+                paneViewing.sendViewingAgainTo(remote->getHost());
+        };
+
+        remote->onUnhandledMessage = [this](RemoteHost& from, const std::string& verb, const std::string& body)
+        {
+            if (verb == activityVerb)
+                takeUnreadReport(from.getHost(), body);
+        };
 
         remote->onLayout = [this](RemoteHost&, const std::string&, const std::string& layout)
         { manager.adoptRemoteSession(layout); };
@@ -291,6 +402,11 @@ void AppShell::setWindowFocused(bool focused)
 {
     logUsage(focused ? "window.focus" : "window.blur");
     windowFocused = focused;
+
+    if (focused)
+        noteUserInput();
+    else
+        updateViewedPane();
 
     for (const auto& session: manager.all())
         for (auto* pane: session->view.panes())
@@ -497,6 +613,7 @@ void AppShell::showPalette()
 
     showOverlay(palette);
     palette.show();
+    askDaemonsForUnread();
 }
 
 void AppShell::showSwitcher(bool reverse)
@@ -504,6 +621,7 @@ void AppShell::showSwitcher(bool reverse)
     if (isSwitcherBlocked())
         return;
 
+    askDaemonsForUnread();
     showOverlay(switcher);
 
     // begin() only opens with two or more sessions to flip between; if it
@@ -591,6 +709,8 @@ bool AppShell::popupKey(const KeyEvent& event)
 
 bool AppShell::interceptKey(const KeyEvent& event)
 {
+    noteUserInput();
+
     if (prefixArmed)
     {
         prefixArmed = false;

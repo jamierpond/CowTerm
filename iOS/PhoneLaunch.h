@@ -61,6 +61,9 @@ public:
     // From Apps::setSuspendHandler.
     void handleSuspended(bool isSuspended);
 
+    // The pane screen came up or went away (PhoneConnection::setPaneScreenShown).
+    void setPaneScreenShown(bool isShown) { connection.setPaneScreenShown(isShown); }
+
     // For the pane screen, after the connection's own logging.
     std::function<void(term::phone::PhoneLinkState)> onLinkStateChanged =
         [](term::phone::PhoneLinkState) {};

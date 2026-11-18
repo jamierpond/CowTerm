@@ -11,6 +11,7 @@
 #include "StoredScreen.h"
 
 #include "Multiplexer/DaemonClient.h"
+#include "Multiplexer/PaneViewing.h"
 #include "Multiplexer/RemoteHosts.h"
 
 #include <eacp/Core/Threads/Timer.h>
@@ -113,6 +114,14 @@ public:
     // instead of waiting for it to time out, and claim again any size given back.
     void handleWake();
 
+    // The pane screen came up or went away (the overview or dv's screen took
+    // its place). While it is up with the app in the foreground, the phone
+    // tells the chosen pane's daemon that Jamie is viewing that pane.
+    void setPaneScreenShown(bool isShown);
+
+    // What the phone told the daemons it is viewing now.
+    const std::optional<ViewedPane>& getViewedPane() const { return viewing.getViewedPane(); }
+
     std::function<void(PhoneLinkState)> onLinkStateChanged = [](PhoneLinkState) {};
     std::function<void(const ChosenPane&)> onPaneChosen = [](const ChosenPane&) {};
 
@@ -179,6 +188,8 @@ private:
     void killTemporaryPanesOfEarlierRuns(const std::string& fromHost);
     void publishSessionLayout(const ProjectSession& session);
     void updateLinkState();
+    void updateViewedPane();
+    void sendToHost(const std::string& toHost, const std::string& message);
 
     PhoneSettings settings;
     BridgeLinkFactory makeLink;
@@ -206,6 +217,10 @@ private:
     bool hasReportedShownPaneDrawn = false;
     std::optional<Milliseconds> lastShownPaneOutputAt;
     Milliseconds lastStoredAt = 0;
+    bool isPaneScreenShown = false;
+    bool isInForeground = true;
+    PaneViewingReporter viewing {[this](const std::string& toHost, const std::string& message)
+                                 { sendToHost(toHost, message); }};
     std::unique_ptr<eacp::Threads::Timer> tickTimer;
     std::shared_ptr<bool> alive = std::make_shared<bool>(true);
 };

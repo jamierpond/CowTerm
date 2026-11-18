@@ -1,6 +1,9 @@
 #pragma once
 
+#include "UnreadMark.h"
+
 #include <cstdint>
+#include <optional>
 #include <string>
 
 namespace term
@@ -28,6 +31,9 @@ struct PaletteItem
     // A remote host that can't be reached: shown, greyed, never opened.
     bool unavailable = false;
     std::int64_t lastUsed = 0;
+
+    // An open session with a pane Jamie has not seen.
+    std::optional<UnreadMark> unread;
     TermSession* session = nullptr;
 };
 

@@ -27,6 +27,7 @@ add_library(CowTermMultiplexer STATIC
         PaletteItem.cpp
         PaletteRanking.cpp
         PaneReadState.cpp
+        PaneViewing.cpp
         PaneSizeOwner.cpp
         ClaudeHookReport.cpp
         PaneStateCommand.cpp
@@ -41,6 +42,8 @@ add_library(CowTermMultiplexer STATIC
         SessionOverviewSearch.cpp
         SshBridgeLink.cpp
         TextLayout.cpp
+        UnreadMark.cpp
+        UnreadReports.cpp
         UsageLog.cpp)
 
 if (WIN32)

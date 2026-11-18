@@ -304,3 +304,56 @@ auto diffViewSaysWhenItIsNotInstalled = test("PhoneConnection/diffViewSaysWhenIt
     check(missingProgram == diffViewCommand);
     check(searchedPath == "/usr/bin:/my bin");
 };
+
+namespace
+{
+PhoneOnRecordedHost& showPaneOne(PhoneOnRecordedHost& phone)
+{
+    phone.openPaneView("pane-1");
+    phone.bringLinkUp();
+    phone.answerInfo(makeInfoLine("pane-1", "tamby/x"));
+    return phone;
+}
+} // namespace
+
+auto paneScreenViewsTheChosenPane = test("PhoneConnection/paneScreenInTheForegroundViewsTheChosenPane") = []
+{
+    auto phone = PhoneOnRecordedHost {makeSettings("pane-1")};
+    showPaneOne(phone);
+    check(!phone.hasSentMessageStartingWith("viewing"), "the pane screen is not up yet");
+
+    phone.connection.setPaneScreenShown(true);
+    check(phone.hasSentMessageStartingWith("viewing pane-1"));
+
+    phone.connection.setPaneScreenShown(false);
+    check(phone.hasSentMessageStartingWith("not-viewing pane-1"));
+    check(!phone.connection.getViewedPane().has_value());
+};
+
+auto backgroundStopsViewing = test("PhoneConnection/backgroundStopsViewingAndWakingViewsAgain") = []
+{
+    auto phone = PhoneOnRecordedHost {makeSettings("pane-1")};
+    showPaneOne(phone);
+    phone.connection.setPaneScreenShown(true);
+
+    phone.connection.handleBackground();
+    check(phone.hasSentMessageStartingWith("not-viewing pane-1"));
+    check(!phone.connection.getViewedPane().has_value());
+
+    phone.connection.handleWake();
+    check(phone.connection.getViewedPane().has_value());
+};
+
+auto anotherPaneOfTheSessionIsViewedInstead = test("PhoneConnection/choosingAnotherPaneViewsItInstead") = []
+{
+    auto phone = PhoneOnRecordedHost {makeSettings("pane-1")};
+    phone.openPaneView("pane-1");
+    phone.bringLinkUp();
+    phone.answerInfo(makeInfoLine("pane-1", "tamby/x") + makeInfoLine("pane-2", "tamby/x"));
+    phone.connection.setPaneScreenShown(true);
+
+    check(phone.connection.choosePaneOfSession("pane-2"));
+
+    check(phone.hasSentMessageStartingWith("not-viewing pane-1"));
+    check(phone.hasSentMessageStartingWith("viewing pane-2"));
+};

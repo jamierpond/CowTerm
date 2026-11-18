@@ -3,6 +3,7 @@
 #include <chrono>
 #include <optional>
 #include <string>
+#include <vector>
 
 // What the pane screen is told about the pane it shows. The connection layer
 // fills these; until it lands, Main.cpp fills them with sample values.
@@ -36,5 +37,10 @@ struct PaneDescription
 
     int paneCount = 1;
     int activePaneIndex = 0;
+
+    // Other sessions with a pane Jamie has not seen (the count on ☰), and this
+    // session's panes he has not seen (their dots are yellow squares).
+    int unreadSessionsElsewhere = 0;
+    std::vector<int> unreadPaneIndexes;
 };
 } // namespace cowterm::mobile

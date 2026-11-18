@@ -893,6 +893,47 @@ sound, and a tap opens that pane.
   says whether the device token is the sandbox's (development) or production's
   (TestFlight).
 
+### The unread mark
+
+When a Claude in one of Jamie's panes finished or asked while he was not
+looking, nothing told him which session needed him. Every list of sessions now
+puts those sessions first with a yellow pill that names what happened.
+
+- The mark is a pill filled with Okabe-Ito yellow (#f0e442) with the event in
+  black words: "finished", "waiting", "bell" or "notified". The yellow is
+  lighter than every host's row fill, and the word and the pill's shape say it
+  without colour, since Jamie is mildly red-green colour blind
+  (`UnreadMark.h`, `getUnreadMarkFillColour`).
+- With nothing typed, unread sessions come first, the newest unread first;
+  the rest keep the order they had (by use, then projects). A typed query
+  ranks by the match alone: the pill shows but does not move a row, so typing
+  stays predictable (`moveUnreadRowsFirst`). On the phone the waiting cards
+  still sit nearest the thumb, unread ones first among them, then the unread
+  rows.
+- The Mac's Ctrl+Tab switcher keeps its most-recently-used order and shows the
+  pill in place of the card's icon: re-ordering it would break the quick flip
+  to the previous session.
+- Opening an unread session on the phone opens its newest unread pane.
+- The pane screen's ☰ carries a count of the other unread sessions, and a pane
+  dot of an unread pane is a yellow square instead of a circle. While the pane
+  screen is up the phone keeps asking for `activity` every three seconds, as
+  the overview does.
+- The phone sends `viewing <id>` for the chosen pane while the pane screen is
+  up and the app is in the foreground, and `not-viewing` when the overview or
+  dv's screen replaces it, when it moves to another pane, or when the app goes
+  to the background. dv's screen views nothing: dv is not Claude's pane. Not
+  yet wired: the app's screen stack does not call `setPaneScreenShown` yet, so
+  the phone sends neither, and the overview's rows are ordered but have no pill.
+- The Mac views the focused pane of its focused window. A minute with no key
+  typed in the app ends that (`desktopIdleMilliseconds`); the next key, or the
+  window coming to the front, views it again. Only keys count: clicks and
+  scrolling in a pane do not reach the app shell. A timer checks once a second.
+- Both send only when the viewed pane changes, and send `viewing` again when a
+  host's link comes back, since the daemon forgets a client that disconnects
+  (`PaneViewingReporter`).
+- The Mac asks every daemon for `activity` when the palette or the switcher
+  opens and redraws when the answers arrive (`UnreadReports`).
+
 ### Touch on a real phone
 
 On Jamie's phone no touch reached the pane screen: no tap on the bar, no

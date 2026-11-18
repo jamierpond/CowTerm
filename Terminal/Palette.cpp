@@ -41,6 +41,8 @@ constexpr auto labelLength = 32;
 constexpr auto labelToDetailGap = 14.0f;
 constexpr auto detailLength = 48;
 constexpr auto badgeRightPadding = 12.0f;
+constexpr auto badgeGap = 8.0f;
+constexpr auto unreadPillHeightFraction = 0.62f;
 constexpr auto rowCornerRadius = 6.0f;
 
 bool isSessionItem(const PaletteItem& item)
@@ -53,15 +55,21 @@ bool isOpenSession(const PaletteItem& item)
     return isSessionItem(item) && item.session != nullptr;
 }
 
-// The host suffix takes room the detail would have had.
+// The host suffix and the unread pill take room the detail would have had.
 std::size_t calculateDetailLength(const PaletteItem& item)
 {
+    constexpr auto unreadPillLength = std::size_t {12};
+    auto length = std::size_t {detailLength};
+
+    if (item.unread)
+        length -= unreadPillLength;
+
     if (item.host.empty())
-        return detailLength;
+        return length;
 
     constexpr auto hostSuffixDecoration = std::size_t {3};
     const auto hostSuffixLength = getHostLabel(item.host).size() + hostSuffixDecoration;
-    return detailLength - std::min(hostSuffixLength, std::size_t {detailLength} / 2);
+    return length - std::min(hostSuffixLength, length / 2);
 }
 
 std::string describeItem(const PaletteItem& item)
@@ -81,8 +89,9 @@ bool isOrderedForEmptyQuery(const PaletteItem& a, const PaletteItem& b)
 }
 } // namespace
 
-Palette::Palette(const AppConfig& configToUse, SessionManager& sessionsToUse)
+Palette::Palette(const AppConfig& configToUse, SessionManager& sessionsToUse, const UnreadReports& unreadToUse)
     : SearchablePanel(configToUse, sessionsToUse, fontSizes)
+    , unread(unreadToUse)
 {
 }
 
@@ -131,6 +140,7 @@ PaletteItem Palette::makeSessionItem(TermSession& session) const
     item.host = session.host;
     item.claude = session.isClaude();
     item.lastUsed = sessions.lastUsed(item.key);
+    item.unread = unread.findNewestUnreadMark(session.host, session.listShellIds());
 
     const auto title = session.activeTitle();
     item.detail = title;
@@ -220,9 +230,11 @@ void Palette::applyQuery()
 
     if (query.empty())
     {
-        // Open sessions first, then projects, each most-recently-used first.
+        // Unread sessions first, the newest first, then open sessions, then
+        // projects, each most-recently-used first.
         visible = allItems;
         std::stable_sort(visible.begin(), visible.end(), isOrderedForEmptyQuery);
+        moveUnreadRowsFirst(visible, [](const PaletteItem& item) -> const auto& { return item.unread; });
     }
     else
     {
@@ -413,14 +425,20 @@ void Palette::paintRow(UI::Graphics& g, const PaletteItem& item, Rect rowArea, c
     x += labelToDetailGap;
     drawTextInFont(g, describeItem(item), {x, baseline}, detailFont);
 
+    auto badgeRight = rowArea.right() - badgeRightPadding;
+
     if (item.claude)
     {
         const auto badge = std::string {"claude"};
         const auto badgeWidth = measureTextInFont(g, badge, detailFont);
-        drawTextInFont(g,
-                       badge,
-                       {rowArea.right() - badgeWidth - badgeRightPadding, baseline},
-                       detailFont);
+        drawTextInFont(g, badge, {badgeRight - badgeWidth, baseline}, detailFont);
+        badgeRight -= badgeWidth + badgeGap;
+    }
+
+    if (item.unread)
+    {
+        const auto place = UnreadPillPlace {badgeRight, rowArea.y + rowArea.h / 2.0f, rowArea.h * unreadPillHeightFraction};
+        paintUnreadPill(g, *item.unread, place, detailFont);
     }
 }
 

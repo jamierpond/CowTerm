@@ -40,6 +40,10 @@ constexpr auto minimumNameLength = 4;
 constexpr auto averageNameCharacterWidth = 8.5f;
 constexpr auto detailLength = 72;
 constexpr auto detailBottomOffset = 14.0f;
+constexpr auto unreadPillHeight = 18.0f;
+
+// From the icon's baseline up to the middle of the pill that takes its place.
+constexpr auto unreadPillRaise = 5.0f;
 
 // Centre text horizontally on anchor.x, drawn at baseline anchor.y.
 void drawCentered(UI::Graphics& g, const std::string& text, Point anchor, const UI::Font& font)
@@ -49,8 +53,9 @@ void drawCentered(UI::Graphics& g, const std::string& text, Point anchor, const 
 }
 } // namespace
 
-Switcher::Switcher(const AppConfig& configToUse, SessionManager& sessionsToUse)
+Switcher::Switcher(const AppConfig& configToUse, SessionManager& sessionsToUse, const UnreadReports& unreadToUse)
     : OverlayPanel(configToUse, sessionsToUse, fontSizes)
+    , unread(unreadToUse)
 {
 }
 
@@ -269,14 +274,30 @@ void Switcher::paintCard(UI::Graphics& g, int index, Rect card)
     if (index == selected)
         paintHighlightOutline(g, colours, card, cardCornerRadius);
 
-    const auto icon = session.isClaude() ? "✳" : "●";
     g.setColour(toColor(colours.text));
-    drawCentered(g, icon, {cx, card.y + iconBaseline}, headerFont);
+    paintCardMark(g, session, {cx, card.y + iconBaseline});
 
     const auto maxChars = (std::size_t) std::max(
         minimumNameLength, (int) (card.w / averageNameCharacterWidth));
     drawCentered(
         g, truncateWithEllipsis(session.name, maxChars), {cx, card.y + nameBaseline}, rowFont);
+}
+
+// The unread pill in the icon's place, else ✳ for Claude or ● for a session.
+void Switcher::paintCardMark(UI::Graphics& g, const TermSession& session, Point iconAnchor)
+{
+    const auto mark = unread.findNewestUnreadMark(session.host, session.listShellIds());
+
+    if (!mark)
+    {
+        const auto icon = session.isClaude() ? "✳" : "●";
+        drawCentered(g, icon, iconAnchor, headerFont);
+        return;
+    }
+
+    const auto width = measureUnreadPillWidth(g, *mark, detailFont);
+    const auto place = UnreadPillPlace {iconAnchor.x + width / 2.0f, iconAnchor.y - unreadPillRaise, unreadPillHeight};
+    paintUnreadPill(g, *mark, place, detailFont);
 }
 
 // The highlight's conversation title (Claude) or cwd.

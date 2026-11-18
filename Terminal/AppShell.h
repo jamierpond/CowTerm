@@ -1,6 +1,8 @@
 #pragma once
 
 #include "Multiplexer/Config.h"
+#include "Multiplexer/PaneViewing.h"
+#include "Multiplexer/UnreadReports.h"
 #include "NotifyUserServer.h"
 #include "PasteConfirmation.h"
 #include "Palette.h"
@@ -12,6 +14,7 @@
 #include "TrayController.h"
 #include "WindowChrome.h"
 
+#include <eacp/Core/Threads/Timer.h>
 #include <eacp/UI/UI.h>
 
 #include <functional>
@@ -123,6 +126,13 @@ private:
     void setGlobalFontSize(float size);
     void updateTitle();
     void handleSessionNotify(TermSession& session, const std::string& text);
+    void askDaemonsForUnread();
+    void takeUnreadReport(const std::string& host, const std::string& body);
+    void startWatchingWhatIsViewed();
+    void noteUserInput();
+    void updateViewedPane();
+    std::optional<ViewedPane> findFocusedPane();
+    static void sendToDaemonOf(const std::string& host, const std::string& message);
     void rudderChanged();
     void showPaneAndBringToFront(const std::string& shellId);
     std::optional<NotifyUserPaneLabel> describePaneForNotifyUser(const std::string& shellId) const;
@@ -134,8 +144,17 @@ private:
     // reports pane changes. It only holds the reference until then.
     RudderPublisher rudder {config, manager};
     SessionManager manager {config};
-    Palette palette {config, manager};
-    Switcher switcher {config, manager};
+
+    // What each daemon last said is unread, drawn by the palette and switcher.
+    UnreadReports unreadReports;
+    Palette palette {config, manager, unreadReports};
+    Switcher switcher {config, manager, unreadReports};
+
+    // Tells the daemons which pane Jamie is looking at (PaneViewing.h).
+    PaneViewingReporter paneViewing {&AppShell::sendToDaemonOf};
+    std::int64_t lastInputMilliseconds = 0;
+    std::unique_ptr<eacp::Threads::Timer> viewingTimer;
+    std::shared_ptr<bool> alive = std::make_shared<bool>(true);
     // Each session's own Ctrl+A i popup, kept while the session is switched
     // away from and shown again when it comes back.
     std::map<const TermSession*, std::unique_ptr<Popup>> popupsBySession;

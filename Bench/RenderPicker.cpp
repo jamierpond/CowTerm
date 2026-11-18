@@ -69,7 +69,8 @@ int renderPicker(const std::string& outputPath, const std::string& query, int se
     Threads::runEventLoopUntil(haveAllHostsAnswered, waitForHosts);
 
     auto sessions = term::SessionManager {config};
-    auto palette = term::Palette {config, sessions};
+    const auto noUnreadPanes = term::UnreadReports {};
+    auto palette = term::Palette {config, sessions, noUnreadPanes};
     auto host = UI::ComponentHost {};
     host.setRootComponent(palette);
     host.setBounds({0.0f, 0.0f, pictureWidth, pictureHeight});

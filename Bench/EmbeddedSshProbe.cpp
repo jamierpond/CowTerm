@@ -7,7 +7,8 @@
 // ends it. --watch-pane opens such a pane at 150 columns, holds its size and
 // prints each size-owner notice; --quit-server stops a test daemon;
 // --list-panes only prints the panes; --list-layouts only prints the session
-// layouts, with the name the Mac gives each one's project directory.
+// layouts, with the name the Mac gives each one's project directory;
+// --list-unread prints each pane's unread mark, or "read".
 // COWTERM_BRIDGE_COMMAND replaces what runs `ct bridge` on the host.
 // Run by scripts/probe-embedded-ssh.sh, run-ios-against-host.sh and
 // run-ios-size-owner-test.sh.
@@ -18,6 +19,7 @@
 #include "Multiplexer/Projects.h"
 #include "Multiplexer/Protocol.h"
 #include "Multiplexer/SessionLayout.h"
+#include "Multiplexer/SessionOverview.h"
 #include "Shell/Pty.h"
 #include "TerminalView/CellText.h"
 
@@ -178,6 +180,9 @@ private:
         if (arguments.mode == ProbeMode::ListLayouts)
             return link.send(term::proto::make("layouts"));
 
+        if (arguments.mode == ProbeMode::ListUnread)
+            return link.send(term::proto::make("activity"));
+
         if (arguments.mode == ProbeMode::QuitServer)
         {
             hasAskedTheDaemonToQuit = true;
@@ -196,6 +201,9 @@ private:
 
         if (message.verb == "layouts")
             return printLayouts(message);
+
+        if (message.verb == "activity")
+            return printUnread(message);
 
         if (isAboutThisPane(message))
             handlePaneMessage(message);
@@ -249,6 +257,20 @@ private:
     }
 
     // "layouts": "layout <name>" messages, each ended by a zero byte.
+    // "unread <pane> finished: All tests pass." or "unread <pane> read".
+    void printUnread(const term::proto::Message& activity)
+    {
+        for (const auto& report: term::overview::parseActivityReport(activity.payload))
+        {
+            if (report.unreadEvent.empty())
+                std::printf("unread %s read\n", report.paneId.c_str());
+            else
+                std::printf("unread %s %s: %s\n", report.paneId.c_str(), report.unreadEvent.c_str(), report.unreadText.c_str());
+        }
+
+        finish({});
+    }
+
     void printLayouts(const term::proto::Message& layouts)
     {
         std::printf("layouts on %s:\n", arguments.destination.host.c_str());
@@ -525,7 +547,7 @@ int main(int argc, char** argv)
         std::fprintf(stderr,
                      "usage: CowTermEmbeddedSshProbe <user@host[:port]> "
                      "[--adopt [pane id] | --leave-pane <pane id> [session] | --kill-pane <pane id> "
-                     "| --watch-pane <pane id> | --quit-server | --list-panes | --list-layouts]\n");
+                     "| --watch-pane <pane id> | --quit-server | --list-panes | --list-layouts | --list-unread]\n");
         return usageExitCode;
     }
 

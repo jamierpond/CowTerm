@@ -252,6 +252,8 @@ void PhoneConnection::setPaneShownLastTime(const PaneOnHostId& pane)
 
 void PhoneConnection::handleBackground()
 {
+    isInForeground = false;
+    updateViewedPane();
     storeShownScreen();
 
     for (const auto& overviewHost: overviewHosts)
@@ -262,6 +264,8 @@ void PhoneConnection::handleBackground()
 
 void PhoneConnection::handleWake()
 {
+    isInForeground = true;
+    updateViewedPane();
     claimReturnedSizesAgain();
     rememberHeldPane();
 
@@ -269,6 +273,31 @@ void PhoneConnection::handleWake()
         watch.noteWokeUp(readClock());
 
     handleTick();
+}
+
+void PhoneConnection::setPaneScreenShown(bool isShown)
+{
+    isPaneScreenShown = isShown;
+    overview.setPaneScreenShown(isShown);
+    updateViewedPane();
+}
+
+void PhoneConnection::updateViewedPane()
+{
+    auto shownPane = std::optional<ViewedPane> {};
+
+    if (chosenPane)
+        shownPane = ViewedPane {chosenPane->host, chosenPane->paneId};
+
+    viewing.setViewedPane(choosePhoneViewedPane({shownPane, isPaneScreenShown, isInForeground}));
+}
+
+void PhoneConnection::sendToHost(const std::string& toHost, const std::string& message)
+{
+    auto* remote = RemoteHosts::find(toHost);
+
+    if (remote != nullptr && remote->getStatus() == RemoteHost::Status::Connected)
+        remote->getDaemon().send(message);
 }
 
 void PhoneConnection::returnBorrowedSizes(const std::string& onHost)
@@ -366,6 +395,7 @@ std::optional<std::string> PhoneConnection::openSession(const overview::Overview
 
     chosenPane = ChosenPane {row.host, *paneId, row.sessionName, row.paneIds};
     onPaneChosen(*chosenPane);
+    updateViewedPane();
     updateLinkState();
     return paneId;
 }
@@ -386,6 +416,7 @@ std::optional<std::string> PhoneConnection::openProject(const overview::Overview
     projectSessionsStarting[session->paneId] = *session;
     chosenPane = ChosenPane {row.host, session->paneId, session->sessionName, {session->paneId}};
     onPaneChosen(*chosenPane);
+    updateViewedPane();
     updateLinkState();
     return session->paneId;
 }
@@ -430,6 +461,9 @@ void PhoneConnection::reportHostStatus(const std::string& changedHost)
 
     reportedHostStatus[changedHost] = status;
     onHostStatusChanged(changedHost, status, remote.getFailureReason());
+
+    if (status == RemoteHost::Status::Connected)
+        viewing.sendViewingAgainTo(changedHost);
 }
 
 void PhoneConnection::askForLastInput(const std::string& askedHost)
@@ -555,6 +589,7 @@ void PhoneConnection::updateChosenPanesSession()
     }
 
     onPaneChosen(*chosenPane);
+    updateViewedPane();
 }
 
 bool PhoneConnection::choosePaneOfSession(const std::string& paneId)
@@ -569,6 +604,7 @@ bool PhoneConnection::choosePaneOfSession(const std::string& paneId)
 
     chosenPane->paneId = paneId;
     onPaneChosen(*chosenPane);
+    updateViewedPane();
     return true;
 }
 

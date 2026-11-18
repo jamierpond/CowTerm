@@ -242,6 +242,10 @@ ios-test-size-return destination device="iPhone 17 Pro":
 ios-test-overview destination folder:
     scripts/run-ios-overview-test.sh {{destination}} {{folder}}
 
+# Check the unread mark on the phone against a test daemon on a host: the unread session first, and opening it reads it
+ios-test-unread destination folder prefix=(screenshot_folder / "unread") device="iPhone 17 Pro":
+    scripts/check-ios-unread.sh {{destination}} {{folder}} {{prefix}} "{{device}}"
+
 # Check that the phone moves between two throwaway panes on a host's test daemon
 ios-test-pane-switching *arguments:
     scripts/check-ios-pane-switching.sh {{arguments}}
@@ -374,3 +378,7 @@ push-check-on-phone destination="jamiepond@macprorack" folder="$HOME/tmp/cowterm
 check-unread-on-host destination="jamiepond@macprorack" folder="$HOME/tmp/cowterm-unread-check":
     scripts/build-headless-instance-on-host.sh {{destination}} '{{folder}}'
     scripts/check-unread-on-host.py {{destination}} '{{folder}}'
+
+# Run just test on another Mac against this working tree (--ios: and just ios-build; --committed: HEAD only; --remove: delete its folder there)
+test-on-host host name *options:
+    scripts/test-working-tree-on-host.sh {{host}} {{name}} {{options}}

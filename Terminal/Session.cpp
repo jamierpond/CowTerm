@@ -63,6 +63,16 @@ std::string TermSession::activeTitle() const
     return pane != nullptr ? pane->currentTitle() : std::string {};
 }
 
+std::vector<std::string> TermSession::listShellIds() const
+{
+    auto ids = std::vector<std::string> {};
+
+    for (const auto* pane: view.panes())
+        ids.push_back(pane->shellId());
+
+    return ids;
+}
+
 std::string TermSession::activeWorkingDirectory() const
 {
     const auto* pane = view.activePane();

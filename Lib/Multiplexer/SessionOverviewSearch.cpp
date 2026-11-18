@@ -66,8 +66,9 @@ std::map<std::string, RowWithUsage> calculateUsageByRankingKey(const std::vector
     return usageByKey;
 }
 
-// Every row matches nothing typed: open sessions first, then projects, as in
-// the Mac's palette, each by usage.
+// Every row matches nothing typed: unread sessions first, the newest first,
+// then the other open sessions, then projects, as in the Mac's palette, each
+// by usage.
 std::vector<OverviewRow> orderByUsage(const std::vector<OverviewRow>& rows,
                                       const std::map<std::string, RowWithUsage>& usageByKey)
 {
@@ -77,6 +78,7 @@ std::vector<OverviewRow> orderByUsage(const std::vector<OverviewRow>& rows,
                              [&readUsage](const OverviewRow& first, const OverviewRow& second)
                              { return readUsage(first) > readUsage(second); });
     std::ranges::stable_partition(ordered, [](const OverviewRow& row) { return !row.isProject; });
+    moveUnreadRowsFirst(ordered, [](const OverviewRow& row) -> const auto& { return row.unread; });
     return ordered;
 }
 } // namespace

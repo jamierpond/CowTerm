@@ -2,6 +2,8 @@
 
 #include "OverlayPanel.h"
 
+#include "Multiplexer/UnreadReports.h"
+
 #include <eacp/Core/Threads/Timer.h>
 
 #include <memory>
@@ -19,7 +21,7 @@ namespace term
 class Switcher final : public OverlayPanel
 {
 public:
-    Switcher(const AppConfig& configToUse, SessionManager& sessionsToUse);
+    Switcher(const AppConfig& configToUse, SessionManager& sessionsToUse, const UnreadReports& unreadToUse);
 
     // Open pointing at the next MRU entry (the previous session), or the last
     // one when reverse. Returns false and stays closed when there aren't at
@@ -51,10 +53,15 @@ private:
     int findRowAt(eacp::UI::Point pos) const override;
 
     void paintCard(eacp::UI::Graphics& g, int index, eacp::UI::Rect card);
+    void paintCardMark(eacp::UI::Graphics& g, const TermSession& session, eacp::UI::Point iconAnchor);
     void paintSelectedDetail(eacp::UI::Graphics& g, eacp::UI::Rect panel);
     std::string describeSession(const TermSession& session) const;
 
+    const UnreadReports& unread;
+
     // Frozen MRU snapshot taken on begin(); index 0 is the current session.
+    // Unread sessions are marked but keep their place, so a quick Ctrl+Tab
+    // still flips to the previous session.
     std::vector<TermSession*> order;
     bool shown = false;
 

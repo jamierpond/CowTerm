@@ -42,7 +42,25 @@ LinkState toPaneScreenLinkState(PhoneLinkState state)
     return LinkState::Connecting;
 }
 
-PaneDescription describeChosenPane(const ChosenPane& chosen)
+bool isSameSession(const ChosenPane& first, const ChosenPane& second)
+{
+    return first.host == second.host && first.sessionName == second.sessionName;
+}
+
+std::vector<int> findUnreadPaneIndexes(const ChosenPane& chosen, const PaneScreenUnread& unread)
+{
+    auto indexes = std::vector<int> {};
+
+    for (auto index = 0; index < (int) chosen.sessionPaneIds.size(); ++index)
+    {
+        if (std::ranges::find(unread.unreadPaneIds, chosen.sessionPaneIds[(std::size_t) index]) != unread.unreadPaneIds.end())
+            indexes.push_back(index);
+    }
+
+    return indexes;
+}
+
+PaneDescription describeChosenPane(const ChosenPane& chosen, const PaneScreenUnread& unread)
 {
     auto pane = PaneDescription {};
     pane.hostName = chosen.host;
@@ -54,6 +72,8 @@ PaneDescription describeChosenPane(const ChosenPane& chosen)
     if (found != chosen.sessionPaneIds.end())
         pane.activePaneIndex = (int) std::distance(chosen.sessionPaneIds.begin(), found);
 
+    pane.unreadSessionsElsewhere = unread.unreadSessionsElsewhere;
+    pane.unreadPaneIndexes = findUnreadPaneIndexes(chosen, unread);
     return pane;
 }
 } // namespace
@@ -71,6 +91,16 @@ PhonePaneBinding::PhonePaneBinding(PhoneLaunch& phoneToUse,
     phone.onLinkStateChanged = [this](PhoneLinkState state) { showLinkState(state); };
     phone.onPaneChosen = [this](const ChosenPane& chosen) { showChosenPane(chosen); };
     screen.actions.onChoosePane = [this](int paneIndex) { switchToPane(paneIndex); };
+    phone.getOverview().onRowsChangedUnderPaneScreen = [this](const OverviewReport& report) { showUnread(report); };
+}
+
+void PhonePaneBinding::showUnread(const OverviewReport& report)
+{
+    if (!chosenPane)
+        return;
+
+    unread = summarisePaneScreenUnread(report.sessions, chosenPane->host, chosenPane->sessionName);
+    screen.setPaneDescription(describeChosenPane(*chosenPane, unread));
 }
 
 term::TerminalConfig PhonePaneBinding::makePaneConfig(PhoneLaunch& phone, const PaneOnHostId& pane)
@@ -123,6 +153,11 @@ void PhonePaneBinding::showChosenPane(const ChosenPane& chosen)
 {
     sessionPaneIds = chosen.sessionPaneIds;
 
+    if (!chosenPane || !isSameSession(*chosenPane, chosen))
+        unread.unreadPaneIds.clear();
+
+    chosenPane = chosen;
+
     if (chosen.paneId != shownPaneId)
     {
         shownPaneId = chosen.paneId;
@@ -130,7 +165,7 @@ void PhonePaneBinding::showChosenPane(const ChosenPane& chosen)
         showPaneScreen();
     }
 
-    screen.setPaneDescription(describeChosenPane(chosen));
+    screen.setPaneDescription(describeChosenPane(chosen, unread));
 }
 
 void PhonePaneBinding::switchToPane(int paneIndex)

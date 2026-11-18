@@ -37,9 +37,21 @@ struct OverviewReport
 std::optional<overview::OverviewRow> findRowByName(const std::vector<overview::OverviewRow>& rows,
                                                    const std::string& hostAndSession);
 
+// What the pane screen's bar marks: how many other sessions are unread (on
+// the ☰ button) and which panes of the shown session are (on its dots).
+struct PaneScreenUnread
+{
+    int unreadSessionsElsewhere = 0;
+    std::vector<std::string> unreadPaneIds;
+};
+
+PaneScreenUnread summarisePaneScreenUnread(const std::vector<overview::OverviewRow>& rows,
+                                           const std::string& host,
+                                           const std::string& sessionName);
+
 // The overview's rows, from each host's daemon (RemoteHosts): while the
-// overview is shown it asks every connected daemon for `info` and `activity`
-// every few seconds and reports the rows each time. Each host lists its
+// overview or the pane screen is shown it asks every connected daemon for
+// `info` and `activity` every few seconds and reports the rows each time. Each host lists its
 // projects again each time the overview comes on screen. A daemon from before
 // `activity` still gives rows from `info`, with no state line. Main-thread object.
 class PhoneOverview
@@ -47,8 +59,10 @@ class PhoneOverview
 public:
     explicit PhoneOverview(std::vector<std::string> hostsToUse);
 
-    // Asking starts at once when the overview is shown and stops when it is not.
+    // Asking starts at once when the overview or the pane screen is shown
+    // and stops when neither is.
     void setShown(bool isShownNow);
+    void setPaneScreenShown(bool isShownNow);
     bool isShown() const { return shown; }
 
     // Reports what is known now, then asks every connected daemon again.
@@ -58,22 +72,31 @@ public:
     void handleInfoChanged();
     void handleActivity(const std::string& host, const std::string& payload);
 
-    // The pane a row opens: of its panes the daemon lists, the one typed into
-    // last, else the first. Empty when the daemon lists none of them.
+    // The pane a row opens: of its panes the daemon lists, the newest unread
+    // one, else the one typed into last, else the first. Empty when the daemon lists none of them.
     std::optional<std::string> findPaneToOpen(const overview::OverviewRow& row) const;
 
     OverviewReport buildReport() const;
 
+    // While the overview is shown.
     std::function<void(const OverviewReport&)> onRowsChanged = [](const OverviewReport&) {};
+
+    // While the pane screen is shown, for its unread marks.
+    std::function<void(const OverviewReport&)> onRowsChangedUnderPaneScreen = [](const OverviewReport&) {};
 
 private:
     overview::HostPanes collectHostPanes(const std::string& host) const;
     overview::PaneActivityReport findActivity(const std::string& host, const std::string& paneId) const;
+    std::optional<std::string> findNewestUnreadListedPane(const overview::OverviewRow& row,
+                                                          const std::vector<std::string>& listed) const;
+    bool isAskingForRows() const;
+    void updateRefreshTimer();
     void report();
 
     std::vector<std::string> hosts;
     std::map<std::string, std::vector<overview::PaneActivityReport>> activityByHost;
     bool shown = false;
+    bool paneScreenShown = false;
     std::unique_ptr<eacp::Threads::Timer> refreshTimer;
     std::shared_ptr<bool> alive = std::make_shared<bool>(true);
 };

@@ -203,3 +203,26 @@ auto tTwoFoldersWithOneNameStayTwoRows = test("OverviewSearch/twoProjectFoldersW
     if (found.size() == rows.size())
         check(found[0].projectFolder != found[1].projectFolder);
 };
+
+auto tEmptyQueryPutsUnreadFirst = test("OverviewSearch/emptyTextPutsUnreadSessionsFirstNewestFirst") = []
+{
+    auto older = makeRow(laptop, "older", now - oneDay);
+    older.unread = term::UnreadMark {"finished", now - oneDay, {}};
+    auto newer = makeRow(rack, "newer", now - oneDay);
+    newer.unread = term::UnreadMark {"waiting", now - oneMinute, {}};
+    const auto rows = std::vector {makeRow(laptop, "recent", now - oneMinute), older, newer};
+
+    check(listHostsAndNames(searchOverviewRows(rows, "", now, noOpenings))
+          == std::vector<std::string> {"jamiepond@macprorack newer", "jamie@tamby older", "jamie@tamby recent"});
+};
+
+auto tTypedQueryIgnoresUnread = test("OverviewSearch/typedTextRanksByTheMatchWhetherUnreadOrNot") = []
+{
+    auto unread = makeRow(laptop, "grazer-docs", now - oneDay);
+    unread.unread = term::UnreadMark {"finished", now - oneMinute, {}};
+    const auto rows = std::vector {unread, makeRow(laptop, "grazer", now - oneMinute)};
+
+    const auto found = searchOverviewRows(rows, "grazer", now, noOpenings);
+
+    check(!found.empty() && found.front().sessionName == "grazer");
+};

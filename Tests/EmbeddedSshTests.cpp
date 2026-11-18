@@ -106,6 +106,13 @@ auto probeListsLayouts = test("EmbeddedSshProbe/listsLayouts") = []
     check(layouts.has_value() && layouts->mode == ProbeMode::ListLayouts);
 };
 
+auto probeListsUnread = test("EmbeddedSshProbe/listsUnread") = []
+{
+    const auto unread = parseProbeArguments({"jamie@tamby", "--list-unread"});
+
+    check(unread.has_value() && unread->mode == ProbeMode::ListUnread);
+};
+
 auto probeWatchesAPaneAndQuitsADaemon = test("EmbeddedSshProbe/watchesAPaneAndQuitsADaemon") = []
 {
     const auto watch = parseProbeArguments({"jamie@tamby", "--watch-pane", "phone-test"});

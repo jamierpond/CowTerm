@@ -1,6 +1,8 @@
 #include "PaneScreenChrome.h"
 
+#include "Multiplexer/HostColours.h"
 #include "Multiplexer/TextLayout.h"
+#include "Multiplexer/UnreadMark.h"
 
 #include <eacp/Core/Threads/EventLoop.h>
 #include <eacp/Core/Utils/Logging.h>
@@ -43,6 +45,12 @@ constexpr auto keyRepeatDelay = eacp::Time::MS {400};
 constexpr auto keyRepeatInterval = eacp::Time::MS {80};
 constexpr auto stopLabel = "Esc";
 constexpr auto paneDotSize = 8.0f;
+constexpr auto unreadPaneDotSize = 9.0f;
+constexpr auto unreadCountSize = 16.0f;
+constexpr auto unreadCountFontSize = 11.0f;
+
+// From the ☰ glyph's centre to the count's, right and up.
+constexpr auto unreadCountOffset = 11.0f;
 constexpr auto ringThickness = 1.5f;
 constexpr auto barDividerThickness = 1.0f;
 constexpr auto pillCornerRadius = 16.0f;
@@ -112,6 +120,33 @@ void drawHollowPaneDot(UI::Graphics& g, Point centre, RingColours colours)
 UI::Font makeFont(float size)
 {
     return UI::Font {fontFamily, size};
+}
+
+// An unread pane's dot: a yellow square edged in the bar's background, so it
+// differs from the round dots by shape as well as colour.
+void drawUnreadPaneDot(UI::Graphics& g, Point centre)
+{
+    const auto half = unreadPaneDotSize / 2.0f;
+    g.setColour(term::toColor(term::getUnreadMarkFillColour()));
+    g.fillRect({centre.x - half, centre.y - half, unreadPaneDotSize, unreadPaneDotSize});
+}
+
+// The count of other unread sessions, as a yellow circle with black digits at
+// the top right of the ☰ button.
+void drawUnreadCount(UI::Graphics& g, int count, Rect button)
+{
+    const auto centre = Point {button.center().x + unreadCountOffset, button.center().y - unreadCountOffset};
+    const auto badge = Rect {centre.x - unreadCountSize / 2.0f, centre.y - unreadCountSize / 2.0f, unreadCountSize, unreadCountSize};
+    g.setColour(term::toColor(term::getUnreadMarkFillColour()));
+    fillCircle(g, centre, unreadCountSize);
+    g.setColour(term::toColor(term::getUnreadMarkTextColour()));
+    g.setFont(makeFont(unreadCountFontSize));
+    g.drawText(std::to_string(count), badge, UI::Justification::Centred);
+}
+
+bool isPaneUnread(const PaneDescription& pane, int index)
+{
+    return std::ranges::find(pane.unreadPaneIndexes, index) != pane.unreadPaneIndexes.end();
 }
 
 void drawLitKeyBar(UI::Graphics& g, Rect keyFace)
@@ -216,6 +251,10 @@ void BottomBar::paint(UI::Graphics& g)
             g.setColour(term::toColor(theme.ansi[ansiBlue]));
             fillCircle(g, centre, paneDotSize);
         }
+        else if (isPaneUnread(pane, index))
+        {
+            drawUnreadPaneDot(g, centre);
+        }
         else
         {
             drawHollowPaneDot(g, centre, {background, foreground.withAlpha(mutedTextAlpha)});
@@ -226,6 +265,9 @@ void BottomBar::paint(UI::Graphics& g)
     g.setFont(makeFont(barGlyphFontSize));
     g.drawText(keyboardGlyph, layout.keyboard, UI::Justification::Centred);
     g.drawText(menuGlyph, layout.overview, UI::Justification::Centred);
+
+    if (pane.unreadSessionsElsewhere > 0)
+        drawUnreadCount(g, pane.unreadSessionsElsewhere, layout.overview);
 
     g.setFont(font);
     g.drawText(diffLabel, layout.diff, UI::Justification::Centred);
