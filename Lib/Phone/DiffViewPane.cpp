@@ -2,6 +2,8 @@
 
 #include "ProjectSession.h"
 
+#include "Multiplexer/RemoteLocation.h"
+
 #include <eacp/Core/Utils/FilePath.h>
 #include <eacp/Core/Utils/Files.h>
 
@@ -154,8 +156,9 @@ std::vector<TemporaryPane> loadTemporaryPanes(const std::filesystem::path& path)
         Miro::fromJSONString(file, text);
         auto panes = std::vector<TemporaryPane> {};
 
+        // Files from before hosts were named without their user hold "jamiepond@macprorack".
         for (const auto& entry: file.panes)
-            panes.push_back({entry.host, entry.paneId});
+            panes.push_back({remote::getHostLabel(entry.host), entry.paneId});
 
         return panes;
     }

@@ -1,9 +1,12 @@
 #pragma once
 
 #include "Multiplexer/Projects.h"
+#include "Multiplexer/RemoteLocation.h"
+#include "Multiplexer/SessionLayout.h"
 #include "Shell/Shell.h"
 
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <string>
@@ -20,6 +23,17 @@ struct ProjectSession
     std::string paneId;
     std::string folder;
     std::string sessionName;
+
+    // The layout the phone publishes on the session's daemon, as a Mac
+    // publishes its own: one pane, filed under the directory the Mac's palette
+    // lists the project under, so the Mac adopts it as that project's session.
+    SavedSession makeLayout() const
+    {
+        auto pane = SavedPane {};
+        pane.cwd = folder;
+        pane.shellId = paneId;
+        return SavedSession {sessionName, remote::makeRemoteProjectDir(host, folder), folder, {pane}};
+    }
 };
 
 // The session for folder on host, under a new pane id made from randomNumber.
@@ -54,6 +68,9 @@ public:
     void terminate() override { inner->terminate(); }
     void detach() override { inner->detach(); }
     void takeSizeBack() override { inner->takeSizeBack(); }
+
+    // After the login shell's spawn went to the daemon.
+    std::function<void()> onLoginShellStarted = [] {};
 
 private:
     bool isAskingForLoginShellInProjectFolder(const PtyOptions& options) const;

@@ -167,7 +167,7 @@ std::string PhoneLaunch::describeHostList(const PhoneSettings& settings)
     auto hosts = std::string {};
 
     for (const auto& destination: settings.overviewDestinations)
-        hosts += (hosts.empty() ? "" : ", ") + makeHostLabel(destination);
+        hosts += (hosts.empty() ? "" : ", ") + getHostName(destination);
 
     return hosts;
 }

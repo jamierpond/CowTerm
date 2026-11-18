@@ -99,6 +99,13 @@ auto probeLeavesAPaneInAFolderAndListsPanes = test("EmbeddedSshProbe/leavesAPane
     check(!parseProbeArguments({"jamie@tamby", "--kill-pane", "phone-dv-test", "session", "/tmp"}).has_value());
 };
 
+auto probeListsLayouts = test("EmbeddedSshProbe/listsLayouts") = []
+{
+    const auto layouts = parseProbeArguments({"jamie@tamby", "--list-layouts"});
+
+    check(layouts.has_value() && layouts->mode == ProbeMode::ListLayouts);
+};
+
 auto probeWatchesAPaneAndQuitsADaemon = test("EmbeddedSshProbe/watchesAPaneAndQuitsADaemon") = []
 {
     const auto watch = parseProbeArguments({"jamie@tamby", "--watch-pane", "phone-test"});

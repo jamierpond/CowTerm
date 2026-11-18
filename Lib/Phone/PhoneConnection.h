@@ -177,6 +177,7 @@ private:
     void rememberHeldPane();
     void returnSizeHeldByEarlierRun(const std::string& fromHost, const std::string& daemonHello);
     void killTemporaryPanesOfEarlierRuns(const std::string& fromHost);
+    void publishSessionLayout(const ProjectSession& session);
     void updateLinkState();
 
     PhoneSettings settings;

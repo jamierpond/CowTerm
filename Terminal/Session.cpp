@@ -4,7 +4,6 @@
 #include "Multiplexer/DataDirectories.h"
 #include "Multiplexer/Projects.h"
 #include "Multiplexer/HostColours.h"
-#include "Multiplexer/Protocol.h"
 #include "Multiplexer/RemoteHosts.h"
 #include "Multiplexer/RemoteLocation.h"
 
@@ -44,16 +43,6 @@ std::string getStartDirectory(const std::string& projectDir, const std::string& 
         return remote->path;
 
     return projectDir;
-}
-
-std::string normalizedDir(const std::string& dir)
-{
-    auto path = expandHome(dir);
-
-    while (path.size() > 1 && path.back() == '/')
-        path.pop_back();
-
-    return path;
 }
 } // namespace
 
@@ -489,10 +478,7 @@ void SessionManager::publishLayouts(const SavedState& state) const
         const auto host = getProjectHost(session.projectDir);
 
         if (auto* daemon = findDaemonOfHost(host))
-        {
-            daemon->send(proto::make(
-                "layout", {proto::encodeArgument(session.name)}, Miro::toJSONString(session)));
-        }
+            daemon->send(makeLayoutMessage(session));
     }
 }
 } // namespace term

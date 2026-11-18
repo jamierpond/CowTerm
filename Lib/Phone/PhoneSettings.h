@@ -45,8 +45,10 @@ using EnvironmentReader = std::function<std::string(const std::string& name)>;
 // that is absent, an environment variable (COWTERM_DESTINATION), which
 // `simctl launch` passes on from SIMCTL_CHILD_COWTERM_DESTINATION. Empty when
 // there is no destination, or one of them is not user@host[:port].
-// "user@host": how RemoteHosts and the overview name a destination.
-std::string makeHostLabel(const SshDestination& destination);
+// The host's name, "macprorack" for "jamiepond@macprorack": the name the Mac
+// and the daemons give it, so a session the phone starts is the Mac's too. The
+// user is part of how to connect, not part of the name.
+std::string getHostName(const SshDestination& destination);
 
 // The hosts file `just ios-pair` writes, one "user@host" a line, as the
 // comma-separated list --destination takes.

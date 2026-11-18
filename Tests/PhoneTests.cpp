@@ -1,4 +1,5 @@
 #include "Phone/DiffViewPane.h"
+#include "Phone/HeldPane.h"
 #include "Phone/LinkWatch.h"
 #include "Phone/MirroredShell.h"
 #include "Phone/PaneChoice.h"
@@ -7,8 +8,11 @@
 #include "Phone/SessionOpenings.h"
 #include "Phone/StoredScreen.h"
 
+#include "Multiplexer/Protocol.h"
 #include "Multiplexer/RemoteLocation.h"
+#include "Multiplexer/SessionLayout.h"
 
+#include <Miro/Reflect.h>
 #include <NanoTest/NanoTest.h>
 
 #include <eacp/Core/Utils/Files.h>
@@ -132,6 +136,13 @@ auto pairedHostsBecomeADestinationList = test("PhoneSettings/pairedHostsBecomeAD
     check(joinPairedHosts("").empty());
 };
 
+auto hostIsNamedWithoutItsUser = test("PhoneSettings/hostIsNamedWithoutItsUser") = []
+{
+    const auto settings = parsePhoneSettings({"--destination", "jamiepond@macprorack"}, makeEnvironment({}), {});
+
+    check(settings && getHostName(settings->destination) == "macprorack", "the name the Mac's ssh alias gives it");
+};
+
 auto lastInputAnswerNamesThePane = test("PaneChoice/lastInputAnswerNamesThePane") = []
 {
     constexpr auto typedAt = std::int64_t {1794906370945};
@@ -234,7 +245,7 @@ auto storedScreenRoundTrips = test("StoredScreen/roundTrips") = []
     model.feed("hello\r\nworld");
 
     const auto path = makeScratchDirectory() / storedScreenFileName;
-    const auto saved = StoredScreen {"jamiepond@macprorack", "pane-1", "macprorack/tmp", savedAt, model.captureState()};
+    const auto saved = StoredScreen {"macprorack", "pane-1", "macprorack/tmp", savedAt, model.captureState()};
     check(saveStoredScreen(path, saved));
 
     const auto loaded = loadStoredScreen(path);
@@ -245,6 +256,33 @@ auto storedScreenRoundTrips = test("StoredScreen/roundTrips") = []
     check(loaded->sessionName == saved.sessionName);
     check(loaded->savedAtMillisecondsSinceEpoch == savedAt);
     check(serializeTerminalState(loaded->state) == serializeTerminalState(saved.state));
+};
+
+auto storedScreenFromBeforeHostNamesLostTheUser = test("StoredScreen/fromBeforeHostNamesLostTheUserIsFound") = []
+{
+    constexpr auto columns = 20;
+    constexpr auto rows = 5;
+    auto theme = Theme {};
+    auto model = TerminalModel {columns, rows, theme};
+    const auto path = makeScratchDirectory() / storedScreenFileName;
+    check(saveStoredScreen(path, {"jamiepond@macprorack", "pane-1", "macprorack/tmp", 0, model.captureState()}));
+
+    const auto loaded = loadStoredScreen(path);
+    std::filesystem::remove_all(path.parent_path());
+    check(loaded && loaded->host == "macprorack");
+};
+
+auto heldPaneFromBeforeHostNamesLostTheUser = test("HeldPane/fromBeforeHostNamesLostTheUserIsFound") = []
+{
+    constexpr auto deskColumns = 150;
+    constexpr auto deskRows = 41;
+    const auto path = makeScratchDirectory() / "held-pane.json";
+    check(saveHeldPane(path, {"jamie@tamby", "pane-held", {deskColumns, deskRows}}));
+
+    const auto loaded = loadHeldPane(path);
+    std::filesystem::remove_all(path.parent_path());
+    check(loaded && loaded->host == "tamby");
+    check(loaded && loaded->paneId == "pane-held");
 };
 
 auto missingOrBrokenStoredScreenIsEmpty = test("StoredScreen/missingOrBrokenIsEmpty") = []
@@ -329,19 +367,45 @@ auto openingsAreKeptAndDecay = test("SessionOpenings/openingsAreKeptAcrossLaunch
 
     {
         auto openings = SessionOpenings {path};
-        openings.recordOpening("jamie@tamby/CowTerm", now);
-        openings.recordOpening("jamie@tamby/CowTerm", now);
-        openings.recordOpening("jamie@tamby/Grazer", now);
+        openings.recordOpening("tamby/CowTerm", now);
+        openings.recordOpening("tamby/CowTerm", now);
+        openings.recordOpening("tamby/Grazer", now);
     }
 
     const auto reopened = SessionOpenings {path};
-    check(reopened.getUsage("jamie@tamby/CowTerm", now) > reopened.getUsage("jamie@tamby/Grazer", now));
-    check(reopened.getUsage("jamie@tamby/never", now) == 0.0);
-    check(reopened.getLastOpeningMilliseconds("jamie@tamby/Grazer") == std::optional<std::int64_t> {now});
-    check(!reopened.getLastOpeningMilliseconds("jamie@tamby/never").has_value());
-    check(reopened.getUsage("jamie@tamby/CowTerm", now + aMonth) < reopened.getUsage("jamie@tamby/CowTerm", now),
+    check(reopened.getUsage("tamby/CowTerm", now) > reopened.getUsage("tamby/Grazer", now));
+    check(reopened.getUsage("tamby/never", now) == 0.0);
+    check(reopened.getLastOpeningMilliseconds("tamby/Grazer") == std::optional<std::int64_t> {now});
+    check(!reopened.getLastOpeningMilliseconds("tamby/never").has_value());
+    check(reopened.getUsage("tamby/CowTerm", now + aMonth) < reopened.getUsage("tamby/CowTerm", now),
           "older openings count for less");
     std::filesystem::remove(path);
+};
+
+auto openingsFromBeforeHostNamesLostTheUserCount =
+    test("SessionOpenings/openingsFromBeforeHostNamesLostTheUserCountUnderTheNewName") = []
+{
+    constexpr auto earlier = std::int64_t {1'800'000'000'000};
+    constexpr auto later = earlier + 1;
+    const auto path = std::filesystem::temp_directory_path()
+                      / ("cowterm-session-openings-migration-" + std::to_string(::getpid()) + ".json");
+    std::filesystem::remove(path);
+
+    {
+        auto openings = SessionOpenings {path};
+        openings.recordOpening("jamiepond@macprorack/macprorack/iac", earlier);
+        openings.recordOpening("jamie@tamby/CowTerm", later);
+        openings.recordOpening("tamby/CowTerm", earlier);
+        openings.recordOpening("big-cow/Grazer", earlier);
+    }
+
+    const auto reopened = SessionOpenings {path};
+    std::filesystem::remove(path);
+    check(reopened.getLastOpeningMilliseconds("macprorack/macprorack/iac") == std::optional<std::int64_t> {earlier});
+    check(!reopened.getLastOpeningMilliseconds("jamiepond@macprorack/macprorack/iac").has_value());
+    check(reopened.getLastOpeningMilliseconds("tamby/CowTerm") == std::optional<std::int64_t> {later},
+          "a session recorded under both names keeps the one opened last");
+    check(reopened.getLastOpeningMilliseconds("big-cow/Grazer") == std::optional<std::int64_t> {earlier});
 };
 
 namespace
@@ -405,6 +469,17 @@ auto temporaryPanesAreKeptUntilKilled = test("DiffViewPane/temporaryPanesAreKept
     check(!std::filesystem::exists(path), "no panes left, no file");
 };
 
+auto temporaryPanesFromBeforeHostNamesLostTheUser = test("DiffViewPane/temporaryPanesFromBeforeHostNamesLostTheUserAreFound") = []
+{
+    const auto path = makeScratchDirectory() / "temporary-panes.json";
+    const auto paneId = makeDiffViewPaneId(someRandomNumber);
+    check(addTemporaryPane(path, {"jamiepond@macprorack", paneId}));
+    check(loadTemporaryPanes(path) == std::vector<TemporaryPane> {{"macprorack", paneId}});
+
+    removeTemporaryPane(path, {"macprorack", paneId});
+    check(!std::filesystem::exists(path), "killed under its new name, the note is gone");
+};
+
 auto diffViewShellStartsOnlyDiffViewInItsFolder = test("DiffViewPane/shellStartsOnlyDiffViewInItsFolder") = []
 {
     const auto pane = *makeDiffViewPane("macprorack", repositoryFolder, someRandomNumber);
@@ -425,7 +500,7 @@ auto diffViewShellStartsOnlyDiffViewInItsFolder = test("DiffViewPane/shellStarts
 
 namespace
 {
-constexpr auto scannedHost = "jamiepond@macprorack";
+constexpr auto scannedHost = "macprorack";
 constexpr auto scannedProjectFolder = "/home/jamiepond/projects/iac";
 constexpr auto folderNotScanned = "/home/jamiepond/secrets";
 
@@ -471,4 +546,46 @@ auto projectShellStartsOnlyTheLoginShellInItsFolder = test("ProjectSession/shell
     check(startWith({}, scannedProjectFolder));
     check(!startWith("bash -c 'rm -rf ~'", scannedProjectFolder), "no command");
     check(!startWith({}, folderNotScanned), "no other folder");
+};
+
+// What the Mac does with the layout the phone leaves on macprorack's daemon:
+// RemoteHost::readLayouts parses the message, SessionManager::adoptRemoteSession
+// files the session under normalizedDir(projectDir), and the palette lists a
+// scanned project (RemoteHost::readScanResult names it "<host>:<folder>") only
+// while no session is filed under that path. So the phone's session must be
+// filed exactly under the Mac's project row, under the Mac's name for it.
+auto projectSessionLayoutIsTheMacsSessionForTheProject =
+    test("ProjectSession/layoutIsAdoptedByTheMacAsTheProjectsOneSession") = []
+{
+    const auto phoneSettings = parsePhoneSettings({"--destination", "jamiepond@macprorack"}, makeEnvironment({}), {});
+    const auto phoneHost = getHostName(phoneSettings->destination);
+    const auto phoneScan = std::vector<ProjectDir> {{remote::makeRemoteProjectDir(phoneHost, scannedProjectFolder), "iac"}};
+    const auto session = *makeProjectSession(phoneHost, phoneScan, scannedProjectFolder, someRandomNumber);
+
+    const auto message = proto::parse(makeLayoutMessage(session.makeLayout()));
+    auto adopted = SavedSession {};
+    Miro::fromJSONString(adopted, message.payload);
+
+    constexpr auto macSshAlias = "macprorack";
+    const auto macProjectRowPath = remote::makeRemoteProjectDir(macSshAlias, scannedProjectFolder);
+
+    check(message.verb == "layout");
+    check(proto::decodeArgument(message.args.at(0)) == "macprorack/iac");
+    check(normalizedDir(adopted.projectDir) == macProjectRowPath, "the Mac hides the project row behind the session");
+    check(adopted.name == getSessionNameForProject(macProjectRowPath), "the name the Mac gives the project's session");
+    check(adopted.panes.size() == 1 && adopted.panes.front().shellId == session.paneId, "the phone's pane");
+    check(adopted.panes.front().cwd == scannedProjectFolder);
+};
+
+auto projectShellPublishesItsLayoutOnlyOnceStarted = test("ProjectSession/shellSaysWhenItsLoginShellStarted") = []
+{
+    const auto session = *makeProjectSession(scannedHost, makeLastScan(), scannedProjectFolder, someRandomNumber);
+    auto startedCount = 0;
+    auto shell = ProjectShell {std::make_unique<ScriptedShell>(), session};
+    shell.onLoginShellStarted = [&] { ++startedCount; };
+
+    check(!shell.start({{}, {}, "bash", {}}, [](std::string) {}, [] {}));
+    check(startedCount == 0, "nothing started, nothing published");
+    check(shell.start({{}, {}, {}, {}}, [](std::string) {}, [] {}));
+    check(startedCount == 1);
 };

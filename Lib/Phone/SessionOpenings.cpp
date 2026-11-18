@@ -1,11 +1,14 @@
 #include "SessionOpenings.h"
 
+#include "Multiplexer/RemoteLocation.h"
+
 #include <FrecencySearch/LearnedPicks.h>
 #include <Miro/Reflect.h>
 
 #include <eacp/Core/Utils/FilePath.h>
 #include <eacp/Core/Utils/Files.h>
 
+#include <algorithm>
 #include <vector>
 
 namespace term::phone
@@ -30,6 +33,20 @@ struct SessionOpeningsFile
 
     MIRO_REFLECT(sessions)
 };
+
+// Openings from before hosts were named without their user were recorded
+// under "jamiepond@macprorack/iac"; they count under "macprorack/iac" now. Read
+// oldest first, a session recorded under both names keeps the one opened last.
+void moveOpeningsToHostNamesWithoutUser(SessionOpeningsFile& file)
+{
+    for (auto& entry: file.sessions)
+    {
+        const auto hostEnd = std::min(entry.rowKey.find('/'), entry.rowKey.size());
+        entry.rowKey = remote::getHostLabel(entry.rowKey.substr(0, hostEnd)) + entry.rowKey.substr(hostEnd);
+    }
+
+    std::ranges::stable_sort(file.sessions, {}, &SessionOpeningEntry::at);
+}
 } // namespace
 
 SessionOpenings::SessionOpenings(std::filesystem::path pathToUse)
@@ -44,6 +61,7 @@ SessionOpenings::SessionOpenings(std::filesystem::path pathToUse)
     {
         auto file = SessionOpeningsFile {};
         Miro::fromJSONString(file, text);
+        moveOpeningsToHostNamesWithoutUser(file);
 
         for (const auto& entry: file.sessions)
             usageByRowKey[entry.rowKey] = {entry.count, entry.at};

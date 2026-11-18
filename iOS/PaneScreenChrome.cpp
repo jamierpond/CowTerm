@@ -27,6 +27,7 @@ constexpr auto menuGestureFontSize = 12.0f;
 constexpr auto sidePadding = 12.0f;
 constexpr auto hostMarkSize = 8.0f;
 constexpr auto hostMarkGap = 8.0f;
+constexpr auto titleToLinkStateGap = 8.0f;
 constexpr auto chipPadding = 10.0f;
 constexpr auto chipCornerRadius = 8.0f;
 constexpr auto keyGap = 3.0f;
@@ -145,9 +146,12 @@ void TopLine::paint(UI::Graphics& g)
 
     g.setColour(term::toColor(pickLinkStateColour(theme, link.state)));
     g.drawText(status, statusArea, UI::Justification::Right);
+    area.removeFromRight(titleToLinkStateGap);
 
     g.setColour(term::toColor(theme.foreground));
-    g.drawText(describePaneTitle(pane.hostName, pane.sessionName), area);
+    const auto measure = [&g](const std::string& text) { return g.measureText(text); };
+    const auto title = describePaneTitle(pane.hostName, pane.sessionName);
+    g.drawText(term::truncateTextToWidth(title, area.w, measure), area);
 }
 
 BottomBar::BottomBar(const term::Theme& themeToUse)

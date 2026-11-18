@@ -62,6 +62,10 @@ bool ProjectShell::start(const PtyOptions& options,
     inner->onStatusChanged = onStatusChanged;
     inner->onGridSetElsewhere = onGridSetElsewhere;
     inner->onCommandNotInstalled = onCommandNotInstalled;
-    return inner->start(inProjectFolder, std::move(onOutput), std::move(onExit));
+    if (!inner->start(inProjectFolder, std::move(onOutput), std::move(onExit)))
+        return false;
+
+    onLoginShellStarted();
+    return true;
 }
 } // namespace term::phone

@@ -14,6 +14,7 @@
 set -eu
 cd "$(dirname "$0")/.."
 destination="$1"
+host_name="${destination#*@}"
 folder="$2"
 screenshot="$3"
 device_name="${4:-iPhone 17 Pro}"
@@ -84,8 +85,8 @@ grep "overview:" "$app_log" | head -5
 
 opened_screenshot="${screenshot%.png}-opened.png"
 xcrun simctl terminate "$device" "$bundle_id"
-launch_app "--open-session=$destination/$idle_pane"
-wait_for_app_log_line "overview: open $destination/$idle_pane on pane $idle_pane"
+launch_app "--open-session=$host_name/$idle_pane"
+wait_for_app_log_line "overview: open $host_name/$idle_pane on pane $idle_pane"
 wait_for_app_log_line "phone: link live"
 sleep "$seconds_for_the_pane_to_draw"
 scripts/screenshot-ios-simulator.sh "$opened_screenshot" "$device_name" > /dev/null

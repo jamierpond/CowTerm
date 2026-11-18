@@ -6,7 +6,8 @@
 // pane running `seq 1 300` and leaves it for the phone to open; --kill-pane
 // ends it. --watch-pane opens such a pane at 150 columns, holds its size and
 // prints each size-owner notice; --quit-server stops a test daemon;
-// --list-panes only prints the panes.
+// --list-panes only prints the panes; --list-layouts only prints the session
+// layouts, with the name the Mac gives each one's project directory.
 // COWTERM_BRIDGE_COMMAND replaces what runs `ct bridge` on the host.
 // Run by scripts/probe-embedded-ssh.sh, run-ios-against-host.sh and
 // run-ios-size-owner-test.sh.
@@ -14,7 +15,9 @@
 #include "EmbeddedSshProbeArguments.h"
 
 #include "Emulator/TerminalModel.h"
+#include "Multiplexer/Projects.h"
 #include "Multiplexer/Protocol.h"
+#include "Multiplexer/SessionLayout.h"
 #include "Shell/Pty.h"
 #include "TerminalView/CellText.h"
 
@@ -22,6 +25,8 @@
 #include <eacp/Core/Threads/EventLoop.h>
 #include <eacp/Core/Utils/Files.h>
 #include <eacp/Core/Utils/Strings.h>
+
+#include <Miro/Reflect.h>
 
 #include <cstdio>
 #include <cstdlib>
@@ -170,6 +175,9 @@ private:
         if (arguments.mode == ProbeMode::KillPane)
             return killPane(arguments.paneId);
 
+        if (arguments.mode == ProbeMode::ListLayouts)
+            return link.send(term::proto::make("layouts"));
+
         if (arguments.mode == ProbeMode::QuitServer)
         {
             hasAskedTheDaemonToQuit = true;
@@ -185,6 +193,9 @@ private:
 
         if (message.verb == "info")
             return handleInfo(message.payload);
+
+        if (message.verb == "layouts")
+            return printLayouts(message);
 
         if (isAboutThisPane(message))
             handlePaneMessage(message);
@@ -235,6 +246,43 @@ private:
 
         std::printf("opening throwaway pane %s\n", paneId.c_str());
         sendSpawn(findSessionName(), findPaneFolder());
+    }
+
+    // "layouts": "layout <name>" messages, each ended by a zero byte.
+    void printLayouts(const term::proto::Message& layouts)
+    {
+        std::printf("layouts on %s:\n", arguments.destination.host.c_str());
+
+        for (const auto& entry: Strings::split(layouts.payload, '\0'))
+        {
+            const auto message = term::proto::parse(entry);
+
+            if (message.verb != "layout")
+                continue;
+
+            auto layout = term::SavedSession {};
+            Miro::fromJSONString(layout, message.payload);
+            printLayout(layout);
+        }
+
+        finish({});
+    }
+
+    static void printLayout(const term::SavedSession& layout)
+    {
+        auto shellIds = std::string {};
+
+        for (const auto& pane: layout.panes)
+        {
+            if (!pane.shellId.empty())
+                shellIds += " " + pane.shellId;
+        }
+
+        std::printf("  layout name=%s projectDir=%s panes=%s mac-name=%s\n",
+                    layout.name.c_str(),
+                    layout.projectDir.c_str(),
+                    shellIds.c_str(),
+                    term::getSessionNameForProject(layout.projectDir).c_str());
     }
 
     void confirmPaneIsGone(const std::vector<ListedPane>& panes)
@@ -477,7 +525,7 @@ int main(int argc, char** argv)
         std::fprintf(stderr,
                      "usage: CowTermEmbeddedSshProbe <user@host[:port]> "
                      "[--adopt [pane id] | --leave-pane <pane id> [session] | --kill-pane <pane id> "
-                     "| --watch-pane <pane id> | --quit-server]\n");
+                     "| --watch-pane <pane id> | --quit-server | --list-panes | --list-layouts]\n");
         return usageExitCode;
     }
 

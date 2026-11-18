@@ -1,5 +1,7 @@
 #include "HeldPane.h"
 
+#include "Multiplexer/RemoteLocation.h"
+
 #include <eacp/Core/Utils/FilePath.h>
 #include <eacp/Core/Utils/Files.h>
 
@@ -50,7 +52,8 @@ std::optional<HeldPane> loadHeldPane(const std::filesystem::path& path)
     {
         auto file = HeldPaneFile {};
         Miro::fromJSONString(file, text);
-        return HeldPane {file.host, file.paneId, {file.columns, file.rows}};
+        // Files from before hosts were named without their user hold "jamiepond@macprorack".
+        return HeldPane {remote::getHostLabel(file.host), file.paneId, {file.columns, file.rows}};
     }
     catch (const std::exception&)
     {

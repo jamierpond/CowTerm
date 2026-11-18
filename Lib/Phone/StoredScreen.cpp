@@ -1,5 +1,7 @@
 #include "StoredScreen.h"
 
+#include "Multiplexer/RemoteLocation.h"
+
 #include <eacp/Core/Utils/Files.h>
 #include <eacp/Core/Utils/FilePath.h>
 
@@ -98,7 +100,8 @@ std::optional<StoredScreen> loadStoredScreen(const std::filesystem::path& path)
     if (!state)
         return std::nullopt;
 
-    return StoredScreen {file->host,
+    // Files from before hosts were named without their user hold "jamiepond@macprorack".
+    return StoredScreen {remote::getHostLabel(file->host),
                          file->paneId,
                          file->sessionName,
                          file->savedAtMillisecondsSinceEpoch,

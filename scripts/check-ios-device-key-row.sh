@@ -10,6 +10,7 @@
 set -eu
 cd "$(dirname "$0")/.."
 destination="${1:-jamiepond@macprorack}"
+host_name="${destination#*@}"
 phone="${2:-pond}"
 session="phone-keys-$$"
 pane="$session-a"
@@ -45,7 +46,7 @@ bridge.wait(5)
 PYTHON
 
 xcrun devicectl device process launch --terminate-existing --device "$phone" "$bundle_id" \
-    --open-session "$destination/$session" > /dev/null
+    --open-session "$host_name/$session" > /dev/null
 sleep "$seconds_for_the_phone_to_open_the_pane"
 
 ct notify-user --title "CowTerm · key row check" \

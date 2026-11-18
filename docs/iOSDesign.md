@@ -713,17 +713,56 @@ each host's projects that are not open, and the phone now does too.
   and only once. The pane's `ProjectShell` starts nothing but the login shell
   in that folder. Only a tap on the row (or `--open-project`, which takes the
   same path) calls `PhoneConnection::openProject`.
-- The Mac app does not show the new session. It lists only sessions it opened
-  or adopted from a published layout, and the phone publishes none: the
-  phone's host name (`jamiepond@macprorack`) is not the Mac's ssh alias
-  (`macprorack`), so an adopted layout would point at a host the Mac does not
-  know.
+- The Mac app shows the new session as that project's session (see "One name
+  for each host" below).
 - `just ios-test-project-opening <user@host>` makes a throwaway folder in
   `~/projects` on the host, screenshots the list showing its row, opens it
   with `--open-project=<user@host>/<folder name>` (ten seconds after launch),
   screenshots the pane, and lists the host's panes in that folder before,
   while open, and after it kills the pane and removes the folder. On 17
   November it passed on macprorack.
+
+### One name for each host
+
+A session the phone started on macprorack did not show on the Mac: the phone
+named the host `jamiepond@macprorack`, the Mac and the daemons `macprorack`.
+The pane title showed the host twice (`macprorack/macprorack/iac`) and ran into
+the link state. The phone now names each host as the Mac does, and the Mac
+picks up the session the phone started.
+
+- A host's name is its host name without the user (`getHostName`): the user
+  is part of how to connect, not part of the name. The pairing file stays one
+  `user@host` a line. The other way, a `name destination` pairing file, would
+  let a name differ from the host dialled, but the phone dials the same
+  tailnet names the Mac's ssh config uses as aliases (`big-cow`, `tamby`,
+  `macprorack`), so it would only repeat each name. If those ever differ, the
+  pairing file can gain the name then.
+- Records the phone keeps under the old name are read under the new one:
+  frecency in `session-openings.json` (row keys `jamiepond@macprorack/...`),
+  `held-pane.json`, `temporary-panes.json` and `last-screen.json`. A session
+  with openings under both names keeps the record opened last. The next save
+  writes the new names.
+- After a project session's login shell starts, the phone leaves its layout
+  with the host's daemon (`layout`, `makeLayoutMessage`, shared with the Mac),
+  as a Mac does for its own sessions: one pane, filed under
+  `macprorack:<folder>`, the path the Mac's palette lists the project under.
+  The Mac adopts it (`adoptRemoteSession`) and the palette shows one session
+  where the project row was. `SavedPane` and `SavedSession` moved from
+  `Terminal/` into `Lib/Multiplexer/SessionLayout.h` so the phone writes the
+  same layout.
+- The Mac asked a host for layouts only when it connected. It now also asks
+  each time the palette opens, so a session the phone started since shows on
+  the next open.
+- The pane title shows a session named after its host once
+  (`macprorack/iac`), and is cut short with an ellipsis before the link state.
+- A session the phone starts on `big-cow` is named `big-cow/<folder>` and is
+  not adopted: the Mac adopts layouts only from remote hosts, and names its own
+  projects without a host.
+- `just ios-test-project-opening <user@host>` now also lists the daemon's
+  layouts with the probe (`--list-layouts`, which prints the name the Mac's
+  `getSessionNameForProject` gives each project directory) and passes only when
+  the phone's layout is filed under `<host>:<folder>`, its name is the Mac's
+  name for that directory, and the pane is in that session.
 
 ### Pairing a phone
 

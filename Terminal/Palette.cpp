@@ -97,8 +97,12 @@ void Palette::show()
     applyQuery();
     logUsage("palette.open", {{"rows", visible.size()}});
 
+    // Layouts again, so a session started since connecting (by the phone) is adopted.
     for (auto* remote: RemoteHosts::all())
+    {
         remote->requestScan();
+        remote->requestLayouts();
+    }
 
     // Snapshot where we came from. We deliberately don't peek row 0 here —
     // merely opening the switcher shouldn't move you; the terminal only

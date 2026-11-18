@@ -105,9 +105,9 @@ std::string joinPairedHosts(const std::string& hostsFileText)
     return joined;
 }
 
-std::string makeHostLabel(const SshDestination& destination)
+std::string getHostName(const SshDestination& destination)
 {
-    return destination.user + "@" + destination.host;
+    return destination.host;
 }
 
 std::optional<PhoneSettings> parsePhoneSettings(const std::vector<std::string>& arguments,

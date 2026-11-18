@@ -122,6 +122,7 @@ int choosePaneAfterSwipe(int activePane, int paneCount, BottomBarGesture gesture
 std::string describeLinkStatus(LinkState state, std::int64_t pictureAgeMilliseconds);
 
 // "macprorack/Grazer": the host's label, then the session when it has a name.
+// A session named after its host ("macprorack/iac") shows the host once.
 std::string describePaneTitle(const std::string& host, const std::string& sessionName);
 
 // "↓ 214 new"

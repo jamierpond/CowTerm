@@ -1,11 +1,10 @@
 #pragma once
 
 #include "Multiplexer/Config.h"
+#include "Multiplexer/SessionLayout.h"
 #include "TerminalView/TerminalView.h"
 
 #include <eacp/UI/UI.h>
-
-#include <Miro/Reflect.h>
 
 #include <memory>
 #include <optional>
@@ -13,24 +12,6 @@
 
 namespace term
 {
-// Flat, reflectable snapshot of a pane tree; `first`/`second` index into the
-// same vector, node 0 is the root. Leaves carry the shell's directory.
-struct SavedPane
-{
-    bool split = false;
-    bool horizontal = false;
-    float ratio = 0.5f;
-    std::string cwd;
-
-    // Names the pane's shell in the session daemon, so a restore adopts
-    // the still-running process instead of spawning a new one.
-    std::string shellId;
-    int first = -1;
-    int second = -1;
-
-    MIRO_REFLECT(split, horizontal, ratio, cwd, shellId, first, second)
-};
-
 // One session's pane tree: every leaf is a live GPU terminal, splits carry
 // an orientation (horizontal = side by side) and a ratio. Handles layout
 // with gutters, splitting, closing, directional focus, keyboard resize and

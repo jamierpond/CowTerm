@@ -15,16 +15,6 @@
 
 namespace term
 {
-struct SavedSession
-{
-    std::string name;
-    std::string projectDir;
-    std::string cwd;
-    std::vector<SavedPane> panes;
-
-    MIRO_REFLECT(name, projectDir, cwd, panes)
-};
-
 struct SavedState
 {
     std::vector<SavedSession> sessions;

@@ -202,12 +202,15 @@ std::string describeLinkStatus(LinkState state, std::int64_t pictureAgeMilliseco
 
 std::string describePaneTitle(const std::string& host, const std::string& sessionName)
 {
-    const auto label = term::remote::getHostLabel(host);
+    const auto hostName = term::remote::getHostLabel(host);
 
     if (sessionName.empty())
-        return label;
+        return hostName;
 
-    return label + "/" + sessionName;
+    if (sessionName.starts_with(hostName + "/"))
+        return sessionName;
+
+    return hostName + "/" + sessionName;
 }
 
 std::string formatNewLinesPill(std::uint64_t lineCount)

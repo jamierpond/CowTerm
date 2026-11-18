@@ -11,8 +11,8 @@ using namespace phonetest;
 
 namespace
 {
-constexpr auto laptop = "jamie@tamby";
-constexpr auto rack = "jamiepond@macprorack";
+constexpr auto laptop = "tamby";
+constexpr auto rack = "macprorack";
 constexpr auto earlierTyping = 1000;
 constexpr auto laterTyping = 2000;
 
@@ -127,11 +127,11 @@ auto rowIsFoundByHostAndSessionName = test("PhoneOverview/rowIsFoundByHostAndSes
     auto shown = ShownOverview {};
     shown.phone.answerFrom(rack, proto::make("info", {}, makeInfoLine("c", "macprorack/Miro")));
 
-    const auto found = findRowByName(shown.lastReport.sessions, "jamiepond@macprorack/macprorack/Miro");
+    const auto found = findRowByName(shown.lastReport.sessions, "macprorack/macprorack/Miro");
 
     check(found.has_value());
     check(found->paneIds == std::vector<std::string> {"c"});
-    check(!findRowByName(shown.lastReport.sessions, "jamie@tamby/macprorack/Miro").has_value());
+    check(!findRowByName(shown.lastReport.sessions, "tamby/macprorack/Miro").has_value());
 };
 
 auto rowWhosePanesAreGoneOpensNothing = test("PhoneOverview/rowWhosePanesAreGoneOpensNothing") = []

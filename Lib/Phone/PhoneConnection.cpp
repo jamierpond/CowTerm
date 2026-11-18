@@ -29,14 +29,14 @@ constexpr auto quietBeforeOutputIsReported = Milliseconds {1000};
 
 std::vector<std::string> listOverviewHosts(const PhoneSettings& settings)
 {
-    auto hosts = std::vector<std::string> {makeHostLabel(settings.destination)};
+    auto hosts = std::vector<std::string> {getHostName(settings.destination)};
 
     for (const auto& destination: settings.overviewDestinations)
     {
-        const auto label = makeHostLabel(destination);
+        const auto hostName = getHostName(destination);
 
-        if (std::ranges::find(hosts, label) == hosts.end())
-            hosts.push_back(label);
+        if (std::ranges::find(hosts, hostName) == hosts.end())
+            hosts.push_back(hostName);
     }
 
     return hosts;
@@ -72,13 +72,13 @@ Milliseconds readSteadyClock()
 
 BridgeLinkFactory makeEmbeddedSshLinkFactory(const PhoneSettings& settings)
 {
-    return [settings](const std::string& hostLabel) -> std::unique_ptr<BridgeLink>
+    return [settings](const std::string& hostName) -> std::unique_ptr<BridgeLink>
     {
         auto destination = settings.destination;
 
         for (const auto& candidate: settings.overviewDestinations)
         {
-            if (makeHostLabel(candidate) == hostLabel)
+            if (getHostName(candidate) == hostName)
                 destination = candidate;
         }
 
@@ -98,7 +98,7 @@ PhoneConnection::PhoneConnection(PhoneSettings settingsToUse,
     : settings(std::move(settingsToUse))
     , makeLink(std::move(makeLinkToUse))
     , readClock(std::move(readClockToUse))
-    , host(makeHostLabel(settings.destination))
+    , host(getHostName(settings.destination))
     , overviewHosts(listOverviewHosts(settings))
     , overview(overviewHosts)
     , heldPanePath(settings.storedScreenPath.parent_path() / heldPaneFileName)
@@ -182,7 +182,11 @@ std::unique_ptr<Shell> PhoneConnection::makeShell(const std::string& paneId)
     auto paneShell = makeRemoteShell(paneId, paneHost, sessionName);
 
     if (const auto starting = projectSessionsStarting.extract(paneId))
-        paneShell = std::make_unique<ProjectShell>(std::move(paneShell), starting.mapped());
+    {
+        auto projectShell = std::make_unique<ProjectShell>(std::move(paneShell), starting.mapped());
+        projectShell->onLoginShellStarted = [this, session = starting.mapped()] { publishSessionLayout(session); };
+        paneShell = std::move(projectShell);
+    }
 
     return std::make_unique<MirroredShell>(std::move(paneShell), mirror, noteStatus);
 }
@@ -385,6 +389,12 @@ std::optional<std::string> PhoneConnection::openProject(const overview::Overview
     onPaneChosen(*chosenPane);
     updateLinkState();
     return session->paneId;
+}
+
+void PhoneConnection::publishSessionLayout(const ProjectSession& session)
+{
+    if (auto* remote = RemoteHosts::find(session.host))
+        remote->getDaemon().send(makeLayoutMessage(session.makeLayout()));
 }
 
 std::unique_ptr<BridgeLink>

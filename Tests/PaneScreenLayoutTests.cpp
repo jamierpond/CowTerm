@@ -156,6 +156,13 @@ auto tTitle = test("PaneScreenLayout/titleNamesHostLabelAndSession") = []
     check(describePaneTitle("tamby", "CowTerm") == "tamby/CowTerm");
 };
 
+auto tTitleOnce = test("PaneScreenLayout/titleNeverRepeatsTheHostTheSessionNameStartsWith") = []
+{
+    check(describePaneTitle("macprorack", "macprorack/iac") == "macprorack/iac");
+    check(describePaneTitle("jamiepond@macprorack", "macprorack/iac") == "macprorack/iac");
+    check(describePaneTitle("macprorack", "macprorack-tools") == "macprorack/macprorack-tools");
+};
+
 auto tTypingRects = test("PaneScreenLayout/typingStacksComposerAndKeyRowOnTheKeyboard") = []
 {
     const auto keyboardUp =
