@@ -365,3 +365,8 @@ push-relay-address:
 # Ring the phone from a throwaway pane on a host's test daemon and print the relay's log of it
 push-check-on-phone destination="jamiepond@macprorack" folder="$HOME/tmp/cowterm-push-check":
     scripts/check-push-on-phone.sh {{destination}} '{{folder}}'
+
+# Walk a throwaway pane on a host's test daemon through unread and read with Claude Code's own hook command
+check-unread-on-host destination="jamiepond@macprorack" folder="$HOME/tmp/cowterm-unread-check":
+    scripts/build-headless-instance-on-host.sh {{destination}} '{{folder}}'
+    scripts/check-unread-on-host.py {{destination}} '{{folder}}'
