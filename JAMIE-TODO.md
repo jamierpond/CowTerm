@@ -68,8 +68,11 @@ Pick any of:
 ## Questions
 
 - [ ] Line-level usage build (see which code your normal day runs, to find
-      code to delete): the Mac app and the daemons on all three machines, or
-      the Mac only to start? Replace your daily app, or install beside it?
+      code to delete) is built and on main. To start a week of counting, from
+      `~/projects/CowTerm`: `just install-coverage`, then
+      `just restart-cowterm-on-this-mac` (ends the programs in your panes).
+      Don't reinstall during the week. Then `just coverage-report`, and
+      `just install` to go back to the normal app.
 - [ ] On the Mac, should clicking or scrolling in a pane count as looking at
       it, so its unread mark clears? Today only typing keeps a pane "viewed".
 - [ ] Should the tray show unread sessions?
