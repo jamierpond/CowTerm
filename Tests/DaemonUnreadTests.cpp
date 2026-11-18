@@ -9,6 +9,7 @@
 #include <eacp/Core/Utils/FilePath.h>
 #include <eacp/Network/HTTPServer/HttpServer.h>
 
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <mutex>
@@ -184,8 +185,9 @@ term::overview::PaneActivityReport readActivity(DaemonConversation& client, cons
     return {};
 }
 
-// Every notice the daemon will post for what came before has been posted once
-// a later, unsuppressed one arrives: the daemon handles messages in order.
+// Every notice the daemon will post for what came before has been sent once a
+// later one is: the daemon handles messages in order. The posts themselves run
+// in parallel, so they may reach the relay in any order.
 std::vector<term::push::PushNotice> pushOnceMoreAndCollect(DaemonConversation& client,
                                                             FakeRelay& relay,
                                                             std::size_t expectedCount)
@@ -235,8 +237,9 @@ auto tTheSameEventIsPostedOnce = test("DaemonUnread/theSameEventIsPostedOnce") =
     reportState(mac, paneId, "waiting", "Claude needs your permission to use Bash");
 
     const auto notices = pushOnceMoreAndCollect(mac, relay, 2);
+    const auto postsForThePane = std::ranges::count(notices, std::string {paneId}, &term::push::PushNotice::paneId);
     check(notices.size() == 2, std::to_string(notices.size()));
-    check(notices.size() == 2 && notices[1].paneId == quietPaneId);
+    check(postsForThePane == 1, "the posts run in parallel, so they may arrive in either order");
 };
 
 auto tAFinishedPaneIsUnreadForEveryClient = test("DaemonUnread/aFinishedPaneIsUnreadForEveryClient") = []
