@@ -386,3 +386,7 @@ test-on-host host name *options:
 # In the simulator: a tap reaches the pane after the overview closes, and a drag scrolls it after the menu closes
 ios-check-hidden-views device="iPhone 17e":
     scripts/check-ios-hidden-views.sh "{{device}}"
+
+# Print one line per thing the push relay needs on its host, ready or not, and what to run for each that is not
+push-relay-check-ready host="jamiepond@macprorack":
+    scripts/check-push-relay-ready.sh {{host}}

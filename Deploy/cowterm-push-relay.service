@@ -2,11 +2,14 @@
 Description=CowTerm push relay: rings Jamie's phone through Apple when a Claude finishes or asks
 After=network-online.target
 Wants=network-online.target
+# Without the 1Password token the relay cannot read Apple's key, so it is not
+# started at all; cowterm-push-relay.path starts it once the token is stored.
+ConditionPathExists=%h/.config/cowterm-push-relay/op-service-account-token
 
 [Service]
 ExecStart=%h/.local/libexec/cowterm-push-relay/start
-Restart=always
-RestartSec=10
+Restart=on-failure
+RestartSec=60
 
 [Install]
 WantedBy=default.target

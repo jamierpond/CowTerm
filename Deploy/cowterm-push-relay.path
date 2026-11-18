@@ -1,0 +1,9 @@
+[Unit]
+Description=Starts the CowTerm push relay once its 1Password token is stored
+
+[Path]
+PathExists=%h/.config/cowterm-push-relay/op-service-account-token
+Unit=cowterm-push-relay.service
+
+[Install]
+WantedBy=default.target
