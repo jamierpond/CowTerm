@@ -7,6 +7,7 @@
 #include "Multiplexer/PaletteItem.h"
 #include "Multiplexer/RemoteLocation.h"
 #include "Multiplexer/TextLayout.h"
+#include "Multiplexer/UnreadMark.h"
 
 #include <eacp/Core/Utils/Logging.h>
 
@@ -35,6 +36,9 @@ constexpr auto cardPadding = 12.0f;
 constexpr auto cornerRadius = 10.0f;
 
 constexpr auto lineGap = 8.0f;
+constexpr auto unreadPillFontSize = 12.0f;
+constexpr auto unreadPillSidePadding = 7.0f;
+constexpr auto unreadPillHeightFraction = 0.8f;
 constexpr auto pressedOutlineThickness = 2.0f;
 
 // A pressed row darkens and gains an outline, so it shows without telling hue
@@ -116,8 +120,26 @@ void drawTextLine(UI::Graphics& g, const TextLine& text, Rect line)
     g.drawText(term::truncateTextToWidth(text.left, line.w, measure), line);
 }
 
-// The name and host on the top half, the state and last use under them.
-void paintSessionText(UI::Graphics& g, const OverviewItem& item, Rect area)
+// The unread mark (UnreadMark.h) at the left of line: a yellow pill naming the
+// event in black, the same mark the Mac draws. Returns its width.
+float paintUnreadPill(UI::Graphics& g, const term::UnreadMark& mark, Rect line)
+{
+    const auto word = term::describeUnreadMark(mark);
+    g.setFont(makeFont(unreadPillFontSize));
+    const auto width = g.measureText(word) + 2.0f * unreadPillSidePadding;
+    const auto height = line.h * unreadPillHeightFraction;
+    const auto pill = Rect {line.x, line.center().y - height / 2.0f, width, height};
+
+    g.setColour(term::toColor(term::getUnreadMarkFillColour()));
+    g.fillRoundedRect(pill, height / 2.0f);
+    g.setColour(term::toColor(term::getUnreadMarkTextColour()));
+    g.drawText(word, pill, UI::Justification::Centred);
+    return width;
+}
+
+// The name and host on the top half, the state and last use under them, after
+// the unread pill when there is one.
+void paintSessionText(UI::Graphics& g, const OverviewItem& item, Rect area, Color textColour)
 {
     const auto nameLine = area.removeFromTop(area.h / 2.0f);
     const auto& session = item.session;
@@ -125,6 +147,14 @@ void paintSessionText(UI::Graphics& g, const OverviewItem& item, Rect area)
     g.setFont(makeFont(detailFontSize));
     const auto host = describeHost(session.host);
     g.drawText(host, nameLine.fromRight(g.measureText(host)), UI::Justification::Right);
+
+    if (session.unread)
+    {
+        area.removeFromLeft(paintUnreadPill(g, *session.unread, area) + lineGap);
+        g.setColour(textColour);
+        g.setFont(makeFont(detailFontSize));
+    }
+
     drawTextLine(g, {session.stateLine, item.lastUse}, area);
 
     auto nameArea = nameLine;
@@ -202,7 +232,7 @@ void OverviewList::paintItem(UI::Graphics& g, const OverviewItem& item, Rect bou
         area = area.inset(0.0f, cardPadding);
 
     g.setColour(term::toColor(colours.text));
-    paintSessionText(g, item, area);
+    paintSessionText(g, item, area, term::toColor(colours.text));
 }
 
 void OverviewList::paintUnreachableHost(UI::Graphics& g, const UnreachableHost& host, Rect bounds)

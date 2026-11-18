@@ -921,9 +921,8 @@ puts those sessions first with a yellow pill that names what happened.
 - The phone sends `viewing <id>` for the chosen pane while the pane screen is
   up and the app is in the foreground, and `not-viewing` when the overview or
   dv's screen replaces it, when it moves to another pane, or when the app goes
-  to the background. dv's screen views nothing: dv is not Claude's pane. Not
-  yet wired: the app's screen stack does not call `setPaneScreenShown` yet, so
-  the phone sends neither, and the overview's rows are ordered but have no pill.
+  to the background. dv's screen views nothing: dv is not Claude's pane.
+- The phone's overview row shows the pill at the start of its state line.
 - The Mac views the focused pane of its focused window. A minute with no key
   typed in the app ends that (`desktopIdleMilliseconds`); the next key, or the
   window coming to the front, views it again. Only keys count: clicks and

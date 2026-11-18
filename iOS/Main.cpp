@@ -531,12 +531,23 @@ struct CowTermMobileApp
 
         if (isShowingOverviewFirst())
             showOverview();
+        else
+            tellPhoneWhetherThePaneScreenIsUp(true);
+    }
+
+    // While the pane screen is up the phone tells the pane's daemon Jamie is
+    // viewing it, which reads it (PhoneConnection::setPaneScreenShown).
+    void tellPhoneWhetherThePaneScreenIsUp(bool isPaneScreenUp)
+    {
+        if (phone != nullptr)
+            phone->setPaneScreenShown(isPaneScreenUp);
     }
 
     // A new overview each time, so its search is empty; its scroll is kept.
     void showOverview()
     {
         LOG("overview: shown");
+        tellPhoneWhetherThePaneScreenIsUp(false);
         auto& overview = screens.showOverview();
         overview.setSoftwareKeyboardCoveredHeight(lastKeyboardChange.coveredHeight);
 
@@ -565,11 +576,13 @@ struct CowTermMobileApp
     {
         leaveOverview();
         screens.showPaneScreen();
+        tellPhoneWhetherThePaneScreenIsUp(true);
     }
 
     cowterm::mobile::DiffViewScreen& showDiffViewScreen()
     {
         leaveOverview();
+        tellPhoneWhetherThePaneScreenIsUp(false);
         auto& diffView = screens.showDiffView();
         diffView.setSoftwareKeyboardChange(lastKeyboardChange);
         return diffView;
