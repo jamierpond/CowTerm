@@ -7,8 +7,6 @@
 # The daemons and ct already installed there are untouched.
 #
 #   scripts/install-push-relay.sh <host>
-# EACP_SOURCE=<local eacp checkout> builds against that eacp's HEAD instead of
-# the pinned one, for an eacp change not yet on jp/develop.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -28,18 +26,10 @@ echo "[push-relay] sending this checkout to $host"
 git archive --format=tar HEAD | ssh -o BatchMode=yes "$host" \
     "rm -rf $remote_build/src && mkdir -p $remote_build/src && tar -x -C $remote_build/src"
 
-eacp_option=""
-if [[ -n "${EACP_SOURCE:-}" ]]; then
-    echo "[push-relay] sending eacp from $EACP_SOURCE ($(git -C "$EACP_SOURCE" rev-parse --short HEAD))"
-    git -C "$EACP_SOURCE" archive --format=tar HEAD | ssh -o BatchMode=yes "$host" \
-        "rm -rf $remote_build/eacp && mkdir -p $remote_build/eacp && tar -x -C $remote_build/eacp"
-    eacp_option="-DLOCKSTEP_eacp_SOURCE=$remote_build/eacp"
-fi
-
 echo "[push-relay] building ct there"
 run_there "set -e
 cd $remote_build/src
-scripts/with-linux-deps.sh cmake -S . -B ../build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCOWTERM_HEADLESS=ON $eacp_option > ../configure.log
+scripts/with-linux-deps.sh cmake -S . -B ../build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCOWTERM_HEADLESS=ON > ../configure.log
 scripts/with-linux-deps.sh cmake --build ../build --target CowTermCli > ../build.log
 mkdir -p $relay_folder
 cp ../build/Remote/ct $relay_folder/ct.new && mv -f $relay_folder/ct.new $relay_folder/ct
