@@ -16,7 +16,6 @@ add_executable(${COWTERM_EXECUTABLE_TARGET}
         Main.cpp
         AppShell.cpp
         Cli.cpp
-        Command.cpp
         GitBranch.cpp
         LeaderKeys.cpp
         NotifyUserPrompt.cpp

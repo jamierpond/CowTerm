@@ -256,7 +256,6 @@ nano_add_executable(CowTermRemoteAppTests
 # (scripts/render-picker.sh), to look at the picker without opening a window.
 add_executable(CowTermRenderPicker
         ../Bench/RenderPicker.cpp
-        ../Terminal/Command.cpp
         ../Terminal/PaneTerminalConfig.cpp
         ../Terminal/OverlayPanel.cpp
         ../Terminal/Palette.cpp
@@ -279,7 +278,6 @@ target_link_libraries(CowTermRenderPicker PRIVATE
 # (scripts/render-host-colours.sh), to look at the host colours.
 add_executable(CowTermRenderHostColours
         ../Bench/RenderHostColours.cpp
-        ../Terminal/Command.cpp
         ../Terminal/OverlayPanel.cpp
         ../Terminal/Palette.cpp
         ../Terminal/PaletteUsageStore.cpp

@@ -2,55 +2,58 @@
 #include "Multiplexer/UsageLog.h"
 
 #include <eacp/Core/Platform/Platform.h>
+#include <eacp/Core/Process/Process.h>
 
-#include <array>
-#include <cstdio>
-#include <cstdlib>
-
-#include <sys/wait.h>
+#include <chrono>
+#include <memory>
+#include <thread>
 
 namespace term
 {
 namespace
 {
-CommandOutput runCaptured(const std::string& command)
+eacp::Processes::ProcessOptions makeLinkOpenerOptions(const std::string& url)
 {
-    auto* pipe = popen(command.c_str(), "r");
+    auto options = eacp::Processes::ProcessOptions {};
+    options.executable = eacp::Platform::isMac() ? "/usr/bin/open" : "xdg-open";
+    options.arguments.add(url);
+    options.mergeErrorOutput = true;
+    return options;
+}
 
-    if (pipe == nullptr)
-        return {-1, "could not launch command"};
+// The opener exits once it has handed the link to the browser.
+void reportWhenLinkOpenerExits(eacp::Processes::Process& opener,
+                               std::chrono::steady_clock::time_point clickedAt)
+{
+    const auto status = opener.wait();
+    const auto elapsed = std::chrono::steady_clock::now() - clickedAt;
+    const auto millisecondsSinceClick =
+        std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count();
 
-    auto text = std::string {};
-    auto buffer = std::array<char, 512> {};
+    if (status != 0)
+    {
+        logUsage("link.open-failed",
+                 {{"status", status}, {"ms", millisecondsSinceClick}, {"output", opener.output()}});
+        return;
+    }
 
-    while (std::fgets(buffer.data(), (int) buffer.size(), pipe) != nullptr)
-        text += buffer.data();
-
-    const auto raw = pclose(pipe);
-    const auto status = (raw != -1 && WIFEXITED(raw)) ? WEXITSTATUS(raw) : -1;
-
-    return {status, std::move(text)};
+    logUsage("link.handed-off", {{"ms", millisecondsSinceClick}});
 }
 } // namespace
 
-CommandOutput runViaLoginShell(const std::string& command)
-{
-    const auto* shell = std::getenv("SHELL");
-    const auto wrapped = shellQuote(shell != nullptr ? shell : "/bin/sh") + " -lc "
-                         + shellQuote(command);
-    return runCaptured(wrapped);
-}
-
 void openInBrowser(const std::string& url)
 {
-    constexpr auto* opener = eacp::Platform::isMac() ? "open" : "xdg-open";
+    const auto clickedAt = std::chrono::steady_clock::now();
     logUsage("link.open", {{"url", url}});
-    runViaLoginShellAsync(std::string {opener} + " " + shellQuote(url),
-                          [](const CommandOutput& output)
-                          {
-                              if (output.status != 0)
-                                  logUsage("link.open-failed",
-                                           {{"status", output.status}, {"output", output.text}});
-                          });
+
+    auto opener = std::make_shared<eacp::Processes::Process>(makeLinkOpenerOptions(url));
+
+    if (!opener->launched())
+    {
+        logUsage("link.open-failed", {{"status", -1}, {"output", "could not start the opener"}});
+        return;
+    }
+
+    std::thread([opener, clickedAt] { reportWhenLinkOpenerExits(*opener, clickedAt); }).detach();
 }
 } // namespace term
