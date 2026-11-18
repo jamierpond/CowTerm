@@ -129,10 +129,10 @@ void DiffViewScreen::open(const term::TerminalConfig& config, const term::phone:
     configWithNotice.makeCommandShell = [this, makeShell = config.makeCommandShell, guard = std::weak_ptr<bool> {alive}](const std::string& paneId)
     {
         auto shell = makeShell(paneId);
-        shell->onCommandNotInstalled = [this, guard](const std::string&)
+        shell->onCommandNotInstalled = [this, guard](const term::MissingCommand& missing)
         {
             if (!guard.expired() && pane)
-                showSentence(term::phone::describeDiffViewNotInstalled(term::remote::getHostLabel(pane->host)));
+                showSentence(term::phone::describeDiffViewNotInstalled(missing, term::remote::getHostLabel(pane->host)));
         };
         return shell;
     };

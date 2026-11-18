@@ -39,7 +39,7 @@ bool isDiffViewPaneId(const std::string& paneId);
 std::vector<std::string> removeDiffViewPaneIds(std::vector<std::string> paneIds);
 
 // "dv is not installed on macprorack."
-std::string describeDiffViewNotInstalled(const std::string& hostLabel);
+std::string describeDiffViewNotInstalled(const MissingCommand& missing, const std::string& hostLabel);
 
 // What the phone says when dv ended having left text on the screen, which it
 // does only when it could not start. Empty for a blank screen: dv quit.

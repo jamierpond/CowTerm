@@ -66,6 +66,16 @@ std::string toString(int value)
 }
 } // namespace
 
+std::string describeCommandNotInstalled(const MissingCommand& missing, const std::string& machineLabel)
+{
+    const auto sentence = missing.program + " is not installed on " + machineLabel;
+
+    if (missing.searchedPath.empty())
+        return sentence + " (not found on its PATH).";
+
+    return sentence + " (not found on its PATH, " + missing.searchedPath + ").";
+}
+
 void DaemonClient::initialize(const Callback& whenReady)
 {
     daemon::dialOrLaunchDaemon(
@@ -214,7 +224,7 @@ void DaemonClient::handlePaneMessage(proto::Message message)
     else if (message.verb == "state")
         handleState(message.args[0], message.payload);
     else if (message.verb == "missing-command")
-        handleMissingCommand(message.args[0], message.payload);
+        handleMissingCommand(message);
     else
         handleExit(message.args[0]);
 }
@@ -368,13 +378,20 @@ void DaemonClient::handleExit(const std::string& id)
     }
 }
 
-void DaemonClient::handleMissingCommand(const std::string& id, const std::string& program)
+// "missing-command <id> [searched PATH]" with the program as the payload.
+void DaemonClient::handleMissingCommand(const proto::Message& message)
 {
-    if (auto found = routes.find(id); found != routes.end())
+    constexpr auto searchedPathArgument = std::size_t {1};
+    auto missing = MissingCommand {message.payload, {}};
+
+    if (message.args.size() > searchedPathArgument)
+        missing.searchedPath = proto::decodeArgument(message.args[searchedPathArgument]);
+
+    if (auto found = routes.find(message.args[0]); found != routes.end())
     {
         auto route = std::move(found->second);
         routes.erase(found);
-        route.routes.onMissingCommand(program);
+        route.routes.onMissingCommand(missing);
     }
 }
 
@@ -697,11 +714,11 @@ public:
             status(describeSizeOwner(notice));
             setGrid(findGridSetElsewhere(notice));
         };
-        routes.onMissingCommand = [this, onOutput](const std::string& program)
+        routes.onMissingCommand = [this, onOutput](const MissingCommand& missing)
         {
             closeOnNextKey = std::move(exitAfterNotice);
-            onOutput(describeMissingCommand(program));
-            onCommandNotInstalled(program);
+            onOutput(describeMissingCommand(missing));
+            onCommandNotInstalled(missing);
         };
         exitAfterNotice = std::move(onExit);
 
@@ -785,10 +802,10 @@ public:
 private:
     std::string describeGonePane() const { return "this pane no longer exists on " + machineLabel; }
 
-    std::string describeMissingCommand(const std::string& program) const
+    std::string describeMissingCommand(const MissingCommand& missing) const
     {
-        return "\r\n  " + program + " is not installed on " + machineLabel
-               + " (not found on its PATH).\r\n\r\n  Press any key to close.";
+        return "\r\n  " + describeCommandNotInstalled(missing, machineLabel)
+               + "\r\n\r\n  Press any key to close.";
     }
 
     std::string id;

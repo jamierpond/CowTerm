@@ -56,7 +56,7 @@ public:
         std::function<void(const std::string& reason)> onLinkLost = [](const std::string&) {};
 
         // The pane's command isn't installed on the daemon's machine.
-        std::function<void(const std::string& program)> onMissingCommand = [](const std::string&) {};
+        std::function<void(const MissingCommand&)> onMissingCommand = [](const MissingCommand&) {};
 
         // Another client (or this one) now sets the pane's size.
         std::function<void(const SizeOwnerNotice&)> onSizeOwnerChanged = [](const SizeOwnerNotice&) {};
@@ -236,7 +236,7 @@ private:
     void handleOutput(const std::string& id, std::string payload);
     void handleState(const std::string& id, const std::string& payload);
     void handleExit(const std::string& id);
-    void handleMissingCommand(const std::string& id, const std::string& program);
+    void handleMissingCommand(const proto::Message& message);
     void handleInfo(const std::string& payload);
     void readInfoLine(const std::string& line);
     void requestInfo();
@@ -253,4 +253,6 @@ private:
     std::optional<int> answeredProtocolVersion;
     std::unique_ptr<eacp::Threads::Timer> infoTimer;
 };
+// "dv is not installed on macprorack (not found on its PATH, /usr/bin:/bin)."
+std::string describeCommandNotInstalled(const MissingCommand& missing, const std::string& machineLabel);
 } // namespace term

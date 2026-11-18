@@ -448,7 +448,10 @@ auto diffViewSaysWhyItEnded = test("DiffViewPane/saysWhyItEnded") = []
           == std::string {repositoryFolder} + " is not in a git repository.");
     check(describeDiffViewFailure("\n  \n", repositoryFolder).empty(), "a blank screen is dv quitting");
     check(describeDiffViewFailure("fatal: bad object\n", repositoryFolder) == "dv stopped: fatal: bad object");
-    check(describeDiffViewNotInstalled("macprorack") == "dv is not installed on macprorack.");
+    check(describeDiffViewNotInstalled({"dv", {}}, "macprorack")
+          == "dv is not installed on macprorack (not found on its PATH).");
+    check(describeDiffViewNotInstalled({"dv", "/usr/bin:/bin"}, "macprorack")
+          == "dv is not installed on macprorack (not found on its PATH, /usr/bin:/bin).");
 };
 
 auto temporaryPanesAreKeptUntilKilled = test("DiffViewPane/temporaryPanesAreKeptUntilKilled") = []

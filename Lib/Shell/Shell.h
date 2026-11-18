@@ -8,6 +8,14 @@
 
 namespace term
 {
+// A command pane's program the daemon did not find, and the PATH it searched
+// (empty from a daemon that does not say).
+struct MissingCommand
+{
+    std::string program;
+    std::string searchedPath;
+};
+
 // What a pane needs from the process behind it, regardless of where that
 // process lives: in this app (LocalShell wraps a Pty) or held by the
 // session daemon so it survives the GUI (RemoteShell in DaemonClient.cpp).
@@ -55,9 +63,8 @@ public:
     std::function<void(std::optional<PtySize>)> onGridSetElsewhere = [](std::optional<PtySize>) {};
 
     // Set before start(). A command pane's program is not installed where it
-    // would run, named here; the pane's text says so too. Local shells never
-    // call it.
-    std::function<void(const std::string& program)> onCommandNotInstalled = [](const std::string&) {};
+    // would run; the pane's text says so too. Local shells never call it.
+    std::function<void(const MissingCommand&)> onCommandNotInstalled = [](const MissingCommand&) {};
 
     // The user asked for the pane back from whoever holds its size (a click
     // on the note that says so). Nothing for a shell no one else can hold.

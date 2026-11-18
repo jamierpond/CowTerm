@@ -2,6 +2,7 @@
 
 #include "ProjectSession.h"
 
+#include "Multiplexer/DaemonClient.h"
 #include "Multiplexer/RemoteLocation.h"
 
 #include <eacp/Core/Utils/FilePath.h>
@@ -103,9 +104,9 @@ std::vector<std::string> removeDiffViewPaneIds(std::vector<std::string> paneIds)
     return paneIds;
 }
 
-std::string describeDiffViewNotInstalled(const std::string& hostLabel)
+std::string describeDiffViewNotInstalled(const MissingCommand& missing, const std::string& hostLabel)
 {
-    return std::string {diffViewCommand} + " is not installed on " + hostLabel + ".";
+    return describeCommandNotInstalled(missing, hostLabel);
 }
 
 std::string describeDiffViewFailure(const std::string& textLeftOnScreen, const std::string& folder)

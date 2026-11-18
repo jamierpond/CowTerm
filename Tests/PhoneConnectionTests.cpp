@@ -290,10 +290,17 @@ auto diffViewSaysWhenItIsNotInstalled = test("PhoneConnection/diffViewSaysWhenIt
     const auto pane = *showing.phone.connection.openDiffView().pane;
     auto missingProgram = std::string {};
     auto shell = showing.phone.connection.makeDiffViewShell(pane);
-    shell->onCommandNotInstalled = [&](const std::string& program) { missingProgram = program; };
+    auto searchedPath = std::string {};
+    shell->onCommandNotInstalled = [&](const MissingCommand& missing)
+    {
+        missingProgram = missing.program;
+        searchedPath = missing.searchedPath;
+    };
     shell->start({{}, shownPanesFolder, diffViewCommand, {}}, [](const std::string&) {}, [] {});
 
-    showing.phone.answer(proto::make("missing-command", {pane.paneId}, diffViewCommand));
+    showing.phone.answer(
+        proto::make("missing-command", {pane.paneId, proto::encodeArgument("/usr/bin:/my bin")}, diffViewCommand));
 
     check(missingProgram == diffViewCommand);
+    check(searchedPath == "/usr/bin:/my bin");
 };

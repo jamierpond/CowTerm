@@ -566,7 +566,9 @@ struct Daemon
 
             if (!term::isCommandInstalled(command, searchPath))
             {
-                sender.send(term::proto::make("missing-command", {id}, term::getProgramName(command)));
+                sender.send(term::proto::make("missing-command",
+                                              {id, term::proto::encodeArgument(searchPath)},
+                                              term::getProgramName(command)));
                 return;
             }
 
