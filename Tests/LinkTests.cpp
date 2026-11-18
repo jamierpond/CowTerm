@@ -318,7 +318,7 @@ namespace
 {
 // A view whose grid is the given size, with the view no bigger than the grid
 // so the grid's first row is the view's first row.
-void showLoginScreenInGridOfWidth(TestPane& pane, int columns)
+void showOutputInGridOfWidth(TestPane& pane, int columns, const std::string& output)
 {
     constexpr auto lessThanACell = 1.f;
     const auto& atlas = referenceAtlas();
@@ -327,8 +327,13 @@ void showLoginScreenInGridOfWidth(TestPane& pane, int columns)
     pane.view->setBounds({0.f, 0.f, width, height});
     pane.view->resized();
     pane.view->setFixedGridSize(PtySize {columns, loginScreenRows});
-    pane.showOutput(drawClaudeCodeLoginScreen(columns));
+    pane.showOutput(output);
     pane.takeWritten();
+}
+
+void showLoginScreenInGridOfWidth(TestPane& pane, int columns)
+{
+    showOutputInGridOfWidth(pane, columns, drawClaudeCodeLoginScreen(columns));
 }
 
 Graphics::MouseEvent makeTapAtCell(int col, int row, Graphics::MouseEventType type)
@@ -458,4 +463,79 @@ auto tEveryLinkUnderlined = test("View/underliningEveryLinkMarksLinksWithoutAHov
     const auto underlined = pane.view->renderToImage(1.f);
     check(isUnderlinePainted(underlined, linkColumn, 0, defaultTheme.foreground));
     check(!isUnderlinePainted(underlined, plainColumn, 0, defaultTheme.foreground));
+};
+
+namespace
+{
+constexpr auto claudeReplyMargin = 2;
+const auto replyUrlStart = std::string {"https://github.com/eyalamirmusic/eacp/pulls?q=is%3Apr"};
+const auto replyUrlPartBeforeTheBreak = std::string {"&utf8=%E2"};
+const auto replyUrlPartAfterTheBreak = std::string {"%9C%93&cowterm_long_link_test=click_me_copies_as_one_line"};
+const auto replyUrlFiller = std::string {"+takes+no+clicks+or+touches"};
+
+// A URL whose second row ends between two percent escapes of one character.
+std::string makeReplyUrlBreakingInsideAnEscape(int columns)
+{
+    const auto twoRowsOfText = (std::size_t) (2 * (columns - claudeReplyMargin));
+    auto url = replyUrlStart;
+
+    while (url.size() + replyUrlPartBeforeTheBreak.size() < twoRowsOfText)
+        url += replyUrlFiller[(url.size() - replyUrlStart.size()) % replyUrlFiller.size()];
+
+    return url + replyUrlPartBeforeTheBreak + replyUrlPartAfterTheBreak;
+}
+
+// Claude Code's reply text in a full-screen tmux pane: every row keeps the
+// reply's left margin, and tmux draws each row at its own position.
+std::string drawClaudeCodeReplyWithUrl(const std::string& url, int columns)
+{
+    const auto rowText = (std::size_t) (columns - claudeReplyMargin);
+    const auto margin = std::string((std::size_t) claudeReplyMargin, ' ');
+    auto output = fullScreenWithMouseReports;
+    auto row = 0;
+
+    for (auto start = std::size_t {0}; start < url.size(); start += rowText)
+        output += moveCursorToRow(row++) + margin + url.substr(start, rowText);
+
+    return output;
+}
+
+int countReplyUrlRows(const std::string& url, int columns)
+{
+    const auto rowText = columns - claudeReplyMargin;
+    return ((int) url.size() + rowText - 1) / rowText;
+}
+} // namespace
+
+auto tReplyUrlWithMargin = test("View/aClaudeReplyUrlBrokenInsideAnEscapeOpensAndCopiesWhole") = []
+{
+    for (const auto columns: paneWidths)
+    {
+        const auto url = makeReplyUrlBreakingInsideAnEscape(columns);
+        const auto output = drawClaudeCodeReplyWithUrl(url, columns);
+        const auto lastRow = countReplyUrlRows(url, columns) - 1;
+
+        for (auto row = 0; row <= lastRow; ++row)
+        {
+            auto clicked = LinkPane {};
+            showOutputInGridOfWidth(clicked.pane, columns, output);
+            clicked.pane.view->mouseDown(linkClickAtCell(claudeReplyMargin + 1, row));
+            check(clicked.opened == url, "Cmd+click");
+
+            auto tapped = LinkPane {};
+            showOutputInGridOfWidth(tapped.pane, columns, output);
+            tapAtCell(tapped.pane, claudeReplyMargin + 1, row);
+            check(tapped.opened == url, "a tap");
+        }
+
+        auto yanked = TestPane {};
+        showOutputInGridOfWidth(yanked, columns, output);
+        yanked.view->enterCopyMode();
+        yanked.view->keyDown(typedKey("V"));
+
+        for (auto step = 0; step < lastRow; ++step)
+            yanked.view->keyDown(typedKey("k"));
+
+        check(yanked.view->getSelectedText().find(url) != std::string::npos, "what y would copy");
+    }
 };

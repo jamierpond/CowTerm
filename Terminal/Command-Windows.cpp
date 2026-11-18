@@ -1,4 +1,5 @@
 #include "Command.h"
+#include "Multiplexer/UsageLog.h"
 
 #include <eacp/Core/Utils/Strings.h>
 #include <eacp/Core/Utils/WinInclude.h>
@@ -189,6 +190,7 @@ CommandOutput runViaLoginShell(const std::string& command)
 
 void openInBrowser(const std::string& url)
 {
+    logUsage("link.open", {{"url", url}});
     ShellExecuteW(
         nullptr, L"open", widen(url).c_str(), nullptr, nullptr, SW_SHOWNORMAL);
 }

@@ -1,4 +1,5 @@
 #include "Command.h"
+#include "Multiplexer/UsageLog.h"
 
 #include <eacp/Core/Platform/Platform.h>
 
@@ -43,7 +44,13 @@ CommandOutput runViaLoginShell(const std::string& command)
 void openInBrowser(const std::string& url)
 {
     constexpr auto* opener = eacp::Platform::isMac() ? "open" : "xdg-open";
+    logUsage("link.open", {{"url", url}});
     runViaLoginShellAsync(std::string {opener} + " " + shellQuote(url),
-                          [](const CommandOutput&) {});
+                          [](const CommandOutput& output)
+                          {
+                              if (output.status != 0)
+                                  logUsage("link.open-failed",
+                                           {{"status", output.status}, {"output", output.text}});
+                          });
 }
 } // namespace term
