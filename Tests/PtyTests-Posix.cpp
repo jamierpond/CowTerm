@@ -2,6 +2,8 @@
 
 #include <NanoTest/NanoTest.h>
 
+#include <filesystem>
+#include <fstream>
 #include <future>
 #include <memory>
 #include <mutex>
@@ -20,12 +22,12 @@ const char* term::tests::getIdleCommand()
 auto stubbornShell = test("Pty shutdown kills a shell that ignores SIGHUP") = []
 { check(shutsDownWithin(startShell("trap '' HUP; sleep 3"), budget)); };
 
-// PtyOptions::environment reaches the shell; `ct notify-user` finds its pane
-// through COWTERM_PANE set this way.
-auto environmentReachesShell = test("Pty sets the extra environment in the shell") = []
+namespace
 {
-    constexpr auto variableValue = "pane-0123abcd";
-    constexpr auto exitWait = std::chrono::milliseconds {3000};
+// What the command printed before it exited, or nothing if it did not exit.
+std::string runCommandAndReadItsOutput(const term::PtyOptions& options)
+{
+    constexpr auto exitWait = std::chrono::milliseconds {5000};
 
     auto output = std::make_shared<std::string>();
     auto outputLock = std::make_shared<std::mutex>();
@@ -33,10 +35,6 @@ auto environmentReachesShell = test("Pty sets the extra environment in the shell
     auto exitedFuture = exited->get_future();
 
     auto pty = term::Pty {};
-    auto options = term::PtyOptions {};
-    options.command = "printf '<%s>' \"$COWTERM_TEST_VARIABLE\"";
-    options.environment = {{"COWTERM_TEST_VARIABLE", variableValue}};
-
     const auto started = pty.start(
         options,
         [output, outputLock](const std::string& data)
@@ -50,5 +48,55 @@ auto environmentReachesShell = test("Pty sets the extra environment in the shell
     check(exitedFuture.wait_for(exitWait) == std::future_status::ready, "command exited");
 
     auto lock = std::scoped_lock {*outputLock};
-    check(output->find(std::string {"<"} + variableValue + ">") != std::string::npos);
+    return *output;
+}
+
+void writeExecutableFile(const std::filesystem::path& path, const std::string& text)
+{
+    auto file = std::ofstream {path};
+    file << text;
+    file.close();
+    std::filesystem::permissions(path, std::filesystem::perms::owner_all);
+}
+} // namespace
+
+// PtyOptions::environment reaches the shell; `ct notify-user` finds its pane
+// through COWTERM_PANE set this way.
+auto environmentReachesShell = test("Pty sets the extra environment in the shell") = []
+{
+    constexpr auto variableValue = "pane-0123abcd";
+
+    auto options = term::PtyOptions {};
+    options.command = "printf '<%s>' \"$COWTERM_TEST_VARIABLE\"";
+    options.environment = {{"COWTERM_TEST_VARIABLE", variableValue}};
+
+    const auto output = runCommandAndReadItsOutput(options);
+    check(output.find(std::string {"<"} + variableValue + ">") != std::string::npos);
+};
+
+// dv lives in ~/.local/bin, which Jamie's zsh adds in .zshrc only; a command
+// pane started with `zsh -c` never read it and said "command not found: dv".
+auto commandFindsProgramsTheRcFileAdds =
+    test("Pty runs a command where the shell's rc file has set up PATH") = []
+{
+    constexpr auto programName = "cowterm-test-program-on-the-rc-files-path";
+    constexpr auto programOutput = "found-through-the-rc-file";
+    const auto home = std::filesystem::temp_directory_path() / "cowterm-rc-path-home";
+    const auto programFolder = home / "rc-only-bin";
+    const auto addFolderToPath = "PATH=\"" + programFolder.string() + ":$PATH\"\n";
+
+    std::filesystem::remove_all(home);
+    std::filesystem::create_directories(programFolder);
+    writeExecutableFile(programFolder / programName, std::string {"#!/bin/sh\necho "} + programOutput + "\n");
+
+    for (const auto* rcFile: {".zshrc", ".bashrc", ".profile"})
+        writeExecutableFile(home / rcFile, addFolderToPath);
+
+    auto options = term::PtyOptions {};
+    options.command = programName;
+    options.environment = {{"HOME", home.string()}, {"ZDOTDIR", home.string()}};
+
+    const auto output = runCommandAndReadItsOutput(options);
+    std::filesystem::remove_all(home);
+    check(output.find(programOutput) != std::string::npos, output);
 };

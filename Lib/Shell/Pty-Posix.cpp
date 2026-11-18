@@ -126,11 +126,15 @@ std::string loginArgumentName(const std::string& shell)
 
     const auto loginName = loginArgumentName(shell);
 
+    // Interactive as well as login, so the command finds programs on the PATH
+    // the user's rc file sets up (zsh reads .zshrc only when interactive), the
+    // PATH the daemon searched to decide the command is installed.
     if (command.empty())
         execl(shell.c_str(), loginName.c_str(), (char*) nullptr);
     else
         execl(shell.c_str(),
               loginName.c_str(),
+              "-i",
               "-c",
               command.c_str(),
               (char*) nullptr);
