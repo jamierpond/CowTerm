@@ -884,7 +884,6 @@ bool AppShell::runPrefixedKey(const KeyEvent& event)
         KeyAction {"[", &AppShell::enterCopyModeOnActivePane},
         KeyAction {"]", &AppShell::pasteIntoActivePane},
         KeyAction {"o", &AppShell::cycleActivePaneFocus},
-        KeyAction {"c", &AppShell::openSessionInActiveDirectory},
         KeyAction {"x", &AppShell::closeActivePane},
         KeyAction {"^", &AppShell::switchToLastSession},
     };

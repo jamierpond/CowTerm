@@ -96,7 +96,7 @@ separate `screencap` tool.
 | `Ctrl+A x` (or `Cmd+W`) | Close the active pane (last pane ends the session) |
 | `Ctrl+A z` | Zoom / unzoom the active pane |
 | `Ctrl+A o` | Cycle pane focus |
-| `Ctrl+A c` (or `Cmd+N`) | New session in the active pane's directory |
+| `Cmd+N` | New session in the active pane's directory |
 | `Ctrl+A 1..9` (or `Cmd+1..9`) | Switch to session by index |
 | `Ctrl+A ^` | Toggle to the previous session |
 | `Ctrl+A Ctrl+A` | Send a literal `Ctrl+A` to the shell |
