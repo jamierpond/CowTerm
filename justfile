@@ -286,6 +286,10 @@ ios-device phone="pond" *app_arguments:
 ios-pair phone="pond":
     scripts/pair-ios-device.sh "{{phone}}"
 
+# This Mac's name as the phone dials it and the Mac colours its sessions by (hostName in ~/.config/cowterm.json)
+this-machine-name:
+    scripts/print-this-machine-name.sh
+
 # Take the phone's key off this Mac, tamby and macprorack
 ios-unpair phone="pond":
     scripts/unpair-ios-device.sh "{{phone}}"

@@ -13,7 +13,8 @@
 # change made there. Each host keeps its name on the phone (tamby), and the
 # phone dials the address this Mac's ssh config gives that name (ssh -G; tamby
 # is jamies-mac-mini.tail8acf23.ts.net since 2026-11-18), so a renamed machine
-# needs only a new pairing. The phone gets the host keys this Mac's
+# needs only a new pairing. This Mac's name is hostName in ~/.config/cowterm.json,
+# the name the Mac colours its own sessions by, so the two always agree. The phone gets the host keys this Mac's
 # ~/.ssh/known_hosts already trusts for each address it dials. An address known_hosts lacks is scanned
 # with ssh-keyscan and accepted only when the key equals one known_hosts holds
 # for that machine under another name. The private key, the host list and the
@@ -30,7 +31,7 @@ phone="${1:-pond}"
 key_comment="cowterm-device:$phone"
 bundle_id="audio.pond.cowterm.mobile"
 pairing_folder_on_phone="Library/Application Support/pond/CowTerm/pairing"
-this_mac="jamiepond@big-cow"
+this_mac="jamiepond@$(scripts/print-this-machine-name.sh)"
 # The hosts Jamie approved for the phone: this Mac, tamby and macprorack on
 # 2026-11-17, tamby-windows on 2026-11-18. Each is this Mac's ssh alias.
 hosts="$this_mac jamiepond@tamby jamiepond@macprorack jamie@tamby-windows"

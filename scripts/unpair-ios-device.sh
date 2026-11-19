@@ -8,7 +8,7 @@
 set -eu
 phone="${1:-pond}"
 key_comment="cowterm-device:$phone"
-this_mac="jamiepond@big-cow"
+this_mac="jamiepond@$("$(dirname "$0")"/print-this-machine-name.sh)"
 hosts="$this_mac jamiepond@tamby jamiepond@macprorack jamie@tamby-windows"
 windows_administrator_hosts="jamie@tamby-windows"
 windows_administrators_keys_file="/c/ProgramData/ssh/administrators_authorized_keys"

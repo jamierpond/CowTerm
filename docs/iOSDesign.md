@@ -602,24 +602,24 @@ launched with `--landscape`, which is how landscape screenshots are taken.
   host's colour as the phone's rows are, with white text, in place of the
   faint wash and thin stripe it had. The highlighted row or card gets a white
   outline, so it is not told by colour alone. Local sessions and projects take
-  this Mac's own colour, picked by its short host name, because the app has
-  no other name for itself. On Jamie's Mac that name is `daily-driver`, while
-  the phone dials it as `big-cow`, so the two differ (reddish purple against
-  orange) unless `hosts.daily-driver.color` in cowterm.json says otherwise;
-  `daily-driver` also shares its entry with `tamby-windows`.
+  this Mac's own colour, picked by `hostName` in cowterm.json, the name the
+  phone dials it by (`big-cow`), so the Mac and the phone show it alike. With
+  no `hostName` the Mac falls back to its short host name, which on both of
+  Jamie's Macs is `daily-driver`; `just ios-pair` refuses to run without
+  `hostName` and gives the phone that name for this Mac.
 - The window's machine is shown in a strip across its top, not round the
   terminal: a remote session's strip is filled with its host's colour and its
   name starts with the host ("tamby/tamber-web"), so the text says the machine
-  without telling hues apart; a local session's strip is the theme's
-  background with its name. On macOS the strip is the title bar: the window
+  without telling hues apart; a local session's strip is this Mac's colour
+  with its name. On macOS the strip is the title bar: the window
   has no title-bar background or title, and the strip sits beside the real
   traffic lights, 32 points tall to cover macOS 26's title bar. On Windows and
   Linux eacp has no way yet to drag a window by a native view or to keep the
   caption buttons without the frame, so the strip sits under the native title
   bar. The panes, their gutters and the active pane's ring are in the theme's
   own colours for every session.
-  `scripts/render-host-colours.sh` renders the palette, the switcher and a
-  session under the strip at minimum, tall narrow, default and ultrawide
+  `scripts/render-host-colours.sh` renders the palette, the switcher and
+  each session under the strip at minimum, tall narrow, default and ultrawide
   sizes, with protanopia, deuteranopia and greyscale views of each, into
   `build/renders/host-colours`.
 - `ColourBlindHostColoursTests` checks the palette as protanopia and
@@ -880,9 +880,10 @@ sound, and a tap opens that pane.
   a daemon restart. `activity` carries it in three more columns: the event,
   since when, and the text.
 - A push is exactly a new unread event: the daemon posts it to the relay in
-  `cowterm.json`'s `pushRelay`, titled with `pushHostName` (both Macs' host
-  names read "daily-driver", so the name is set, not looked up; `just
-  push-relay-set-host`). The same event again while still unread is not
+  `cowterm.json`'s `pushRelay`, titled with `hostName`, the machine's name
+  as the phone dials it, which also picks its sessions' colour (it defaults
+  to the short host name, but both Macs' host names read "daily-driver", so
+  each sets it; `just push-relay-set-host`). The same event again while still unread is not
   posted. This replaced an earlier rule (the phone holding the pane's size, or
   a desktop typing into it in the last minute), so nothing decides pushes but
   unread.
