@@ -322,6 +322,10 @@ restart-daemon-on-host host:
 restart-cowterm-on-this-mac:
     scripts/restart-cowterm-on-this-mac.sh
 
+# Restart only this Mac's CowTerm app on the installed build; the daemon and every program in every pane keep running
+restart-cowterm-app-on-this-mac:
+    scripts/restart-cowterm-on-this-mac.sh --app-only
+
 # Show on a separate daemon instance on a host what an update does to running shells
 check-update-keeps-shells destination folder:
     scripts/check-update-keeps-shells.sh {{destination}} {{folder}}

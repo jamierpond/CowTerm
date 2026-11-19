@@ -13,12 +13,25 @@
 #      reopens the sessions.
 #
 #   scripts/restart-cowterm-on-this-mac.sh
+#
+# With --app-only it restarts just the app: the daemon and every program in
+# every pane keep running, and the app comes back on the installed build.
+#
+#   scripts/restart-cowterm-on-this-mac.sh --app-only
 set -eu
+app_only=no
+
+for argument in "$@"; do
+    if [ "$argument" = "--app-only" ]; then
+        app_only=yes
+    fi
+done
+
 app="$HOME/.local/libexec/cowterm/CowTerm.app"
 log="$HOME/Library/Logs/cowterm-restart.log"
 seconds_to_wait=30
 
-if [ "${1:-}" != "--detached" ]; then
+if [ "${COWTERM_RESTART_IS_DETACHED:-}" != "yes" ]; then
     python3 -I -c '
 import os, sys
 if os.fork():
@@ -30,8 +43,9 @@ log = os.open(sys.argv[2], os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o644)
 os.dup2(log, 1)
 os.dup2(log, 2)
 os.dup2(os.open(os.devnull, os.O_RDONLY), 0)
-os.execv("/bin/sh", ["/bin/sh", sys.argv[1], "--detached"])
-' "$0" "$log"
+os.environ["COWTERM_RESTART_IS_DETACHED"] = "yes"
+os.execv("/bin/sh", ["/bin/sh", sys.argv[1]] + sys.argv[3:])
+' "$0" "$log" "$@"
     echo "restarting CowTerm detached; log: $log"
     exit 0
 fi
@@ -60,7 +74,7 @@ if [ -n "$app_pid" ]; then
     say_when "the app has quit"
 fi
 
-if [ -n "$daemon_pid" ]; then
+if [ -n "$daemon_pid" ] && [ "$app_only" = no ]; then
     python3 -I - "$app/Contents/MacOS/CowTerm" <<'PYTHON'
 import os, select, subprocess, sys, time
 bridge = subprocess.Popen([sys.argv[1], "bridge"], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
@@ -81,7 +95,12 @@ PYTHON
     say_when "the daemon saved its panes and quit"
 fi
 
-"$(dirname "$0")/open-cowterm-cleanly.sh" "$app"
+if [ "$app_only" = yes ]; then
+    # Without -n, open sees the running daemon (same bundle) as the app and does nothing.
+    "$(dirname "$0")/open-cowterm-cleanly.sh" "$app" -n
+else
+    "$(dirname "$0")/open-cowterm-cleanly.sh" "$app"
+fi
 
 # Names only, never values: a token must not reach the log.
 find_inherited_session_variables() {
@@ -92,6 +111,16 @@ waited=0
 while ! pgrep -x CowTermDaemon > /dev/null; do
     if [ "$waited" -ge "$seconds_to_wait" ]; then
         say_when "FAILED: the daemon did not start"
+        exit 1
+    fi
+    sleep 1
+    waited=$((waited + 1))
+done
+
+waited=0
+while ! pgrep -x CowTerm > /dev/null; do
+    if [ "$waited" -ge "$seconds_to_wait" ]; then
+        say_when "FAILED: the app did not start"
         exit 1
     fi
     sleep 1
