@@ -8,6 +8,7 @@ namespace
 constexpr auto remoteHost = "jamiepond@tamby";
 constexpr auto remoteProject = "jamiepond@tamby:~/projects/tamber-web";
 constexpr auto localSessionName = "CowTerm";
+constexpr auto thisMachineName = "big-cow";
 constexpr auto chromeWidth = 600.f;
 constexpr auto pixelBesideTheLabel = 4;
 
@@ -37,21 +38,22 @@ struct RenderedChrome
     bool canRender() { return host.renderToImage(1.f).width() != 0; }
 
     AppConfig config;
-    WindowChrome chrome {config};
+    WindowChrome chrome {config, getColourBlindSafeHostRowColours(config, thisMachineName)};
     UI::ComponentHost host;
 };
 } // namespace
 
 auto tLocalChrome =
-    test("WindowChrome/aLocalSessionShowsItsNameOnTheThemeBackground") = []
+    test("WindowChrome/aLocalSessionShowsItsNameOnThisMachinesColour") = []
 {
     const auto config = AppConfig {};
-    const auto look = describeWindowChrome(config, "", localSessionName);
-    const auto theme = themeByName(config.theme);
+    const auto thisMachineColours = getColourBlindSafeHostRowColours(config, thisMachineName);
+    const auto look = describeWindowChrome(config, thisMachineColours, "", localSessionName);
 
     check(look.label == localSessionName);
-    check(look.background == theme.background);
-    check(look.text == theme.foreground);
+    check(look.background == thisMachineColours.background,
+          "the colour the phone gives this Mac, which it dials as big-cow");
+    check(look.text == thisMachineColours.text);
 };
 
 auto tRemoteChrome =
@@ -59,7 +61,8 @@ auto tRemoteChrome =
 {
     const auto config = AppConfig {};
     const auto look = describeWindowChrome(
-        config, remoteHost, getSessionNameForProject(remoteProject));
+        config, getColourBlindSafeHostRowColours(config, thisMachineName), remoteHost,
+        getSessionNameForProject(remoteProject));
     const auto hostColours = getColourBlindSafeHostRowColours(config, remoteHost);
 
     check(look.label == "tamby/tamber-web",
@@ -91,13 +94,14 @@ auto tChromeFollowsTheSession =
 
     const auto hostColours =
         getColourBlindSafeHostRowColours(rendered.config, remoteHost);
-    const auto theme = themeByName(rendered.config.theme);
+    const auto thisMachineColours =
+        getColourBlindSafeHostRowColours(rendered.config, thisMachineName);
 
     rendered.chrome.showSession(remoteHost, getSessionNameForProject(remoteProject));
     check(matches(rendered.renderPixelBesideTheLabel(), hostColours.background));
 
     rendered.chrome.showSession("", localSessionName);
-    check(matches(rendered.renderPixelBesideTheLabel(), theme.background));
+    check(matches(rendered.renderPixelBesideTheLabel(), thisMachineColours.background));
 
     rendered.chrome.showSession(remoteHost, getSessionNameForProject(remoteProject));
     check(matches(rendered.renderPixelBesideTheLabel(), hostColours.background));

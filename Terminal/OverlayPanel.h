@@ -105,6 +105,7 @@ public:
 
 protected:
     OverlayPanel(const AppConfig& configToUse,
+                 const HostRowColours& thisMachineColoursToUse,
                  SessionManager& sessionsToUse,
                  OverlayFontSizes fontSizes);
 
@@ -135,7 +136,7 @@ protected:
     eacp::UI::Font rowFont;
     eacp::UI::Font detailFont;
 
-    const std::string localHostName;
+    const HostRowColours thisMachineColours;
 
     int selected = 0;
 };

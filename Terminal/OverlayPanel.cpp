@@ -1,6 +1,5 @@
 #include "OverlayPanel.h"
 
-#include "Multiplexer/LocalHostName.h"
 #include "Multiplexer/TextLayout.h"
 
 #include <algorithm>
@@ -151,6 +150,7 @@ void paintHighlightOutline(UI::Graphics& g, const HostRowColours& colours, Rect 
 }
 
 OverlayPanel::OverlayPanel(const AppConfig& configToUse,
+                           const HostRowColours& thisMachineColoursToUse,
                            SessionManager& sessionsToUse,
                            OverlayFontSizes fontSizes)
     : config(configToUse)
@@ -159,7 +159,7 @@ OverlayPanel::OverlayPanel(const AppConfig& configToUse,
     , headerFont({config.font, fontSizes.header})
     , rowFont({config.font, fontSizes.row})
     , detailFont({config.font, fontSizes.detail})
-    , localHostName(getShortLocalHostName())
+    , thisMachineColours(thisMachineColoursToUse)
 {
     setInterceptsMouseClicks(true);
     setWantsKeyboardFocus(true);
@@ -195,7 +195,7 @@ void OverlayPanel::paintHeaderDivider(UI::Graphics& g, Rect panel, float headerH
 HostRowColours OverlayPanel::getHostRowColoursFor(const std::string& host) const
 {
     if (host.empty())
-        return getColourBlindSafeHostRowColours(config, localHostName);
+        return thisMachineColours;
 
     return getColourBlindSafeHostRowColours(config, host);
 }

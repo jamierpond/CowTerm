@@ -35,12 +35,12 @@ struct AppConfig
     // ring the phone ("http://macprorack:8742"); empty sends nothing.
     std::string pushRelay;
 
-    // This machine's name as the phone dials it ("big-cow"), which the
-    // notification's title shows and its tap opens. Both Macs' host names
-    // read "daily-driver", so it is set here, not looked up.
-    std::string pushHostName;
+    // This machine's name as the phone dials it ("big-cow"): its sessions'
+    // colour, and the title of its notifications. Empty means its short host
+    // name; both Macs' host names read "daily-driver", so each sets it.
+    std::string hostName;
 
-    MIRO_REFLECT(searchDirs, font, fontSize, theme, hosts, pushRelay, pushHostName)
+    MIRO_REFLECT(searchDirs, font, fontSize, theme, hosts, pushRelay, hostName)
 };
 
 AppConfig loadConfig();
@@ -52,7 +52,7 @@ void saveConfig(const AppConfig& config);
 
 // The config as the text saveConfig writes over existingText: the fields this
 // build knows, plus every other top-level key existingText had, so a setting a
-// newer or other build added (pushRelay, pushHostName) survives a save.
+// newer or other build added (pushRelay, hostName) survives a save.
 std::string writeConfigKeepingUnknownSettings(const AppConfig& config, const std::string& existingText);
 
 Theme themeByName(const std::string& name);

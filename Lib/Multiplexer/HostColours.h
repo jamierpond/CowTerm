@@ -29,6 +29,10 @@ struct HostRowColours
 // for protanopia, deuteranopia and in greyscale.
 HostRowColours getColourBlindSafeHostRowColours(const AppConfig& config, const std::string& host);
 
+// The colours of this machine's own sessions: its host's colours under the name
+// the phone dials it by (getThisMachineName), so both show it alike.
+HostRowColours getThisMachineColours(const AppConfig& config);
+
 // Every entry of that palette, in the order host names pick them.
 std::vector<HostRowColours> listColourBlindSafeHostRowColours();
 

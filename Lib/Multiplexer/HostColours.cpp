@@ -1,6 +1,7 @@
 #include "HostColours.h"
 
 #include "ColourSpace.h"
+#include "LocalHostName.h"
 
 #include <algorithm>
 #include <array>
@@ -144,6 +145,11 @@ HostRowColours getColourBlindSafeHostRowColours(const AppConfig& config, const s
 
     const auto index = hashHostName(getHostLabel(host)) % colourBlindSafePalette.size();
     return makeHostRowColours(colourBlindSafePalette[index]);
+}
+
+HostRowColours getThisMachineColours(const AppConfig& config)
+{
+    return getColourBlindSafeHostRowColours(config, getThisMachineName(config));
 }
 
 std::vector<HostRowColours> listColourBlindSafeHostRowColours()

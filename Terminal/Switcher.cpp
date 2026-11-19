@@ -53,8 +53,11 @@ void drawCentered(UI::Graphics& g, const std::string& text, Point anchor, const 
 }
 } // namespace
 
-Switcher::Switcher(const AppConfig& configToUse, SessionManager& sessionsToUse, const UnreadReports& unreadToUse)
-    : OverlayPanel(configToUse, sessionsToUse, fontSizes)
+Switcher::Switcher(const AppConfig& configToUse,
+                   const HostRowColours& thisMachineColours,
+                   SessionManager& sessionsToUse,
+                   const UnreadReports& unreadToUse)
+    : OverlayPanel(configToUse, thisMachineColours, sessionsToUse, fontSizes)
     , unread(unreadToUse)
 {
 }

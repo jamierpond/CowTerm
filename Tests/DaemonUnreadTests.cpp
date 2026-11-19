@@ -127,7 +127,7 @@ struct PushingDaemon
     {
         const auto path = getInstanceConfigPath(instance);
         auto file = std::ofstream {path};
-        file << R"({"pushRelay":")" << relay.getAddress() << R"(","pushHostName":")" << hostName
+        file << R"({"pushRelay":")" << relay.getAddress() << R"(","hostName":")" << hostName
              << R"("})";
         return path;
     }

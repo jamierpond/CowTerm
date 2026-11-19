@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Multiplexer/Config.h"
+#include "Multiplexer/HostColours.h"
 
 #include <eacp/UI/UI.h>
 
@@ -16,10 +17,11 @@ struct WindowChromeLook
     Rgb text = 0;
 };
 
-// The session's name on its host's colour, or on the theme's background for a
-// local session. A remote session's name starts with its host ("tamby/iac"),
-// so the machine reads without telling hues apart.
+// The session's name on its host's colour; a local session (empty host) takes
+// this machine's colour. A remote session's name starts with its host
+// ("tamby/iac"), so the machine reads without telling hues apart.
 WindowChromeLook describeWindowChrome(const AppConfig& config,
+                                      const HostRowColours& thisMachineColours,
                                       const std::string& host,
                                       const std::string& sessionName);
 
@@ -34,7 +36,7 @@ eacp::Graphics::Rect calculateAreaUnderWindowChrome(eacp::Graphics::Rect window)
 class WindowChrome final : public eacp::UI::Component
 {
 public:
-    explicit WindowChrome(const AppConfig& configToUse);
+    WindowChrome(const AppConfig& configToUse, const HostRowColours& thisMachineColoursToUse);
 
     void showSession(const std::string& host, const std::string& sessionName);
 
@@ -42,6 +44,7 @@ public:
 
 private:
     const AppConfig& config;
+    const HostRowColours thisMachineColours;
     Theme theme;
     WindowChromeLook look;
     eacp::UI::Font labelFont;

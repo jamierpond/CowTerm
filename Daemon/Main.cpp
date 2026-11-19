@@ -8,6 +8,7 @@
 
 #include "Multiplexer/Config.h"
 #include "Multiplexer/DataDirectories.h"
+#include "Multiplexer/LocalHostName.h"
 #include "Multiplexer/PaneSizeOwner.h"
 #include "Multiplexer/Protocol.h"
 #include "Signals.h"
@@ -832,7 +833,8 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char** argv)
     try
     {
         const auto config = term::loadConfig();
-        return Apps::run<Daemon>(PushRelayTarget {config.pushRelay, config.pushHostName});
+        const auto thisMachineName = term::getThisMachineName(config);
+        return Apps::run<Daemon>(PushRelayTarget {config.pushRelay, thisMachineName});
     }
     catch (const std::exception& error)
     {

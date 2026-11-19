@@ -89,8 +89,11 @@ bool isOrderedForEmptyQuery(const PaletteItem& a, const PaletteItem& b)
 }
 } // namespace
 
-Palette::Palette(const AppConfig& configToUse, SessionManager& sessionsToUse, const UnreadReports& unreadToUse)
-    : SearchablePanel(configToUse, sessionsToUse, fontSizes)
+Palette::Palette(const AppConfig& configToUse,
+                 const HostRowColours& thisMachineColours,
+                 SessionManager& sessionsToUse,
+                 const UnreadReports& unreadToUse)
+    : SearchablePanel(configToUse, thisMachineColours, sessionsToUse, fontSizes)
     , unread(unreadToUse)
 {
 }

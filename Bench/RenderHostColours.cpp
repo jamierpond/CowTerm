@@ -1,6 +1,8 @@
-// Not a test: renders the palette, the switcher and a session's panes under
+// Not a test: renders the palette, the switcher and each session's panes under
 // the window chrome strip off screen to PNGs, with sessions on Jamie's hosts
-// and a local one, so the host colours can be looked at without a window. The
+// and a local one, so the host colours can be looked at without a window. This
+// Mac is named big-cow, as Jamie's cowterm.json names it, so its local session
+// should take big-cow's colour everywhere. The
 // session on tamby is marked unread (finished) and the one on macprorack
 // (waiting), so the unread pills and their order can be looked at too. The
 // shells are scripted: no daemon, no ssh, no real program runs. Run it under an isolated instance
@@ -12,6 +14,7 @@
 #include "Session.h"
 #include "Switcher.h"
 #include "WindowChrome.h"
+#include "Multiplexer/RemoteLocation.h"
 
 #include <eacp/Core/App/App.h>
 #include <eacp/Core/Threads/EventLoop.h>
@@ -32,6 +35,7 @@ constexpr std::uint16_t downArrowKeyCode = 125;
 constexpr auto onIPhoneNote = "on iPhone, 49 columns; click here to take it back";
 constexpr auto sessionWithTheNote = "jamiepond@tamby";
 constexpr auto unreadSinceMilliseconds = std::int64_t {1'800'000'000'000};
+constexpr auto thisMachineName = "big-cow";
 
 struct UnreadSession
 {
@@ -58,7 +62,8 @@ const auto windowShapes = std::array {WindowShape {"minimum", 300.0f, 200.0f},
 const auto projectsToOpen = std::array {std::string {"/tmp/CowTerm"},
                                         std::string {"jamiepond@big-cow:~/projects/DiffView"},
                                         std::string {"jamiepond@tamby:~/projects/tamber-web"},
-                                        std::string {"jamiepond@macprorack:~/projects/eacp"}};
+                                        std::string {"jamiepond@macprorack:~/projects/eacp"},
+                                        std::string {"jamie@tamby-windows:~/projects/Cows"}};
 
 // Prints a prompt and a listing once, then sits still; a pane on tamby also
 // says the phone holds it, as the daemon would.
@@ -105,7 +110,7 @@ class RenderWindow final : public Graphics::View
 {
 public:
     explicit RenderWindow(const term::AppConfig& config)
-        : chrome(config)
+        : chrome(config, term::getColourBlindSafeHostRowColours(config, thisMachineName))
     {
         chromeHost.setRootComponent(chrome);
         addSubview(chromeHost);
@@ -194,6 +199,14 @@ void runQueuedCalls()
     Threads::runEventLoopUntil([&reached] { return reached; }, waitForOutput);
 }
 
+std::string describeSessionForFileName(const term::TermSession& session)
+{
+    if (session.host.empty())
+        return "local";
+
+    return term::remote::getHostLabel(session.host);
+}
+
 term::TermSession& findSession(term::SessionManager& sessions, const std::string& host)
 {
     for (const auto& session: sessions.all())
@@ -238,23 +251,24 @@ void renderShape(term::SessionManager& sessions,
     const auto bounds = Graphics::Rect {0.0f, 0.0f, shape.width, shape.height};
     auto window = RenderWindow {config};
     auto& tamby = findSession(sessions, sessionWithTheNote);
-    auto& local = findSession(sessions, "");
 
-    window.show(local, bounds);
-    saveImage(window.renderToImage(pictureScale),
-              directory / ("session-local-" + shape.name + ".png"));
+    for (const auto& session: sessions.all())
+    {
+        window.show(*session, bounds);
+        const auto fileName = "session-" + describeSessionForFileName(*session) + "-" + shape.name + ".png";
+        saveImage(window.renderToImage(pictureScale), directory / fileName);
+    }
 
     window.show(tamby, bounds);
-    saveImage(window.renderToImage(pictureScale), directory / ("session-lone-pane-" + shape.name + ".png"));
-
     const auto unread = makeUnreadReports(sessions);
-    auto palette = term::Palette {config, sessions, unread};
+    const auto thisMachineColours = term::getColourBlindSafeHostRowColours(config, thisMachineName);
+    auto palette = term::Palette {config, thisMachineColours, sessions, unread};
     window.showOverlay(palette);
     palette.show();
     palette.keyDown(makeKeyEvent(downArrowKeyCode));
     saveImage(window.renderToImage(pictureScale), directory / ("palette-" + shape.name + ".png"));
 
-    auto switcher = term::Switcher {config, sessions, unread};
+    auto switcher = term::Switcher {config, thisMachineColours, sessions, unread};
     window.clear();
     window.show(tamby, bounds);
     switcher.begin(false);

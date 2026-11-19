@@ -21,7 +21,10 @@ namespace term
 class Switcher final : public OverlayPanel
 {
 public:
-    Switcher(const AppConfig& configToUse, SessionManager& sessionsToUse, const UnreadReports& unreadToUse);
+    Switcher(const AppConfig& configToUse,
+             const HostRowColours& thisMachineColours,
+             SessionManager& sessionsToUse,
+             const UnreadReports& unreadToUse);
 
     // Open pointing at the next MRU entry (the previous session), or the last
     // one when reverse. Returns false and stays closed when there aren't at

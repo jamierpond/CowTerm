@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Multiplexer/Config.h"
+#include "Multiplexer/HostColours.h"
 #include "Multiplexer/PaneViewing.h"
 #include "Multiplexer/UnreadReports.h"
 #include "NotifyUserServer.h"
@@ -140,6 +141,7 @@ private:
                                const std::string& title) const;
 
     AppConfig config = loadConfig();
+    const HostRowColours thisMachineColours = getThisMachineColours(config);
     // Ahead of the manager, so it outlives the session teardown that still
     // reports pane changes. It only holds the reference until then.
     RudderPublisher rudder {config, manager};
@@ -147,8 +149,8 @@ private:
 
     // What each daemon last said is unread, drawn by the palette and switcher.
     UnreadReports unreadReports;
-    Palette palette {config, manager, unreadReports};
-    Switcher switcher {config, manager, unreadReports};
+    Palette palette {config, thisMachineColours, manager, unreadReports};
+    Switcher switcher {config, thisMachineColours, manager, unreadReports};
 
     // Tells the daemons which pane Jamie is looking at (PaneViewing.h).
     PaneViewingReporter paneViewing {&AppShell::sendToDaemonOf};
@@ -160,7 +162,7 @@ private:
     std::map<const TermSession*, std::unique_ptr<Popup>> popupsBySession;
     pond::PermissionsPanel permissions {permissions::makePermissionsPanelSettings(config)};
     eacp::UI::ComponentHost overlayHost;
-    WindowChrome windowChrome {config};
+    WindowChrome windowChrome {config, thisMachineColours};
     eacp::UI::ComponentHost windowChromeHost;
     TrayController tray {manager};
     NotifyUserServer notifyUserServer {config};

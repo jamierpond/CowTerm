@@ -1,4 +1,5 @@
 #include <Multiplexer/Config.h>
+#include <Multiplexer/LocalHostName.h>
 
 #include <Miro/Json.h>
 #include <NanoTest/NanoTest.h>
@@ -26,4 +27,18 @@ auto tSaveOverAnUnreadableFile = test("Config/savingOverAnUnreadableFileWritesTh
 
     check(saved.isObject());
     check(saved["fontSize"].isNumber());
+};
+
+auto tConfiguredMachineNameWins = test("Config/thisMachineIsCalledWhatTheFileSays") = []
+{
+    constexpr auto fileText = R"({"hostName": "big-cow"})";
+    auto config = AppConfig {};
+    Miro::fromJSONString(config, fileText);
+
+    check(getThisMachineName(config) == "big-cow");
+};
+
+auto tMachineNameDefaultsToTheHostName = test("Config/thisMachineIsCalledItsHostNameWhenTheFileSaysNothing") = []
+{
+    check(getThisMachineName(AppConfig {}) == getShortLocalHostName());
 };

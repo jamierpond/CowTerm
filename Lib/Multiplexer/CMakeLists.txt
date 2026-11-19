@@ -18,6 +18,7 @@ add_library(CowTermMultiplexer STATIC
         CliParsing.cpp
         ColourSpace.cpp
         Config.cpp
+        LocalHostName.cpp
         DaemonClient.cpp
         DaemonDialer.cpp
         DataDirectories.cpp

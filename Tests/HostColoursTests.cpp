@@ -45,3 +45,13 @@ auto blendingHalfwayMeetsInTheMiddle = test("HostColours/blendingHalfwayMeetsInT
     check(blendColours(0x000000, 0xfefefe, halfway) == Rgb {0x7f7f7f});
     check(blendColours(0x102030, 0xffffff, 0.0f) == Rgb {0x102030});
 };
+
+auto thisMachineTakesTheColourThePhoneGivesIt = test("HostColours/thisMachineTakesTheColourThePhoneGivesIt") = []
+{
+    auto config = AppConfig {};
+    config.hostName = "big-cow";
+    const auto phonesColours = getColourBlindSafeHostRowColours(config, "jamiepond@big-cow");
+
+    check(getThisMachineColours(config).background == phonesColours.background);
+    check(getThisMachineColours(config).stripe == phonesColours.stripe);
+};

@@ -31,7 +31,7 @@ else
 fi
 
 ssh -o BatchMode=yes "$destination" \
-    "printf '%s' '{\"pushRelay\":\"$relay\",\"pushHostName\":\"$host_name\"}' > ~/.config/cowterm.$instance.json"
+    "printf '%s' '{\"pushRelay\":\"$relay\",\"hostName\":\"$host_name\"}' > ~/.config/cowterm.$instance.json"
 
 scripts/check-unread-on-host.py "$destination" "$installed_ct"
 

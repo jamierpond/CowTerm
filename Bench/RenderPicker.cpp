@@ -70,7 +70,8 @@ int renderPicker(const std::string& outputPath, const std::string& query, int se
 
     auto sessions = term::SessionManager {config};
     const auto noUnreadPanes = term::UnreadReports {};
-    auto palette = term::Palette {config, sessions, noUnreadPanes};
+    const auto thisMachineColours = term::getThisMachineColours(config);
+    auto palette = term::Palette {config, thisMachineColours, sessions, noUnreadPanes};
     auto host = UI::ComponentHost {};
     host.setRootComponent(palette);
     host.setBounds({0.0f, 0.0f, pictureWidth, pictureHeight});

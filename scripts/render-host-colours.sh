@@ -1,7 +1,8 @@
 #!/bin/sh
-# Renders the palette, the switcher and a session's panes under the window
+# Renders the palette, the switcher and each session's panes under the window
 # chrome strip at minimum, tall narrow, default and ultrawide window sizes,
-# with sessions on Jamie's hosts and a local one, then writes protanopia,
+# with sessions on Jamie's hosts and a local one on this Mac, named big-cow as
+# in Jamie's cowterm.json, then writes protanopia,
 # deuteranopia and greyscale views of each. Runs in an
 # isolated instance with an empty session store, removed afterwards; the
 # shells are scripted, so no daemon or ssh is touched.

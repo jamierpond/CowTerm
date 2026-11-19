@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Tells a machine's CowTerm daemon where to send a Claude's finishing or asking
-# and what the phone calls the machine: sets pushRelay and pushHostName in
+# and what the phone calls the machine: sets pushRelay and hostName in
 # ~/.config/cowterm.json there (or here, for "local"), keeping every other key.
 # The daemon reads them when it starts, so they take effect at its next start.
 #
@@ -18,13 +18,13 @@ import json, os, sys
 path = os.path.expanduser("~/.config/cowterm.json")
 config = json.load(open(path)) if os.path.exists(path) else {}
 config["pushRelay"] = sys.argv[1]
-config["pushHostName"] = sys.argv[2]
+config["hostName"] = sys.argv[2]
 temporary = path + ".push-relay"
 with open(temporary, "w") as file:
     json.dump(config, file, indent=4)
     file.write("\n")
 os.replace(temporary, path)
-print(f"{path}: pushRelay {sys.argv[1]}, pushHostName {sys.argv[2]}")
+print(f"{path}: pushRelay {sys.argv[1]}, hostName {sys.argv[2]}")
 PYTHON
 
 if [[ "$host" == local ]]; then

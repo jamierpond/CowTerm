@@ -21,7 +21,10 @@ class RemoteHost;
 class Palette final : public SearchablePanel
 {
 public:
-    Palette(const AppConfig& configToUse, SessionManager& sessionsToUse, const UnreadReports& unreadToUse);
+    Palette(const AppConfig& configToUse,
+            const HostRowColours& thisMachineColours,
+            SessionManager& sessionsToUse,
+            const UnreadReports& unreadToUse);
 
     void show();
 

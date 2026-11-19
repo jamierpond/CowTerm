@@ -42,14 +42,12 @@ float getLabelSideClearance()
 } // namespace
 
 WindowChromeLook describeWindowChrome(const AppConfig& config,
+                                      const HostRowColours& thisMachineColours,
                                       const std::string& host,
                                       const std::string& sessionName)
 {
     if (host.empty())
-    {
-        const auto theme = themeByName(config.theme);
-        return {sessionName, theme.background, theme.foreground};
-    }
+        return {sessionName, thisMachineColours.background, thisMachineColours.text};
 
     const auto colours = getColourBlindSafeHostRowColours(config, host);
     return {sessionName, colours.background, colours.text};
@@ -66,8 +64,9 @@ Graphics::Rect calculateAreaUnderWindowChrome(Graphics::Rect window)
     return window;
 }
 
-WindowChrome::WindowChrome(const AppConfig& configToUse)
+WindowChrome::WindowChrome(const AppConfig& configToUse, const HostRowColours& thisMachineColoursToUse)
     : config(configToUse)
+    , thisMachineColours(thisMachineColoursToUse)
     , theme(themeByName(configToUse.theme))
     , labelFont({config.font, labelFontSize})
 {
@@ -76,7 +75,7 @@ WindowChrome::WindowChrome(const AppConfig& configToUse)
 void WindowChrome::showSession(const std::string& host,
                                const std::string& sessionName)
 {
-    look = describeWindowChrome(config, host, sessionName);
+    look = describeWindowChrome(config, thisMachineColours, host, sessionName);
     repaint();
 }
 

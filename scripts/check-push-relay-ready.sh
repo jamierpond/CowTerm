@@ -79,9 +79,8 @@ apple_answer="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 --http2 \
 [ -n "$apple_answer" ] && [ "$apple_answer" != 000 ]
 report $? "Apple's push service answers on port 443" "no answer from api.sandbox.push.apple.com"
 
-grep -q '"pushRelay": *"http' "$HOME/.config/cowterm.json" 2>/dev/null \
-    && grep -q '"pushHostName": *"[^"]' "$HOME/.config/cowterm.json" 2>/dev/null
-report $? "this machine's daemon knows the relay and its own name" "run just push-relay-set-host"
+grep -q '"pushRelay": *"http' "$HOME/.config/cowterm.json" 2>/dev/null
+report $? "this machine's daemon knows the relay" "run just push-relay-set-host"
 
 daemon_pid="$(pgrep -x cowtermd | head -n 1)"
 [ -n "$daemon_pid" ] && ! readlink "/proc/$daemon_pid/exe" | grep -q deleted
