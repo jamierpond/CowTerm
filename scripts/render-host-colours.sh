@@ -5,8 +5,10 @@
 # in Jamie's cowterm.json, then writes protanopia,
 # deuteranopia and greyscale views of each. Runs in an
 # isolated instance with an empty session store, removed afterwards; the
-# shells are scripted, so no daemon or ssh is touched.
-# usage: scripts/render-host-colours.sh [output directory]
+# shells are scripted, so no daemon or ssh is touched. Given a cowterm.json
+# (Jamie's is ~/.config/cowterm.json), its host colours apply; without one every
+# host takes its default colour.
+# usage: scripts/render-host-colours.sh [output directory] [cowterm.json]
 set -e
 
 instance="render-host-colours"
@@ -14,7 +16,7 @@ build_directory="${BUILD_DIRECTORY:-build}"
 output_directory="${1:-$build_directory/renders/host-colours}"
 
 rm -rf "$output_directory"
-COWTERM_INSTANCE="$instance" "$build_directory/Tests/CowTermRenderHostColours" "$output_directory" || status=$?
+COWTERM_INSTANCE="$instance" "$build_directory/Tests/CowTermRenderHostColours" "$output_directory" ${2:+"$2"} || status=$?
 rm -rf "$HOME/Library/Application Support/pond/CowTerm/sessions-$instance" \
        "$HOME/.local/share/pond/CowTerm/sessions-$instance"
 

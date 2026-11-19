@@ -226,6 +226,10 @@ ios-screenshots:
     scripts/screenshot-ios-pane-screen.sh
     scripts/screenshot-ios-overview.sh {{screenshot_folder}}
 
+# Render the Mac's palette, switcher and window strip in each host's colour at four window shapes, with colour-blind and greyscale views; pass a cowterm.json for its host colours
+render-host-colours output="build/renders/host-colours" config="":
+    scripts/render-host-colours.sh "{{output}}" {{config}}
+
 # Write protanopia, deuteranopia and greyscale versions of a screenshot beside it
 simulate-colour-vision screenshot:
     scripts/simulate-colour-vision.py {{screenshot}}

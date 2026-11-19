@@ -6,8 +6,9 @@
 // session on tamby is marked unread (finished) and the one on macprorack
 // (waiting), so the unread pills and their order can be looked at too. The
 // shells are scripted: no daemon, no ssh, no real program runs. Run it under an isolated instance
-// (COWTERM_INSTANCE) by scripts/render-host-colours.sh.
-// usage: CowTermRenderHostColours <output directory>
+// (COWTERM_INSTANCE) by scripts/render-host-colours.sh. Given a cowterm.json,
+// its host colours apply; without one every host takes its default colour.
+// usage: CowTermRenderHostColours <output directory> [cowterm.json]
 
 #include "PaneTerminalConfig.h"
 #include "Palette.h"
@@ -18,6 +19,7 @@
 
 #include <eacp/Core/App/App.h>
 #include <eacp/Core/Threads/EventLoop.h>
+#include <eacp/Core/Utils/Files.h>
 #include <eacp/UI/UI.h>
 
 #include <array>
@@ -286,11 +288,10 @@ void renderShape(term::SessionManager& sessions,
     window.clear();
 }
 
-int renderHostColours(const std::filesystem::path& directory)
+int renderHostColours(const std::filesystem::path& directory, const term::AppConfig& config)
 {
     std::filesystem::create_directories(directory);
 
-    const auto config = term::AppConfig {};
     auto sessions = term::SessionManager {config};
 
     for (const auto& project: projectsToOpen)
@@ -322,10 +323,12 @@ int main(int argc, char** argv)
 {
     if (argc < 2)
     {
-        std::fprintf(stderr, "usage: CowTermRenderHostColours <output directory>\n");
+        std::fprintf(stderr, "usage: CowTermRenderHostColours <output directory> [cowterm.json]\n");
         return 2;
     }
 
     const auto directory = std::filesystem::path {argv[1]};
-    return Apps::run([&] { Apps::quit(renderHostColours(directory)); });
+    const auto hasConfigFile = argc > 2;
+    const auto config = hasConfigFile ? term::parseConfig(Files::readFile(argv[2])) : term::AppConfig {};
+    return Apps::run([&] { Apps::quit(renderHostColours(directory, config)); });
 }
