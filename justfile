@@ -405,15 +405,19 @@ coverage-build:
     {{deps}} cmake -S . -B {{coverage_build_dir}} -G "{{generator}}" -DCMAKE_BUILD_TYPE={{build_type}} {{coverage_cmake_arguments}}
     just build_dir={{coverage_build_dir}} build
 
-[doc('Install the line-coverage build in place of the normal app (just install puts the normal one back)')]
+[doc('Install the line-coverage build in place of the normal app, keeping the old and new programs for coverage-report (just install puts the normal one back)')]
 install-coverage: coverage-build
+    scripts/line-coverage.py keep
     just build_dir={{coverage_build_dir}} install
+    scripts/line-coverage.py keep
 
 [doc("Install a line-coverage headless ct and cowtermd on a host in place of its normal ones; its running daemon keeps running")]
 coverage-install-headless-on-host host:
+    scripts/line-coverage.py keep {{host}}
     scripts/install-headless-on-host.sh {{host}} '$HOME/tmp/cowterm-coverage-install' build-headless-coverage {{coverage_cmake_arguments}}
+    scripts/line-coverage.py keep {{host}}
 
-[doc('Print the code that never ran, largest first, from this machine and every collected host')]
+[doc('Print the code that never ran in any build, largest first, from this machine and every collected host')]
 coverage-report *arguments:
     scripts/line-coverage.py report {{arguments}}
 
@@ -421,7 +425,7 @@ coverage-report *arguments:
 coverage-collect-from-host host *arguments:
     scripts/line-coverage.py collect {{host}} {{arguments}}
 
-[doc('Delete the line-coverage counts here, or on user@host')]
+[doc('Delete the line-coverage counts and kept programs here, or on user@host')]
 coverage-reset host="" *arguments:
     scripts/line-coverage.py reset {{host}} {{arguments}}
 
@@ -432,3 +436,7 @@ coverage-check:
 [doc("The same check on user@host, detached there, then collect and report its counts here")]
 coverage-check-on-host host:
     scripts/check-line-coverage-on-host.sh {{host}} {{coverage_cmake_arguments}}
+
+[doc("Build ct twice, the second with printVersion changed, and show coverage-report counts a function run only under the first build as run")]
+coverage-check-across-builds:
+    {{deps}} scripts/check-line-coverage-across-builds.sh {{coverage_cmake_arguments}}

@@ -28,6 +28,6 @@ echo "[coverage-check] waiting ${seconds_past_first_write}s for the daemon's tim
 sleep "$seconds_past_first_write"
 pkill -KILL -f "$programs/cowtermd"
 echo "[coverage-check] daemon killed with SIGKILL at $(date '+%H:%M:%S')"
-scripts/line-coverage.py report --instance "$COWTERM_INSTANCE" \
-    --binary "$programs/ct" --binary "$programs/cowtermd"
+scripts/line-coverage.py keep --instance "$COWTERM_INSTANCE" --programs "$programs"
+scripts/line-coverage.py report --instance "$COWTERM_INSTANCE"
 echo "[coverage-check] done"

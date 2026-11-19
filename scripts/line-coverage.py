@@ -1,24 +1,34 @@
 #!/usr/bin/env python3
-"""Which lines of CowTerm's own code ran, from a build made with
+"""Which of CowTerm's own code ran, from builds made with
 -DCOWTERM_LINE_COVERAGE=ON (just install-coverage). Each instrumented program
-adds its counts every minute and at exit to <data folder>/coverage/<id>.profraw.
+adds its counts every minute and at exit to <data folder>/coverage/<id>.profraw,
+one file per build of each program. Counts only map to lines through the
+programs that wrote them, so each build's programs are kept in
+<data folder>/coverage/programs/<installed date>-<hash>/ before an install
+replaces them.
 
-  line-coverage.py report [--instance NAME] [--binary PATH]...
-      Never-run files and functions, largest first, from this machine's counts
-      and every host collected into build-coverage/hosts, and an HTML per-line
-      view of each. --binary replaces the installed programs as what ran.
-  line-coverage.py collect <user@host> [--instance NAME] [--binaries FOLDER]
-      Copies a host's counts and the programs that wrote them here.
+  line-coverage.py report [--instance NAME]
+      Never-run files and functions, largest first, combined over every kept
+      build (keeping the installed one first) on this machine and every host collected into build-coverage/hosts,
+      and an HTML per-line view of each place's newest build.
+  line-coverage.py keep [<user@host>] [--instance NAME] [--programs FOLDER]
+      Keeps a copy of the installed instrumented programs (or those in FOLDER).
+  line-coverage.py collect <user@host> [--instance NAME]
+      Keeps the host's installed programs there, then copies its counts and
+      kept programs here.
   line-coverage.py reset [<user@host>] [--instance NAME]
-      Deletes the counts, here or on a host.
+      Deletes the counts and the kept programs, here or on a host.
 """
 import argparse
+import hashlib
+import io
 import json
 import platform
 import re
 import shutil
 import subprocess
 import sys
+import tarfile
 import time
 from pathlib import Path
 
@@ -26,41 +36,38 @@ REPOSITORY = Path(__file__).resolve().parent.parent
 HOSTS_FOLDER = REPOSITORY / "build-coverage" / "hosts"
 REPORT_FOLDER = REPOSITORY / "build-coverage" / "report"
 LOCAL_SET_NAME = "this-machine"
+PROGRAMS_FOLDER_NAME = "programs"
 CAVEAT = ("Code that never ran includes error handling and rare paths: "
           "these are candidates to look at, and you decide what goes.")
 OWN_CODE = re.compile(r"/((?:Lib|Terminal|Daemon|Remote|LineCoverage)/.*)$")
-NOT_OWN_CODE = re.compile(r"lockstep|_deps|/build[^/]*/|/iOS/|/Tests/|/Bench/|/Fuzz/")
+NOT_OWN_CODE = re.compile(r"lockstep|_deps|/build[^/]*/(?:Lib|Terminal|Daemon|Remote)/|/iOS/|/Tests/|/Bench/|/Fuzz/")
 FUNCTIONS_SHOWN = 60
-INSTALLED_BINARIES = [
-    "~/.local/libexec/cowterm/CowTerm.app/Contents/MacOS/CowTerm",
-    "~/.local/libexec/cowterm/CowTerm.app/Contents/MacOS/CowTermDaemon",
-    "~/.local/libexec/cowterm/CowTerm",
-    "~/.local/libexec/cowterm/CowTermDaemon",
-    "~/.local/libexec/cowterm-remote/ct",
-    "~/.local/libexec/cowterm-remote/cowtermd",
+PROGRAM_NAMES = ["CowTerm", "CowTermDaemon", "ct", "cowtermd"]
+INSTALLED_PROGRAM_FOLDERS = [
+    "~/.local/libexec/cowterm/CowTerm.app/Contents/MacOS",
+    "~/.local/libexec/cowterm",
+    "~/.local/libexec/cowterm-remote",
 ]
-REMOTE_BINARY_FOLDERS = "~/.local/libexec/cowterm/CowTerm.app/Contents/MacOS ~/.local/libexec/cowterm ~/.local/libexec/cowterm-remote"
+BUILD_HASH_LENGTH = 12
+BUILD_DATE_FORMAT = "%Y-%m-%d-%H%M%S"
+SHOWN_DATE_FORMAT = "%Y-%m-%d %H:%M"
 REGION_START_LINE = 0
 REGION_END_LINE = 2
 REGION_FILE_INDEX = 5
 
 
-def get_coverage_folder_name(instance):
-    return f"coverage-{instance}" if instance else "coverage"
-
-
-def get_local_coverage_folder(instance):
+def get_coverage_folder(instance):
     if platform.system() == "Darwin":
         data = Path.home() / "Library/Application Support/pond/CowTerm"
     else:
         data = Path.home() / ".local/share/pond/CowTerm"
-    return data / get_coverage_folder_name(instance)
+    return data / (f"coverage-{instance}" if instance else "coverage")
 
 
-def get_remote_coverage_folder(instance):
-    folder = get_coverage_folder_name(instance)
-    return ('"$( [ "$(uname)" = Darwin ] && echo "$HOME/Library/Application Support" '
-            f'|| echo "$HOME/.local/share")/pond/CowTerm/{folder}"')
+def run_on_host(host, *arguments):
+    command = ["ssh", "-o", "BatchMode=yes", host, "python3", "-", *arguments]
+    with open(__file__, "rb") as script:
+        return subprocess.run(command, stdin=script, check=True, capture_output=True).stdout
 
 
 def run_llvm_tool(name, *arguments):
@@ -69,8 +76,43 @@ def run_llvm_tool(name, *arguments):
                           capture_output=True, text=True).stdout
 
 
-def has_coverage_counters(binary):
-    return b"__llvm_covmap" in binary.read_bytes()
+def has_coverage_counters(program):
+    return program.is_file() and b"__llvm_covmap" in program.read_bytes()
+
+
+def find_instrumented_programs(folder):
+    return [folder / name for name in PROGRAM_NAMES if has_coverage_counters(folder / name)]
+
+
+def get_build_name(programs):
+    digest = hashlib.sha256()
+    for program in programs:
+        digest.update(program.read_bytes())
+    installed = time.localtime(programs[0].stat().st_mtime)
+    return f"{time.strftime(BUILD_DATE_FORMAT, installed)}-{digest.hexdigest()[:BUILD_HASH_LENGTH]}"
+
+
+def keep_programs(coverage_folder, folder):
+    programs = find_instrumented_programs(folder)
+    if not programs:
+        return
+    build_name = get_build_name(programs)
+    kept = coverage_folder / PROGRAMS_FOLDER_NAME
+    if any(path.name.endswith(build_name[-BUILD_HASH_LENGTH:]) for path in kept.glob("*")):
+        return
+    (kept / build_name).mkdir(parents=True)
+    for program in programs:
+        shutil.copy2(program, kept / build_name / program.name)
+    print(f"[coverage] kept {', '.join(program.name for program in programs)} as {kept / build_name}")
+
+
+def keep(arguments):
+    if arguments.host:
+        sys.stdout.buffer.write(run_on_host(arguments.host, "keep", "--instance", arguments.instance))
+        return
+    folders = [arguments.programs] if arguments.programs else INSTALLED_PROGRAM_FOLDERS
+    for folder in folders:
+        keep_programs(get_coverage_folder(arguments.instance), Path(folder).expanduser())
 
 
 def demangle(names):
@@ -90,34 +132,20 @@ def shorten_standard_names(name):
     return name.replace("std::__1::", "std::")
 
 
-def describe_counts(set_name, counts_folder, counts, binaries):
-    newest = time.localtime(max(path.stat().st_mtime for path in counts))
-    programs = ", ".join(binary.name for binary in binaries)
-    print(f"[coverage] {set_name}: {len(counts)} counts files in {counts_folder}, newest written "
-          f"{time.strftime('%Y-%m-%d %H:%M:%S', newest)}, from {programs}")
+def get_object_arguments(programs):
+    others = [argument for program in programs[1:] for argument in ("-object", str(program))]
+    return [str(programs[0]), *others]
 
 
-def get_object_arguments(binaries):
-    others = [argument for binary in binaries[1:] for argument in ("-object", str(binary))]
-    return [str(binaries[0]), *others]
+def describe_build(build):
+    return time.strftime(SHOWN_DATE_FORMAT, time.strptime(build.name[:-BUILD_HASH_LENGTH - 1], BUILD_DATE_FORMAT))
 
 
-def export_coverage(set_name, counts_folder, binaries):
-    counts = sorted(counts_folder.glob("*.profraw"))
-    binaries = [binary for binary in binaries if binary.is_file() and has_coverage_counters(binary)]
-    if not counts or not binaries:
-        print(f"[coverage] {set_name}: {len(counts)} counts files, {len(binaries)} instrumented programs; skipped")
-        return None
-    describe_counts(set_name, counts_folder, counts, binaries)
-    output = REPORT_FOLDER / set_name
-    output.mkdir(parents=True, exist_ok=True)
-    profile = output / "merged.profdata"
-    run_llvm_tool("llvm-profdata", "merge", "-sparse", "-o", str(profile), *map(str, counts))
-    objects = get_object_arguments(binaries)
+def export_build(profile, build):
+    objects = get_object_arguments(sorted(build.iterdir()))
     exported = json.loads(run_llvm_tool("llvm-cov", "export", "-instr-profile", str(profile),
-                                        "-skip-expansions", "-skip-branches", *objects))["data"][0]
-    write_line_view(output, profile, objects, exported)
-    return exported
+                                        "-skip-expansions", "-skip-branches", *objects))
+    return exported["data"][0], objects
 
 
 def write_line_view(output, profile, objects, exported):
@@ -142,30 +170,74 @@ def get_own_path(filename):
     return match.group(1)
 
 
-def add_files_to_totals(data, files):
+def read_build_files(data):
+    files = {}
     for entry in data["files"]:
         path = get_own_path(entry["filename"])
         if path is not None:
             lines = entry["summary"]["lines"]
-            known = files.setdefault(path, {"lines": 0, "covered": 0})
-            known["lines"] = max(known["lines"], lines["count"])
-            known["covered"] = max(known["covered"], lines["covered"])
+            files[path] = {"lines": lines["count"], "ran": lines["covered"] > 0}
+    return files
 
 
-def add_functions_to_totals(data, functions):
+def read_build_functions(data):
+    functions = {}
     for function in data["functions"]:
         first_region = function["regions"][0]
         path = get_own_path(function["filenames"][first_region[REGION_FILE_INDEX]])
         if path is not None:
-            name = function["name"].split(":", 1)[-1]
-            lines = first_region[REGION_END_LINE] - first_region[REGION_START_LINE] + 1
-            known = functions.setdefault((path, first_region[REGION_START_LINE], name),
-                                         {"lines": lines, "count": 0})
-            known["count"] += function["count"]
+            key = (path, function["name"].split(":", 1)[-1])
+            known = functions.setdefault(key, {"line": first_region[REGION_START_LINE], "ran": False,
+                                               "lines": first_region[REGION_END_LINE] - first_region[REGION_START_LINE] + 1})
+            known["ran"] = known["ran"] or function["count"] > 0
+    return functions
+
+
+def combine_builds(builds_newest_first):
+    newest_files, newest_functions = builds_newest_first[0]
+    for older_files, older_functions in builds_newest_first[1:]:
+        for path, entry in newest_files.items():
+            entry["ran"] = entry["ran"] or older_files.get(path, {}).get("ran", False)
+        for key, entry in newest_functions.items():
+            entry["ran"] = entry["ran"] or older_functions.get(key, {}).get("ran", False)
+    return newest_files, newest_functions
+
+
+def report_place(place_name, coverage_folder):
+    counts = sorted(coverage_folder.glob("*.profraw"))
+    builds = sorted((coverage_folder / PROGRAMS_FOLDER_NAME).glob("*"), reverse=True)
+    if not counts or not builds:
+        print(f"[coverage] {place_name}: {len(counts)} counts files, {len(builds)} kept builds; skipped")
+        return None
+    output = REPORT_FOLDER / place_name
+    output.mkdir(parents=True, exist_ok=True)
+    profile = output / "merged.profdata"
+    run_llvm_tool("llvm-profdata", "merge", "-sparse", "-o", str(profile), *map(str, counts))
+    per_build = []
+    for build in builds:
+        data, objects = export_build(profile, build)
+        if build == builds[0]:
+            write_line_view(output, profile, objects, data)
+        per_build.append((read_build_files(data), read_build_functions(data)))
+    print(f"[coverage] {place_name}: {len(builds)} builds installed {', '.join(map(describe_build, reversed(builds)))}; "
+          f"lines and names are the newest build's")
+    return combine_builds(per_build)
+
+
+def combine_places(places):
+    files, functions = {}, {}
+    for place_files, place_functions in places:
+        for path, entry in place_files.items():
+            known = files.setdefault(path, dict(entry))
+            known["ran"] = known["ran"] or entry["ran"]
+        for key, entry in place_functions.items():
+            known = functions.setdefault(key, dict(entry))
+            known["ran"] = known["ran"] or entry["ran"]
+    return files, functions
 
 
 def print_unrun_files(files):
-    unrun_files = sorted(((entry["lines"], path) for path, entry in files.items() if entry["covered"] == 0),
+    unrun_files = sorted(((entry["lines"], path) for path, entry in files.items() if not entry["ran"]),
                          reverse=True)
     print(f"Files that never ran ({len(unrun_files)}, {sum(lines for lines, _ in unrun_files)} lines):")
     for lines, path in unrun_files:
@@ -174,100 +246,102 @@ def print_unrun_files(files):
 
 
 def print_unrun_functions(functions, unrun_file_paths):
-    unrun_functions = sorted(((entry["lines"], key) for key, entry in functions.items()
-                              if entry["count"] == 0 and key[0] not in unrun_file_paths), reverse=True)
-    names = demangle([key[2] for _, key in unrun_functions])
-    listing = [f"  {lines:6}  {path}:{line}  {name}"
-               for (lines, (path, line, _)), name in zip(unrun_functions, names)]
+    unrun_functions = sorted(((entry["lines"], key, entry["line"]) for key, entry in functions.items()
+                              if not entry["ran"] and key[0] not in unrun_file_paths), reverse=True)
+    names = demangle([key[1] for _, key, _ in unrun_functions])
+    listing = [f"  {lines:6}  {key[0]}:{line}  {name}"
+               for (lines, key, line), name in zip(unrun_functions, names)]
     full_list = REPORT_FOLDER / "never-run-functions.txt"
     full_list.write_text("\n".join(listing) + "\n")
     print(f"\nFunctions that never ran, in files that did ({len(listing)}, "
-          f"{sum(lines for lines, _ in unrun_functions)} lines), largest first:")
+          f"{sum(lines for lines, _, _ in unrun_functions)} lines), largest first:")
     print("\n".join(listing[:FUNCTIONS_SHOWN]))
     if len(listing) > FUNCTIONS_SHOWN:
         print(f"  ... {len(listing) - FUNCTIONS_SHOWN} more in {full_list}")
 
 
-def print_report(files, functions, set_names):
-    total_lines = sum(entry["lines"] for entry in files.values())
-    covered_lines = sum(entry["covered"] for entry in files.values())
+def print_report(files, functions, place_names):
+    ran_functions = sum(entry["ran"] for entry in functions.values())
     print(CAVEAT)
-    print(f"From: {', '.join(set_names)}. {covered_lines} of {total_lines} lines of CowTerm's own code ran.\n")
+    print(f"From: {', '.join(place_names)}. {ran_functions} of {len(functions)} functions "
+          f"in CowTerm's own code ran.\n")
     unrun_file_paths = print_unrun_files(files)
     print_unrun_functions(functions, unrun_file_paths)
-    print("\nPer-line view:")
-    for name in set_names:
+    print("\nPer-line view of each place's newest build:")
+    for name in place_names:
         print(f"  {REPORT_FOLDER / name / 'lines' / 'index.html'}")
 
 
-def find_coverage_sets(arguments):
-    binaries = [Path(binary) for binary in arguments.binary] or \
-               [Path(binary).expanduser() for binary in INSTALLED_BINARIES]
-    sets = [(LOCAL_SET_NAME, get_local_coverage_folder(arguments.instance), binaries)]
+def find_places(arguments):
+    if not arguments.instance:
+        keep(argparse.Namespace(host=None, instance="", programs=None))
+    places = [(LOCAL_SET_NAME, get_coverage_folder(arguments.instance))]
     if HOSTS_FOLDER.is_dir():
-        sets += [(host.name, host / "counts", sorted((host / "binaries").glob("*")))
-                 for host in sorted(HOSTS_FOLDER.iterdir())]
-    return sets
+        places += [(host.name, host) for host in sorted(HOSTS_FOLDER.iterdir())]
+    return places
 
 
 def report(arguments):
-    files, functions, used = {}, {}, []
-    for set_name, counts_folder, binaries in find_coverage_sets(arguments):
-        data = export_coverage(set_name, counts_folder, binaries)
-        if data is not None:
-            add_files_to_totals(data, files)
-            add_functions_to_totals(data, functions)
-            used.append(set_name)
+    places, used = [], []
+    for place_name, coverage_folder in find_places(arguments):
+        combined = report_place(place_name, coverage_folder)
+        if combined is not None:
+            places.append(combined)
+            used.append(place_name)
     if not used:
         sys.exit("[coverage] no counts yet: install with just install-coverage and use it for a while")
-    print_report(files, functions, used)
+    print_report(*combine_places(places), used)
+
+
+def pack(arguments):
+    folder = get_coverage_folder(arguments.instance)
+    with tarfile.open(fileobj=sys.stdout.buffer, mode="w|") as archive:
+        for path in [*folder.glob("*.profraw"), folder / PROGRAMS_FOLDER_NAME]:
+            if path.exists():
+                archive.add(path, arcname=path.name)
 
 
 def collect(arguments):
+    sys.stdout.buffer.write(run_on_host(arguments.host, "keep", "--instance", arguments.instance))
+    packed = run_on_host(arguments.host, "pack", "--instance", arguments.instance)
     destination = HOSTS_FOLDER / arguments.host.split("@")[-1]
     shutil.rmtree(destination, ignore_errors=True)
-    (destination / "counts").mkdir(parents=True)
-    (destination / "binaries").mkdir()
-    folders = arguments.binaries or REMOTE_BINARY_FOLDERS
-    remote = (f"cd {get_remote_coverage_folder(arguments.instance)} && "
-              f"tar -c *.profraw -C / $(for folder in {folders}; do "
-              "for name in CowTerm CowTermDaemon ct cowtermd; do "
-              "[ -f $folder/$name ] && echo ${folder#/}/$name; done; done)")
-    archive = subprocess.run(["ssh", "-o", "BatchMode=yes", arguments.host, remote],
-                             check=True, capture_output=True).stdout
-    subprocess.run(["tar", "-x", "-C", str(destination / "counts")], input=archive, check=True)
-    for program in (destination / "counts").rglob("*"):
-        if program.is_file() and program.suffix != ".profraw":
-            program.rename(destination / "binaries" / program.name)
-    print(f"[coverage] {destination}: {len(list((destination / 'counts').glob('*.profraw')))} counts files, "
-          f"programs {', '.join(sorted(path.name for path in (destination / 'binaries').iterdir()))}")
+    destination.mkdir(parents=True)
+    with tarfile.open(fileobj=io.BytesIO(packed), mode="r:") as archive:
+        archive.extractall(destination, filter="data")
+    builds = list((destination / PROGRAMS_FOLDER_NAME).glob("*"))
+    print(f"[coverage] {destination}: {len(list(destination.glob('*.profraw')))} counts files, {len(builds)} builds")
 
 
 def reset(arguments):
     if arguments.host:
-        remote = f"rm -f {get_remote_coverage_folder(arguments.instance)}/*.profraw"
-        subprocess.run(["ssh", "-o", "BatchMode=yes", arguments.host, remote], check=True)
+        run_on_host(arguments.host, "reset", "--instance", arguments.instance)
         shutil.rmtree(HOSTS_FOLDER / arguments.host.split("@")[-1], ignore_errors=True)
     else:
-        for counts in get_local_coverage_folder(arguments.instance).glob("*.profraw"):
+        folder = get_coverage_folder(arguments.instance)
+        for counts in folder.glob("*.profraw"):
             counts.unlink()
-    print(f"[coverage] counts deleted {'on ' + arguments.host if arguments.host else 'here'}")
+        shutil.rmtree(folder / PROGRAMS_FOLDER_NAME, ignore_errors=True)
+    print(f"[coverage] counts and kept programs deleted {'on ' + arguments.host if arguments.host else 'here'}")
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     commands = parser.add_subparsers(dest="command", required=True)
     report_command = commands.add_parser("report")
-    report_command.add_argument("--binary", action="append", default=[])
+    keep_command = commands.add_parser("keep")
+    keep_command.add_argument("host", nargs="?")
+    keep_command.add_argument("--programs")
     collect_command = commands.add_parser("collect")
     collect_command.add_argument("host")
-    collect_command.add_argument("--binaries")
+    pack_command = commands.add_parser("pack")
     reset_command = commands.add_parser("reset")
     reset_command.add_argument("host", nargs="?")
-    for command in (report_command, collect_command, reset_command):
+    for command in (report_command, keep_command, collect_command, pack_command, reset_command):
         command.add_argument("--instance", default="")
     arguments = parser.parse_args()
-    {"report": report, "collect": collect, "reset": reset}[arguments.command](arguments)
+    handlers = {"report": report, "keep": keep, "collect": collect, "pack": pack, "reset": reset}
+    handlers[arguments.command](arguments)
 
 
 if __name__ == "__main__":

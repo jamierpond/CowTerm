@@ -25,5 +25,5 @@ done
 ssh -o BatchMode=yes "$host" "cat $folder/check.log"
 ssh -o BatchMode=yes "$host" "grep -q '^\[coverage-check\] done' $folder/check.log"
 
-scripts/line-coverage.py collect "$host" --instance coverage-check --binaries "$folder/build/coverage-check"
+scripts/line-coverage.py collect "$host" --instance coverage-check
 scripts/line-coverage.py report --instance coverage-check
