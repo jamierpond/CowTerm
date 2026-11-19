@@ -13,16 +13,26 @@ struct EmbeddedSshConnection;
 
 inline constexpr int defaultSshPort = 22;
 
-// Where to ssh: "user@host" or "user@host:port".
+// Where to ssh: "user@host", "user@host:port", or "user@host=address[:port]"
+// for a machine known by one name and reached at another address
+// ("jamiepond@tamby=jamies-mac-mini.tail8acf23.ts.net").
 struct SshDestination
 {
     std::string user;
+
+    // The machine's name, which sessions, host colours and frecency key on.
     std::string host;
     int port = defaultSshPort;
+
+    // What to dial and check the host key against; empty dials the name.
+    std::string address;
 };
 
 // Empty when text has no user, no host, or a port that is not a number.
 std::optional<SshDestination> parseSshDestination(const std::string& text);
+
+// The address when there is one, else the name.
+const std::string& getAddressToDial(const SshDestination& destination);
 
 // What the link authenticates and checks the host with. The app reads these
 // at its edge; the link never looks at the environment or the home folder.

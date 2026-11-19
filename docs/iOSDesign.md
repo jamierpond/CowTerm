@@ -791,6 +791,20 @@ picks up the session the phone started.
   the phone's layout is filed under `<host>:<folder>`, its name is the Mac's
   name for that directory, and the pane is in that session.
 
+### A host's name and the address the phone dials
+
+On 18 November tamby moved to another tailnet, its short name stopped
+resolving, and the phone could no longer reach it, though the Mac could
+through an alias in its ssh config. A paired host now has a name and,
+separately, an address to dial: the hosts file says
+`jamiepond@tamby=jamies-mac-mini.tail8acf23.ts.net`. Sessions, host colours,
+frecency and the Mac adopting phone sessions all key on the name (`tamby`);
+the link dials the address and checks the host key under it, so the phone's
+known_hosts holds the key under the address. `just ios-pair` takes the address,
+user and port from this Mac's `ssh -G <host>`, so nothing is written into the
+code and the next rename needs only a new pairing. A pairing from before has no
+address and dials the name, as it did.
+
 ### Pairing a phone
 
 The app on a real phone showed the sample pane, labelled live, because a phone

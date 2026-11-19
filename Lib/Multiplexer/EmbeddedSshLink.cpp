@@ -250,10 +250,10 @@ private:
         auto addresses = ResolvedAddresses {};
         const auto port = std::to_string(destination.port);
         const auto resolved =
-            ::getaddrinfo(destination.host.c_str(), port.c_str(), &hints, &addresses.first);
+            ::getaddrinfo(getAddressToDial(destination).c_str(), port.c_str(), &hints, &addresses.first);
 
         if (resolved != 0)
-            return "ssh: Could not resolve hostname " + destination.host + ": " + ::gai_strerror(resolved);
+            return "ssh: Could not resolve hostname " + getAddressToDial(destination) + ": " + ::gai_strerror(resolved);
 
         auto lastError = std::string {timedOut};
 
@@ -265,7 +265,7 @@ private:
                 return std::nullopt;
         }
 
-        return "ssh: connect to host " + destination.host + " port " + port + ": " + lastError;
+        return "ssh: connect to host " + getAddressToDial(destination) + " port " + port + ": " + lastError;
     }
 
     std::optional<std::string> connectToAddress(const addrinfo& address)
@@ -343,19 +343,19 @@ private:
         auto knownHosts = readKnownHosts();
         const auto typeMask = LIBSSH2_KNOWNHOST_TYPE_PLAIN | LIBSSH2_KNOWNHOST_KEYENC_RAW | keyType->knownHostType;
         const auto check = libssh2_knownhost_checkp(
-            knownHosts.get(), destination.host.c_str(), destination.port, key, keyLength, typeMask, nullptr);
+            knownHosts.get(), getAddressToDial(destination).c_str(), destination.port, key, keyLength, typeMask, nullptr);
 
         if (check == LIBSSH2_KNOWNHOST_CHECK_MATCH)
             return std::nullopt;
 
         if (check == LIBSSH2_KNOWNHOST_CHECK_MISMATCH)
         {
-            return "ssh: the " + std::string {keyType->name} + " host key for " + destination.host
+            return "ssh: the " + std::string {keyType->name} + " host key for " + getAddressToDial(destination)
                    + " has changed since " + credentials.knownHostsPath + " recorded it\n"
                    + hostKeyVerificationFailed;
         }
 
-        return "ssh: no " + std::string {keyType->name} + " host key is known for " + destination.host
+        return "ssh: no " + std::string {keyType->name} + " host key is known for " + getAddressToDial(destination)
                + " in " + credentials.knownHostsPath + "\n" + hostKeyVerificationFailed;
     }
 
@@ -578,6 +578,8 @@ private:
     std::optional<SessionEnding> ending;
 };
 
+constexpr auto nameAndAddressSeparator = '=';
+
 bool isPortInRange(int port)
 {
     constexpr auto highestPort = 65535;
@@ -598,6 +600,46 @@ std::optional<int> parsePort(std::string_view text)
 
     return port;
 }
+
+// Moves ":port" off the end of text into port; false when it is not a port.
+bool takePortFromTheEnd(std::string& text, int& port)
+{
+    const auto colon = text.find(':');
+
+    if (colon == std::string::npos)
+        return true;
+
+    const auto parsedPort = parsePort(std::string_view {text}.substr(colon + 1));
+
+    if (!parsedPort)
+        return false;
+
+    port = *parsedPort;
+    text.resize(colon);
+    return true;
+}
+
+// Moves "=address" off the end of the host into the address; false when the
+// separator is there with nothing after it.
+bool takeAddressFromTheHost(SshDestination& destination)
+{
+    const auto nameEnd = destination.host.find(nameAndAddressSeparator);
+
+    if (nameEnd == std::string::npos)
+        return true;
+
+    destination.address = destination.host.substr(nameEnd + 1);
+    destination.host.resize(nameEnd);
+    return !destination.address.empty();
+}
+
+std::string& findTextThatEndsWithThePort(SshDestination& destination)
+{
+    if (destination.address.empty())
+        return destination.host;
+
+    return destination.address;
+}
 } // namespace
 
 std::optional<SshDestination> parseSshDestination(const std::string& text)
@@ -607,24 +649,26 @@ std::optional<SshDestination> parseSshDestination(const std::string& text)
     if (at == std::string::npos || at == 0)
         return std::nullopt;
 
-    auto destination = SshDestination {text.substr(0, at), text.substr(at + 1)};
-    const auto colon = destination.host.find(':');
+    auto destination = SshDestination {.user = text.substr(0, at), .host = text.substr(at + 1)};
 
-    if (colon != std::string::npos)
-    {
-        const auto port = parsePort(std::string_view {destination.host}.substr(colon + 1));
+    if (!takeAddressFromTheHost(destination))
+        return std::nullopt;
 
-        if (!port)
-            return std::nullopt;
-
-        destination.port = *port;
-        destination.host.resize(colon);
-    }
+    if (!takePortFromTheEnd(findTextThatEndsWithThePort(destination), destination.port))
+        return std::nullopt;
 
     if (destination.host.empty())
         return std::nullopt;
 
     return destination;
+}
+
+const std::string& getAddressToDial(const SshDestination& destination)
+{
+    if (destination.address.empty())
+        return destination.host;
+
+    return destination.address;
 }
 
 EmbeddedSshLink::EmbeddedSshLink(const SshDestination& destination,

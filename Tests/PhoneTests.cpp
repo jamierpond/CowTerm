@@ -137,6 +137,21 @@ auto pairedHostsBecomeADestinationList = test("PhoneSettings/pairedHostsBecomeAD
     check(joinPairedHosts("").empty());
 };
 
+auto pairedHostWithAnAddressKeepsItsName = test("PhoneSettings/pairedHostWithAnAddressKeepsItsName") = []
+{
+    const auto hosts = joinPairedHosts("jamiepond@tamby=jamies-mac-mini.tail8acf23.ts.net\njamiepond@macprorack\n");
+    const auto settings = parsePhoneSettings({"--destination", hosts}, makeEnvironment({}), {});
+
+    check(settings && settings->overviewDestinations.size() == 2);
+
+    if (settings && settings->overviewDestinations.size() == 2)
+    {
+        check(getHostName(settings->overviewDestinations[0]) == "tamby");
+        check(getAddressToDial(settings->overviewDestinations[0]) == "jamies-mac-mini.tail8acf23.ts.net");
+        check(getAddressToDial(settings->overviewDestinations[1]) == "macprorack");
+    }
+};
+
 auto hostIsNamedWithoutItsUser = test("PhoneSettings/hostIsNamedWithoutItsUser") = []
 {
     const auto settings = parsePhoneSettings({"--destination", "jamiepond@macprorack"}, makeEnvironment({}), {});

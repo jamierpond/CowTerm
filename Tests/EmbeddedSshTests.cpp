@@ -27,6 +27,26 @@ auto destinationTakesAPort = test("EmbeddedSsh/destinationTakesAPort") = []
     check(destination->port == expectedPort);
 };
 
+auto destinationNamesTheMachineAndDialsItsAddress = test("EmbeddedSsh/destinationNamesTheMachineAndDialsItsAddress") = []
+{
+    constexpr auto expectedPort = 2222;
+    const auto renamed = parseSshDestination("jamiepond@tamby=jamies-mac-mini.tail8acf23.ts.net:2222");
+
+    check(renamed.has_value());
+    check(renamed->user == "jamiepond");
+    check(renamed->host == "tamby", "sessions and colours keep the machine's name");
+    check(renamed->address == "jamies-mac-mini.tail8acf23.ts.net");
+    check(renamed->port == expectedPort);
+    check(getAddressToDial(*renamed) == "jamies-mac-mini.tail8acf23.ts.net");
+
+    const auto plain = parseSshDestination("jamiepond@macprorack");
+    check(plain && getAddressToDial(*plain) == "macprorack", "a pairing from before addresses dials the name");
+
+    check(!parseSshDestination("jamiepond@tamby=").has_value());
+    check(!parseSshDestination("jamiepond@=jamies-mac-mini.tail8acf23.ts.net").has_value());
+    check(!parseSshDestination("jamiepond@tamby=jamies-mac-mini:ssh").has_value());
+};
+
 auto destinationNeedsAUserAndAHost = test("EmbeddedSsh/destinationNeedsAUserAndAHost") = []
 {
     check(!parseSshDestination("tamby").has_value());

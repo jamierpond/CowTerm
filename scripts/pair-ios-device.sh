@@ -10,8 +10,11 @@
 # mbedTLS reads neither OpenSSH's own format nor the explicit curve parameters
 # macOS's ssh-keygen -m PEM writes. Its public key goes into ~/.ssh/authorized_keys on
 # each host, once, marked "cowterm-device:<phone>"; that line is the only
-# change made there. The phone gets the host keys this Mac's ~/.ssh/known_hosts
-# already trusts for each name it dials. A name known_hosts lacks is scanned
+# change made there. Each host keeps its name on the phone (tamby), and the
+# phone dials the address this Mac's ssh config gives that name (ssh -G; tamby
+# is jamies-mac-mini.tail8acf23.ts.net since 2026-11-18), so a renamed machine
+# needs only a new pairing. The phone gets the host keys this Mac's
+# ~/.ssh/known_hosts already trusts for each address it dials. An address known_hosts lacks is scanned
 # with ssh-keyscan and accepted only when the key equals one known_hosts holds
 # for that machine under another name. The private key, the host list and the
 # known hosts are copied into the app's container on the phone, and the private
@@ -31,6 +34,37 @@ this_mac="jamiepond@big-cow"
 # The hosts Jamie approved for the phone on 2026-11-17, by their tailnet names.
 hosts="$this_mac jamiepond@tamby jamiepond@macprorack"
 ssh_timeout_seconds=10
+default_ssh_port=22
+
+# What `ssh -G` resolves for host: its "hostname", "user" or "port" line.
+read_ssh_setting() {
+    ssh -G "$1" 2> /dev/null | awk -v setting="$2" '$1 == setting { print $2; exit }'
+}
+
+# The address the phone dials for host: the hostname this Mac's ssh config gives it.
+find_address_to_dial() {
+    read_ssh_setting "$1" hostname
+}
+
+# How the phone's hosts file names host: "user@name" when it dials the name
+# itself, else "user@name=address[:port]".
+describe_host_for_the_phone() {
+    name="${1#*@}"
+    user=$(read_ssh_setting "$1" user)
+    address=$(find_address_to_dial "$1")
+    port=$(read_ssh_setting "$1" port)
+    port_suffix=""
+
+    if [ "$port" != "$default_ssh_port" ]; then
+        port_suffix=":$port"
+    fi
+
+    if [ "$address" = "$name" ]; then
+        echo "$user@$name$port_suffix"
+    else
+        echo "$user@$name=$address$port_suffix"
+    fi
+}
 
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
@@ -149,7 +183,7 @@ find_known_host_lines() {
 }
 
 for host in $hosts; do
-    name="${host#*@}"
+    name=$(find_address_to_dial "$host")
     lines=$(find_known_host_lines "$name")
 
     if [ -n "$lines" ]; then
@@ -173,8 +207,9 @@ for host in $hosts; do
 done
 
 for host in $hosts; do
-    echo "$host"
+    describe_host_for_the_phone "$host"
 done > "$work/pairing/hosts"
+sed 's/^/the phone dials: /' "$work/pairing/hosts"
 
 for host in $hosts; do
     if ssh -o BatchMode=yes -o IdentitiesOnly=yes -o IdentityAgent=none -o ConnectTimeout="$ssh_timeout_seconds" \
@@ -194,13 +229,13 @@ cp "$key" "$work/home/.ssh/id_ecdsa"
 cp "$key.pub" "$work/home/.ssh/id_ecdsa.pub"
 cp "$work/pairing/known_hosts" "$work/home/.ssh/known_hosts"
 
-for host in $hosts; do
+while read -r host; do
     if env -u SSH_AUTH_SOCK HOME="$work/home" build/Tests/CowTermEmbeddedSshProbe "$host" | grep -q "^killed throwaway pane"; then
         echo "$host: the app's ssh client signs in and reaches the daemon"
     else
         echo "$host: the app's ssh client could not reach the daemon; run scripts/probe-embedded-ssh.sh $host" >&2
     fi
-done
+done < "$work/pairing/hosts"
 
 xcrun devicectl device copy to --device "$phone" \
     --domain-type appDataContainer --domain-identifier "$bundle_id" \
