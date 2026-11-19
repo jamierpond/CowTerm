@@ -177,6 +177,36 @@ done
 known_hosts="$work/pairing/known_hosts"
 : > "$known_hosts"
 
+# libssh2 on mbedTLS, the phone's ssh client, checks RSA and ECDSA host keys
+# but not ed25519.
+key_types_the_phone_can_check="ssh-rsa ecdsa-sha2-nistp256 ecdsa-sha2-nistp384 ecdsa-sha2-nistp521"
+
+is_a_key_type_the_phone_can_check() {
+    for checkable_type in $key_types_the_phone_can_check; do
+        if [ "$1" = "$checkable_type" ]; then
+            return 0
+        fi
+    done
+
+    return 1
+}
+
+# Whether any known_hosts line given holds a key type the phone can check.
+has_a_key_the_phone_can_check() {
+    for key_type in $(printf '%s\n' "$1" | awk '{ print $2 }'); do
+        if is_a_key_type_the_phone_can_check "$key_type"; then
+            return 0
+        fi
+    done
+
+    return 1
+}
+
+# Lines of the phone's known_hosts for name, hashed names included.
+find_phone_known_host_lines() {
+    ssh-keygen -F "$1" -f "$known_hosts" 2> /dev/null | grep -v '^#' || true
+}
+
 # Lines of this Mac's known_hosts for name, without ssh-keygen's comments.
 find_known_host_lines() {
     ssh-keygen -F "$1" -f "$HOME/.ssh/known_hosts" 2> /dev/null | grep -v '^#' || true
@@ -189,20 +219,25 @@ for host in $hosts; do
     if [ -n "$lines" ]; then
         echo "$lines" >> "$known_hosts"
         echo "$name: host keys from known_hosts"
-        continue
+
+        if has_a_key_the_phone_can_check "$lines"; then
+            continue
+        fi
+
+        echo "$name: none of them is a type the phone's ssh client can check; scanning it"
     fi
 
     ssh-keyscan -T "$ssh_timeout_seconds" "$name" 2> /dev/null | grep -v '^#' > "$work/scanned" || true
 
     while read -r scanned_name scanned_type scanned_blob; do
-        if grep -qF "$scanned_blob" "$HOME/.ssh/known_hosts"; then
+        if is_a_key_type_the_phone_can_check "$scanned_type" && grep -qF "$scanned_blob" "$HOME/.ssh/known_hosts"; then
             echo "$scanned_name $scanned_type $scanned_blob" >> "$known_hosts"
             echo "$name: added its $scanned_type key, which known_hosts holds for this machine under another name"
         fi
     done < "$work/scanned"
 
-    if ! grep -q "^$name " "$known_hosts"; then
-        echo "$name: no host key this Mac already trusts; the phone will refuse it" >&2
+    if ! has_a_key_the_phone_can_check "$(find_phone_known_host_lines "$name")"; then
+        echo "$name: no host key of a type the phone can check that this Mac already trusts; the phone will refuse it" >&2
     fi
 done
 
