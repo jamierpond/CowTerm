@@ -2,6 +2,19 @@
 
 Written 2026-11-18. Each item says what it unblocks.
 
+## Phone: reach tamby again (it moved tailnets)
+
+The fix is on main (the phone dials `jamies-mac-mini.tail8acf23.ts.net` and
+still calls the machine tamby). pond was not reachable from big-cow when it was
+ready, so it is not installed yet.
+
+- [ ] Plug pond into big-cow and unlock it, then run
+      `cd ~/projects/CowTerm-ios-app && just configure && just ios-device pond && just ios-pair pond`.
+      It builds and installs the app, then re-pairs: the pairing output should
+      say "the phone dials: jamiepond@tamby=jamies-mac-mini.tail8acf23.ts.net"
+      and that all three hosts accept the phone's key. No authorized_keys line
+      is added (the key is already there), and nothing on the Mac restarts.
+
 ## Push notifications: your phone rings when a Claude finishes or asks
 
 macprorack is ready. `just push-relay-check-ready` shows 14 of 18 requirements
