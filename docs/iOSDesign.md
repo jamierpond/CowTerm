@@ -821,7 +821,11 @@ ios-pair` now gives it all three, and the sample needs `--sample`.
   hands it to libssh2. Without it libssh2 answers "Key type not supported" and
   the host refuses the key.
 - Its public key goes into `~/.ssh/authorized_keys` on this Mac (`big-cow`),
-  tamby and macprorack, once, with the comment `cowterm-device:pond`. Running
+  tamby and macprorack, and on tamby-windows (approved on 18 November) into
+  `C:\ProgramData\ssh\administrators_authorized_keys`, the only file Windows'
+  ssh server reads an administrator's keys from; it is appended to, never
+  replaced, so it keeps its Administrators-and-SYSTEM-only access. Each gets
+  the key once, with the comment `cowterm-device:pond`. Running
   the script again reads the key back from the phone and adds nothing. `just
   ios-unpair` removes exactly the lines with that comment.
 - The phone's known hosts are the lines this Mac's `~/.ssh/known_hosts`

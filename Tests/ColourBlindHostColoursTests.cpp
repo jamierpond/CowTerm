@@ -214,3 +214,18 @@ auto jamiesHostsStayApartForTritanopia = test("ColourBlindHostColours/jamiesThre
     check(findSmallestDifference(listJamiesHostBackgrounds(), seenWith(tritanopiaSimulation))
           >= minimumColourDifference);
 };
+
+// No fourth palette entry stays ΔE 40 from the other three, so tamby-windows
+// (reddish purple) is held to the palette-wide rule against Jamie's three.
+auto tambyWindowsStaysApartFromJamiesOtherHosts =
+    test("ColourBlindHostColours/tambyWindowsStaysApartFromJamiesOtherHosts") = []
+{
+    const auto tambyWindows = getColourBlindSafeHostRowColours(AppConfig {}, "jamie@tamby-windows").background;
+
+    for (const auto& otherHost: listJamiesHostBackgrounds())
+    {
+        check(calculateColourDifference(protanopiaSimulation, tambyWindows, otherHost) >= minimumColourDifference);
+        check(calculateColourDifference(deuteranopiaSimulation, tambyWindows, otherHost) >= minimumColourDifference);
+        check(calculateGreyscaleDifference(tambyWindows, otherHost) >= minimumGreyscaleLightnessDifference);
+    }
+};

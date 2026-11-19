@@ -1,5 +1,5 @@
 #!/bin/sh
-# Pairs the iPhone app with this Mac, tamby and macprorack, so it reaches them
+# Pairs the iPhone app with this Mac, tamby, macprorack and tamby-windows, so it reaches them
 # when opened from the home screen.
 #
 # Pairing again with a new key removes the phone's older keys from each host,
@@ -8,8 +8,8 @@
 # The phone gets its own ECDSA P-256 key with no passphrase (the app's mbedTLS
 # cannot sign with ed25519), written by openssl as SEC1 PEM on the named curve:
 # mbedTLS reads neither OpenSSH's own format nor the explicit curve parameters
-# macOS's ssh-keygen -m PEM writes. Its public key goes into ~/.ssh/authorized_keys on
-# each host, once, marked "cowterm-device:<phone>"; that line is the only
+# macOS's ssh-keygen -m PEM writes. Its public key goes into ~/.ssh/authorized_keys
+# (on tamby-windows, Windows' administrators_authorized_keys) on each host, once, marked "cowterm-device:<phone>"; that line is the only
 # change made there. Each host keeps its name on the phone (tamby), and the
 # phone dials the address this Mac's ssh config gives that name (ssh -G; tamby
 # is jamies-mac-mini.tail8acf23.ts.net since 2026-11-18), so a renamed machine
@@ -31,8 +31,13 @@ key_comment="cowterm-device:$phone"
 bundle_id="audio.pond.cowterm.mobile"
 pairing_folder_on_phone="Library/Application Support/pond/CowTerm/pairing"
 this_mac="jamiepond@big-cow"
-# The hosts Jamie approved for the phone on 2026-11-17, by their tailnet names.
-hosts="$this_mac jamiepond@tamby jamiepond@macprorack"
+# The hosts Jamie approved for the phone: this Mac, tamby and macprorack on
+# 2026-11-17, tamby-windows on 2026-11-18. Each is this Mac's ssh alias.
+hosts="$this_mac jamiepond@tamby jamiepond@macprorack jamie@tamby-windows"
+# Windows' ssh server reads an administrator's keys only from this file, which
+# must stay owned by and readable only to Administrators and SYSTEM.
+windows_administrator_hosts="jamie@tamby-windows"
+windows_administrators_keys_file="/c/ProgramData/ssh/administrators_authorized_keys"
 ssh_timeout_seconds=10
 default_ssh_port=22
 
@@ -140,7 +145,7 @@ key_blob=$(echo "$key_type_and_blob" | cut -d' ' -f2)
 # the line once; a file whose last line has no newline gets one first. Prints
 # what it did, then how many lines carry the phone's mark afterwards.
 append_once='
-    file="$HOME/.ssh/authorized_keys"
+    file="${4:-$HOME/.ssh/authorized_keys}"
     stale=0
     if [ -f "$file" ]; then
         stale=$(grep " $3\$" "$file" | grep -vcF "$1" || true)
@@ -161,15 +166,30 @@ append_once='
         printf "\n" >> "$file"
     fi
     printf "%s\n" "$2" >> "$file"
-    chmod 600 "$file"
+    if [ -z "${4:-}" ]; then
+        chmod 600 "$file"
+    fi
     echo "added; $(grep -c " $3\$" "$file") line(s) for this phone"'
 
+# The file that host's ssh server reads the phone's key from; empty means
+# ~/.ssh/authorized_keys.
+find_authorized_keys_file() {
+    for windows_host in $windows_administrator_hosts; do
+        if [ "$1" = "$windows_host" ]; then
+            echo "$windows_administrators_keys_file"
+            return
+        fi
+    done
+}
+
 for host in $hosts; do
+    keys_file=$(find_authorized_keys_file "$host")
+
     if [ "$host" = "$this_mac" ]; then
         result=$(printf '%s\n' "$append_once" | sh -s "$key_blob" "$authorized_line" "$key_comment")
     else
         result=$(printf '%s\n' "$append_once" | ssh -o BatchMode=yes -o ConnectTimeout="$ssh_timeout_seconds" \
-            "$host" "sh -s '$key_blob' '$authorized_line' '$key_comment'")
+            "$host" "sh -s '$key_blob' '$authorized_line' '$key_comment' '$keys_file'")
     fi
     echo "$host authorized_keys: $result"
 done
