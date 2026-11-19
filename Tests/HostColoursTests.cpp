@@ -55,3 +55,28 @@ auto thisMachineTakesTheColourThePhoneGivesIt = test("HostColours/thisMachineTak
     check(getThisMachineColours(config).background == phonesColours.background);
     check(getThisMachineColours(config).stripe == phonesColours.stripe);
 };
+
+// The Mac reads cowterm.json; the phone reads only its "hosts", which pairing
+// copies into host-colours.json. Each host must come out alike on both.
+auto phoneShowsTheMacsConfiguredColours = test("HostColours/phoneShowsTheMacsConfiguredColours") = []
+{
+    const auto macConfig = parseConfig(R"({
+        "hostName": "big-cow",
+        "searchDirs": ["~/projects", "tamby:~/projects", "jamie@tamby-windows:~/projects"],
+        "hosts": {"big-cow": {"color": "#56b4e9"}, "tamby": {"color": "#123456"},
+                  "jamie@tamby-windows": {"color": "#654321"}}
+    })");
+    const auto phoneConfig = parseConfig(R"({"hosts": {"big-cow": {"color": "#56b4e9"},
+        "tamby": {"color": "#123456"}, "jamie@tamby-windows": {"color": "#654321"}}})");
+
+    const auto isAlike = [](const HostRowColours& mac, const HostRowColours& phone)
+    { return mac.stripe == phone.stripe && mac.background == phone.background; };
+
+    check(isAlike(getThisMachineColours(macConfig),
+                  getColourBlindSafeHostRowColours(phoneConfig, "jamiepond@big-cow")));
+    check(isAlike(getColourBlindSafeHostRowColours(macConfig, "tamby"),
+                  getColourBlindSafeHostRowColours(phoneConfig, "jamiepond@tamby")));
+    check(isAlike(getColourBlindSafeHostRowColours(macConfig, "jamie@tamby-windows"),
+                  getColourBlindSafeHostRowColours(phoneConfig, "jamie@tamby-windows")));
+    check(getThisMachineColours(macConfig).stripe == Rgb {0x56b4e9});
+};

@@ -63,6 +63,8 @@ public:
     // paneId names the daemon's pane to show; empty for a local shell.
     PaneScreen(const term::TerminalConfig& config, const std::string& paneId);
 
+    // The Mac's configured host colours, which the top line's host colour follows.
+    void setHostColourConfig(const term::AppConfig& config);
     void setPaneDescription(const PaneDescription& pane);
     void setLinkStatus(const LinkStatus& link);
 
@@ -113,6 +115,7 @@ private:
 
     term::Theme theme;
     PaneDescription pane;
+    term::AppConfig hostColourConfig;
     LinkStatus link;
     float softwareKeyboardCoveredHeight = 0.0f;
 

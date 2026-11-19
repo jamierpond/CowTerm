@@ -85,6 +85,7 @@ void PhoneOverviewBinding::showOn(OverviewScreen& screenToUse)
 {
     screen = screenToUse;
     screenToUse.onOpenSession = [this](const term::overview::OverviewRow& row) { openSession(row); };
+    screenToUse.setHostColourConfig(phone.getHostColourConfig());
     screenToUse.setInputs(makeOverviewInputs(phone.getOverview().buildReport(), phone.getSessionOpenings()));
     phone.getOverview().setShown(true);
 }

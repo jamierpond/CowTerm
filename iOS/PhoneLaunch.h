@@ -2,6 +2,7 @@
 
 #include "NetworkPathWatch.h"
 
+#include "Multiplexer/Config.h"
 #include "Phone/PhoneConnection.h"
 #include "Phone/SessionOpenings.h"
 #include "TerminalView/TerminalView.h"
@@ -41,6 +42,9 @@ public:
     const std::string& getHost() const { return connection.getHost(); }
 
     const term::phone::PhoneSettings& getSettings() const { return settings; }
+
+    // The host colours set in the Mac's cowterm.json, so each host looks as it does there.
+    const term::AppConfig& getHostColourConfig() const { return hostColourConfig; }
 
     // The pane to open at once; empty until the daemon has chosen one.
     std::string getPaneToOpen() const;
@@ -82,6 +86,7 @@ private:
 
     term::phone::PhoneSettings settings;
     std::optional<term::phone::StoredScreen> storedScreen;
+    term::AppConfig hostColourConfig;
     term::phone::SessionOpenings sessionOpenings;
     term::phone::PhoneConnection connection;
     NetworkPathWatch networkPathWatch;

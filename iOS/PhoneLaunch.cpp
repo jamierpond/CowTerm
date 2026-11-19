@@ -29,6 +29,7 @@ constexpr auto pairedDeviceNameFileName = "device-name";
 constexpr auto pairedKeyFileName = "phone-key";
 constexpr auto pairedPublicKeyFileName = "phone-key.pub";
 constexpr auto pairedKnownHostsFileName = "known_hosts";
+constexpr auto pairedHostColoursFileName = "host-colours.json";
 
 std::string readEnvironment(const std::string& name)
 {
@@ -92,6 +93,28 @@ EnvironmentReader makePairedSetupReader(const std::filesystem::path& folder)
     };
 }
 
+// The Mac's configured host colours, as pairing copied them: {"hosts": ...}
+// from its cowterm.json. Without the file every host gets its default colour.
+term::AppConfig readPairedHostColours()
+{
+    const auto path = term::getDataDirectory() / pairingFolderName / pairedHostColoursFileName;
+
+    try
+    {
+        auto config = term::parseConfig(readFileIfPresent(path));
+
+        for (const auto& [host, settings]: config.hosts)
+            LOG("phone: ", host, " is ", settings.color, " as set on the Mac");
+
+        return config;
+    }
+    catch (const std::exception& error)
+    {
+        LOG("phone: ignoring unreadable ", path.string(), ": ", error.what());
+        return {};
+    }
+}
+
 std::string describeSize(term::PtySize size)
 {
     return std::to_string(size.cols) + " x " + std::to_string(size.rows);
@@ -141,6 +164,7 @@ bool doArgumentsNameThePaneToShow(const std::vector<std::string>& arguments)
 PhoneLaunch::PhoneLaunch(PhoneSettings settingsToUse)
     : settings(std::move(settingsToUse))
     , storedScreen(loadStoredScreen(settings.storedScreenPath))
+    , hostColourConfig(readPairedHostColours())
     , sessionOpenings(settings.storedScreenPath.parent_path() / sessionOpeningsFileName)
     , connection(settings, makeEmbeddedSshLinkFactory(settings), readSteadyClock)
     , networkPathWatch(

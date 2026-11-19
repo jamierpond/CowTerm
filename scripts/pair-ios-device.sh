@@ -13,8 +13,10 @@
 # change made there. Each host keeps its name on the phone (tamby), and the
 # phone dials the address this Mac's ssh config gives that name (ssh -G; tamby
 # is jamies-mac-mini.tail8acf23.ts.net since 2026-11-18), so a renamed machine
-# needs only a new pairing. This Mac's name is hostName in ~/.config/cowterm.json,
-# the name the Mac colours its own sessions by, so the two always agree. The phone gets the host keys this Mac's
+# needs only a new pairing. The host colours set in ~/.config/cowterm.json
+# ("hosts") go to the phone too, so each host looks there as it does on the Mac;
+# pairing again picks up a changed colour. This Mac's name is hostName in
+# ~/.config/cowterm.json, the name the Mac colours its own sessions by, so the two always agree. The phone gets the host keys this Mac's
 # ~/.ssh/known_hosts already trusts for each address it dials. An address known_hosts lacks is scanned
 # with ssh-keyscan and accepted only when the key equals one known_hosts holds
 # for that machine under another name. The private key, the host list and the
@@ -267,6 +269,17 @@ for host in $hosts; do
 done > "$work/pairing/hosts"
 sed 's/^/the phone dials: /' "$work/pairing/hosts"
 
+# Only the "hosts" setting: the phone reads it into the same config the Mac uses.
+python3 -I -c '
+import json, sys
+try:
+    hosts = json.load(open(sys.argv[1])).get("hosts", {})
+except (OSError, ValueError):
+    hosts = {}
+json.dump({"hosts": hosts}, open(sys.argv[2], "w"), indent=4)
+' "$HOME/.config/cowterm.json" "$work/pairing/host-colours.json"
+echo "host colours for the phone: $(tr -d ' \n' < "$work/pairing/host-colours.json")"
+
 for host in $hosts; do
     if ssh -o BatchMode=yes -o IdentitiesOnly=yes -o IdentityAgent=none -o ConnectTimeout="$ssh_timeout_seconds" \
         -i "$key" "$host" true 2> /dev/null; then
@@ -295,6 +308,7 @@ done < "$work/pairing/hosts"
 
 xcrun devicectl device copy to --device "$phone" \
     --domain-type appDataContainer --domain-identifier "$bundle_id" \
-    --source "$work/pairing/hosts" --source "$work/pairing/known_hosts" --source "$key" --source "$key.pub" \
+    --source "$work/pairing/hosts" --source "$work/pairing/known_hosts" --source "$work/pairing/host-colours.json" \
+    --source "$key" --source "$key.pub" \
     --destination "$pairing_folder_on_phone" > /dev/null
-echo "copied hosts, known_hosts, phone-key and phone-key.pub to $phone; the private key is deleted from this Mac"
+echo "copied hosts, known_hosts, host-colours.json, phone-key and phone-key.pub to $phone; the private key is deleted from this Mac"

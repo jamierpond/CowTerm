@@ -595,8 +595,10 @@ launched with `--landscape`, which is how landscape screenshots are taken.
   also differ in greyscale and white text keeps 4.5:1 or better. The host name
   picks the entry by FNV-1a, as on the Mac: big-cow gets orange, macprorack
   bluish green, tamby blue. A `hosts.<name>.color` in cowterm.json still wins,
-  darkened only if white text would not read on it; the phone has no
-  cowterm.json today. The pane screen's host dot uses the same colour.
+  darkened only if white text would not read on it. `just ios-pair` copies the
+  Mac's `hosts` setting into the pairing folder (`host-colours.json`), so a set
+  colour shows on the phone as on the Mac; pairing again picks up a change. The
+  pane screen's host dot uses the same colour.
 - The Mac uses the same host colours, from the same function, so a machine is
   one colour on both. Its palette rows and switcher cards are filled with the
   host's colour as the phone's rows are, with white text, in place of the

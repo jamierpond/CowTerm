@@ -45,6 +45,9 @@ struct AppConfig
 
 AppConfig loadConfig();
 
+// The config the text of a cowterm.json holds; an empty text gives the defaults.
+AppConfig parseConfig(const std::string& text);
+
 // Writes the effective config back to ~/.config/cowterm.json, so settings
 // changed from inside the app (Cmd +/- zoom) survive a relaunch. Best
 // effort: an unwritable file loses the change but never interrupts typing.

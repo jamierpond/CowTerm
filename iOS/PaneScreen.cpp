@@ -190,11 +190,17 @@ void PaneScreen::showPane(const term::TerminalConfig& config, const std::string&
     layOutParts();
 }
 
+void PaneScreen::setHostColourConfig(const term::AppConfig& config)
+{
+    hostColourConfig = config;
+    setPaneDescription(pane);
+}
+
 void PaneScreen::setPaneDescription(const PaneDescription& paneToShow)
 {
     pane = paneToShow;
     topLine.pane = pane;
-    topLine.hostColour = term::getColourBlindSafeHostRowColours(term::AppConfig {}, pane.hostName).stripe;
+    topLine.hostColour = term::getColourBlindSafeHostRowColours(hostColourConfig, pane.hostName).stripe;
     bottomBar.pane = pane;
     topLine.repaint();
     bottomBar.repaint();

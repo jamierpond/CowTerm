@@ -30,8 +30,12 @@ std::string expandHome(const std::string& path)
 
 AppConfig loadConfig()
 {
+    return parseConfig(eacp::Files::readFile(configPath()));
+}
+
+AppConfig parseConfig(const std::string& text)
+{
     auto config = AppConfig {};
-    const auto text = eacp::Files::readFile(configPath());
 
     if (!text.empty())
         Miro::fromJSONString(config, text);

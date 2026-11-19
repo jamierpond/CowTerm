@@ -3,6 +3,7 @@
 #include "OverviewLayout.h"
 
 #include "Emulator/TermTypes.h"
+#include "Multiplexer/Config.h"
 #include "TerminalView/ScrollMomentum.h"
 
 #include <eacp/UI/UI.h>
@@ -26,6 +27,9 @@ public:
     OverviewList();
 
     void setItems(std::vector<OverviewItem> itemsToShow);
+
+    // The Mac's configured host colours, which each row's colour follows.
+    void setHostColourConfig(const term::AppConfig& config);
 
     // How far the list is scrolled up from its bottom, kept while it is off screen.
     float getScrollOffset() const { return scrollOffset; }
@@ -54,6 +58,7 @@ private:
                               eacp::UI::Rect bounds);
 
     std::vector<OverviewItem> items;
+    term::AppConfig hostColourConfig;
     float scrollOffset = 0.0f;
     float lastFingerY = 0.0f;
     bool isDragging = false;
@@ -111,6 +116,7 @@ public:
     // hostCount is how many machines were asked, so the screen can tell
     // "one machine is down" from "nothing answers".
     void setInputs(OverviewInputs inputs);
+    void setHostColourConfig(const term::AppConfig& config) { panel.list.setHostColourConfig(config); }
 
     // From WindowEvents::onSoftwareKeyboardChanged.
     void setSoftwareKeyboardCoveredHeight(float coveredHeight);

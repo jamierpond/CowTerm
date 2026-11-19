@@ -176,6 +176,12 @@ void OverviewList::setItems(std::vector<OverviewItem> itemsToShow)
     setScrollOffset(scrollOffset);
 }
 
+void OverviewList::setHostColourConfig(const term::AppConfig& config)
+{
+    hostColourConfig = config;
+    repaint();
+}
+
 void OverviewList::setScrollOffset(float offset)
 {
     const auto maximum = calculateMaximumOverviewScroll(listOverviewItemHeights(items), getHeight());
@@ -218,7 +224,7 @@ void OverviewList::paintItem(UI::Graphics& g, const OverviewItem& item, Rect bou
     if (item.kind == OverviewItemKind::UnreachableHostRow)
         return paintUnreachableHost(g, item.unreachable, bounds);
 
-    auto colours = term::getColourBlindSafeHostRowColours(term::AppConfig {}, item.session.host);
+    auto colours = term::getColourBlindSafeHostRowColours(hostColourConfig, item.session.host);
 
     if (isPressed(item))
         colours = darkenForPress(colours);
@@ -237,7 +243,7 @@ void OverviewList::paintItem(UI::Graphics& g, const OverviewItem& item, Rect bou
 
 void OverviewList::paintUnreachableHost(UI::Graphics& g, const UnreachableHost& host, Rect bounds)
 {
-    const auto colours = term::getColourBlindSafeHostRowColours(term::AppConfig {}, host.host);
+    const auto colours = term::getColourBlindSafeHostRowColours(hostColourConfig, host.host);
     auto area = paintHostBackground(g, colours, bounds);
     const auto nameLine = area.removeFromTop(area.h / 2.0f);
 

@@ -86,6 +86,7 @@ PhonePaneBinding::PhonePaneBinding(PhoneLaunch& phoneToUse,
     , showPaneScreen(std::move(showPaneScreenToUse))
     , shownPaneId(phone.getPaneToOpen())
 {
+    screen.setHostColourConfig(phone.getHostColourConfig());
     showStoredScreenDescription();
 
     phone.onLinkStateChanged = [this](PhoneLinkState state) { showLinkState(state); };
