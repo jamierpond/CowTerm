@@ -395,6 +395,10 @@ push-relay-address:
 push-check-on-phone destination="jamiepond@macprorack":
     scripts/check-push-on-phone.sh {{destination}}
 
+# Print the activity report a running daemon gives (no host: this Mac's): how long ago each pane was typed into and had a file change in its project
+print-activity host="":
+    scripts/print-activity.py {{host}}
+
 # Walk a throwaway pane on a host's test daemon through unread and read with Claude Code's own hook command
 check-unread-on-host destination="jamiepond@macprorack" folder="$HOME/tmp/cowterm-unread-check":
     scripts/build-headless-instance-on-host.sh {{destination}} '{{folder}}'
