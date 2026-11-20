@@ -26,7 +26,7 @@ constexpr auto gitHubRemotePrefixes = std::array {
 
 // Where gh usually lives when a non-login ssh shell's PATH leaves it out.
 constexpr auto extraToolDirectories = std::string_view {
-    "/opt/homebrew/bin:/usr/local/bin:$HOME/.local/bin:$HOME/bin:$HOME/scoop/shims"};
+    "/opt/homebrew/bin:/usr/local/bin:$HOME/.local/bin:$HOME/bin:$HOME/.nix-profile/bin:$HOME/scoop/shims"};
 
 constexpr auto sshConnectTimeoutOption = std::string_view {"ConnectTimeout=10"};
 
