@@ -54,7 +54,16 @@ test-file-changes: configure
 
 # Run just test-file-changes on another machine (Linux, macOS or Windows over git-bash) against this working tree; --remove deletes its folder there
 test-file-changes-on-host host *options:
-    scripts/test-file-changes-on-host.sh {{host}} {{options}}
+    scripts/test-recipe-on-host.sh {{host}} test-file-changes {{options}}
+
+[doc("Build and run the tests of the phone's build stamp: the hello that carries it, the daemon listing its clients, and when the Mac notifies")]
+test-phone-build-stamp: configure
+    {{deps}} cmake --build {{build_dir}} --target CowTermPaneSizeOwnerTests CowTermDaemonPhoneProtocolTests
+    {{deps}} ctest --test-dir {{build_dir}} --output-on-failure -R "PhoneBuildStamp|DaemonClientSizeOwner|DaemonPhoneProtocol"
+
+# Run just test-phone-build-stamp on another machine (Linux, macOS or Windows over git-bash) against this working tree; --remove deletes its folder there
+test-phone-build-stamp-on-host host *options:
+    scripts/test-recipe-on-host.sh {{host}} test-phone-build-stamp {{options}}
 
 [doc("Build everything, then run clang-tidy (eacp's checks) over CowTerm's sources; fails on any finding")]
 [unix]
@@ -412,6 +421,14 @@ push-check-on-phone destination="jamiepond@macprorack":
 # Print the activity report a running daemon gives (no host: this Mac's): how long ago each pane was typed into and had a file change in its project
 print-activity host="":
     scripts/print-activity.py {{host}}
+
+# Print the iPhone app's build stamp for this checkout: the last commit that changed what the phone is built from
+print-phone-build-stamp:
+    scripts/print-phone-build-stamp.sh
+
+# Print the clients a running daemon has (no host: this Mac's) and the build stamp each sent, the phone's among them
+print-connected-clients host="":
+    scripts/print-connected-clients.py {{host}}
 
 # Walk a throwaway pane on a host's test daemon through unread and read with Claude Code's own hook command
 check-unread-on-host destination="jamiepond@macprorack" folder="$HOME/tmp/cowterm-unread-check":
