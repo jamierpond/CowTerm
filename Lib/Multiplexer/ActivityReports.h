@@ -11,7 +11,7 @@
 namespace term
 {
 // What each daemon gave in its last `activity` answer, by host: empty for this
-// Mac's own daemon. The Mac's palette and switcher read them.
+// Mac's own daemon. The Mac's palette reads them.
 class ActivityReports
 {
 public:

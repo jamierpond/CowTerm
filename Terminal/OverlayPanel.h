@@ -94,9 +94,8 @@ float paintUnreadPill(eacp::UI::Graphics& g,
                       UnreadPillPlace place,
                       const eacp::UI::Font& font);
 
-// What the palette and switcher share: the session
-// list they drive, the theme, three fonts, and the dimmed backdrop and card
-// they paint over the terminal.
+// The palette's base: the session list it drives, the theme, three fonts,
+// and the dimmed backdrop and card it paints over the terminal.
 class OverlayPanel : public eacp::UI::Component
 {
 public:

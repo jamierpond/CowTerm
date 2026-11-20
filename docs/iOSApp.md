@@ -106,7 +106,7 @@ every pane is a `DaemonShell`.
 
 **`iOS/`.** The app itself: the session list, a pane pager, the ask sheet,
 the key bar and pairing. All of it is eacp views drawn on the GPU, like the
-Mac's palette and switcher. `PaletteRanking` (fuzzy match + MRU) moves from
+Mac's palette. `PaletteRanking` (fuzzy match + MRU) moves from
 `Terminal/` into a library both apps link.
 
 ### What is new in eacp (PRs on `jp/develop`, as usual)

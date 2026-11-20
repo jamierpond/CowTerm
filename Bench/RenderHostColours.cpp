@@ -1,4 +1,4 @@
-// Not a test: renders the palette, the switcher and each session's panes under
+// Not a test: renders the palette and each session's panes under
 // the window chrome strip off screen to PNGs, with sessions on Jamie's hosts
 // and a local one, so the host colours can be looked at without a window. This
 // Mac is named big-cow, as Jamie's cowterm.json names it, so its local session
@@ -13,7 +13,6 @@
 #include "PaneTerminalConfig.h"
 #include "Palette.h"
 #include "Session.h"
-#include "Switcher.h"
 #include "WindowChrome.h"
 #include "Multiplexer/RemoteLocation.h"
 
@@ -193,14 +192,6 @@ UI::KeyEvent makeKeyEvent(std::uint16_t keyCode)
     return key;
 }
 
-// Runs what the overlays queued with callAsync while they are still alive.
-void runQueuedCalls()
-{
-    auto reached = false;
-    Threads::callAsync([&reached] { reached = true; });
-    Threads::runEventLoopUntil([&reached] { return reached; }, waitForOutput);
-}
-
 std::string describeSessionForFileName(const term::TermSession& session)
 {
     if (session.host.empty())
@@ -269,15 +260,6 @@ void renderShape(term::SessionManager& sessions,
     palette.show();
     palette.keyDown(makeKeyEvent(downArrowKeyCode));
     saveImage(window.renderToImage(pictureScale), directory / ("palette-" + shape.name + ".png"));
-
-    auto switcher = term::Switcher {config, thisMachineColours, sessions, unread};
-    window.clear();
-    window.show(tamby, bounds);
-    switcher.begin(false);
-    window.showOverlay(switcher);
-    saveImage(window.renderToImage(pictureScale), directory / ("switcher-" + shape.name + ".png"));
-    switcher.keyDown(makeKeyEvent(UI::KeyCode::Escape));
-    runQueuedCalls();
 
     tamby.view.splitActive(true);
     window.clear();

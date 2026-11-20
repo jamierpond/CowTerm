@@ -124,8 +124,6 @@ void AppShell::wireOverlays()
 {
     palette.onClosed = [this] { hideOverlayAndRefocus(); };
 
-    switcher.onClosed = [this] { hideOverlayAndRefocus(); };
-
     permissions.onClosed = [this] { hideOverlayAndRefocus(); };
     permissions.onRelaunch = [] { permissions::relaunchCowTerm(); };
 
@@ -243,9 +241,6 @@ void AppShell::takeUnreadReport(const std::string& host, const std::string& body
 {
     activityReports.takeActivityReport(host, proto::parse(body).payload);
     palette.refreshRemoteRows();
-
-    if (switcher.isShown())
-        switcher.repaint();
 }
 
 // The focused pane counts as viewed until a minute passes with no key typed;
@@ -393,8 +388,7 @@ void AppShell::attachActive(TermSession& session)
 
 bool AppShell::anyOverlayShown() const
 {
-    return palette.isShown() || switcher.isShown() || isAttachedPopupShown()
-           || permissions.isShown();
+    return palette.isShown() || isAttachedPopupShown() || permissions.isShown();
 }
 
 void AppShell::setWindowFocused(bool focused)
@@ -525,8 +519,6 @@ void AppShell::raiseOverlay()
 {
     if (palette.isShown())
         showOverlay(palette);
-    else if (switcher.isShown())
-        showOverlay(switcher);
     else if (permissions.isShown())
         showOverlay(permissions);
 
@@ -615,29 +607,6 @@ void AppShell::showPalette()
     askDaemonsForUnread();
 }
 
-void AppShell::showSwitcher(bool reverse)
-{
-    if (isSwitcherBlocked())
-        return;
-
-    askDaemonsForUnread();
-    showOverlay(switcher);
-
-    // begin() only opens with two or more sessions to flip between; if it
-    // declines, take the overlay back down and leave the pane focused.
-    if (!switcher.begin(reverse))
-    {
-        hideOverlay();
-        return;
-    }
-
-}
-
-bool AppShell::isSwitcherBlocked() const
-{
-    return switcher.isShown() || palette.isShown() || isAttachedPopupShown();
-}
-
 // Like the other overlays, it waits for whichever one is open to close.
 void AppShell::showPermissions(bool confirmReset)
 {
@@ -716,16 +685,6 @@ bool AppShell::interceptKey(const KeyEvent& event)
         return handlePrefixed(event);
     }
 
-    // Ctrl+Tab: the MRU session switcher, macOS Cmd+Tab style. Shift reverses.
-    // Once it's up it owns the keyboard, so this only fires the first press;
-    // the switcher itself handles the rest (further taps, release-to-commit).
-    if (isSwitcherKey(event))
-    {
-        logUsage("switcher.open", {{"reverse", event.modifiers.shift ? "yes" : "no"}});
-        showSwitcher(event.modifiers.shift);
-        return true;
-    }
-
     if (isLeaderPrefixKey(event))
     {
         prefixArmed = true;
@@ -736,12 +695,6 @@ bool AppShell::interceptKey(const KeyEvent& event)
         return handleCommand(event);
 
     return false;
-}
-
-bool AppShell::isSwitcherKey(const KeyEvent& event)
-{
-    return event.modifiers.control && !event.modifiers.command
-           && event.keyCode == KeyCode::Tab;
 }
 
 void AppShell::withActivePaneTree(const std::function<void(SessionView&)>& action)

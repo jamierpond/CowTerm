@@ -13,7 +13,6 @@
 #include "Popup.h"
 #include "RudderPublisher.h"
 #include "Session.h"
-#include "Switcher.h"
 #include "TrayController.h"
 #include "WindowChrome.h"
 
@@ -75,7 +74,6 @@ private:
     bool handleCommand(const eacp::Graphics::KeyEvent& event);
     bool popupKey(const eacp::Graphics::KeyEvent& event);
     static bool isLeaderPrefixKey(const eacp::Graphics::KeyEvent& event);
-    static bool isSwitcherKey(const eacp::Graphics::KeyEvent& event);
     bool doesKeyTogglePopup(const std::string& characters) const;
     bool runKeyAction(std::span<const KeyAction> actions, const std::string& characters);
     bool runArrowKey(const eacp::Graphics::KeyEvent& event);
@@ -105,7 +103,6 @@ private:
     void hideOverlay();
     void hideOverlayAndRefocus();
     void focusAttachedPane();
-    bool isSwitcherBlocked() const;
     bool isSessionInFrontOfUser(TermSession& session);
     void wireSessionManager();
     void wireRemoteHosts();
@@ -117,7 +114,6 @@ private:
     void raiseOverlay();
     void raisePopup();
     void showPalette();
-    void showSwitcher(bool reverse);
     void showPopup(const std::string& command);
     void hidePopup(const TermSession& session);
     Popup* findAttachedPopup() const;
@@ -153,10 +149,9 @@ private:
     RudderPublisher rudder {config, manager};
     SessionManager manager {config};
 
-    // What each daemon last said is unread, drawn by the palette and switcher.
+    // What each daemon last said is unread, drawn by the palette.
     ActivityReports activityReports;
     Palette palette {config, thisMachineColours, manager, activityReports};
-    Switcher switcher {config, thisMachineColours, manager, activityReports};
 
     // Tells the daemons which pane Jamie is looking at (PaneViewing.h).
     PaneViewingReporter paneViewing {&AppShell::sendToDaemonOf};

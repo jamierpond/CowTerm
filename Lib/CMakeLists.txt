@@ -21,8 +21,8 @@
 #                        project links to put a terminal pane in its window.
 #                        Emulator + Shell; never Multiplexer.
 #
-# The app's own UI — sessions and splits on screen, the palette, the switcher,
-# popups, the tray — stays in Terminal/.
+# The app's own UI — sessions and splits on screen, the palette, popups,
+# the tray — stays in Terminal/.
 add_subdirectory(Emulator)
 add_subdirectory(Shell)
 add_subdirectory(Multiplexer)

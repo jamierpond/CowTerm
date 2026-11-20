@@ -10,8 +10,8 @@ endif ()
 
 # The libraries live in Lib/ (CowTerm::TerminalView draws a pane,
 # CowTerm::Multiplexer keeps panes in the daemon and on remote hosts); what
-# remains here is the app's own UI — sessions, splits, palette, switcher,
-# popups, notifications, tray.
+# remains here is the app's own UI — sessions, splits, palette, popups,
+# notifications, tray.
 add_executable(${COWTERM_EXECUTABLE_TARGET}
         Main.cpp
         AppShell.cpp
@@ -34,7 +34,6 @@ add_executable(${COWTERM_EXECUTABLE_TARGET}
         SearchField.cpp
         Session.cpp
         SessionView.cpp
-        Switcher.cpp
         TrayController.cpp
         PaneTerminalConfig.cpp
         WindowChrome.cpp)
@@ -60,7 +59,7 @@ elseif (WIN32)
             DirWatcher-Windows.cpp
             Notifier-Windows.cpp)
 
-    # The dashboard and switcher sources hold Unicode literals (powerline
+    # Several sources hold Unicode literals (powerline
     # glyphs); MSVC assumes the ANSI codepage without this.
     target_compile_options(${COWTERM_EXECUTABLE_TARGET} PRIVATE /utf-8)
 

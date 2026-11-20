@@ -2,8 +2,8 @@
 
 ## The problem
 
-Jamie works across several machines, but the project picker (Ctrl+A F) and
-the session switcher only know the Mac CowTerm runs on. Opening a project on
+Jamie works across several machines, but the project picker (Ctrl+A F) only
+knew the Mac CowTerm runs on. Opening a project on
 another box meant an ssh pane whose shell died with the laptop lid.
 
 ## The fix
@@ -36,9 +36,9 @@ error.
 
 Every host has a colour, worked out from its name so it is the same on every
 machine; `hosts.<name>.color` overrides it. The colour marks the host label in
-the picker and switcher, and tints the pane border thinly.
+the picker, and tints the pane border thinly.
 
-### Picker and switcher
+### Picker
 
 - One list across all machines. A remote row reads `Grazer · tamby`, the host
   dim and in its colour.
@@ -47,8 +47,6 @@ the picker and switcher, and tints the pane border thinly.
 - An unreachable host is one grey row: `tamby — unreachable (<reason>)`.
 - A remote session is named `<host>/<project>`. Most-recently-used ordering
   works across hosts.
-- The switcher lists sessions from every reachable daemon, with the host
-  label, including sessions another Mac started.
 
 ### Transport
 

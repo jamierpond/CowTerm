@@ -314,7 +314,7 @@ target_include_directories(CowTermRenderPicker PRIVATE ../Terminal)
 target_link_libraries(CowTermRenderPicker PRIVATE
         CowTerm::TerminalView CowTerm::Multiplexer eacp-ui eacp-text emberstore FrecencySearch SearchKeys SessionLog PondApp)
 
-# Not a test: the palette, the switcher and a session's panes rendered off
+# Not a test: the palette and a session's panes rendered off
 # screen to PNGs with sessions on Jamie's hosts and scripted shells
 # (scripts/render-host-colours.sh), to look at the host colours.
 add_executable(CowTermRenderHostColours
@@ -325,7 +325,6 @@ add_executable(CowTermRenderHostColours
         ../Terminal/SearchField.cpp
         ../Terminal/Session.cpp
         ../Terminal/SessionView.cpp
-        ../Terminal/Switcher.cpp
         ../Terminal/WindowChrome.cpp)
 if (WIN32)
     target_sources(CowTermRenderHostColours PRIVATE ../Terminal/Command-Windows.cpp)

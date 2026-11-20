@@ -298,7 +298,6 @@ From the logs and from the size of the screen:
 - The leader key. Navigation is the bar and the overview.
 - Session by number, pane cycling and "previous session" as keys. The `‹` chip
   replaces the last one.
-- The Ctrl+Tab switcher. It depends on releasing a hardware key.
 - Peeking at a session while moving through a list. 241 of his 609 session
   stays are previews under five seconds, and on a phone each would cost a
   connection and a reflow. The row's one line of state does that job.
@@ -594,9 +593,9 @@ launched with `--landscape`, which is how landscape screenshots are taken.
   colour shows on the phone as on the Mac; pairing again picks up a change. The
   pane screen's host dot uses the same colour.
 - The Mac uses the same host colours, from the same function, so a machine is
-  one colour on both. Its palette rows and switcher cards are filled with the
+  one colour on both. Its palette rows are filled with the
   host's colour as the phone's rows are, with white text, in place of the
-  faint wash and thin stripe it had. The highlighted row or card gets a white
+  faint wash and thin stripe it had. The highlighted row gets a white
   outline, so it is not told by colour alone. Local sessions and projects take
   this Mac's own colour, picked by `hostName` in cowterm.json, the name the
   phone dials it by (`big-cow`), so the Mac and the phone show it alike. With
@@ -614,8 +613,8 @@ launched with `--landscape`, which is how landscape screenshots are taken.
   caption buttons without the frame, so the strip sits under the native title
   bar. The panes, their gutters and the active pane's ring are in the theme's
   own colours for every session.
-  `scripts/render-host-colours.sh` renders the palette, the switcher and
-  each session under the strip at minimum, tall narrow, default and ultrawide
+  `scripts/render-host-colours.sh` renders the palette and each
+  session under the strip at minimum, tall narrow, default and ultrawide
   sizes, with protanopia, deuteranopia and greyscale views of each, into
   `build/renders/host-colours`.
 - `ColourBlindHostColoursTests` checks the palette as protanopia and
@@ -923,9 +922,6 @@ puts those sessions first with a yellow pill that names what happened.
   stays predictable (`moveUnreadRowsFirst`). On the phone the waiting cards
   still sit nearest the thumb, unread ones first among them, then the unread
   rows.
-- The Mac's Ctrl+Tab switcher keeps its most-recently-used order and shows the
-  pill in place of the card's icon: re-ordering it would break the quick flip
-  to the previous session.
 - Opening an unread session on the phone opens its newest unread pane.
 - The pane screen's ☰ carries a count of the other unread sessions, and a pane
   dot of an unread pane is a yellow square instead of a circle. While the pane
@@ -943,8 +939,7 @@ puts those sessions first with a yellow pill that names what happened.
 - Both send only when the viewed pane changes, and send `viewing` again when a
   host's link comes back, since the daemon forgets a client that disconnects
   (`PaneViewingReporter`).
-- The Mac asks every daemon for `activity` when the palette or the switcher
-  opens and redraws when the answers arrive (`ActivityReports`).
+- The Mac asks every daemon for `activity` when the palette opens and redraws when the answers arrive (`ActivityReports`).
 
 ### Touch on a real phone
 
