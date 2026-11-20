@@ -14,11 +14,6 @@ std::string calculateLearnedPickId(const std::string& query, const std::string& 
 {
     return query + "\n" + destinationKey;
 }
-
-frecencysearch::LearnedPick toLearnedPick(const LearnedPickEntry& entry)
-{
-    return {entry.query, entry.destinationKey, entry.count, entry.at};
-}
 } // namespace
 
 PaletteUsageStore::PaletteUsageStore(const emberstore::Database& db)
@@ -58,7 +53,7 @@ void PaletteUsageStore::recordPalettePick(const std::string& query,
 double PaletteUsageStore::getUsage(const std::string& key, std::int64_t nowMs)
 {
     if (auto entry = usage.get(key))
-        return frecencysearch::calculateDecayedUsage(entry->count, entry->at, nowMs);
+        return calculateStoredUsage(*entry, nowMs);
 
     return 0;
 }
@@ -68,6 +63,23 @@ std::vector<frecencysearch::LearnedPick>
 {
     auto normalisedQuery = frecencysearch::normaliseQuery(query);
     return frecencysearch::findLearnedPicksForQuery(getAllLearnedPicks(), normalisedQuery, nowMs);
+}
+
+std::map<std::string, UsageEntry> PaletteUsageStore::readAllUsage()
+{
+    auto byKey = std::map<std::string, UsageEntry> {};
+    auto ids = usage.ids();
+    auto values = usage.values();
+
+    for (auto index = std::size_t {0}; index < ids.size() && index < values.size(); ++index)
+        byKey[ids[index]] = values[index];
+
+    return byKey;
+}
+
+std::vector<LearnedPickEntry> PaletteUsageStore::readAllLearnedPicks()
+{
+    return learnedPicks.values();
 }
 
 std::vector<frecencysearch::LearnedPick> PaletteUsageStore::getAllLearnedPicks()

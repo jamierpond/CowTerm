@@ -27,7 +27,6 @@ add_library(CowTermMultiplexer STATIC
         NotifyUserClient.cpp
         NotifyUserProtocol.cpp
         PaletteItem.cpp
-        PaletteRanking.cpp
         PaneReadState.cpp
         PaneViewing.cpp
         PaneSizeOwner.cpp
@@ -70,6 +69,7 @@ target_include_directories(CowTermMultiplexer
 target_link_libraries(CowTermMultiplexer PUBLIC
         CowTerm::Emulator
         CowTerm::Shell
+        CowTermPalette
         eacp-network
         FrecencySearch
         PondApp

@@ -30,6 +30,10 @@ public:
 
     // A remote host answered (or failed): rebuild the rows if shown.
     void refreshRemoteRows();
+
+    // The rows the palette lists, built now: every session, then the projects
+    // not open here, then the remote ones.
+    std::vector<PaletteItem> collectItems() const;
     bool isShown() const { return shown; }
 
     // Fired for both dismissal and selection; the shell removes the overlay
@@ -48,7 +52,7 @@ private:
     void rebuild();
     PaletteItem makeSessionItem(TermSession& session) const;
     PaletteItem makeProjectItem(const std::string& name, const std::string& path) const;
-    void addRemoteItems();
+    void addRemoteItems(std::vector<PaletteItem>& items) const;
     PaletteItem makeUnreachableItem(const RemoteHost& remote) const;
     void applyQuery();
     void chooseSelected() override;

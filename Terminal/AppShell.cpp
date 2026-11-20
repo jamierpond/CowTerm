@@ -193,6 +193,8 @@ void AppShell::ringBackForNotifyUser(const NotifyUserRequest& request,
 void AppShell::start()
 {
     rudder.onBringToFront = [this] { onBringToFront(); };
+    rudder.collectRankingMaterials = [this]
+    { return manager.collectPaletteRankingMaterials(palette.collectItems()); };
 
     // A pane's running command shows up only in the daemon's info refresh.
     if (auto* daemon = DaemonClient::get())
@@ -241,7 +243,6 @@ void AppShell::takeUnreadReport(const std::string& host, const std::string& body
 {
     activityReports.takeActivityReport(host, proto::parse(body).payload);
     palette.refreshRemoteRows();
-    rudder.schedulePush();
 }
 
 // The focused pane counts as viewed until a minute passes with no key typed;

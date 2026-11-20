@@ -263,9 +263,13 @@ void SessionManager::switchTo(TermSession& session)
 
 PaletteUsage SessionManager::getPaletteUsage(const std::string& query)
 {
-    auto nowMs = MruStore::nowMs();
-    auto usage = [this, nowMs](const std::string& key) { return paletteUsage.getUsage(key, nowMs); };
-    return {usage, paletteUsage.findPicksForQuery(query, nowMs)};
+    return makePaletteUsage(
+        paletteUsage.readAllUsage(), paletteUsage.readAllLearnedPicks(), query, MruStore::nowMs());
+}
+
+PaletteRankingMaterials SessionManager::collectPaletteRankingMaterials(std::vector<PaletteItem> items)
+{
+    return {std::move(items), paletteUsage.readAllUsage(), paletteUsage.readAllLearnedPicks()};
 }
 
 void SessionManager::recordPalettePick(const std::string& query, const std::string& key)

@@ -1,6 +1,5 @@
 #pragma once
 
-#include "Multiplexer/ActivityReports.h"
 #include "Multiplexer/Config.h"
 #include "DirWatcher.h"
 #include "GitBranch.h"
@@ -24,15 +23,17 @@ namespace term
 class RudderPublisher
 {
 public:
-    RudderPublisher(const AppConfig& configToUse,
-                    SessionManager& managerToUse,
-                    const ActivityReports& activityReportsToUse);
+    RudderPublisher(const AppConfig& configToUse, SessionManager& managerToUse);
     ~RudderPublisher();
 
     // Something the list shows changed. Bursts (a split is a create, a
     // focus and a title) coalesce into one push at the end of the event loop
     // turn.
     void schedulePush();
+
+    // Everything CowTerm's palette ordering reads, built now, for Rudder's
+    // ranking materials request. Unset, the materials list no rows.
+    std::function<PaletteRankingMaterials()> collectRankingMaterials = [] { return PaletteRankingMaterials {}; };
 
     // Rudder picked a context (Enter, not a preview); the window should come
     // forward.
@@ -46,18 +47,18 @@ public:
 private:
     void push();
     std::function<void()> createPendingRun(bool RudderPublisher::*pending, void (RudderPublisher::*action)());
-    RudderPane describePane(TerminalView& pane, const TermSession& session);
-    RecordedUse findRecordedUse(const std::string& key);
+    RudderPane describePane(TerminalView& pane, bool isOnThisMachine);
     RudderTab describeSession(TermSession& session);
     const TerminalView* findFocusedPane(TermSession& session);
     void activate(const std::string& contextId, bool raise);
+    void openPlace(const std::string& directory, bool raise);
+    bool showTarget(const RudderTarget& target);
     void close(const std::string& contextId);
     void rescanPlaces();
     void schedulePlacesRescan();
 
     const AppConfig& config;
     SessionManager& manager;
-    const ActivityReports& activityReports;
     rudder::RudderClient client;
 
     // The ctrl+a f list (scanProjects), cached between directory changes.

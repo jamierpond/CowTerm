@@ -1,6 +1,6 @@
 #include "SessionOverviewSearch.h"
 
-#include "PaletteRanking.h"
+#include <CowTermPalette/PaletteRanking.h>
 #include "Projects.h"
 #include "RemoteLocation.h"
 

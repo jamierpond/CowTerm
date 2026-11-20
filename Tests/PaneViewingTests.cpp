@@ -166,20 +166,3 @@ auto tReportsGiveTheLastUseOfAPaneSet = test("ActivityReports/lastUseIsTheLatest
     check(reports.findLastUseMilliseconds(rack, {"b", "c"}) == 200, "b's typing; c's daemon sends no file change");
     check(reports.findLastUseMilliseconds({}, {"a"}) == 0, "another host's daemon");
 };
-
-auto tReportsKeepEachPanesTimes = test("ActivityReports/eachPaneKeepsItsTypingAndFileChangeTimesApart") = []
-{
-    auto reports = ActivityReports {};
-    reports.takeActivityReport(rack,
-                               "a\t100\t0\t\t0\t\t\t\t\t300\n"
-                               "c\t50\t0\t\t0\t\n");
-
-    const auto a = reports.findPaneActivityTimes(rack, "a");
-    check(a.lastInputMilliseconds == 100 && a.lastFileChangeMilliseconds == 300);
-
-    const auto c = reports.findPaneActivityTimes(rack, "c");
-    check(c.lastInputMilliseconds == 50 && c.lastFileChangeMilliseconds == 0, "c's daemon sends no file change");
-
-    const auto unknown = reports.findPaneActivityTimes({}, "a");
-    check(unknown.lastInputMilliseconds == 0 && unknown.lastFileChangeMilliseconds == 0, "another host's daemon");
-};

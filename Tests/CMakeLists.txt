@@ -95,7 +95,7 @@ nano_add_executable(CowTermRudderTests
             RudderContextsTests.cpp
             ../Terminal/RudderContexts.cpp
             ../Terminal/GitBranch.cpp
-        TARGETS RudderProtocol FrecencySearch)
+        TARGETS RudderProtocol)
 
 target_include_directories(CowTermRudderTests PRIVATE ../Terminal)
 
@@ -223,10 +223,10 @@ nano_add_executable(CowTermFolderWatchTests
             RecursiveFolderWatcherTests.cpp
         TARGETS CowTerm::FolderWatch)
 
-# The palette's order: match level, learned picks, usage.
-nano_add_executable(CowTermPaletteRankingTests
+# How a palette row describes itself; its order is PondDev's CowTermPalette.
+nano_add_executable(CowTermPaletteItemTests
         SOURCES
-            PaletteRankingTests.cpp
+            PaletteItemTests.cpp
         TARGETS CowTerm::Multiplexer)
 
 # Not a test: `cat` of a large file through a real pane, timing the output and

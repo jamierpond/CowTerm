@@ -1,8 +1,11 @@
 #include "RudderPublisher.h"
+
+#include <map>
 #include "Multiplexer/UsageLog.h"
 
 #include "Multiplexer/Projects.h"
 
+#include <Miro/Reflection/Serialize.h>
 #include <eacp/Core/Threads/Async.h>
 #include <eacp/Core/Utils/FilePath.h>
 
@@ -10,6 +13,12 @@ namespace term
 {
 namespace
 {
+const auto rudderTargetKindNames = std::map<RudderTarget::Kind, std::string> {
+    {RudderTarget::Kind::Pane, "pane"},
+    {RudderTarget::Kind::Place, "place"},
+    {RudderTarget::Kind::Session, "session"},
+};
+
 // A directory under ~/projects being created is often a clone or an unpack:
 // a burst of events. Rescan once it settles.
 constexpr auto placesRescanDelay = eacp::Time::MS {500};
@@ -27,11 +36,9 @@ std::string findRudderEndpoint()
 } // namespace
 
 RudderPublisher::RudderPublisher(const AppConfig& configToUse,
-                                 SessionManager& managerToUse,
-                                 const ActivityReports& activityReportsToUse)
+                                 SessionManager& managerToUse)
     : config(configToUse)
     , manager(managerToUse)
-    , activityReports(activityReportsToUse)
     , client(rudder::protocol::Hello {"CowTerm", "audio.pond.cowterm", 0, true},
              findRudderEndpoint())
 {
@@ -43,6 +50,12 @@ RudderPublisher::RudderPublisher(const AppConfig& configToUse,
     client.onPreview = [this](const std::string& contextId) { activate(contextId, false); };
 
     client.onClose = [this](const std::string& contextId) { close(contextId); };
+
+    client.onRankingMaterialsRequest = [this]
+    {
+        return std::optional {rudder::protocol::RankingMaterials {
+            paletteRankingMaterialsName, Miro::toJSON(collectRankingMaterials())}};
+    };
 
     placesWatcher.onChange = [this] { schedulePlacesRescan(); };
 
@@ -86,19 +99,17 @@ void RudderPublisher::schedulePush()
 // A remote pane's directory is a path on another machine: looking for its git
 // checkout here would stat paths like /home/x/.git on this Mac, where /home is
 // an automount and every miss costs a directory-service lookup.
-RudderPane RudderPublisher::describePane(TerminalView& pane, const TermSession& session)
+RudderPane RudderPublisher::describePane(TerminalView& pane, bool isOnThisMachine)
 {
     auto cwd = pane.workingDirectory();
     auto branch = std::string {};
     auto repo = std::string {};
 
-    if (!session.isRemote())
+    if (isOnThisMachine)
     {
         branch = branches.of(cwd);
         repo = branches.repositoryRootOf(cwd);
     }
-
-    const auto times = activityReports.findPaneActivityTimes(session.host, pane.shellId());
 
     return {pane.shellId(),
             pane.currentTitle(),
@@ -106,33 +117,17 @@ RudderPane RudderPublisher::describePane(TerminalView& pane, const TermSession& 
             std::move(cwd),
             std::move(branch),
             std::move(repo),
-            false,
-            times.lastInputMilliseconds,
-            times.lastFileChangeMilliseconds};
-}
-
-RecordedUse RudderPublisher::findRecordedUse(const std::string& key)
-{
-    auto use = RecordedUse {};
-    use.lastUsedAtMs = manager.lastUsed(key);
-
-    if (const auto stored = manager.findStoredPaletteUse(key))
-    {
-        use.useCount = stored->count;
-        use.useCountAtMs = stored->at;
-    }
-
-    return use;
+            false};
 }
 
 RudderTab RudderPublisher::describeSession(TermSession& session)
 {
-    auto tab = RudderTab {session.name, session.key(), {}, findRecordedUse(session.key())};
+    auto tab = RudderTab {session.name, session.key(), {}};
     const auto* focused = findFocusedPane(session);
 
     for (auto* pane: session.view.panes())
     {
-        auto description = describePane(*pane, session);
+        auto description = describePane(*pane, !session.isRemote());
         description.focused = pane == focused;
         tab.panes.push_back(std::move(description));
     }
@@ -158,11 +153,8 @@ void RudderPublisher::push()
     auto placesWithBranches = std::vector<RudderPlace> {};
 
     for (const auto& path: places)
-    {
-        auto& place = placesWithBranches.emplace_back(
+        placesWithBranches.emplace_back(
             path, branches.of(path), branches.repositoryRootOf(path));
-        place.use = findRecordedUse(path);
-    }
 
     auto contexts = rudderContexts(
         tabs, placesWithBranches, eacp::FilePath::homeDirectory().str());
@@ -181,26 +173,44 @@ void RudderPublisher::activate(const std::string& contextId, bool raise)
     if (!target)
         return;
 
-    const auto isPlace = target->kind == RudderTarget::Kind::Place;
     logUsage("rudder.switch",
-             {{"kind", isPlace ? "place" : "pane"}, {"raise", raise ? "yes" : "no"}});
+             {{"kind", rudderTargetKindNames.at(target->kind)}, {"raise", raise ? "yes" : "no"}});
 
-    if (isPlace)
+    if (target->kind == RudderTarget::Kind::Place)
     {
-        // Rudder never previews a place (it isn't open yet); opening one is
-        // Enter's alone.
-        if (!raise)
-            return;
-
-        // Exactly what choosing it in ctrl+a f does: the session already on
-        // that directory, or a new one.
-        manager.openProject(target->value);
-        onBringToFront();
+        openPlace(target->value, raise);
         return;
     }
 
-    if (manager.showPane(target->value) && raise)
+    if (showTarget(*target) && raise)
         onBringToFront();
+}
+
+// Rudder never previews a place (it isn't open yet); opening one is Enter's
+// alone. Exactly what choosing it in ctrl+a f does: the session already on
+// that directory, or a new one.
+void RudderPublisher::openPlace(const std::string& directory, bool raise)
+{
+    if (!raise)
+        return;
+
+    manager.openProject(directory);
+    onBringToFront();
+}
+
+// A pane, or a session from the rows Rudder lists from the ranking materials.
+bool RudderPublisher::showTarget(const RudderTarget& target)
+{
+    if (target.kind == RudderTarget::Kind::Pane)
+        return manager.showPane(target.value);
+
+    auto* session = manager.find(target.value);
+
+    if (session == nullptr)
+        return false;
+
+    manager.switchTo(*session);
+    return true;
 }
 
 std::optional<rudder::protocol::Context>

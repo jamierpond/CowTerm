@@ -2,7 +2,6 @@
 
 #include "RudderProtocol.h"
 
-#include <cstdint>
 #include <optional>
 #include <string>
 #include <utility>
@@ -10,17 +9,6 @@
 
 namespace term
 {
-// What CowTerm recorded about the user's use of a session or a place, under
-// its key: the last switch to it (MruStore) and the palette's decayed use
-// count (PaletteUsageStore) with the time that count is as of. 0 where CowTerm
-// has no record.
-struct RecordedUse
-{
-    std::int64_t lastUsedAtMs = 0;
-    double useCount = 0;
-    std::int64_t useCountAtMs = 0;
-};
-
 // What Rudder (the app switcher) is told about one pane: plain values copied
 // out of the live tree, so the context list can be built and tested without
 // a window.
@@ -40,11 +28,6 @@ struct RudderPane
 
     // The pane CowTerm is showing: the active tab's focused pane.
     bool focused = false;
-
-    // When the user last typed in the pane and when a file last changed in
-    // its project, as its daemon last reported them; 0 where it reported none.
-    std::int64_t lastTypedAtMs = 0;
-    std::int64_t lastFileChangeAtMs = 0;
 };
 
 struct RudderTab
@@ -55,7 +38,6 @@ struct RudderTab
     // already open as this tab.
     std::string key;
     std::vector<RudderPane> panes;
-    RecordedUse use;
 };
 
 // A ctrl+a f directory, and the branch and repository root there if it's a
@@ -74,28 +56,27 @@ struct RudderPlace
     std::string path;
     std::string branch;
     std::string repo;
-    RecordedUse use;
 };
 
 // One context per pane, then one per place (a ctrl+a f directory) that no tab
 // or pane is in yet. Places are pushed with open=false, since activating one
 // creates a session. Each carries its directory as `path` (what Rudder
 // matches a project name on) and its git branch; `home` is abbreviated to ~
-// where it's shown. Each also carries as `usage` what CowTerm recorded about
-// its use: a pane its session's RecordedUse and its own typing and file
-// change times, a place its own RecordedUse; left out where there is none.
+// where it's shown.
 std::vector<rudder::protocol::Context>
     rudderContexts(const std::vector<RudderTab>& tabs,
                    const std::vector<RudderPlace>& places,
                    const std::string& home);
 
-// Context ids: "pane:<shellId>" and "place:<abs path>".
+// Context ids: "pane:<shellId>", "place:<abs path>" and, for the rows Rudder
+// lists from CowTerm's ranking materials, "session:<key>".
 struct RudderTarget
 {
     enum class Kind
     {
         Pane,
-        Place
+        Place,
+        Session
     };
 
     Kind kind = Kind::Pane;

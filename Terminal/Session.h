@@ -2,7 +2,7 @@
 
 #include "Multiplexer/Config.h"
 #include "Multiplexer/MruStore.h"
-#include "Multiplexer/PaletteRanking.h"
+#include <CowTermPalette/RankingMaterials.h>
 #include "PaletteUsageStore.h"
 #include "SessionView.h"
 
@@ -10,7 +10,6 @@
 #include <emberstore/Emberstore.h>
 
 #include <memory>
-#include <optional>
 #include <string>
 #include <vector>
 
@@ -106,14 +105,11 @@ public:
 
     std::int64_t lastUsed(const std::string& key) { return mru.lastUsed(key); }
 
-    // The palette's use count for the key as stored, not decayed; nothing for a
-    // key never used.
-    std::optional<UsageEntry> findStoredPaletteUse(const std::string& key)
-    {
-        return paletteUsage.usage.get(key);
-    }
-
     PaletteUsage getPaletteUsage(const std::string& query);
+
+    // Everything the palette's ordering reads besides `items`, the rows it
+    // lists: what Rudder orders CowTerm's rows from.
+    PaletteRankingMaterials collectPaletteRankingMaterials(std::vector<PaletteItem> items);
     void recordPalettePick(const std::string& query, const std::string& key);
 
     std::function<void(TermSession&)> onActiveChanged = [](TermSession&) {};

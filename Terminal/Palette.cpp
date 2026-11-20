@@ -1,6 +1,6 @@
 #include "Palette.h"
 
-#include "Multiplexer/PaletteRanking.h"
+#include <CowTermPalette/PaletteRanking.h>
 #include "Multiplexer/HostColours.h"
 #include "Multiplexer/Projects.h"
 #include "Multiplexer/RemoteHosts.h"
@@ -46,11 +46,6 @@ constexpr auto unreadPillHeightFraction = 0.62f;
 constexpr auto rowCornerRadius = 6.0f;
 // The theme's dim grey vanishes on the darker host fills; the row's own text colour, faded, still reads.
 constexpr auto ageTextOpacity = 0.7f;
-
-bool isSessionItem(const PaletteItem& item)
-{
-    return item.kind == PaletteItem::Kind::Session;
-}
 
 bool isOpenSession(const PaletteItem& item)
 {
@@ -102,14 +97,6 @@ std::string keepTextIfItFits(const std::string& text, float width, const TextWid
         return {};
 
     return text;
-}
-
-bool isOrderedForEmptyQuery(const PaletteItem& a, const PaletteItem& b)
-{
-    if (a.kind != b.kind)
-        return isSessionItem(a);
-
-    return a.lastUsed > b.lastUsed;
 }
 } // namespace
 
@@ -216,38 +203,44 @@ PaletteItem Palette::makeUnreachableItem(const RemoteHost& remote) const
 
 // Each host's last good scan shows at once; one that can't be reached is a
 // single grey row saying why.
-void Palette::addRemoteItems()
+void Palette::addRemoteItems(std::vector<PaletteItem>& items) const
 {
     for (auto* remote: RemoteHosts::all())
     {
         if (remote->getStatus() == RemoteHost::Status::Unreachable && remote->getLastScan().empty())
         {
-            allItems.push_back(makeUnreachableItem(*remote));
+            items.push_back(makeUnreachableItem(*remote));
             continue;
         }
 
         for (const auto& project: remote->getLastScan())
         {
             if (sessions.find(project.path) == nullptr)
-                allItems.push_back(makeProjectItem(project.name, project.path));
+                items.push_back(makeProjectItem(project.name, project.path));
         }
     }
 }
 
-void Palette::rebuild()
+std::vector<PaletteItem> Palette::collectItems() const
 {
-    allItems.clear();
+    auto items = std::vector<PaletteItem> {};
 
     for (auto& session: sessions.all())
-        allItems.push_back(makeSessionItem(*session));
+        items.push_back(makeSessionItem(*session));
 
     for (auto& project: scanProjects(config))
     {
         if (sessions.find(project.path) == nullptr)
-            allItems.push_back(makeProjectItem(project.name, project.path));
+            items.push_back(makeProjectItem(project.name, project.path));
     }
 
-    addRemoteItems();
+    addRemoteItems(items);
+    return items;
+}
+
+void Palette::rebuild()
+{
+    allItems = collectItems();
 }
 
 void Palette::applyQuery()
@@ -256,19 +249,7 @@ void Palette::applyQuery()
 
     const auto& query = searchField.getText();
 
-    if (query.empty())
-    {
-        // Unread sessions first, the newest first, then open sessions, then
-        // projects. Each is ordered by its last use: switched to here, typed
-        // into anywhere or a file changed in its project, as the phone does.
-        visible = allItems;
-        std::stable_sort(visible.begin(), visible.end(), isOrderedForEmptyQuery);
-        moveUnreadRowsFirst(visible, [](const PaletteItem& item) -> const auto& { return item.unread; });
-    }
-    else
-    {
-        visible = rankPaletteItems(allItems, query, sessions.getPaletteUsage(query));
-    }
+    visible = orderPaletteItems(allItems, query, sessions.getPaletteUsage(query));
 
     selected = std::clamp(selected, 0, std::max((int) visible.size() - 1, 0));
 }

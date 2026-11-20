@@ -61,16 +61,6 @@ std::vector<std::string> collectRemoteHosts(const std::vector<std::string>& sear
     return hosts;
 }
 
-std::string getHostLabel(const std::string& host)
-{
-    const auto at = host.find('@');
-
-    if (at == std::string::npos)
-        return host;
-
-    return host.substr(at + 1);
-}
-
 std::string makeRemoteProjectDir(const std::string& host, const std::string& path)
 {
     return host + ":" + path;

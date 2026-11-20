@@ -1,5 +1,7 @@
 #pragma once
 
+#include <CowTermPalette/HostLabel.h>
+
 #include <optional>
 #include <string>
 #include <vector>
@@ -26,9 +28,6 @@ std::optional<RemoteSearchDir> parseRemoteSearchDir(const std::string& entry);
 
 // Every distinct host named in searchDirs, in first-seen order.
 std::vector<std::string> collectRemoteHosts(const std::vector<std::string>& searchDirs);
-
-// How a host is shown: "tamby-windows" for "jamie@tamby-windows".
-std::string getHostLabel(const std::string& host);
 
 // "tamby:/home/x/Grazer" for a project dir on a host; plain paths stay local.
 std::string makeRemoteProjectDir(const std::string& host, const std::string& path);

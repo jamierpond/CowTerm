@@ -1,33 +1,17 @@
 #pragma once
 
+#include <CowTermPalette/PaletteUsageEntries.h>
 #include <FrecencySearch/LearnedPicks.h>
 #include <Miro/Reflect.h>
 #include <emberstore/Emberstore.h>
 
 #include <cstdint>
+#include <map>
 #include <string>
 #include <vector>
 
 namespace term
 {
-struct UsageEntry
-{
-    double count = 0;
-    std::int64_t at = 0;
-
-    MIRO_REFLECT(count, at)
-};
-
-struct LearnedPickEntry
-{
-    std::string query;
-    std::string destinationKey;
-    double count = 0;
-    std::int64_t at = 0;
-
-    MIRO_REFLECT(query, destinationKey, count, at)
-};
-
 // How much each session or project is used (decayed: a palette pick adds 1,
 // any other switch to it seenWeight) and which one the user picked for each
 // typed text. Give it an Atomic database: losing the last uses is harmless.
@@ -43,6 +27,10 @@ struct PaletteUsageStore
     void recordPalettePick(const std::string& query, const std::string& key, std::int64_t nowMs);
 
     double getUsage(const std::string& key, std::int64_t nowMs);
+
+    // Every stored use count, not decayed, by key; and every learned pick.
+    std::map<std::string, UsageEntry> readAllUsage();
+    std::vector<LearnedPickEntry> readAllLearnedPicks();
     std::vector<frecencysearch::LearnedPick> findPicksForQuery(const std::string& query,
                                                                std::int64_t nowMs);
 
