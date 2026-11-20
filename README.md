@@ -94,6 +94,8 @@ separate `screencap` tool.
 | `Ctrl+A x` | Close the active pane (last pane ends the session) |
 | `Ctrl+A z` | Zoom / unzoom the active pane |
 | `Ctrl+A o` | Cycle pane focus |
+| `Ctrl+A g` | Open the active pane's repository on GitHub, in this machine's browser |
+| `Ctrl+A r` | Open the pull request for the active pane's branch, or GitHub's form to open one |
 | `Cmd+N` | New session in the active pane's directory |
 | `Ctrl+A 1..9` (or `Cmd+1..9`) | Switch to session by index |
 | `Ctrl+A Ctrl+A` | Send a literal `Ctrl+A` to the shell |
@@ -127,6 +129,19 @@ lazygit (`q`) and the popup is gone with focus back where it was;
 (`$SHELL -c`), so PATH and `$EDITOR` apply: lazygit's `e` opens nvim inside
 the popup's own PTY, edit, `:q`, and you're back in lazygit. The popup's
 shell is in-process and ephemeral — it never goes to the session daemon.
+
+## GitHub pages
+
+`Ctrl+A g` opens the active pane's repository on GitHub and `Ctrl+A r` the pull
+request for its branch, both in the browser of the machine the app runs on,
+even when the pane lives on another host. The app reads `origin`, the branch
+and `origin/HEAD` with git in the pane's folder: directly for a local pane,
+over one `ssh <host>` call for a remote one. `Ctrl+A r` asks `gh pr view` there
+when `gh` is installed and logged in; otherwise, or when the branch has no pull
+request, it opens GitHub's form for a new one (`compare/<default>...<branch>`),
+which creates nothing until you submit it. A folder outside a repository, an
+origin off GitHub, a detached HEAD or the default branch posts a notification
+saying so and opens nothing.
 
 ## Ring-back notifications
 

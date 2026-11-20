@@ -8,6 +8,7 @@
 #include "PasteConfirmation.h"
 #include "Palette.h"
 #include "CowTermPermissions.h"
+#include "GitHubPages.h"
 #include "Popup.h"
 #include "RudderPublisher.h"
 #include "Session.h"
@@ -88,6 +89,9 @@ private:
     void enterCopyModeOnActivePane();
     void pasteIntoActivePane();
     void openSessionInActiveDirectory();
+    void openGitHubRepositoryOfActivePane();
+    void openGitHubPullRequestOfActivePane();
+    void openGitHubPageOfActivePane(github::PageKind kind);
     void quitFromLeader();
     void increaseGlobalFontSize();
     void decreaseGlobalFontSize();

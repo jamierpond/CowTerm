@@ -6,6 +6,7 @@
 #include "Multiplexer/MruStore.h"
 #include "Multiplexer/RemoteHosts.h"
 #include "Multiplexer/SshBridgeLink.h"
+#include "GitHubPageOpener.h"
 #include "LeaderKeys.h"
 #include "Notifier.h"
 #include "Multiplexer/TextLayout.h"
@@ -831,7 +832,8 @@ bool AppShell::handlePrefixed(const KeyEvent& event)
 bool AppShell::runPrefixedKey(const KeyEvent& event)
 {
     // f palette, i lazygit popup, " and %
-    // split below and beside, [ ] copy mode and paste, x kills the pane.
+    // split below and beside, [ ] copy mode and paste, x kills the pane,
+    // g and r open the pane's repository and its branch's pull request on GitHub.
     static constexpr auto leaderActions = std::array {
         KeyAction {"f", &AppShell::showPalette},
         KeyAction {"i", &AppShell::showLazygitPopup},
@@ -842,6 +844,8 @@ bool AppShell::runPrefixedKey(const KeyEvent& event)
         KeyAction {"]", &AppShell::pasteIntoActivePane},
         KeyAction {"o", &AppShell::cycleActivePaneFocus},
         KeyAction {"x", &AppShell::closeActivePane},
+        KeyAction {"g", &AppShell::openGitHubRepositoryOfActivePane},
+        KeyAction {"r", &AppShell::openGitHubPullRequestOfActivePane},
     };
 
     const auto& characters = event.charactersIgnoringModifiers;
@@ -931,6 +935,31 @@ void AppShell::openSessionInActiveDirectory()
 {
     if (auto* active = manager.active())
         manager.newSession(active->getActiveDirectoryAsProjectDir());
+}
+
+void AppShell::openGitHubRepositoryOfActivePane()
+{
+    openGitHubPageOfActivePane(github::PageKind::repository);
+}
+
+void AppShell::openGitHubPullRequestOfActivePane()
+{
+    openGitHubPageOfActivePane(github::PageKind::pullRequest);
+}
+
+// The page opens in this machine's browser even when the pane's shell runs on
+// another host.
+void AppShell::openGitHubPageOfActivePane(github::PageKind kind)
+{
+    auto* active = manager.active();
+
+    if (active == nullptr)
+        return;
+
+    github::openPageForFolder({active->host, active->activeWorkingDirectory()},
+                              kind,
+                              [sessionKey = active->key(), sessionName = active->name](const std::string& reason)
+                              { Notifier::notify(sessionKey, sessionName, reason); });
 }
 
 void AppShell::quitFromLeader()

@@ -99,6 +99,17 @@ nano_add_executable(CowTermRudderTests
 
 target_include_directories(CowTermRudderTests PRIVATE ../Terminal)
 
+# Ctrl+A g and r: the GitHub page for a pane's repository, from its origin
+# URL and the query the app runs where the pane lives. Pure, over eacp's
+# string and URL helpers.
+nano_add_executable(CowTermGitHubPageTests
+        SOURCES
+            GitHubPageTests.cpp
+            ../Terminal/GitHubPages.cpp
+        TARGETS eacp-network)
+
+target_include_directories(CowTermGitHubPageTests PRIVATE ../Terminal)
+
 # The `ct notify-user` request and reply encoding; pure, over Protocol.h.
 nano_add_executable(CowTermNotifyUserTests
         SOURCES
