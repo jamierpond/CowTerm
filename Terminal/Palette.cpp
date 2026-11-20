@@ -44,6 +44,8 @@ constexpr auto badgeRightPadding = 12.0f;
 constexpr auto badgeGap = 8.0f;
 constexpr auto unreadPillHeightFraction = 0.62f;
 constexpr auto rowCornerRadius = 6.0f;
+// The theme's dim grey vanishes on the darker host fills; the row's own text colour, faded, still reads.
+constexpr auto ageTextOpacity = 0.7f;
 
 bool isSessionItem(const PaletteItem& item)
 {
@@ -72,12 +74,34 @@ std::size_t calculateDetailLength(const PaletteItem& item)
     return length - std::min(hostSuffixLength, length / 2);
 }
 
+std::string describeHostSuffix(const PaletteItem& item)
+{
+    if (item.host.empty() || item.unavailable)
+        return {};
+
+    return " · " + getHostLabel(item.host);
+}
+
 std::string describeItem(const PaletteItem& item)
 {
     if (!item.status.empty())
         return truncateWithEllipsis(item.status, calculateDetailLength(item));
 
     return truncateWithEllipsis(item.detail, calculateDetailLength(item));
+}
+
+TextWidthMeasurer createMeasurer(UI::Graphics& g, const UI::Font& font)
+{
+    return [&g, &font](const std::string& text) { return measureTextInFont(g, text, font); };
+}
+
+// A host's name cut short reads as another host, so it shows whole or not at all.
+std::string keepTextIfItFits(const std::string& text, float width, const TextWidthMeasurer& measureWidth)
+{
+    if (measureWidth(text) > width)
+        return {};
+
+    return text;
 }
 
 bool isOrderedForEmptyQuery(const PaletteItem& a, const PaletteItem& b)
@@ -405,32 +429,22 @@ void Palette::mouseMove(const MouseEvent& event)
     }
 }
 
-// Every piece of text takes the row's text colour, which reads on every host's
-// fill; the host's name says in words what the fill says in colour.
-void Palette::paintRow(UI::Graphics& g, const PaletteItem& item, Rect rowArea, const HostRowColours& colours)
+// The age, the claude badge and the unread pill, right to left from the row's
+// right edge. Returns the left edge of what it drew.
+float Palette::paintRowBadges(UI::Graphics& g, const PaletteItem& item, Rect rowArea, const HostRowColours& colours)
 {
     const auto baseline = rowArea.y + listMetrics.rowHeight * baselineFraction;
-    auto x = rowArea.x + iconLeft;
+    auto badgeRight = rowArea.right() - badgeRightPadding;
 
-    g.setColour(toColor(colours.text));
-    drawTextInFont(g, getPaletteItemIcon(item), {x, baseline}, rowFont);
-    x += labelAfterIcon;
-
-    const auto label = truncateWithEllipsis(item.label, labelLength);
-    drawTextInFont(g, label, {x, baseline}, rowFont);
-    x += measureTextInFont(g, label, rowFont);
-
-    if (!item.host.empty() && !item.unavailable)
+    if (const auto age = describePaletteItemAge(item, MruStore::nowMs()); !age.empty())
     {
-        const auto hostSuffix = " · " + getHostLabel(item.host);
-        drawTextInFont(g, hostSuffix, {x, baseline}, detailFont);
-        x += measureTextInFont(g, hostSuffix, detailFont);
+        const auto ageWidth = measureTextInFont(g, age, detailFont);
+        g.setColour(toColor(colours.text, ageTextOpacity));
+        drawTextInFont(g, age, {badgeRight - ageWidth, baseline}, detailFont);
+        badgeRight -= ageWidth + badgeGap;
     }
 
-    x += labelToDetailGap;
-    drawTextInFont(g, describeItem(item), {x, baseline}, detailFont);
-
-    auto badgeRight = rowArea.right() - badgeRightPadding;
+    g.setColour(toColor(colours.text));
 
     if (item.claude)
     {
@@ -443,8 +457,36 @@ void Palette::paintRow(UI::Graphics& g, const PaletteItem& item, Rect rowArea, c
     if (item.unread)
     {
         const auto place = UnreadPillPlace {badgeRight, rowArea.y + rowArea.h / 2.0f, rowArea.h * unreadPillHeightFraction};
-        paintUnreadPill(g, *item.unread, place, detailFont);
+        badgeRight -= paintUnreadPill(g, *item.unread, place, detailFont) + badgeGap;
     }
+
+    return badgeRight;
+}
+
+// Every piece of text takes the row's text colour, which reads on every host's
+// fill; the host's name says in words what the fill says in colour. The name,
+// host and detail are cut short before they reach the badges on the right.
+void Palette::paintRow(UI::Graphics& g, const PaletteItem& item, Rect rowArea, const HostRowColours& colours)
+{
+    const auto textRight = paintRowBadges(g, item, rowArea, colours);
+    const auto baseline = rowArea.y + listMetrics.rowHeight * baselineFraction;
+    auto x = rowArea.x + iconLeft;
+
+    g.setColour(toColor(colours.text));
+    drawTextInFont(g, getPaletteItemIcon(item), {x, baseline}, rowFont);
+    x += labelAfterIcon;
+
+    const auto shortLabel = truncateWithEllipsis(item.label, labelLength);
+    const auto label = truncateTextToWidth(shortLabel, textRight - x, createMeasurer(g, rowFont));
+    drawTextInFont(g, label, {x, baseline}, rowFont);
+    x += measureTextInFont(g, label, rowFont);
+    const auto hostSuffix = keepTextIfItFits(describeHostSuffix(item), textRight - x, createMeasurer(g, detailFont));
+    drawTextInFont(g, hostSuffix, {x, baseline}, detailFont);
+    x += measureTextInFont(g, hostSuffix, detailFont);
+
+    x += labelToDetailGap;
+    const auto detail = truncateTextToWidthOrDrop(describeItem(item), textRight - x, createMeasurer(g, detailFont));
+    drawTextInFont(g, detail, {x, baseline}, detailFont);
 }
 
 void Palette::paint(UI::Graphics& g)

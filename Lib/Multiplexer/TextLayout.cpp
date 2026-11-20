@@ -12,6 +12,9 @@ constexpr auto firstPrintableCharacter = 0x20;
 constexpr auto deleteCharacter = 0x7f;
 constexpr auto ellipsis = "…";
 
+// A cut that keeps fewer characters than this, besides the ellipsis, says nothing.
+constexpr auto fewestCharactersWorthKeeping = std::size_t {4};
+
 // Takes the longest prefix of word that fits (at least one codepoint) off the
 // front of word and returns it.
 std::string takeWidestFittingPrefix(std::string& word,
@@ -78,6 +81,10 @@ void wrapParagraphToWidth(const std::string& paragraph,
     }
 
     lines.push_back(line);
+}
+std::size_t countCodepoints(const std::string& text)
+{
+    return static_cast<std::size_t>(std::ranges::count_if(text, [](char byte) { return !isUtf8ContinuationByte(byte); }));
 }
 } // namespace
 
@@ -162,6 +169,18 @@ std::string truncateTextToWidth(const std::string& source,
         truncated.erase(findPreviousCodepointStart(truncated, truncated.size()));
 
     return truncated + ellipsis;
+}
+
+std::string truncateTextToWidthOrDrop(const std::string& source,
+                                      float width,
+                                      const TextWidthMeasurer& measureWidth)
+{
+    auto truncated = truncateTextToWidth(source, width, measureWidth);
+
+    if (truncated != source && countCodepoints(truncated) <= fewestCharactersWorthKeeping)
+        return {};
+
+    return truncated;
 }
 
 std::vector<std::string> wrapTextToWidth(const std::string& source,

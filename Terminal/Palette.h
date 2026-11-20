@@ -66,6 +66,11 @@ private:
                   eacp::UI::Rect rowArea,
                   const HostRowColours& colours);
 
+    float paintRowBadges(eacp::UI::Graphics& g,
+                         const PaletteItem& item,
+                         eacp::UI::Rect rowArea,
+                         const HostRowColours& colours);
+
     const ActivityReports& activityReports;
     std::vector<PaletteItem> allItems;
     std::vector<PaletteItem> visible;

@@ -120,3 +120,33 @@ auto tPlainNameKeepsEveryMachine = test("PaletteRanking/a plain name still lists
     check(ranked.size() == 3);
     check(ranked.front().key == "/p/Miro");
 };
+
+auto tSessionAge = test("PaletteItem/aSessionRowSaysHowLongAgoItWasLastUsedAsThePhoneDoes") = []
+{
+    constexpr auto thirtySecondsMs = 30LL * 1000;
+    constexpr auto fourMinutes = 4;
+    constexpr auto thirtyHours = 30 * 60;
+    auto session = makeItem(PaletteItem::Kind::Session, "grader", "/p/grader");
+
+    session.lastUsed = nowMs - thirtySecondsMs;
+    check(describePaletteItemAge(session, nowMs) == "just now");
+
+    session.lastUsed = nowMs - fourMinutes * minuteMs;
+    check(describePaletteItemAge(session, nowMs) == "4 min ago");
+
+    session.lastUsed = nowMs - thirtyHours * minuteMs;
+    check(describePaletteItemAge(session, nowMs) == "yesterday");
+};
+
+auto tNeverUsedHasNoAge = test("PaletteItem/aSessionNeverUsedShowsNoAge") = []
+{
+    const auto session = makeItem(PaletteItem::Kind::Session, "grader", "/p/grader");
+    check(describePaletteItemAge(session, nowMs).empty());
+};
+
+auto tProjectHasNoAge = test("PaletteItem/aProjectRowShowsNoAgeEvenWhenOpenedBefore") = []
+{
+    auto project = makeItem(PaletteItem::Kind::Project, "graphics-analyzer", "/p/graphics-analyzer");
+    project.lastUsed = nowMs - minuteMs;
+    check(describePaletteItemAge(project, nowMs).empty());
+};

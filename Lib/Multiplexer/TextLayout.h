@@ -27,6 +27,12 @@ std::string truncateTextToWidth(const std::string& source,
                                 float width,
                                 const TextWidthMeasurer& measureWidth);
 
+// As truncateTextToWidth, but empty when the cut would keep fewer than four
+// characters: "~/…" says nothing.
+std::string truncateTextToWidthOrDrop(const std::string& source,
+                                      float width,
+                                      const TextWidthMeasurer& measureWidth);
+
 // Word-wraps each line of source to width; a word wider than a whole line
 // breaks between codepoints.
 std::vector<std::string> wrapTextToWidth(const std::string& source,

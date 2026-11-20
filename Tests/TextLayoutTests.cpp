@@ -59,6 +59,14 @@ auto tTruncateToWidth = test("TextLayout/truncateTextToWidthFitsTheEllipsisIn") 
     check(truncateTextToWidth("hello", 2.f, oneUnitPerByte) == "…");
 };
 
+auto tTruncateOrDrop = test("TextLayout/truncateTextToWidthOrDropGivesNothingWhenUnderFourCharactersFit") = []
+{
+    check(truncateTextToWidthOrDrop("hi", 2.f, oneUnitPerByte) == "hi");
+    check(truncateTextToWidthOrDrop("hello world", 7.f, oneUnitPerByte) == "hell…");
+    check(truncateTextToWidthOrDrop("hello world", 6.f, oneUnitPerByte).empty());
+    check(truncateTextToWidthOrDrop("", 3.f, oneUnitPerByte).empty());
+};
+
 auto tWrapByWords = test("TextLayout/wrapTextToWidthBreaksBetweenWords") = []
 {
     check(wrapTextToWidth("one two three", 7.f, oneUnitPerByte) == Lines {"one two", "three"});
