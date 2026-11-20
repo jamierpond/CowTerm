@@ -909,9 +909,7 @@ bool AppShell::handleCommand(const KeyEvent& event)
     static constexpr auto commandActions = std::array {
         KeyAction {"k", &AppShell::showPalette},
         KeyAction {"t", &AppShell::showPalette},
-        KeyAction {"w", &AppShell::closeActivePane},
         KeyAction {"n", &AppShell::openSessionInActiveDirectory},
-        KeyAction {"d", &AppShell::splitActivePaneBeside},
         KeyAction {"q", &AppShell::quitFromLeader},
         KeyAction {"=", &AppShell::increaseGlobalFontSize},
         KeyAction {"+", &AppShell::increaseGlobalFontSize},
