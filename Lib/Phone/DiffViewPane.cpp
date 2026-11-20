@@ -1,12 +1,10 @@
 #include "DiffViewPane.h"
 
+#include "JsonFile.h"
 #include "ProjectSession.h"
 
 #include "Multiplexer/DaemonClient.h"
 #include "Multiplexer/RemoteLocation.h"
-
-#include <eacp/Core/Utils/FilePath.h>
-#include <eacp/Core/Utils/Files.h>
 
 #include <Miro/Reflect.h>
 
@@ -43,18 +41,7 @@ bool saveTemporaryPanes(const std::filesystem::path& path, const std::vector<Tem
     for (const auto& pane: panes)
         file.panes.push_back({pane.host, pane.paneId});
 
-    auto ignoredError = std::error_code {};
-    std::filesystem::create_directories(path.parent_path(), ignoredError);
-
-    try
-    {
-        eacp::Files::writeFileAtomically(eacp::FilePath {path.string()}, Miro::toJSONString(file));
-        return true;
-    }
-    catch (const std::exception&)
-    {
-        return false;
-    }
+    return writeJsonFileAtomically(path, file);
 }
 
 // The screen's text has one line per row, so a long message is broken where
@@ -146,27 +133,18 @@ void removeTemporaryPane(const std::filesystem::path& path, const TemporaryPane&
 
 std::vector<TemporaryPane> loadTemporaryPanes(const std::filesystem::path& path)
 {
-    const auto text = eacp::Files::readFile(eacp::FilePath {path.string()});
+    const auto file = readJsonFile<TemporaryPanesFile>(path);
 
-    if (text.empty())
+    if (!file)
         return {};
 
-    try
-    {
-        auto file = TemporaryPanesFile {};
-        Miro::fromJSONString(file, text);
-        auto panes = std::vector<TemporaryPane> {};
+    auto panes = std::vector<TemporaryPane> {};
 
-        // Files from before hosts were named without their user hold "jamiepond@macprorack".
-        for (const auto& entry: file.panes)
-            panes.push_back({remote::getHostLabel(entry.host), entry.paneId});
+    // Files from before hosts were named without their user hold "jamiepond@macprorack".
+    for (const auto& entry: file->panes)
+        panes.push_back({remote::getHostLabel(entry.host), entry.paneId});
 
-        return panes;
-    }
-    catch (const std::exception&)
-    {
-        return {};
-    }
+    return panes;
 }
 
 DiffViewShell::DiffViewShell(std::unique_ptr<Shell> innerToUse, DiffViewPane paneToUse)

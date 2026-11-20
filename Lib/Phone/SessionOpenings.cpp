@@ -1,12 +1,11 @@
 #include "SessionOpenings.h"
 
+#include "JsonFile.h"
+
 #include "Multiplexer/RemoteLocation.h"
 
 #include <FrecencySearch/LearnedPicks.h>
 #include <Miro/Reflect.h>
-
-#include <eacp/Core/Utils/FilePath.h>
-#include <eacp/Core/Utils/Files.h>
 
 #include <algorithm>
 #include <vector>
@@ -52,24 +51,15 @@ void moveOpeningsToHostNamesWithoutUser(SessionOpeningsFile& file)
 SessionOpenings::SessionOpenings(std::filesystem::path pathToUse)
     : path(std::move(pathToUse))
 {
-    const auto text = eacp::Files::readFile(eacp::FilePath {path.string()});
+    auto file = readJsonFile<SessionOpeningsFile>(path);
 
-    if (text.empty())
+    if (!file)
         return;
 
-    try
-    {
-        auto file = SessionOpeningsFile {};
-        Miro::fromJSONString(file, text);
-        moveOpeningsToHostNamesWithoutUser(file);
+    moveOpeningsToHostNamesWithoutUser(*file);
 
-        for (const auto& entry: file.sessions)
-            usageByRowKey[entry.rowKey] = {entry.count, entry.at};
-    }
-    catch (const std::exception&)
-    {
-        usageByRowKey.clear();
-    }
+    for (const auto& entry: file->sessions)
+        usageByRowKey[entry.rowKey] = {entry.count, entry.at};
 }
 
 void SessionOpenings::recordOpening(const std::string& rowKey, std::int64_t nowMilliseconds)
@@ -105,16 +95,7 @@ void SessionOpenings::save() const
     for (const auto& [rowKey, usage]: usageByRowKey)
         file.sessions.push_back({rowKey, usage.count, usage.atMilliseconds});
 
-    auto ignoredError = std::error_code {};
-    std::filesystem::create_directories(path.parent_path(), ignoredError);
-
-    try
-    {
-        eacp::Files::writeFileAtomically(eacp::FilePath {path.string()}, Miro::toJSONString(file));
-    }
     // As on the Mac, losing the last openings is harmless.
-    catch (const std::exception&)
-    {
-    }
+    writeJsonFileAtomically(path, file);
 }
 } // namespace term::phone

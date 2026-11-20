@@ -1,9 +1,8 @@
 #include "HeldPane.h"
 
-#include "Multiplexer/RemoteLocation.h"
+#include "JsonFile.h"
 
-#include <eacp/Core/Utils/FilePath.h>
-#include <eacp/Core/Utils/Files.h>
+#include "Multiplexer/RemoteLocation.h"
 
 #include <Miro/Reflect.h>
 
@@ -27,38 +26,18 @@ bool saveHeldPane(const std::filesystem::path& path, const HeldPane& pane)
     const auto file =
         HeldPaneFile {pane.host, pane.paneId, pane.sizeBeforeThePhone.cols, pane.sizeBeforeThePhone.rows};
 
-    auto ignoredError = std::error_code {};
-    std::filesystem::create_directories(path.parent_path(), ignoredError);
-
-    try
-    {
-        eacp::Files::writeFileAtomically(eacp::FilePath {path.string()}, Miro::toJSONString(file));
-        return true;
-    }
-    catch (const std::exception&)
-    {
-        return false;
-    }
+    return writeJsonFileAtomically(path, file);
 }
 
 std::optional<HeldPane> loadHeldPane(const std::filesystem::path& path)
 {
-    const auto text = eacp::Files::readFile(eacp::FilePath {path.string()});
+    const auto file = readJsonFile<HeldPaneFile>(path);
 
-    if (text.empty())
+    if (!file)
         return std::nullopt;
 
-    try
-    {
-        auto file = HeldPaneFile {};
-        Miro::fromJSONString(file, text);
-        // Files from before hosts were named without their user hold "jamiepond@macprorack".
-        return HeldPane {remote::getHostLabel(file.host), file.paneId, {file.columns, file.rows}};
-    }
-    catch (const std::exception&)
-    {
-        return std::nullopt;
-    }
+    // Files from before hosts were named without their user hold "jamiepond@macprorack".
+    return HeldPane {remote::getHostLabel(file->host), file->paneId, {file->columns, file->rows}};
 }
 
 void forgetHeldPane(const std::filesystem::path& path)
