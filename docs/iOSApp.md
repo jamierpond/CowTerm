@@ -271,9 +271,6 @@ finds the daemon inside `CowTerm.app`.
   eacp's keyboard-frame event above the keyboard: `Esc`, `Tab`, a sticky `Ctrl`,
   `⌃A` (the leader), arrows, and `| ~ / -`. Dragging on the bar moves the
   cursor, like dragging on the space bar.
-- A **composer for Claude panes**: a native text field with dictation and
-  autocorrect that sends as a bracketed paste plus Enter. Speaking a paragraph
-  to Claude beats typing it in a terminal grid.
 - **Quick replies** when the screen shows a Claude permission prompt
   (`1. Yes  2. Yes, don't ask again  3. No`): buttons instead of keys.
 - **Hardware keyboards** go through the Mac's own `KeyEncoding.cpp` /
@@ -317,7 +314,7 @@ pair-device` + the Secure Enclave key. Read-only at the daemon's size, with
 pinch to zoom. eacp PR: lifecycle events.
 
 **Phase 2: Steer.** eacp PRs: text input and keyboard frame. Then the key
-bar, the Claude composer and quick replies, and take-over resize (daemon
+bar and quick replies, and take-over resize (daemon
 protocol v5).
 
 **Phase 3: Ring.** eacp PR: notifications. Then `ct push-relay` on a
