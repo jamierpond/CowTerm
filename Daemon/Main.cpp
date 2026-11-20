@@ -36,6 +36,7 @@
 #include <memory>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 using namespace eacp;
@@ -759,7 +760,18 @@ struct Daemon
     {
         auto& client = clients.at(&sender);
         client.lastHeardAt = std::chrono::steady_clock::now();
-        client.hasYieldedForSilence = false;
+
+        if (std::exchange(client.hasYieldedForSilence, false))
+            returnPanesToClientHeardAgain(client);
+    }
+
+    void returnPanesToClientHeardAgain(const ConnectedClient& client)
+    {
+        for (auto& [id, pane]: panes)
+        {
+            if (auto size = pane->sizeOwner.markClientHeardAgain(client.id))
+                applySize(id, *pane, *size);
+        }
     }
 
     bool hasGoneSilent(const ConnectedClient& client) const
@@ -768,8 +780,8 @@ struct Daemon
         return !client.hasYieldedForSilence && silence > silenceThatLosesThePanes;
     }
 
-    // As yield-size does for each pane the silent client holds; it claims them
-    // again itself when it speaks.
+    // The silent client's panes go to the clients showing them that still
+    // answer; it keeps its sizes and takes back any pane nobody holds when it speaks.
     void yieldPanesOfSilentClients()
     {
         for (auto& [messenger, client]: clients)
@@ -781,10 +793,7 @@ struct Daemon
 
             for (auto& [id, pane]: panes)
             {
-                if (!pane->sizeOwner.isOwnedBy(client.id))
-                    continue;
-
-                if (auto size = pane->sizeOwner.forgetClient(client.id))
+                if (auto size = pane->sizeOwner.yieldSizeWhileSilent(client.id))
                     applySize(id, *pane, *size);
             }
         }

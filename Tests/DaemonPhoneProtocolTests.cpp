@@ -117,6 +117,25 @@ bool isSizeOwnerNotice(const std::optional<term::proto::Message>& notice,
     return notice->args[columnsArgument] == toArgument(expected.columns)
            && notice->args[ownerFlagArgument] == expectedFlag && receivedName == expected.ownerName;
 }
+
+// Skips the size-owner notices before the expected one.
+bool waitForSizeOwnerNotice(DaemonConversation& client, const ExpectedSizeOwner& expected)
+{
+    while (auto notice = client.waitForMessage("size-owner"))
+    {
+        if (isSizeOwnerNotice(notice, expected))
+            return true;
+    }
+
+    return false;
+}
+
+// Longer than the daemon's 5 seconds of silence plus its 1 second check.
+void staySilentLongerThanTheDaemonWaits()
+{
+    constexpr auto silenceLongerThanTheDaemonWaits = Time::MS {7000};
+    Threads::runEventLoopUntil([] { return false; }, silenceLongerThanTheDaemonWaits);
+}
 } // namespace
 
 auto tPhoneClaimTellsEveryWatcher = test("DaemonPhoneProtocol/phoneClaimTellsEveryWatcher") = []
@@ -243,7 +262,36 @@ auto tPhoneLeavingHandsThePaneBack = test("DaemonPhoneProtocol/phoneLeavingHands
     mac.messenger.send(term::proto::make("kill", {paneId}));
 };
 
-auto tOldClientResizeStillWins = test("DaemonPhoneProtocol/oldClientResizeStillWins") = []
+auto tSilentMacGetsThePaneBackWhenThePhoneLeaves =
+    test("DaemonPhoneProtocol/aMacThatWentSilentGetsThePaneBackWhenThePhoneLeaves") = []
+{
+    auto daemon = TestDaemon {"daemon-silent-mac-test"};
+    auto mac = DaemonConversation {daemon.instance};
+    check(mac.waitForConnection());
+    introduce(mac, "Mac");
+    createPane(mac, paneId, desktopColumns);
+
+    staySilentLongerThanTheDaemonWaits();
+    mac.messenger.send(term::proto::make("info"));
+    mac.waitForMessage("info");
+
+    {
+        auto phone = DaemonConversation {daemon.instance};
+        check(phone.waitForConnection());
+        introduce(phone, "iPhone");
+        openPane(phone, paneId, phoneColumns);
+        phone.messenger.send(term::proto::make(
+            "claim-size", {paneId, toArgument(phoneColumns), toArgument(rows)}));
+        check(waitForSizeOwnerNotice(mac, {phoneColumns, false, "iPhone"}), mac.listReceivedVerbs());
+    }
+
+    check(waitForSizeOwnerNotice(mac, {desktopColumns, true, "Mac"}), "the phone left, so the Mac has its size back");
+    check(readPaneColumns(daemon.instance) == desktopColumns);
+
+    mac.messenger.send(term::proto::make("kill", {paneId}));
+};
+
+auto tOldClientResizeStillWins =test("DaemonPhoneProtocol/oldClientResizeStillWins") = []
 {
     auto daemon = TestDaemon {"daemon-old-client-test"};
     auto phone = DaemonConversation {daemon.instance};

@@ -4,6 +4,7 @@
 
 #include <map>
 #include <optional>
+#include <set>
 #include <vector>
 
 namespace term
@@ -32,15 +33,27 @@ public:
     // other client owned it before, one that still shows it takes it.
     std::optional<PtySize> forgetClient(ClientId client);
 
+    // The client stopped answering (a Mac asleep, a phone iOS suspended). It
+    // holds the pane no longer, as if it had left, but keeps the size it asked
+    // for, and nothing is handed to it until it is heard again.
+    std::optional<PtySize> yieldSizeWhileSilent(ClientId client);
+
+    // The silent client spoke again. It takes the pane back at its size when
+    // nobody else holds it.
+    std::optional<PtySize> markClientHeardAgain(ClientId client);
+
     std::optional<ClientId> getOwner() const;
     bool isOwnedBy(ClientId client) const;
 
 private:
     PtySize takeOwnership(ClientId client);
+    std::optional<PtySize> handOverToTheNextClient();
 
     std::map<ClientId, PtySize> requestedSizes;
 
-    // Every client that has owned the pane and still shows it, latest last.
+    // Every client that has owned the pane, still shows it and still answers, latest last.
     std::vector<ClientId> owners;
+
+    std::set<ClientId> silentClients;
 };
 } // namespace term

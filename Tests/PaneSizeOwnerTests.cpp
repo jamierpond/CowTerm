@@ -137,3 +137,48 @@ auto tMacThatOpenedLaterGetsThePaneBack = test("PaneSizeOwner/aMacThatOpenedTheP
     check(isSize(owner.forgetClient(phone), desktopSize));
     check(owner.isOwnedBy(mac));
 };
+
+auto tSilentMacGetsThePaneBackWhenThePhoneLeaves =
+    test("PaneSizeOwner/aMacThatWentSilentGetsThePaneBackWhenThePhoneLeaves") = []
+{
+    auto owner = makePaneTheMacOwns();
+    owner.yieldSizeWhileSilent(mac);
+    owner.markClientHeardAgain(mac);
+    owner.claimSize(phone, phoneSize);
+
+    check(isSize(owner.forgetClient(phone), desktopSize));
+    check(owner.isOwnedBy(mac));
+};
+
+auto tSilentMacTakesThePaneTheMomentItSpeaks =
+    test("PaneSizeOwner/aMacThatWasSilentWhenThePhoneLeftTakesThePaneWhenItSpeaks") = []
+{
+    auto owner = makePaneTheMacOwns();
+    owner.claimSize(phone, phoneSize);
+    owner.yieldSizeWhileSilent(mac);
+
+    check(!owner.forgetClient(phone).has_value(), "a silent Mac is handed nothing");
+    check(isSize(owner.markClientHeardAgain(mac), desktopSize));
+    check(owner.isOwnedBy(mac));
+};
+
+auto tSilentPhoneIsNotHandedThePane = test("PaneSizeOwner/aSilentPhoneIsNotHandedThePane") = []
+{
+    auto owner = makePaneTheMacOwns();
+    owner.claimSize(phone, phoneSize);
+
+    check(isSize(owner.yieldSizeWhileSilent(phone), desktopSize));
+    check(!owner.yieldSizeWhileSilent(mac).has_value());
+    check(!owner.getOwner().has_value());
+};
+
+auto tMacThatOpenedLaterGetsThePaneFromASilentPhone =
+    test("PaneSizeOwner/aMacThatOpenedThePaneWhileThePhoneHeldItGetsItWhenThePhoneGoesSilent") = []
+{
+    auto owner = PaneSizeOwner {};
+    owner.claimSize(phone, phoneSize);
+    owner.requestSize(mac, desktopSize);
+
+    check(isSize(owner.yieldSizeWhileSilent(phone), desktopSize));
+    check(owner.isOwnedBy(mac));
+};
