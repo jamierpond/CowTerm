@@ -905,7 +905,7 @@ bool AppShell::runPrefixedKey(const KeyEvent& event)
 
 bool AppShell::handleCommand(const KeyEvent& event)
 {
-    // Zoom (= + - 0) is one size for the whole app: every pane in every
+    // Zoom (= + -) is one size for the whole app: every pane in every
     // session changes together, written back to ~/.config/cowterm.json.
     static constexpr auto commandActions = std::array {
         KeyAction {"k", &AppShell::showPalette},
@@ -917,7 +917,6 @@ bool AppShell::handleCommand(const KeyEvent& event)
         KeyAction {"=", &AppShell::increaseGlobalFontSize},
         KeyAction {"+", &AppShell::increaseGlobalFontSize},
         KeyAction {"-", &AppShell::decreaseGlobalFontSize},
-        KeyAction {"0", &AppShell::resetGlobalFontSize},
     };
 
     const auto& characters = event.charactersIgnoringModifiers;
@@ -994,10 +993,5 @@ void AppShell::increaseGlobalFontSize()
 void AppShell::decreaseGlobalFontSize()
 {
     setGlobalFontSize(config.fontSize - 1);
-}
-
-void AppShell::resetGlobalFontSize()
-{
-    setGlobalFontSize(AppConfig {}.fontSize);
 }
 } // namespace term

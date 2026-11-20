@@ -92,7 +92,6 @@ private:
     void quitFromLeader();
     void increaseGlobalFontSize();
     void decreaseGlobalFontSize();
-    void resetGlobalFontSize();
     // The overlays are UI components, not native views: one ComponentHost (a
     // GPUView) carries whichever is open, which is why they raise and lower as
     // a single subview rather than one apiece.

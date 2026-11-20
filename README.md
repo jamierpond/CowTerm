@@ -100,7 +100,7 @@ separate `screencap` tool.
 | `Ctrl+A 1..9` (or `Cmd+1..9`) | Switch to session by index |
 | `Ctrl+A Ctrl+A` | Send a literal `Ctrl+A` to the shell |
 | `Cmd+C` / `Cmd+V` | Copy selection / paste (bracketed) |
-| `Cmd++` / `Cmd+-` / `Cmd+0` | Font size |
+| `Cmd++` / `Cmd+-` | Font size |
 | `Shift+PageUp/PageDown/Home/End` | Scrollback |
 
 Pane layouts (splits, ratios, per-pane directories) persist and restore with
