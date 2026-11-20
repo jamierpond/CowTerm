@@ -2,8 +2,6 @@
 
 #include <eacp/Core/Threads/EventLoop.h>
 
-#include <cmath>
-
 #include <NanoTest/NanoTest.h>
 
 // The split tree, driven through real panes. Closing a pane collapses its
@@ -114,7 +112,6 @@ namespace
 {
 constexpr auto viewWidth = 600.f;
 constexpr auto viewHeight = 300.f;
-constexpr auto ratioTolerance = 0.0001f;
 
 // A left pane beside a right column of two stacked panes.
 std::vector<SavedPane> leftPaneBesideStackedPair()
@@ -156,10 +153,6 @@ struct ThreePaneView
     TerminalView* bottomRight() const { return panes[2]; }
 };
 
-bool isNear(float actual, float expected)
-{
-    return std::abs(actual - expected) < ratioTolerance;
-}
 } // namespace
 
 auto tFocusDirectionWalksTheTree = test("SessionView/focusDirectionMovesToTheNearestPane") = []
@@ -190,38 +183,6 @@ auto tFocusDirectionWalksTheTree = test("SessionView/focusDirectionMovesToTheNea
 
     view.focusDirection('x');
     check(view.activePane() == fixture.left(), "an unknown direction moves nowhere");
-};
-
-auto tResizeActiveMovesTheMatchingSplit = test("SessionView/resizeActiveMovesTheEnclosingSplitOnThatAxis") = []
-{
-    auto fixture = ThreePaneView {};
-    auto& view = fixture.view;
-
-    // Ten cells of 9pt across 600pt grows the left pane by 0.15.
-    view.resizeActive('l', 10.f);
-    check(isNear(view.snapshot()[0].ratio, 0.65f));
-
-    view.resizeActive('h', 10.f);
-    check(isNear(view.snapshot()[0].ratio, 0.5f));
-
-    // The left pane has no vertical split above it, so this moves nothing.
-    view.resizeActive('j', 5.f);
-    check(isNear(view.snapshot()[0].ratio, 0.5f));
-
-    view.focusPane(fixture.bottomRight());
-
-    // Five cells of 18pt across 300pt; the bottom pane is the second child,
-    // so growing it shrinks the first.
-    view.resizeActive('j', 5.f);
-    check(isNear(view.snapshot()[2].ratio, 0.2f));
-
-    view.resizeActive('j', 5.f);
-    check(isNear(view.snapshot()[2].ratio, 0.1f), "the ratio clamps at 0.1");
-
-    // Horizontal moves from the bottom pane reach the root split; it is the
-    // second child, so growing right shrinks the left side.
-    view.resizeActive('l', 10.f);
-    check(isNear(view.snapshot()[0].ratio, 0.35f));
 };
 
 auto tClosingTheActivePaneFocusesTheSiblingSubtree =

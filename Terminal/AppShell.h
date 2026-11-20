@@ -75,7 +75,6 @@ private:
     bool doesKeyTogglePopup(const std::string& characters) const;
     bool runKeyAction(std::span<const KeyAction> actions, const std::string& characters);
     bool runArrowKey(const eacp::Graphics::KeyEvent& event);
-    static float calculateArrowResizeCells(bool altHeld);
     bool runPaneDirectionKey(const std::string& characters);
     bool runSessionDigitKey(const std::string& characters);
     void withActivePaneTree(const std::function<void(SessionView&)>& action);

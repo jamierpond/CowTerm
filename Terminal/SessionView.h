@@ -7,7 +7,6 @@
 #include <eacp/UI/UI.h>
 
 #include <memory>
-#include <optional>
 #include <vector>
 
 namespace term
@@ -65,7 +64,6 @@ public:
     // opposed to detaching at app teardown.
     void terminateAll();
     void focusDirection(char direction);
-    void resizeActive(char direction, float cells);
     void toggleZoom();
     void cycleFocus();
     void focusActive();
@@ -131,14 +129,6 @@ private:
     void collapseIntoSurvivingSibling(Node& collapsingSplit, const Node& closing);
     Node* findFirstLeafUnder(Node* node) const;
     Node* findNearestLeafInDirection(char direction) const;
-
-    struct EnclosingSplit
-    {
-        Node& split;
-        Node& child;
-    };
-
-    std::optional<EnclosingSplit> findEnclosingSplit(bool horizontal) const;
 
     const AppConfig& config;
     std::string fallbackDir;

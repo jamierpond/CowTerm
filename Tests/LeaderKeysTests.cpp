@@ -5,17 +5,6 @@
 using namespace nano;
 using namespace term;
 
-auto resizeKeysMapToLowercaseDirections = test("LeaderKeys/resizeKeysMapToLowercaseDirections") = []
-{
-    check(findPaneResizeDirection("H") == std::optional<char> {'h'});
-    check(findPaneResizeDirection("J") == std::optional<char> {'j'});
-    check(findPaneResizeDirection("K") == std::optional<char> {'k'});
-    check(findPaneResizeDirection("L") == std::optional<char> {'l'});
-    check(!findPaneResizeDirection("h"));
-    check(!findPaneResizeDirection("HJ"));
-    check(!findPaneResizeDirection(""));
-};
-
 auto focusKeysAreLowercaseOnly = test("LeaderKeys/focusKeysAreLowercaseOnly") = []
 {
     check(findPaneFocusDirection("h") == std::optional<char> {'h'});

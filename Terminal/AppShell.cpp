@@ -764,8 +764,8 @@ bool AppShell::runKeyAction(std::span<const KeyAction> actions,
     return true;
 }
 
-// Arrows: plain moves focus (tmux select-pane); Ctrl resizes by one
-// cell, Alt by five.
+// Arrows move focus (tmux select-pane) whether or not Ctrl is still down
+// from the prefix roll.
 bool AppShell::runArrowKey(const KeyEvent& event)
 {
     using ArrowDirection = std::pair<std::uint16_t, char>;
@@ -784,46 +784,13 @@ bool AppShell::runArrowKey(const KeyEvent& event)
         return false;
 
     const auto direction = found->second;
-    const auto& modifiers = event.modifiers;
-
-    withActivePaneTree(
-        [&](SessionView& paneTree)
-        {
-            if (modifiers.control || modifiers.alt)
-                paneTree.resizeActive(direction, calculateArrowResizeCells(modifiers.alt));
-            else
-                paneTree.focusDirection(direction);
-        });
-
+    withActivePaneTree([&](SessionView& paneTree) { paneTree.focusDirection(direction); });
     return true;
 }
 
-float AppShell::calculateArrowResizeCells(bool altHeld)
-{
-    constexpr auto arrowResizeCells = 1.0f;
-    constexpr auto altArrowResizeCells = 5.0f;
-
-    if (altHeld)
-        return altArrowResizeCells;
-
-    return arrowResizeCells;
-}
-
-// Shift+H/J/K/L resize by one cell; plain h/j/k/l move focus whether or not
-// Ctrl is still down from the prefix roll. Ctrl is left out of resize on
-// purpose: rolling the prefix leaves it held, so Ctrl+h must mean "move
-// focus", never resize.
+// h/j/k/l move focus whether or not Ctrl is still down from the prefix roll.
 bool AppShell::runPaneDirectionKey(const std::string& characters)
 {
-    constexpr auto letterResizeCells = 1.0f;
-
-    if (const auto direction = findPaneResizeDirection(characters))
-    {
-        withActivePaneTree([&](SessionView& paneTree)
-                           { paneTree.resizeActive(*direction, letterResizeCells); });
-        return true;
-    }
-
     if (const auto direction = findPaneFocusDirection(characters))
     {
         withActivePaneTree([&](SessionView& paneTree)

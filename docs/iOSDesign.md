@@ -389,9 +389,9 @@ Things only a finger can judge:
 - The friction of the scroll fling.
 
 Mac features with no use, or one use, in three days of logs. They were listed
-for a decision, and `leader ^` (previous session) and `leader w` (a second key
-for the palette) have since been removed. Still in: `leader H J K L` (resize by
-a cell), `leader o` (cycle panes), `leader 1–9` (session by number), `leader ]`
+for a decision, and `leader H J K L` (resize by a cell), `leader ^` (previous
+session) and `leader w` (a second key for the palette) have since been removed.
+Still in: `leader o` (cycle panes), `leader 1–9` (session by number), `leader ]`
 (paste), and the palette's normal mode. Click to focus stays. Cmd chords are
 not logged, so nothing is known about them.
 

@@ -5,9 +5,6 @@
 
 namespace term
 {
-// Shift+H/J/K/L after the leader: the lowercase direction to resize toward.
-std::optional<char> findPaneResizeDirection(const std::string& characters);
-
 // h/j/k/l after the leader: the direction to move focus toward.
 std::optional<char> findPaneFocusDirection(const std::string& characters);
 

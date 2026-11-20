@@ -19,8 +19,6 @@ constexpr float minimumRatio = 0.1f;
 constexpr float maximumRatio = 0.9f;
 constexpr float evenRatio = 0.5f;
 constexpr float edgeTolerance = 1.0f;
-constexpr float resizeCellWidth = 9.0f;
-constexpr float resizeCellHeight = 18.0f;
 
 bool overlaps(float aStart, float aEnd, float bStart, float bEnd)
 {
@@ -89,16 +87,6 @@ bool isCloser(std::optional<float> distance, std::optional<float> bestDistance)
         return false;
 
     return !bestDistance || *distance < *bestDistance;
-}
-
-bool isHorizontalDirection(char direction)
-{
-    return direction == 'h' || direction == 'l';
-}
-
-bool isGrowingDirection(char direction)
-{
-    return direction == 'l' || direction == 'j';
 }
 
 bool isValidSavedIndex(const std::vector<SavedPane>& saved, int index)
@@ -540,55 +528,6 @@ void SessionView::focusDirection(char direction)
         setActive(best);
         layout();
     }
-}
-
-// The nearest enclosing split on the matching axis is the one whose ratio
-// moves; which side the active pane sits on decides the sign.
-std::optional<SessionView::EnclosingSplit> SessionView::findEnclosingSplit(bool horizontal) const
-{
-    auto* child = active;
-    auto* split = active->parent;
-
-    while (split != nullptr && split->horizontal != horizontal)
-    {
-        child = split;
-        split = split->parent;
-    }
-
-    if (split == nullptr)
-        return std::nullopt;
-
-    return EnclosingSplit {*split, *child};
-}
-
-void SessionView::resizeActive(char direction, float cells)
-{
-    if (active == nullptr)
-        return;
-
-    const auto wantHorizontal = isHorizontalDirection(direction);
-    const auto enclosing = findEnclosingSplit(wantHorizontal);
-
-    if (!enclosing)
-        return;
-
-    auto& split = enclosing->split;
-    const auto& child = enclosing->child;
-
-    const auto extent = wantHorizontal ? split.bounds.w : split.bounds.h;
-
-    if (extent <= 0)
-        return;
-
-    // A "cell" of resize is ~9pt wide / ~18pt tall at the default font.
-    const auto cellSize = wantHorizontal ? resizeCellWidth : resizeCellHeight;
-    const auto step = cells * cellSize / extent;
-    const auto growsFirstSide = (split.first.get() == &child) == isGrowingDirection(direction);
-    const auto delta = growsFirstSide ? step : -step;
-
-    split.ratio = std::clamp(split.ratio + delta, minimumRatio, maximumRatio);
-    logUsage("pane.resize", {{"direction", std::string(1, direction)}, {"ratio", std::to_string(split.ratio)}});
-    layout();
 }
 
 void SessionView::setFontSize(float size)

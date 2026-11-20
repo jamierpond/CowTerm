@@ -7,7 +7,6 @@ namespace term
 namespace
 {
 constexpr auto focusDirections = std::string_view {"hjkl"};
-constexpr auto resizeKeys = std::string_view {"HJKL"};
 
 std::optional<char> findSingleCharacterIn(const std::string& characters,
                                           std::string_view allowed)
@@ -23,16 +22,6 @@ std::optional<char> findSingleCharacterIn(const std::string& characters,
     return allowed[position];
 }
 } // namespace
-
-std::optional<char> findPaneResizeDirection(const std::string& characters)
-{
-    const auto key = findSingleCharacterIn(characters, resizeKeys);
-
-    if (!key)
-        return std::nullopt;
-
-    return focusDirections[resizeKeys.find(*key)];
-}
 
 std::optional<char> findPaneFocusDirection(const std::string& characters)
 {
