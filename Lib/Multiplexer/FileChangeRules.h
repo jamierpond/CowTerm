@@ -9,9 +9,9 @@
 namespace term::filechanges
 {
 // The folder a pane's project is in: the nearest folder at or above where the
-// pane started that holds a .git, else where it started. Empty for a user's
-// home folder, a filesystem root or a folder that does not exist: watching
-// those would report changes from everywhere.
+// pane started that holds a .git. Empty outside a git repository (~/projects,
+// ~/Library), and for a user's home folder or a filesystem root even when it
+// is one: watching those would report changes from everywhere.
 std::string findProjectFolder(const std::filesystem::path& workingDirectory,
                               const std::filesystem::path& homeFolder);
 

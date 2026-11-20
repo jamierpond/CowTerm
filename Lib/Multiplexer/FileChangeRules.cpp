@@ -56,10 +56,7 @@ std::string findProjectFolder(const fs::path& workingDirectory, const fs::path& 
             return folder.string();
     }
 
-    if (isTooBroadToWatch(start, homeFolder))
-        return {};
-
-    return start.string();
+    return {};
 }
 
 std::vector<std::string> orderFoldersByLastInput(std::vector<FolderLastInput> folders)

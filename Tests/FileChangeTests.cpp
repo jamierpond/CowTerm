@@ -49,13 +49,13 @@ auto tProjectFolderIsTheRepository = test("FileChangeRules/projectFolderIsTheNea
     check(findProjectFolder(project, home.path) == project.string());
 };
 
-auto tProjectFolderWithoutGit = test("FileChangeRules/projectFolderWithoutGitIsWhereThePaneStarted") = []
+auto tFolderOutsideARepositoryIsNotWatched = test("FileChangeRules/aFolderOutsideAGitRepositoryIsNeverWatched") = []
 {
     const auto home = ScratchFolder {"cowterm-home"};
-    const auto notes = home.path / "notes";
-    fs::create_directories(notes);
+    const auto projects = home.path / "projects";
+    fs::create_directories(projects / "some-project" / ".git");
 
-    check(findProjectFolder(notes, home.path) == notes.string());
+    check(findProjectFolder(projects, home.path).empty());
 };
 
 auto tHomeAndRootAreNeverWatched = test("FileChangeRules/homeFolderAndFilesystemRootAreNeverWatched") = []
