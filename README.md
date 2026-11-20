@@ -91,7 +91,7 @@ separate `screencap` tool.
 | `Ctrl+A "` | Split pane below (in the pane's directory) |
 | `Ctrl+A %` (or `Cmd+D`) | Split pane right (in the pane's directory) |
 | `Ctrl+A h/j/k/l` | Focus pane in direction |
-| `Ctrl+A Ctrl+h/j/k/l` | Resize pane by one cell |
+| `Ctrl+A Shift+H/J/K/L` | Resize pane by one cell |
 | `Ctrl+A Alt+arrows` / `Ctrl+arrows` | Resize pane by 5 / 1 cells |
 | `Ctrl+A x` (or `Cmd+W`) | Close the active pane (last pane ends the session) |
 | `Ctrl+A z` | Zoom / unzoom the active pane |
