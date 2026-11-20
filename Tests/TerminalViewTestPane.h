@@ -42,7 +42,7 @@ struct ShellRecording
 {
     std::string written;
     std::vector<PtySize> resizes;
-    int sizeTakeBacks = 0;
+    std::vector<PtySize> sizesTakenBack;
     std::function<void(std::optional<PtySize>)> setGridHeldElsewhere;
     std::function<void(const std::string&)> showStatus;
     std::function<void(std::string)> deliverOutput;
@@ -74,7 +74,7 @@ public:
     std::string currentWorkingDirectory() const override { return {}; }
     void terminate() override {}
     void detach() override {}
-    void takeSizeBack() override { ++recording->sizeTakeBacks; }
+    void takeSizeBack(const PtySize& size) override { recording->sizesTakenBack.push_back(size); }
 
 private:
     std::shared_ptr<ShellRecording> recording;

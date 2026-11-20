@@ -22,14 +22,6 @@ PtySize PaneSizeOwner::claimSize(ClientId client, const PtySize& size)
     return takeOwnership(client);
 }
 
-std::optional<PtySize> PaneSizeOwner::reclaimSize(ClientId client)
-{
-    if (isOwnedBy(client) || !requestedSizes.contains(client))
-        return std::nullopt;
-
-    return takeOwnership(client);
-}
-
 std::optional<PtySize> PaneSizeOwner::forgetClient(ClientId client)
 {
     const auto wasOwner = isOwnedBy(client);

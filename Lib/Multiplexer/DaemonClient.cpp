@@ -568,11 +568,6 @@ void DaemonClient::claimSize(const std::string& id, const PtySize& size)
     sendResizeAndClaim(id, size);
 }
 
-void DaemonClient::reclaimSizes()
-{
-    send(proto::make("reclaim-sizes"));
-}
-
 bool DaemonClient::isPaneHeldElsewhere(const std::string& id) const
 {
     return panesHeldElsewhere.contains(id);
@@ -755,10 +750,10 @@ public:
             client->resize(id, size);
     }
 
-    void takeSizeBack() override
+    void takeSizeBack(const PtySize& size) override
     {
         if (auto* client = findDaemon(); client != nullptr && client->isPaneHeldElsewhere(id))
-            client->reclaimSizes();
+            client->claimSize(id, size);
     }
 
     std::string foregroundProcess() const override

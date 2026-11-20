@@ -162,9 +162,9 @@ auto tPhoneClaimTellsEveryWatcher = test("DaemonPhoneProtocol/phoneClaimTellsEve
     mac.messenger.send(term::proto::make("kill", {paneId}));
 };
 
-auto tMacResizeWaitsUntilItReclaims = test("DaemonPhoneProtocol/macResizeWaitsUntilItReclaims") = []
+auto tMacResizeWaitsUntilItClaims = test("DaemonPhoneProtocol/macResizeWaitsUntilItClaimsThePaneBack") = []
 {
-    auto daemon = TestDaemon {"daemon-reclaim-test"};
+    auto daemon = TestDaemon {"daemon-claim-back-test"};
     auto mac = DaemonConversation {daemon.instance};
     auto phone = DaemonConversation {daemon.instance};
     check(mac.waitForConnection() && phone.waitForConnection());
@@ -182,7 +182,8 @@ auto tMacResizeWaitsUntilItReclaims = test("DaemonPhoneProtocol/macResizeWaitsUn
         "resize", {paneId, toArgument(widerDesktopColumns), toArgument(rows)}));
     check(readPaneColumns(daemon.instance) == phoneColumns, "the phone still holds the pane");
 
-    mac.messenger.send(term::proto::make("reclaim-sizes"));
+    mac.messenger.send(term::proto::make(
+        "claim-size", {paneId, toArgument(widerDesktopColumns), toArgument(rows)}));
     check(isSizeOwnerNotice(mac.waitForMessage("size-owner"), {widerDesktopColumns, true, "Mac"}));
     check(isSizeOwnerNotice(phone.waitForMessage("size-owner"), {widerDesktopColumns, false, "Mac"}));
 

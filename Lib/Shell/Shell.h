@@ -66,9 +66,9 @@ public:
     // would run; the pane's text says so too. Local shells never call it.
     std::function<void(const MissingCommand&)> onCommandNotInstalled = [](const MissingCommand&) {};
 
-    // The user asked for the pane back from whoever holds its size (a click
-    // on the note that says so). Nothing for a shell no one else can hold.
-    virtual void takeSizeBack() {}
+    // The user asked for the pane back, at this size, from whoever holds its
+    // size (a click on the note that says so). Nothing for a shell no one else can hold.
+    virtual void takeSizeBack(const PtySize&) {}
 };
 
 // In-process shell: the pane owns the PTY directly. detach() still kills —

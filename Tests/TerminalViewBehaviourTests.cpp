@@ -1172,11 +1172,15 @@ auto tHeldPaneDrawsTheHoldersGrid = test("View/aPaneAPhoneHoldsIsDrawnAtThePhone
     check(pane.recording->resizes.back().cols == deskGrid.cols, "the desk's grid when the phone lets go");
 };
 
-auto tClickOnTheNoteTakesTheSizeBack = test("View/aClickOnTheOnIPhoneNoteTakesThePaneBack") = []
+auto tClickOnTheNoteTakesTheSizeBack = test("View/aClickOnTheOnIPhoneNoteTakesThePaneBackAtTheDesksGrid") = []
 {
+    constexpr auto phoneColumns = 45;
+    constexpr auto phoneRows = 17;
     constexpr auto noteText = "on iPhone, 45 columns; click here to take it back";
     const auto pointInsideTheNote = Graphics::Point {viewWidth - marginX - 2.f, marginY + 2.f};
     auto pane = TestPane {};
+    const auto deskGrid = pane.recording->resizes.back();
+    pane.recording->setGridHeldElsewhere(PtySize {phoneColumns, phoneRows});
     pane.recording->showStatus(noteText);
     pane.takeWritten();
 
@@ -1186,7 +1190,10 @@ auto tClickOnTheNoteTakesTheSizeBack = test("View/aClickOnTheOnIPhoneNoteTakesTh
     click.button = Graphics::MouseButton::Left;
     pane.view->mouseDown(click);
 
-    check(pane.recording->sizeTakeBacks == 1);
+    const auto& taken = pane.recording->sizesTakenBack;
+    check(taken.size() == 1);
+    check(!taken.empty() && taken[0].cols == deskGrid.cols && taken[0].rows == deskGrid.rows,
+          "the desk's own grid, not the phone's it is drawn at");
     check(pane.takeWritten().empty(), "the click reaches no program");
 };
 

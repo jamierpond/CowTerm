@@ -40,7 +40,7 @@ public:
 
     void terminate() override { inner->terminate(); }
     void detach() override { inner->detach(); }
-    void takeSizeBack() override { inner->takeSizeBack(); }
+    void takeSizeBack(const term::PtySize& size) override { inner->takeSizeBack(size); }
 
 private:
     std::unique_ptr<term::Shell> inner;

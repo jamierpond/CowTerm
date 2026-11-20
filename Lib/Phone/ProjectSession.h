@@ -67,7 +67,7 @@ public:
 
     void terminate() override { inner->terminate(); }
     void detach() override { inner->detach(); }
-    void takeSizeBack() override { inner->takeSizeBack(); }
+    void takeSizeBack(const PtySize& size) override { inner->takeSizeBack(size); }
 
     // After the login shell's spawn went to the daemon.
     std::function<void()> onLoginShellStarted = [] {};

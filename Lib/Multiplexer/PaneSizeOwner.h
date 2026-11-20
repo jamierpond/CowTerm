@@ -24,10 +24,6 @@ public:
     // The client takes the pane at this size, whoever owned it.
     PtySize claimSize(ClientId client, const PtySize& size);
 
-    // The client takes the pane back at the size it last asked for. Empty
-    // when it already owns the pane or never asked for a size.
-    std::optional<PtySize> reclaimSize(ClientId client);
-
     // The client stopped showing the pane. When it owned it, the client that
     // owned it before (and still shows it) takes it back at its size; when no
     // other client owned it before, one that still shows it takes it.

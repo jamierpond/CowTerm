@@ -300,6 +300,20 @@ auto tMacSendsNoSizeWhilePhoneHolds = test("DaemonClientSizeOwner/macSendsNoSize
     check(!recorded.sent.empty());
 };
 
+auto tMacTakesThePaneBackAtItsOwnSize = test("DaemonClientSizeOwner/macTakesThePaneBackAtItsOwnSize") = []
+{
+    constexpr auto deskColumns = 150;
+    auto recorded = ClientWithRecordedLink {};
+    recorded.client->spawn({paneId, {deskColumns, rows}, "/tmp", "Grazer", {}}, {});
+    recorded.link->deliver(makeSizeOwnerMessage(false, "iPhone"));
+    recorded.sent.clear();
+
+    recorded.client->claimSize(paneId, {deskColumns, rows});
+
+    check(recorded.hasSent(proto::make("claim-size", {paneId, std::to_string(deskColumns), std::to_string(rows)})),
+          "a daemon that forgot the Mac's size learns it from the claim");
+};
+
 namespace
 {
 constexpr auto diffViewPaneId = "phone-dv-0000000000000001";

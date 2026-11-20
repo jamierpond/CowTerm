@@ -49,7 +49,7 @@ public:
 
     void terminate() override { inner->terminate(); }
     void detach() override { inner->detach(); }
-    void takeSizeBack() override { inner->takeSizeBack(); }
+    void takeSizeBack(const PtySize& size) override { inner->takeSizeBack(size); }
 
 private:
     std::unique_ptr<Shell> inner;

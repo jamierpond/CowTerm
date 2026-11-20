@@ -50,7 +50,7 @@ auto tOthersResizeIsRememberedNotApplied = test("PaneSizeOwner/othersResizeIsRem
 
     check(!owner.requestSize(mac, widerDesktopSize).has_value());
     check(owner.isOwnedBy(phone));
-    check(isSize(owner.reclaimSize(mac), widerDesktopSize));
+    check(isSize(owner.forgetClient(phone), widerDesktopSize));
 };
 
 auto tClaimTakesThePaneFromTheOwner = test("PaneSizeOwner/claimTakesThePaneFromTheOwner") = []
@@ -61,19 +61,6 @@ auto tClaimTakesThePaneFromTheOwner = test("PaneSizeOwner/claimTakesThePaneFromT
     check(applied.cols == phoneSize.cols);
     check(owner.isOwnedBy(phone));
     check(!owner.isOwnedBy(mac));
-};
-
-auto tReclaimByTheOwnerChangesNothing = test("PaneSizeOwner/reclaimByTheOwnerChangesNothing") = []
-{
-    auto owner = makePaneTheMacOwns();
-    check(!owner.reclaimSize(mac).has_value());
-};
-
-auto tReclaimNeedsAnEarlierSize = test("PaneSizeOwner/reclaimNeedsAnEarlierSize") = []
-{
-    auto owner = makePaneTheMacOwns();
-    check(!owner.reclaimSize(phone).has_value());
-    check(owner.isOwnedBy(mac));
 };
 
 auto tOwnerLeavingHandsThePaneBack = test("PaneSizeOwner/ownerLeavingHandsThePaneBack") = []

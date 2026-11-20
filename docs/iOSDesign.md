@@ -500,7 +500,7 @@ launched with `--landscape`, which is how landscape screenshots are taken.
   the phone's grid (`TerminalView::setFixedGridSize`, driven by the
   `size-owner` notice through `Shell::onGridSetElsewhere`) and sends no resize
   of its own for it, so the size it gets back is the one it had. A click on
-  the note sends `reclaim-sizes`. The phone sends `yield-size <id>` (new in
+  the note sends `claim-size` with the grid the pane's view fits on the Mac. The phone sends `yield-size <id>` (new in
   protocol 5; older daemons ignore it) when it goes to the background or its
   link stalls, so the client that held the pane before takes it back while
   the phone still watches it; it claims again on coming back.
@@ -513,6 +513,13 @@ launched with `--landscape`, which is how landscape screenshots are taken.
   nothing for 5 seconds (a phone iOS suspended with its link still open; a
   client showing panes asks for info every second). The phone claims every
   pane it shows again when it comes back to the foreground.
+- The daemon used to forget a silent client's size along with its panes. The
+  phone claims again when it speaks, but the Mac never does, so a Mac that
+  was quiet for 5 seconds (asleep, or the app busy) before the phone took a
+  pane stayed at the phone's size after the phone left, with a note whose
+  click did nothing. A silent client now keeps its size: it is handed no pane
+  while quiet, takes back any pane nobody holds when it speaks again, and
+  gets the pane when the phone leaves.
 - A launch that names its host itself (a simulator started by a script) never
   opens a pane on its own, so no test takes the size of a pane Jamie typed in;
   only the paired app does.

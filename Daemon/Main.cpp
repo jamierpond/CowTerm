@@ -223,7 +223,6 @@ struct Daemon
             MessageHandler {"write", 1, &Daemon::handleWrite},
             MessageHandler {"resize", 3, &Daemon::handleResize},
             MessageHandler {"claim-size", 3, &Daemon::handleClaimSize},
-            MessageHandler {"reclaim-sizes", 0, &Daemon::handleReclaimSizes},
             MessageHandler {"yield-size", 1, &Daemon::handleYieldSize},
             MessageHandler {"last-input", 0, &Daemon::handleLastInput},
             MessageHandler {"pane-state", 2, &Daemon::handlePaneState},
@@ -328,21 +327,6 @@ struct Daemon
     {
         if (auto found = panes.find(id); found != panes.end())
             applySize(id, *found->second, found->second->sizeOwner.claimSize(client.id, size));
-    }
-
-    // The sender takes back every pane it shows, at the sizes it last asked for.
-    void handleReclaimSizes(IPC::Messenger& sender, const term::proto::Message&)
-    {
-        const auto& client = clients.at(&sender);
-
-        for (auto& [id, pane]: panes)
-        {
-            if (std::ranges::find(pane->watchers, &sender) == pane->watchers.end())
-                continue;
-
-            if (auto size = pane->sizeOwner.reclaimSize(client.id))
-                applySize(id, *pane, *size);
-        }
     }
 
     // yield-size <id>: the sender stops holding the pane's size but keeps

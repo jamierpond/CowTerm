@@ -157,9 +157,6 @@ public:
     // Sets the pane's size from now on, whoever set it before.
     void claimSize(const std::string& id, const PtySize& size);
 
-    // Takes back every pane another client holds, at this client's sizes.
-    void reclaimSizes();
-
     // When the app leaves the foreground or the link stalls, the panes this
     // client holds go back to whoever held them before. A daemon with size
     // owners does that itself, asked with yield-size. One from before size

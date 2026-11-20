@@ -1166,7 +1166,10 @@ void TerminalView::mouseDown(const MouseEvent& event)
     mousePressOwner = MousePressOwner::Nobody;
 
     if (isOnShellStatusNote(event.pos))
-        return shell->takeSizeBack();
+    {
+        const auto bounds = getLocalBounds();
+        return shell->takeSizeBack(calculateGridSizeFor({bounds.w, bounds.h}));
+    }
 
     if (openHyperlinkUnderPointer(event))
     {
