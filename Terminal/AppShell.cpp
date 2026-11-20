@@ -50,7 +50,6 @@ void AppShell::wireSessionManager()
     {
         attachActive(session);
         updateTitle();
-        tray.refresh();
         rudderChanged();
         updateViewedPane();
     };
@@ -58,7 +57,6 @@ void AppShell::wireSessionManager()
     manager.onSessionsChanged = [this]
     {
         closePopupsOfClosedSessions();
-        tray.refresh();
         rudderChanged();
     };
 
@@ -99,7 +97,6 @@ void AppShell::wireSessionManager()
     manager.onNotify = [this](TermSession& session, const std::string& text)
     {
         handleSessionNotify(session, text);
-        tray.refresh();
     };
 }
 
@@ -108,13 +105,6 @@ void AppShell::wireTray()
     tray.onShowWindow = [this]
     {
         logUsage("window.show", {{"via", "tray"}});
-        onBringToFront();
-    };
-
-    tray.onPickSession = [this](TermSession& session)
-    {
-        logUsage("tray.pick", {{"name", session.name}});
-        manager.switchTo(session);
         onBringToFront();
     };
 
@@ -216,6 +206,7 @@ void AppShell::start()
         };
     }
 
+    tray.refresh();
     RemoteHosts::configure(config, makeSshBridgeLink);
     wireRemoteHosts();
     manager.restoreOrCreateInitial();

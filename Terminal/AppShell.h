@@ -162,7 +162,7 @@ private:
     eacp::UI::ComponentHost overlayHost;
     WindowChrome windowChrome {config, thisMachineColours};
     eacp::UI::ComponentHost windowChromeHost;
-    TrayController tray {manager};
+    TrayController tray;
     NotifyUserServer notifyUserServer {config};
     PasteConfirmation pasteConfirmation {config};
     std::set<std::string> remoteAskerIdentities;

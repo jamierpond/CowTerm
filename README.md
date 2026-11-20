@@ -221,9 +221,8 @@ minute with no shells and no client.
 
 Closing the window does not quit: the app keeps running with every shell
 alive (the window just hides), tmux-server style. Get back via the menu-bar
-tray icon — its menu lists every session (`●` active, `✳` Claude, plus the
-last notify text) for a one-click jump — or by clicking the Dock icon, or by
-clicking any ring-back notification. Only an explicit Quit (`Cmd+Q`, tray →
+tray icon's Show CowTerm, by clicking the Dock icon, or by clicking any
+ring-back notification. Only an explicit Quit (`Cmd+Q`, tray →
 Quit, or closing the last shell) tears sessions down.
 
 ## State

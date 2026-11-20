@@ -44,30 +44,11 @@ Image TrayController::makeIcon()
     return image;
 }
 
-TrayController::TrayController(SessionManager& sessionsToUse)
-    : sessions(sessionsToUse)
+TrayController::TrayController()
 {
     icon.setIcon(makeIcon());
     icon.setTooltip("CowTerm");
     refresh();
-}
-
-std::string TrayController::createSessionMenuTitle(const TermSession& session)
-{
-    auto title = std::string {};
-
-    if (sessions.active() == &session)
-        title += "● ";
-
-    if (session.isClaude())
-        title += "✳ ";
-
-    title += session.name;
-
-    if (!session.lastNotify.empty())
-        title += " — " + session.lastNotify;
-
-    return title;
 }
 
 void TrayController::refresh()
@@ -75,15 +56,6 @@ void TrayController::refresh()
     auto menu = Menu {};
 
     menu.add(MenuItem::withAction("Show CowTerm", [this] { onShowWindow(); }));
-    menu.addSeparator();
-
-    for (auto& session: sessions.all())
-    {
-        auto* raw = session.get();
-        menu.add(MenuItem::withAction(createSessionMenuTitle(*raw),
-                                      [this, raw] { onPickSession(*raw); }));
-    }
-
     menu.addSeparator();
 
     if (onShowPermissions)

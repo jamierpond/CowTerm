@@ -1,25 +1,21 @@
 #pragma once
 
-#include "Session.h"
-
 #include <eacp/Graphics/Tray/TrayIcon.h>
 
 namespace term
 {
 // The menu-bar presence that makes hide-on-close feel intentional: close
-// the window and the icon stays, shells keep running. The menu lists every
-// session (Claude sessions marked) for a one-click jump back.
+// the window and the icon stays, shells keep running.
 class TrayController
 {
 public:
-    explicit TrayController(SessionManager& sessionsToUse);
+    TrayController();
 
-    // Rebuilds the menu; call when sessions, the active session or notify
-    // state change.
+    // Rebuilds the menu; call once the daemon has answered or not, since the
+    // Quit items depend on it.
     void refresh();
 
     eacp::Callback onShowWindow = [] {};
-    std::function<void(TermSession&)> onPickSession = [](TermSession&) {};
 
     // Set only where there is a permissions panel (macOS); the item shows
     // only then.
@@ -27,9 +23,7 @@ public:
 
 private:
     static eacp::Graphics::Image makeIcon();
-    std::string createSessionMenuTitle(const TermSession& session);
 
-    SessionManager& sessions;
     eacp::Graphics::TrayIcon icon;
 };
 } // namespace term
