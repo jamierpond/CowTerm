@@ -241,6 +241,7 @@ void AppShell::takeUnreadReport(const std::string& host, const std::string& body
 {
     activityReports.takeActivityReport(host, proto::parse(body).payload);
     palette.refreshRemoteRows();
+    rudder.schedulePush();
 }
 
 // The focused pane counts as viewed until a minute passes with no key typed;

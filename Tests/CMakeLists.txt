@@ -95,7 +95,7 @@ nano_add_executable(CowTermRudderTests
             RudderContextsTests.cpp
             ../Terminal/RudderContexts.cpp
             ../Terminal/GitBranch.cpp
-        TARGETS RudderProtocol)
+        TARGETS RudderProtocol FrecencySearch)
 
 target_include_directories(CowTermRudderTests PRIVATE ../Terminal)
 

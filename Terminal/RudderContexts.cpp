@@ -1,5 +1,7 @@
 #include "RudderContexts.h"
 
+#include <FrecencySearch/LearnedPicks.h>
+
 #include <algorithm>
 #include <array>
 #include <cctype>
@@ -232,8 +234,47 @@ std::string paneSubtitle(const RudderPane& pane,
     return cwd + " · " + where;
 }
 
+struct ActivityTimes
+{
+    std::int64_t lastTypedAtMs = 0;
+    std::int64_t lastFileChangeAtMs = 0;
+};
+
+void addRecordedUse(rudder::protocol::ContextUsage& usage, const RecordedUse& use)
+{
+    if (use.lastUsedAtMs > 0)
+        usage.lastUsedAtMs = use.lastUsedAtMs;
+
+    if (use.useCountAtMs > 0)
+        usage.useCount = rudder::protocol::DecayingUseCount {
+            use.useCount, use.useCountAtMs, frecencysearch::usageHalfLifeMs};
+}
+
+void addActivityTimes(rudder::protocol::ContextUsage& usage, const ActivityTimes& times)
+{
+    if (times.lastTypedAtMs > 0)
+        usage.lastTypedAtMs = times.lastTypedAtMs;
+
+    if (times.lastFileChangeAtMs > 0)
+        usage.lastFileChangeAtMs = times.lastFileChangeAtMs;
+}
+
+Miro::Omittable<rudder::protocol::ContextUsage> describeUsage(const RecordedUse& use,
+                                                              const ActivityTimes& times = {})
+{
+    auto usage = rudder::protocol::ContextUsage {};
+    addRecordedUse(usage, use);
+    addActivityTimes(usage, times);
+
+    if (usage == rudder::protocol::ContextUsage {})
+        return {};
+
+    return usage;
+}
+
 rudder::protocol::Context createPaneContext(const RudderPane& pane,
                                            const PanePlacement& placement,
+                                           const RecordedUse& sessionUse,
                                            const std::string& home)
 {
     auto context = rudder::protocol::Context {};
@@ -244,6 +285,7 @@ rudder::protocol::Context createPaneContext(const RudderPane& pane,
     context.branch = pane.branch;
     context.repo = pane.repo;
     context.focused = pane.focused;
+    context.usage = describeUsage(sessionUse, {pane.lastTypedAtMs, pane.lastFileChangeAtMs});
     return context;
 }
 
@@ -258,6 +300,7 @@ rudder::protocol::Context createPlaceContext(const RudderPlace& place,
     context.branch = place.branch;
     context.repo = place.repo;
     context.open = false;
+    context.usage = describeUsage(place.use);
     return context;
 }
 
@@ -281,7 +324,7 @@ void appendTabContexts(const RudderTab& session,
         const auto& pane = session.panes[index];
         collected.covered.insert(pane.cwd);
         collected.contexts.push_back(
-            createPaneContext(pane, PanePlacement {tab, index, session.name}, home));
+            createPaneContext(pane, PanePlacement {tab, index, session.name}, session.use, home));
     }
 }
 } // namespace

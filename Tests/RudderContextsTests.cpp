@@ -1,6 +1,8 @@
 #include "GitBranch.h"
 #include "RudderContexts.h"
 
+#include <FrecencySearch/LearnedPicks.h>
+
 #include <NanoTest/NanoTest.h>
 
 #include <filesystem>
@@ -353,4 +355,63 @@ auto tGitBranchesFollowCheckout = test("GitBranch/cacheFollowsCheckout") = []
 
     std::filesystem::remove_all(dir.path / "repo" / ".git");
     check(branches.of((dir.path / "repo").string()).empty(), "nor is a removed repo");
+};
+
+namespace
+{
+constexpr std::int64_t switchedToAtMs = 1'790'000'000'000LL;
+constexpr std::int64_t typedAtMs = switchedToAtMs + 1000;
+constexpr std::int64_t fileChangedAtMs = switchedToAtMs + 2000;
+constexpr double paletteUses = 1.75;
+
+RecordedUse makeRecordedUse()
+{
+    return {switchedToAtMs, paletteUses, switchedToAtMs};
+}
+} // namespace
+
+auto tPaneUsage = test("RudderContexts/a pane carries its session's recorded use and its own typing") = []
+{
+    auto tab = twoPaneTab();
+    tab.use = makeRecordedUse();
+    tab.panes[0].lastTypedAtMs = typedAtMs;
+    tab.panes[0].lastFileChangeAtMs = fileChangedAtMs;
+
+    const auto contexts = rudderContexts({tab}, {}, home);
+
+    check(contexts.size() == 2);
+
+    const auto& typedIn = contexts[0].usage;
+    check(typedIn && typedIn->lastUsedAtMs == switchedToAtMs);
+    check(typedIn && typedIn->useCount
+          && *typedIn->useCount
+                 == rudder::protocol::DecayingUseCount {
+                     paletteUses, switchedToAtMs, frecencysearch::usageHalfLifeMs});
+    check(typedIn && typedIn->lastTypedAtMs == typedAtMs
+          && typedIn->lastFileChangeAtMs == fileChangedAtMs);
+
+    const auto& other = contexts[1].usage;
+    check(other && other->lastUsedAtMs == switchedToAtMs && !other->lastTypedAtMs);
+};
+
+auto tPlaceUsage = test("RudderContexts/a place carries its own recorded use") = []
+{
+    auto place = RudderPlace {"/Users/me/projects/iac"};
+    place.use = makeRecordedUse();
+
+    const auto contexts = rudderContexts({}, {place}, home);
+
+    check(contexts.size() == 1 && !contexts[0].open);
+    check(contexts[0].usage && contexts[0].usage->lastUsedAtMs == switchedToAtMs
+          && contexts[0].usage->useCount);
+};
+
+auto tNoUsage = test("RudderContexts/a pane or place CowTerm has no record of reports no usage") = []
+{
+    const auto contexts = rudderContexts({twoPaneTab()}, {RudderPlace {"/Users/me/projects/iac"}}, home);
+
+    check(contexts.size() == 3);
+
+    for (const auto& context: contexts)
+        check(!context.usage);
 };

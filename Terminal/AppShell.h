@@ -144,13 +144,15 @@ private:
 
     AppConfig config = loadConfig();
     const HostRowColours thisMachineColours = getThisMachineColours(config);
+    // What each daemon last said is unread, drawn by the palette, and when
+    // each pane was last typed in, published to Rudder. Ahead of both.
+    ActivityReports activityReports;
+
     // Ahead of the manager, so it outlives the session teardown that still
     // reports pane changes. It only holds the reference until then.
-    RudderPublisher rudder {config, manager};
+    RudderPublisher rudder {config, manager, activityReports};
     SessionManager manager {config};
 
-    // What each daemon last said is unread, drawn by the palette.
-    ActivityReports activityReports;
     Palette palette {config, thisMachineColours, manager, activityReports};
 
     // Tells the daemons which pane Jamie is looking at (PaneViewing.h).

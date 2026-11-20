@@ -26,11 +26,22 @@ public:
     std::int64_t findLastUseMilliseconds(const std::string& host,
                                          const std::vector<std::string>& paneIds) const;
 
+    // When the user last typed in the pane and when a file last changed in its
+    // project, as the host's daemon last reported them; 0 for what it didn't.
+    struct PaneActivityTimes
+    {
+        std::int64_t lastInputMilliseconds = 0;
+        std::int64_t lastFileChangeMilliseconds = 0;
+    };
+
+    PaneActivityTimes findPaneActivityTimes(const std::string& host, const std::string& paneId) const;
+
 private:
     struct PaneReport
     {
         std::optional<UnreadMark> unread;
         std::int64_t lastUseMilliseconds = 0;
+        PaneActivityTimes times;
     };
 
     const std::map<std::string, PaneReport>& findHost(const std::string& host) const;

@@ -12,7 +12,9 @@ void ActivityReports::takeActivityReport(const std::string& host, const std::str
     reports.clear();
 
     for (const auto& activity: overview::parseActivityReport(payload))
-        reports[activity.paneId] = {overview::findUnreadMark(activity), overview::findLastUseMilliseconds(activity)};
+        reports[activity.paneId] = {overview::findUnreadMark(activity),
+                                    overview::findLastUseMilliseconds(activity),
+                                    {activity.lastInputMilliseconds, activity.lastFileChangeMilliseconds}};
 }
 
 const std::map<std::string, ActivityReports::PaneReport>&
@@ -51,5 +53,13 @@ std::int64_t ActivityReports::findLastUseMilliseconds(const std::string& host,
     }
 
     return latest;
+}
+
+ActivityReports::PaneActivityTimes ActivityReports::findPaneActivityTimes(const std::string& host,
+                                                                          const std::string& paneId) const
+{
+    const auto& reports = findHost(host);
+    const auto report = reports.find(paneId);
+    return report == reports.end() ? PaneActivityTimes {} : report->second.times;
 }
 } // namespace term

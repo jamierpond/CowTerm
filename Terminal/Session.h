@@ -10,6 +10,7 @@
 #include <emberstore/Emberstore.h>
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -104,6 +105,13 @@ public:
     void restoreOrCreateInitial();
 
     std::int64_t lastUsed(const std::string& key) { return mru.lastUsed(key); }
+
+    // The palette's use count for the key as stored, not decayed; nothing for a
+    // key never used.
+    std::optional<UsageEntry> findStoredPaletteUse(const std::string& key)
+    {
+        return paletteUsage.usage.get(key);
+    }
 
     PaletteUsage getPaletteUsage(const std::string& query);
     void recordPalettePick(const std::string& query, const std::string& key);

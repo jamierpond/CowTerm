@@ -27,9 +27,11 @@ std::string findRudderEndpoint()
 } // namespace
 
 RudderPublisher::RudderPublisher(const AppConfig& configToUse,
-                                 SessionManager& managerToUse)
+                                 SessionManager& managerToUse,
+                                 const ActivityReports& activityReportsToUse)
     : config(configToUse)
     , manager(managerToUse)
+    , activityReports(activityReportsToUse)
     , client(rudder::protocol::Hello {"CowTerm", "audio.pond.cowterm", 0, true},
              findRudderEndpoint())
 {
@@ -84,17 +86,19 @@ void RudderPublisher::schedulePush()
 // A remote pane's directory is a path on another machine: looking for its git
 // checkout here would stat paths like /home/x/.git on this Mac, where /home is
 // an automount and every miss costs a directory-service lookup.
-RudderPane RudderPublisher::describePane(TerminalView& pane, bool isOnThisMachine)
+RudderPane RudderPublisher::describePane(TerminalView& pane, const TermSession& session)
 {
     auto cwd = pane.workingDirectory();
     auto branch = std::string {};
     auto repo = std::string {};
 
-    if (isOnThisMachine)
+    if (!session.isRemote())
     {
         branch = branches.of(cwd);
         repo = branches.repositoryRootOf(cwd);
     }
+
+    const auto times = activityReports.findPaneActivityTimes(session.host, pane.shellId());
 
     return {pane.shellId(),
             pane.currentTitle(),
@@ -102,17 +106,33 @@ RudderPane RudderPublisher::describePane(TerminalView& pane, bool isOnThisMachin
             std::move(cwd),
             std::move(branch),
             std::move(repo),
-            false};
+            false,
+            times.lastInputMilliseconds,
+            times.lastFileChangeMilliseconds};
+}
+
+RecordedUse RudderPublisher::findRecordedUse(const std::string& key)
+{
+    auto use = RecordedUse {};
+    use.lastUsedAtMs = manager.lastUsed(key);
+
+    if (const auto stored = manager.findStoredPaletteUse(key))
+    {
+        use.useCount = stored->count;
+        use.useCountAtMs = stored->at;
+    }
+
+    return use;
 }
 
 RudderTab RudderPublisher::describeSession(TermSession& session)
 {
-    auto tab = RudderTab {session.name, session.key(), {}};
+    auto tab = RudderTab {session.name, session.key(), {}, findRecordedUse(session.key())};
     const auto* focused = findFocusedPane(session);
 
     for (auto* pane: session.view.panes())
     {
-        auto description = describePane(*pane, !session.isRemote());
+        auto description = describePane(*pane, session);
         description.focused = pane == focused;
         tab.panes.push_back(std::move(description));
     }
@@ -138,8 +158,11 @@ void RudderPublisher::push()
     auto placesWithBranches = std::vector<RudderPlace> {};
 
     for (const auto& path: places)
-        placesWithBranches.emplace_back(
+    {
+        auto& place = placesWithBranches.emplace_back(
             path, branches.of(path), branches.repositoryRootOf(path));
+        place.use = findRecordedUse(path);
+    }
 
     auto contexts = rudderContexts(
         tabs, placesWithBranches, eacp::FilePath::homeDirectory().str());

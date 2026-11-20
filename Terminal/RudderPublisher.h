@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Multiplexer/ActivityReports.h"
 #include "Multiplexer/Config.h"
 #include "DirWatcher.h"
 #include "GitBranch.h"
@@ -23,7 +24,9 @@ namespace term
 class RudderPublisher
 {
 public:
-    RudderPublisher(const AppConfig& configToUse, SessionManager& managerToUse);
+    RudderPublisher(const AppConfig& configToUse,
+                    SessionManager& managerToUse,
+                    const ActivityReports& activityReportsToUse);
     ~RudderPublisher();
 
     // Something the list shows changed. Bursts (a split is a create, a
@@ -43,7 +46,8 @@ public:
 private:
     void push();
     std::function<void()> createPendingRun(bool RudderPublisher::*pending, void (RudderPublisher::*action)());
-    RudderPane describePane(TerminalView& pane, bool isOnThisMachine);
+    RudderPane describePane(TerminalView& pane, const TermSession& session);
+    RecordedUse findRecordedUse(const std::string& key);
     RudderTab describeSession(TermSession& session);
     const TerminalView* findFocusedPane(TermSession& session);
     void activate(const std::string& contextId, bool raise);
@@ -53,6 +57,7 @@ private:
 
     const AppConfig& config;
     SessionManager& manager;
+    const ActivityReports& activityReports;
     rudder::RudderClient client;
 
     // The ctrl+a f list (scanProjects), cached between directory changes.
