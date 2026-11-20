@@ -14,6 +14,9 @@
 #   CowTermPhone         the phone's link to one host's daemon over the
 #                        in-process ssh client: pane choice, link state,
 #                        stored last screen. Multiplexer + EmbeddedSsh.
+#   CowTermFolderWatch   a folder and everything under it watched with the
+#                        platform's change events, for the daemon. eacp core
+#                        only, written to move into eacp one day.
 #   CowTermTerminalView  the embeddable GPU terminal widget — what another
 #                        project links to put a terminal pane in its window.
 #                        Emulator + Shell; never Multiplexer.
@@ -26,6 +29,7 @@ add_subdirectory(Multiplexer)
 add_subdirectory(Push)
 if (NOT IOS)
     add_subdirectory(PushRelay)
+    add_subdirectory(FolderWatch)
 endif ()
 if (TARGET CowTerm::EmbeddedSsh)
     add_subdirectory(Phone)

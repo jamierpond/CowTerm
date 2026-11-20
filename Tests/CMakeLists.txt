@@ -210,6 +210,13 @@ nano_add_executable(CowTermCliTests
             PaneStateArgumentsTests.cpp
         TARGETS CowTerm::Multiplexer)
 
+# Each platform's recursive folder watch reporting real changes in a scratch
+# folder; eacp core only, like the watcher.
+nano_add_executable(CowTermFolderWatchTests
+        SOURCES
+            RecursiveFolderWatcherTests.cpp
+        TARGETS CowTerm::FolderWatch)
+
 # The palette's order: match level, learned picks, usage.
 nano_add_executable(CowTermPaletteRankingTests
         SOURCES
