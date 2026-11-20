@@ -32,11 +32,20 @@ const auto textOptions = std::array {TextOption {"--listen", &PushRelayOptions::
                                      TextOption {"--topic", &PushRelayOptions::topic},
                                      TextOption {"--sound", &PushRelayOptions::soundName}};
 
+std::tm getLocalTime(std::time_t time)
+{
+    auto localTime = std::tm {};
+#if defined(_WIN32)
+    localtime_s(&localTime, &time);
+#else
+    localtime_r(&time, &localTime);
+#endif
+    return localTime;
+}
+
 void writeLogLine(const std::string& line)
 {
-    const auto now = std::time(nullptr);
-    auto localTime = std::tm {};
-    localtime_r(&now, &localTime);
+    const auto localTime = getLocalTime(std::time(nullptr));
     auto timestamp = std::array<char, timestampBytes> {};
     std::strftime(timestamp.data(), timestamp.size(), timestampFormat, &localTime);
     std::printf("%s push-relay: %s\n", timestamp.data(), line.c_str());
