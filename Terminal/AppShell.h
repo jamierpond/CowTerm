@@ -5,6 +5,7 @@
 #include "Multiplexer/PaneViewing.h"
 #include "Multiplexer/ActivityReports.h"
 #include "NotifyUserServer.h"
+#include "OutdatedPhoneNag.h"
 #include "PasteConfirmation.h"
 #include "Palette.h"
 #include "CowTermPermissions.h"
@@ -15,6 +16,8 @@
 #include "Switcher.h"
 #include "TrayController.h"
 #include "WindowChrome.h"
+
+#include <ThisBuildsPhoneStamp.h>
 
 #include <eacp/Core/Threads/Timer.h>
 #include <eacp/UI/UI.h>
@@ -129,6 +132,8 @@ private:
     void updateTitle();
     void handleSessionNotify(TermSession& session, const std::string& text);
     void askDaemonsForUnread();
+    static void sendToEveryDaemon(const std::string& message);
+    void takeDaemonMessage(const std::string& host, const std::string& verb, const std::string& body);
     void takeUnreadReport(const std::string& host, const std::string& body);
     void startWatchingWhatIsViewed();
     void noteUserInput();
@@ -155,6 +160,9 @@ private:
 
     // Tells the daemons which pane Jamie is looking at (PaneViewing.h).
     PaneViewingReporter paneViewing {&AppShell::sendToDaemonOf};
+
+    // Tells Jamie when the phone on any of these daemons runs an older build.
+    OutdatedPhoneNag outdatedPhoneNag {getThisBuildsPhoneStamp(), &AppShell::sendToEveryDaemon};
     std::int64_t lastInputMilliseconds = 0;
     std::unique_ptr<eacp::Threads::Timer> viewingTimer;
     std::shared_ptr<bool> alive = std::make_shared<bool>(true);

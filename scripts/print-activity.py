@@ -60,8 +60,11 @@ def make_bridge_command(arguments):
     return [os.path.expanduser("~/.local/bin/ct"), "bridge"]
 
 
-def main():
-    bridge = subprocess.Popen(make_bridge_command(sys.argv[1:]), stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+def ask_daemon(verb, arguments):
+    """Sends verb through `ct bridge` (to the host in arguments, or this Mac's
+    daemon) and returns the payload of the daemon's answer with the same verb,
+    or None when none came."""
+    bridge = subprocess.Popen(make_bridge_command(arguments), stdin=subprocess.PIPE, stdout=subprocess.PIPE)
     decoder = probe_bridge.Decoder()
     deadline = time.time() + TIMEOUT_SECONDS
     try:
@@ -70,18 +73,25 @@ def main():
             if not ready:
                 continue
             for message in decoder.append(os.read(bridge.stdout.fileno(), READ_BYTES)):
-                verb, _, payload = message.partition(b"\n")
-                if verb.startswith(b"bridge-hello"):
-                    bridge.stdin.write(probe_bridge.frame("activity"))
+                answer_verb, _, payload = message.partition(b"\n")
+                if answer_verb.startswith(b"bridge-hello"):
+                    bridge.stdin.write(probe_bridge.frame(verb))
                     bridge.stdin.flush()
-                if verb == b"activity":
-                    print_report(payload)
-                    return 0
-        print("the daemon did not answer", file=sys.stderr)
-        return 1
+                if answer_verb == verb.encode():
+                    return payload
+        return None
     finally:
         bridge.stdin.close()
         bridge.wait(timeout=TIMEOUT_SECONDS)
+
+
+def main():
+    payload = ask_daemon("activity", sys.argv[1:])
+    if payload is None:
+        print("the daemon did not answer", file=sys.stderr)
+        return 1
+    print_report(payload)
+    return 0
 
 
 if __name__ == "__main__":

@@ -175,6 +175,11 @@ pond_add_version_library(CowTermVersion)
 # The libraries (see Lib/CMakeLists.txt), then the product built on them.
 add_subdirectory(Lib)
 
+# The commit the iPhone app is built from, which the phone sends and the Mac
+# app compares with its own to tell Jamie when the phone is out of date.
+include(PhoneBuildStamp)
+cowterm_add_phone_build_stamp_library(CowTermPhoneBuildStamp)
+
 # iOS forbids starting processes, so the phone build has none of the daemon,
 # ct, the Mac app, the fuzzers or the tests: only the libraries and the iPhone
 # app (docs/iOSApp.md).

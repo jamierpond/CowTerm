@@ -32,7 +32,7 @@ eacp_add_app(CowTermMobile
         DISPLAY_NAME "CowTerm")
 
 target_link_libraries(CowTermMobile PRIVATE
-        CowTerm::TerminalView CowTerm::Multiplexer CowTerm::Phone eacp-ui "-framework Network")
+        CowTerm::TerminalView CowTerm::Multiplexer CowTerm::Phone CowTermPhoneBuildStamp eacp-ui "-framework Network")
 # The Mac's paste confirmation, reused as it is.
 target_include_directories(CowTermMobile PRIVATE ${PROJECT_SOURCE_DIR}/Terminal)
 # The cow icon in every iPhone size, from scripts/make-ios-app-icon.sh.

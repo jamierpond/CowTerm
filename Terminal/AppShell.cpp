@@ -201,10 +201,7 @@ void AppShell::start()
     {
         daemon->onInfoChanged = [this] { rudderChanged(); };
         daemon->onOtherMessage = [this](const std::string& verb, const std::string& body)
-        {
-            if (verb == activityVerb)
-                takeUnreadReport({}, body);
-        };
+        { takeDaemonMessage({}, verb, body); };
     }
 
     tray.refresh();
@@ -223,10 +220,23 @@ AppShell::~AppShell()
 
 void AppShell::askDaemonsForUnread()
 {
-    sendToDaemonOf({}, proto::make(activityVerb));
+    sendToEveryDaemon(proto::make(activityVerb));
+}
+
+void AppShell::sendToEveryDaemon(const std::string& message)
+{
+    sendToDaemonOf({}, message);
 
     for (auto* remote: RemoteHosts::all())
-        remote->getDaemon().send(proto::make(activityVerb));
+        remote->getDaemon().send(message);
+}
+
+void AppShell::takeDaemonMessage(const std::string& host, const std::string& verb, const std::string& body)
+{
+    if (verb == activityVerb)
+        takeUnreadReport(host, body);
+    else if (verb == OutdatedPhoneNag::clientsVerb)
+        outdatedPhoneNag.takeConnectedClients(host, body);
 }
 
 void AppShell::takeUnreadReport(const std::string& host, const std::string& body)
@@ -311,10 +321,7 @@ void AppShell::wireRemoteHosts()
         };
 
         remote->onUnhandledMessage = [this](RemoteHost& from, const std::string& verb, const std::string& body)
-        {
-            if (verb == activityVerb)
-                takeUnreadReport(from.getHost(), body);
-        };
+        { takeDaemonMessage(from.getHost(), verb, body); };
 
         remote->onLayout = [this](RemoteHost&, const std::string&, const std::string& layout)
         { manager.adoptRemoteSession(layout); };

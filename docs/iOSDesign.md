@@ -1057,6 +1057,27 @@ there:
 - `scripts/check-ios-size-return.sh` (`just ios-test-size-return`) checks it on
   two throwaway panes on a host.
 
+### An out-of-date phone
+
+The phone is installed by hand (`just ios-device pond`) and falls behind the
+Mac app, which is installed many times a day. Every build carries a stamp:
+the time and short hash of the last commit that touched what the phone is
+built from (the paths are listed once, in `cmake/PhoneBuildStamp.cmake`;
+`just print-phone-build-stamp` prints it). Whole-repo HEAD would move with
+every Mac-only commit.
+
+- The phone sends its stamp last in `hello`. A daemon from before stamps
+  reads the first two arguments as before.
+- `clients` asks a daemon for one `<name>\t<stamp>` line per connected
+  client (`just print-connected-clients [host]`). A daemon from before it
+  never answers, and the Mac asks again later.
+- The Mac asks every daemon it talks to every 30 seconds and posts a desktop
+  notification for a phone whose stamp is older than its own, or that sent
+  none: once per phone and stamp while the app runs. Nothing else shows it.
+- A build from a tree without git (a headless install from `git archive`) has
+  no stamp; only the daemon and `ct` are built there, and neither needs one. A
+  Mac app built that way never notifies.
+
 ## What eacp lacks on iOS
 
 Each gap was a branch of eacp off Eyal's develop. All of them are now on

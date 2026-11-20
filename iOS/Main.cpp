@@ -13,7 +13,10 @@
 #include "SampleShell.h"
 #include "ScreenStack.h"
 
+#include "Multiplexer/DaemonClient.h"
 #include "Multiplexer/DataDirectories.h"
+
+#include <ThisBuildsPhoneStamp.h>
 
 #include "TerminalView/GlyphAtlas.h"
 #include "TerminalView/TerminalView.h"
@@ -253,6 +256,7 @@ std::unique_ptr<cowterm::mobile::PhoneLaunch> makePhoneLaunch(const LaunchOption
     if (!launchOptions.phoneSettings)
         return nullptr;
 
+    term::DaemonClient::setClientBuildStamp(term::getThisBuildsPhoneStamp());
     return std::make_unique<cowterm::mobile::PhoneLaunch>(*launchOptions.phoneSettings);
 }
 

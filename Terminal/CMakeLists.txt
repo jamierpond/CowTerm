@@ -22,6 +22,7 @@ add_executable(${COWTERM_EXECUTABLE_TARGET}
         LeaderKeys.cpp
         NotifyUserPrompt.cpp
         NotifyUserServer.cpp
+        OutdatedPhoneNag.cpp
         OverlayPanel.cpp
         Palette.cpp
         PaletteUsageStore.cpp
@@ -86,7 +87,7 @@ endif ()
 # which is the native 2D tier and exists only on macOS and Windows.
 target_link_libraries(${COWTERM_EXECUTABLE_TARGET} PRIVATE
         CowTerm::TerminalView CowTerm::Multiplexer eacp-sprites eacp-text eacp-ui eacp-network emberstore PermissionsPanel
-        PondApp RudderClient FrecencySearch SearchKeys SessionLog CowTermVersion)
+        PondApp RudderClient FrecencySearch SearchKeys SessionLog CowTermVersion CowTermPhoneBuildStamp)
 
 # JetBrains Mono (OFL) rides inside the binary; registered with the platform
 # font system at startup, so the default font needs no install step.
