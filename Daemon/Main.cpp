@@ -13,6 +13,7 @@
 #include "Multiplexer/Protocol.h"
 #include "Signals.h"
 #include "CommandLookup.h"
+#include "ProjectFileChanges.h"
 #include "UnreadPanes.h"
 #include "Shell/Pty.h"
 #include "Emulator/TerminalModel.h"
@@ -32,6 +33,7 @@
 #include <array>
 #include <chrono>
 #include <cstdio>
+#include <filesystem>
 #include <map>
 #include <memory>
 #include <string>
@@ -90,6 +92,7 @@ struct DaemonPane
     bool alive = false;
     bool hasUnsavedChanges = false;
     std::string sessionName;
+    std::string projectFolder;
     term::PaneSizeOwner sizeOwner;
     PaneActivity activity;
 
@@ -289,8 +292,12 @@ struct Daemon
 
         if (auto found = panes.find(id); isUserInput && found != panes.end())
         {
+            const auto isNewPane = lastInput.paneId != id;
             lastInput = {id, getMillisecondsSinceEpoch()};
             found->second->activity.lastInputMilliseconds = lastInput.millisecondsSinceEpoch;
+
+            if (isNewPane)
+                watchProjectFolders();
         }
 
         write(id, message.payload);
@@ -422,8 +429,9 @@ struct Daemon
     }
 
     // One "<id>\t<last input>\t<last output>\t<state>\t<state since>\t<message>
-    // \t<unread event>\t<unread since>\t<unread text>" line per pane; times in
-    // milliseconds since 1970, 0 for never; the unread columns empty when read.
+    // \t<unread event>\t<unread since>\t<unread text>\t<last file change>" line
+    // per pane; times in milliseconds since 1970, 0 for never; the unread
+    // columns empty when read.
     void handleActivity(IPC::Messenger& sender, const term::proto::Message&)
     {
         auto payload = std::string {};
@@ -435,7 +443,9 @@ struct Daemon
                        + std::to_string(activity.lastOutputMilliseconds) + "\t" + activity.state
                        + "\t" + std::to_string(activity.stateSinceMilliseconds) + "\t"
                        + flattenToOneLine(activity.stateMessage) + "\t"
-                       + unreadPanes.describeForActivity(id) + "\n";
+                       + unreadPanes.describeForActivity(id) + "\t"
+                       + std::to_string(projectFileChanges.getLastChangeMilliseconds(pane->projectFolder))
+                       + "\n";
         }
 
         sender.send(term::proto::make("activity", {}, payload));
@@ -581,6 +591,7 @@ struct Daemon
 
         auto& pane = *(panes[id] = std::make_unique<DaemonPane>(request.size));
         pane.sessionName = request.sessionName;
+        pane.projectFolder = term::filechanges::findProjectFolder(request.payload.workingDirectory, homeFolder);
         pane.sizeOwner.claimSize(client.id, request.size);
         watch(pane, sender);
         restoreSavedPane(id, pane);
@@ -605,6 +616,18 @@ struct Daemon
             sendToWatchers(pane, term::proto::make("exit", {id}));
             panes.erase(id);
         }
+
+        watchProjectFolders();
+    }
+
+    void watchProjectFolders()
+    {
+        auto folders = std::vector<term::filechanges::FolderLastInput> {};
+
+        for (const auto& [id, pane]: panes)
+            folders.push_back({pane->projectFolder, pane->activity.lastInputMilliseconds});
+
+        projectFileChanges.watch(std::move(folders));
     }
 
     // A pane whose shell died with an earlier daemon: show what it had on
@@ -666,6 +689,7 @@ struct Daemon
         panes.erase(found);
         forgetSavedPane(id);
         unreadPanes.forgetPane(id);
+        watchProjectFolders();
 
         for (auto* watcher: watchers)
             watcher->send(term::proto::make("exit", {id}));
@@ -693,6 +717,7 @@ struct Daemon
         panes.erase(id);
         forgetSavedPane(id);
         unreadPanes.forgetPane(id);
+        watchProjectFolders();
     }
 
     emberstore::Document<term::TerminalState> paneDocument(const std::string& id) const
@@ -804,6 +829,8 @@ struct Daemon
     int idleTicks = 0;
     emberstore::Database paneStore = openPaneStore();
     UnreadPanes unreadPanes;
+    std::filesystem::path homeFolder = eacp::FilePath::homeDirectory().str();
+    ProjectFileChanges projectFileChanges;
 
     IPC::MessageServer server {term::proto::serverName()};
     Threads::Timer idleTimer {[this] { checkIdle(); }, idleCheckInterval};

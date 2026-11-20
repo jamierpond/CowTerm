@@ -1,11 +1,14 @@
 #include "DaemonConversation.h"
 
 #include <Multiplexer/Protocol.h>
+#include <Multiplexer/SessionOverview.h>
 #include <PondApp/DataDirectory.h>
 
 #include <NanoTest/NanoTest.h>
 
+#include <chrono>
 #include <filesystem>
+#include <fstream>
 #include <string>
 
 using namespace nano;
@@ -344,7 +347,7 @@ auto tLastInputNamesThePaneTypedInto = test("DaemonPhoneProtocol/lastInputNamesT
 
 auto tActivityCarriesWhatThePaneSaid = test("DaemonPhoneProtocol/activityCarriesWhatThePaneSaid") = []
 {
-    constexpr auto activityColumnCount = std::size_t {9};
+    constexpr auto activityColumnCount = std::size_t {10};
     auto daemon = TestDaemon {"daemon-activity-test"};
     auto mac = DaemonConversation {daemon.instance};
     check(mac.waitForConnection());
@@ -384,6 +387,7 @@ auto tActivityCarriesWhatThePaneSaid = test("DaemonPhoneProtocol/activityCarries
             check(columns[6] == "waiting", "nobody viewed the pane, so the question is unread");
             check(std::stoll(columns[7]) > 0);
             check(columns[8] == "Claude needs your permission ", "the unread text stays on one line");
+            check(columns[9].find_first_not_of("0123456789") == std::string::npos, "the last file change");
         }
     }
 
@@ -411,4 +415,67 @@ auto tLocalSessionsAreKnown = test("DaemonPhoneProtocol/localSessionsAreKnown") 
           "the session's layout is kept");
 
     mac.messenger.send(term::proto::make("kill", {paneId}));
+};
+
+namespace
+{
+constexpr auto timeBetweenFileWrites = Time::MS {500};
+constexpr auto fileChangeTimeout = Time::MS {15000};
+
+std::int64_t askForLastFileChange(DaemonConversation& client)
+{
+    client.messenger.send(term::proto::make("activity"));
+    const auto answer = client.waitForMessage("activity");
+
+    if (!answer)
+        return 0;
+
+    for (const auto& report: term::overview::parseActivityReport(answer->payload))
+    {
+        if (report.paneId == paneId)
+            return report.lastFileChangeMilliseconds;
+    }
+
+    return 0;
+}
+
+void appendToFile(const std::filesystem::path& file)
+{
+    auto stream = std::ofstream {file, std::ios::app};
+    stream << "changed\n";
+}
+} // namespace
+
+auto tActivityCarriesFileChanges = test("DaemonPhoneProtocol/activityCarriesTheLastFileChangeInThePanesRepository") = []
+{
+    const auto stamp = std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
+    const auto project = std::filesystem::temp_directory_path() / ("cowterm-daemon-file-change-" + stamp);
+    std::filesystem::create_directories(project / ".git");
+    std::filesystem::create_directories(project / "src");
+
+    auto daemon = TestDaemon {"daemon-file-change-test"};
+    auto mac = DaemonConversation {daemon.instance};
+    check(mac.waitForConnection());
+    introduce(mac, "Mac");
+
+    mac.messenger.send(term::proto::make(
+        "spawn", {paneId, toArgument(desktopColumns), toArgument(rows), sessionName}, (project / "src").string()));
+    mac.waitForMessage("output");
+    check(askForLastFileChange(mac) == 0, "nothing changed yet");
+
+    auto lastFileChange = std::int64_t {0};
+    auto deadline = Time::Deadline {fileChangeTimeout};
+
+    while (lastFileChange == 0 && !deadline.expired())
+    {
+        appendToFile(project / "notes.txt");
+        Threads::runEventLoopFor(timeBetweenFileWrites);
+        lastFileChange = askForLastFileChange(mac);
+    }
+
+    check(lastFileChange > 0, "a change at the repository's top counts for a pane started in src");
+
+    mac.messenger.send(term::proto::make("kill", {paneId}));
+    auto error = std::error_code {};
+    std::filesystem::remove_all(project, error);
 };

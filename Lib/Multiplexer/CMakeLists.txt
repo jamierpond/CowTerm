@@ -22,6 +22,7 @@ add_library(CowTermMultiplexer STATIC
         DaemonClient.cpp
         DaemonDialer.cpp
         DataDirectories.cpp
+        FileChangeRules.cpp
         HostColours.cpp
         NotifyUserClient.cpp
         NotifyUserProtocol.cpp

@@ -210,6 +210,12 @@ nano_add_executable(CowTermCliTests
             PaneStateArgumentsTests.cpp
         TARGETS CowTerm::Multiplexer)
 
+# Which project folders the daemon watches and which changes count.
+nano_add_executable(CowTermFileChangeTests
+        SOURCES
+            FileChangeTests.cpp
+        TARGETS CowTerm::Multiplexer)
+
 # Each platform's recursive folder watch reporting real changes in a scratch
 # folder; eacp core only, like the watcher.
 nano_add_executable(CowTermFolderWatchTests

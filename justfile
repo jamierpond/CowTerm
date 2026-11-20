@@ -47,6 +47,15 @@ test: configure
     {{deps}} cmake --build {{build_dir}}
     {{deps}} ctest --test-dir {{build_dir}} --output-on-failure
 
+[doc('Build and run the tests of the project file-change watch and the session order it feeds')]
+test-file-changes: configure
+    {{deps}} cmake --build {{build_dir}} --target CowTermFileChangeTests CowTermFolderWatchTests CowTermPaneSizeOwnerTests CowTermDaemonPhoneProtocolTests
+    {{deps}} ctest --test-dir {{build_dir}} --output-on-failure -R "FileChangeRules|RecursiveFolderWatcher|SessionOverview|ActivityReports|DaemonPhoneProtocol"
+
+# Run just test-file-changes on another machine (Linux, macOS or Windows over git-bash) against this working tree; --remove deletes its folder there
+test-file-changes-on-host host *options:
+    scripts/test-file-changes-on-host.sh {{host}} {{options}}
+
 [doc("Build everything, then run clang-tidy (eacp's checks) over CowTerm's sources; fails on any finding")]
 [unix]
 tidy: configure
