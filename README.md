@@ -85,7 +85,7 @@ separate `screencap` tool.
 
 | Key | Action |
 | --- | --- |
-| `Ctrl+A f` / `w` / `p` (or `Cmd+K` / `Cmd+T`) | Open the palette |
+| `Ctrl+A f` / `p` (or `Cmd+K` / `Cmd+T`) | Open the palette |
 | `Ctrl+W` (in the palette) | Delete the word behind the caret |
 | `Ctrl+A i` | Lazygit popup in the active pane's directory |
 | `Ctrl+A "` | Split pane below (in the pane's directory) |

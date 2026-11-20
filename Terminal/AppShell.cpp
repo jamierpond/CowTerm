@@ -872,11 +872,10 @@ bool AppShell::handlePrefixed(const KeyEvent& event)
 
 bool AppShell::runPrefixedKey(const KeyEvent& event)
 {
-    // f/w palette, i lazygit popup, " and %
+    // f palette, i lazygit popup, " and %
     // split below and beside, [ ] copy mode and paste, x kills the pane.
     static constexpr auto leaderActions = std::array {
         KeyAction {"f", &AppShell::showPalette},
-        KeyAction {"w", &AppShell::showPalette},
         KeyAction {"i", &AppShell::showLazygitPopup},
         KeyAction {"\"", &AppShell::splitActivePaneBelow},
         KeyAction {"%", &AppShell::splitActivePaneBeside},
