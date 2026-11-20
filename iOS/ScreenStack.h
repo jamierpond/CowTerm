@@ -34,6 +34,10 @@ public:
     void resized() override;
 
 private:
+    template <typename Cover, typename OtherCover>
+    Cover& showCoverRemovingTheOtherCover(std::unique_ptr<Cover>& cover,
+                                          std::unique_ptr<OtherCover>& otherCover);
+
     void coverPaneScreen(eacp::Graphics::View& cover);
 
     eacp::Graphics::View& paneScreen;

@@ -12,28 +12,27 @@ ScreenStack::ScreenStack(eacp::Graphics::View& paneScreenToUse)
 
 OverviewScreen& ScreenStack::showOverview()
 {
-    removeViewAndDestroyItSoon(*this, diffView);
-
-    if (overview == nullptr)
-    {
-        overview = std::make_unique<OverviewScreen>();
-        coverPaneScreen(*overview);
-    }
-
-    return *overview;
+    return showCoverRemovingTheOtherCover(overview, diffView);
 }
 
 DiffViewScreen& ScreenStack::showDiffView()
 {
-    removeViewAndDestroyItSoon(*this, overview);
+    return showCoverRemovingTheOtherCover(diffView, overview);
+}
 
-    if (diffView == nullptr)
+template <typename Cover, typename OtherCover>
+Cover& ScreenStack::showCoverRemovingTheOtherCover(std::unique_ptr<Cover>& cover,
+                                                   std::unique_ptr<OtherCover>& otherCover)
+{
+    removeViewAndDestroyItSoon(*this, otherCover);
+
+    if (cover == nullptr)
     {
-        diffView = std::make_unique<DiffViewScreen>();
-        coverPaneScreen(*diffView);
+        cover = std::make_unique<Cover>();
+        coverPaneScreen(*cover);
     }
 
-    return *diffView;
+    return *cover;
 }
 
 // The pane screen stays alive under the cover, hidden, with nothing beneath it.
