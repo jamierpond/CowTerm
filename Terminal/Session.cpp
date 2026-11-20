@@ -279,17 +279,6 @@ void SessionManager::switchToIndex(int index)
         switchTo(*sessions[(std::size_t) index]);
 }
 
-void SessionManager::switchToLast()
-{
-    if (previousSession != nullptr)
-        for (auto& session: sessions)
-            if (session.get() == previousSession)
-            {
-                switchTo(*previousSession);
-                return;
-            }
-}
-
 void SessionManager::beginPeek()
 {
     peekOrigin = activeSession;

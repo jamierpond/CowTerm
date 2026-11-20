@@ -89,7 +89,6 @@ public:
     void adoptRemoteSession(const std::string& layout);
     void switchTo(TermSession& session);
     void switchToIndex(int index);
-    void switchToLast();
 
     // Live-peek support for the palette. The palette shows the terminal
     // underneath switching to whatever row is highlighted, so navigating the

@@ -885,7 +885,6 @@ bool AppShell::runPrefixedKey(const KeyEvent& event)
         KeyAction {"]", &AppShell::pasteIntoActivePane},
         KeyAction {"o", &AppShell::cycleActivePaneFocus},
         KeyAction {"x", &AppShell::closeActivePane},
-        KeyAction {"^", &AppShell::switchToLastSession},
     };
 
     const auto& characters = event.charactersIgnoringModifiers;
@@ -978,11 +977,6 @@ void AppShell::openSessionInActiveDirectory()
 {
     if (auto* active = manager.active())
         manager.newSession(active->getActiveDirectoryAsProjectDir());
-}
-
-void AppShell::switchToLastSession()
-{
-    manager.switchToLast();
 }
 
 void AppShell::quitFromLeader()

@@ -388,9 +388,9 @@ Things only a finger can judge:
 - The sideways swipe on the bottom bar against the home indicator below it.
 - The friction of the scroll fling.
 
-Mac features with no use, or one use, in three days of logs. They are listed
-for a decision and nothing has been removed: `leader H J K L` (resize by a
-cell), `leader o` (cycle panes), `leader ^` (previous session), `leader 1–9`
+Mac features with no use, or one use, in three days of logs. They were listed
+for a decision, and `leader ^` (previous session) has since been removed. Still
+in: `leader H J K L` (resize by a cell), `leader o` (cycle panes), `leader 1–9`
 (session by number), `leader ]` (paste), `leader w` (a second key for the
 palette), and the palette's normal mode. Click to focus stays. Cmd chords are
 not logged, so nothing is known about them.

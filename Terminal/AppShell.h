@@ -89,7 +89,6 @@ private:
     void enterCopyModeOnActivePane();
     void pasteIntoActivePane();
     void openSessionInActiveDirectory();
-    void switchToLastSession();
     void quitFromLeader();
     void increaseGlobalFontSize();
     void decreaseGlobalFontSize();
