@@ -56,7 +56,7 @@ void drawCentered(UI::Graphics& g, const std::string& text, Point anchor, const 
 Switcher::Switcher(const AppConfig& configToUse,
                    const HostRowColours& thisMachineColours,
                    SessionManager& sessionsToUse,
-                   const UnreadReports& unreadToUse)
+                   const ActivityReports& unreadToUse)
     : OverlayPanel(configToUse, thisMachineColours, sessionsToUse, fontSizes)
     , unread(unreadToUse)
 {

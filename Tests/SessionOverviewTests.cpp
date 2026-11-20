@@ -281,3 +281,56 @@ auto tPillWordIsNotRepeated = test("SessionOverview/theStateLineDoesNotRepeatThe
     check(findStateLine("asks") == "Claude needs your permission to use Bash");
     check(findStateLine("rang") == "finished 4 min ago", "a pill naming another event leaves the line alone");
 };
+
+auto tActivityReportCarriesFileChange = test("SessionOverview/activityReportCarriesTheLastFileChange") = []
+{
+    const auto reports = parseActivityReport("a\t10\t20\t\t0\t\t\t\t\t40\n");
+
+    check(reports.size() == 1 && reports[0].lastFileChangeMilliseconds == 40);
+};
+
+auto tOlderReportsHaveNoFileChange = test("SessionOverview/reportsFromOlderDaemonsHaveNoFileChange") = []
+{
+    const auto withUnread = parseActivityReport("a\t10\t20\t\t0\t\tbell\t30\t\n");
+    const auto beforeUnread = parseActivityReport("b\t10\t20\t\t0\t\n");
+
+    check(withUnread.size() == 1 && withUnread[0].unreadEvent == "bell");
+    check(withUnread.size() == 1 && withUnread[0].lastFileChangeMilliseconds == 0);
+    check(beforeUnread.size() == 1 && beforeUnread[0].lastFileChangeMilliseconds == 0);
+};
+
+auto tFileChangeCountsAsUse = test("SessionOverview/aFileChangeNewerThanTypingPutsASessionFirst") = []
+{
+    const auto typedInto = makeActivity(now - fourMinutes, {}, 0);
+    auto changingFiles = makeActivity(now - twelveMinutes, "working", now - twelveMinutes);
+    changingFiles.lastFileChangeMilliseconds = now - oneMinute;
+
+    const auto rows = buildOverviewRows(
+        {{"tamby", {makePane("p1", "Grazer", "zsh", typedInto)}},
+         {"macprorack", {makePane("p2", "tamber-web", "claude", changingFiles)}}},
+        now);
+
+    check(rows.size() == 2 && rows[0].sessionName == "tamber-web");
+    check(rows.size() == 2 && rows[0].lastUsedMilliseconds == now - oneMinute);
+};
+
+auto tFileChangeStaysBehindWaiting = test("SessionOverview/aFileChangeStaysBehindUnreadAndWaitingSessions") = []
+{
+    auto unread = makeActivity(now - twelveMinutes, {}, 0);
+    unread.unreadEvent = "finished";
+    unread.unreadSinceMilliseconds = now - twelveMinutes;
+    const auto waiting = makeActivity(now - twelveMinutes, "waiting", now - twelveMinutes);
+    auto changingFiles = makeActivity(0, "working", now - twelveMinutes);
+    changingFiles.lastFileChangeMilliseconds = now;
+
+    const auto rows = buildOverviewRows({{"tamby",
+                                          {makePane("p1", "busy", "claude", changingFiles),
+                                           makePane("p2", "asks", "claude", waiting),
+                                           makePane("p3", "done", "claude", unread)}}},
+                                        now);
+
+    check(rows.size() == 3);
+
+    if (rows.size() == 3)
+        check(rows[0].sessionName == "done" && rows[1].sessionName == "asks" && rows[2].sessionName == "busy");
+};

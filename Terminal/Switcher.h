@@ -2,7 +2,7 @@
 
 #include "OverlayPanel.h"
 
-#include "Multiplexer/UnreadReports.h"
+#include "Multiplexer/ActivityReports.h"
 
 #include <eacp/Core/Threads/Timer.h>
 
@@ -24,7 +24,7 @@ public:
     Switcher(const AppConfig& configToUse,
              const HostRowColours& thisMachineColours,
              SessionManager& sessionsToUse,
-             const UnreadReports& unreadToUse);
+             const ActivityReports& unreadToUse);
 
     // Open pointing at the next MRU entry (the previous session), or the last
     // one when reverse. Returns false and stays closed when there aren't at
@@ -60,7 +60,7 @@ private:
     void paintSelectedDetail(eacp::UI::Graphics& g, eacp::UI::Rect panel);
     std::string describeSession(const TermSession& session) const;
 
-    const UnreadReports& unread;
+    const ActivityReports& unread;
 
     // Frozen MRU snapshot taken on begin(); index 0 is the current session.
     // Unread sessions are marked but keep their place, so a quick Ctrl+Tab

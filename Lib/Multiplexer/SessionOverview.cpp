@@ -19,6 +19,7 @@ namespace
 constexpr auto millisecondsPerMinute = std::int64_t {60000};
 constexpr auto activityColumnCount = 6;
 constexpr auto activityColumnCountWithUnread = 9;
+constexpr auto activityColumnCountWithFileChange = 10;
 constexpr auto waitingState = "waiting";
 constexpr auto workingState = "working";
 constexpr auto finishedState = "finished";
@@ -120,7 +121,7 @@ OverviewRow makeRow(const SessionPanes& session, std::int64_t now)
     {
         row.paneIds.push_back(pane->paneId);
         row.isClaude = row.isClaude || isClaudeProcess(pane->foregroundProcess);
-        row.lastUsedMilliseconds = std::max(row.lastUsedMilliseconds, pane->activity.lastInputMilliseconds);
+        row.lastUsedMilliseconds = std::max(row.lastUsedMilliseconds, findLastUseMilliseconds(pane->activity));
     }
 
     addUnreadMarks(row, session.panes);
@@ -212,10 +213,18 @@ std::vector<PaneActivityReport> parseActivityReport(const std::string& payload)
             report.unreadText = columns[8];
         }
 
+        if (columns.size() >= activityColumnCountWithFileChange)
+            report.lastFileChangeMilliseconds = readMilliseconds(columns[9]);
+
         reports.push_back(report);
     }
 
     return reports;
+}
+
+std::int64_t findLastUseMilliseconds(const PaneActivityReport& activity)
+{
+    return std::max(activity.lastInputMilliseconds, activity.lastFileChangeMilliseconds);
 }
 
 std::optional<UnreadMark> findUnreadMark(const PaneActivityReport& activity)

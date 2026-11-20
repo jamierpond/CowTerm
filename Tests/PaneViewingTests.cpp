@@ -1,6 +1,6 @@
 #include <Multiplexer/PaneViewing.h>
 #include <Multiplexer/UnreadMark.h>
-#include <Multiplexer/UnreadReports.h>
+#include <Multiplexer/ActivityReports.h>
 
 #include <NanoTest/NanoTest.h>
 
@@ -137,9 +137,9 @@ auto tMarkSaysTheEventInWords = test("UnreadMark/markSaysTheEventInWords") = []
     check(describeUnreadMark({"something-new", 0, {}}) == "unread");
 };
 
-auto tReportsGiveTheNewestMarkOfAPaneSet = test("UnreadReports/newestMarkAmongASessionsPanes") = []
+auto tReportsGiveTheNewestMarkOfAPaneSet = test("ActivityReports/newestMarkAmongASessionsPanes") = []
 {
-    auto reports = UnreadReports {};
+    auto reports = ActivityReports {};
     reports.takeActivityReport(rack,
                                "a\t0\t0\tfinished\t0\t\tfinished\t100\tDone.\n"
                                "b\t0\t0\twaiting\t0\t\twaiting\t200\tRun it?\n"
@@ -152,4 +152,17 @@ auto tReportsGiveTheNewestMarkOfAPaneSet = test("UnreadReports/newestMarkAmongAS
 
     reports.takeActivityReport(rack, "a\t0\t0\t\t0\t\t\t0\t\n");
     check(!reports.findNewestUnreadMark(rack, {"a", "b"}).has_value(), "the next answer replaces the last");
+};
+
+auto tReportsGiveTheLastUseOfAPaneSet = test("ActivityReports/lastUseIsTheLatestTypingOrFileChangeAmongASessionsPanes") = []
+{
+    auto reports = ActivityReports {};
+    reports.takeActivityReport(rack,
+                               "a\t100\t0\t\t0\t\t\t\t\t300\n"
+                               "b\t200\t0\t\t0\t\t\t\t\t0\n"
+                               "c\t50\t0\t\t0\t\n");
+
+    check(reports.findLastUseMilliseconds(rack, {"a", "b"}) == 300, "a's file change");
+    check(reports.findLastUseMilliseconds(rack, {"b", "c"}) == 200, "b's typing; c's daemon sends no file change");
+    check(reports.findLastUseMilliseconds({}, {"a"}) == 0, "another host's daemon");
 };

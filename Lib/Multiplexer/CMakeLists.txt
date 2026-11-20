@@ -45,7 +45,7 @@ add_library(CowTermMultiplexer STATIC
         SshBridgeLink.cpp
         TextLayout.cpp
         UnreadMark.cpp
-        UnreadReports.cpp
+        ActivityReports.cpp
         UsageLog.cpp)
 
 if (WIN32)

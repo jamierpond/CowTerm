@@ -2,7 +2,7 @@
 
 #include "OverlayPanel.h"
 #include "Multiplexer/PaletteItem.h"
-#include "Multiplexer/UnreadReports.h"
+#include "Multiplexer/ActivityReports.h"
 
 #include <cstdint>
 #include <string>
@@ -24,7 +24,7 @@ public:
     Palette(const AppConfig& configToUse,
             const HostRowColours& thisMachineColours,
             SessionManager& sessionsToUse,
-            const UnreadReports& unreadToUse);
+            const ActivityReports& activityReportsToUse);
 
     void show();
 
@@ -66,7 +66,7 @@ private:
                   eacp::UI::Rect rowArea,
                   const HostRowColours& colours);
 
-    const UnreadReports& unread;
+    const ActivityReports& activityReports;
     std::vector<PaletteItem> allItems;
     std::vector<PaletteItem> visible;
     bool shown = false;

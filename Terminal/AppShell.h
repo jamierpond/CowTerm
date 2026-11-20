@@ -3,7 +3,7 @@
 #include "Multiplexer/Config.h"
 #include "Multiplexer/HostColours.h"
 #include "Multiplexer/PaneViewing.h"
-#include "Multiplexer/UnreadReports.h"
+#include "Multiplexer/ActivityReports.h"
 #include "NotifyUserServer.h"
 #include "PasteConfirmation.h"
 #include "Palette.h"
@@ -145,9 +145,9 @@ private:
     SessionManager manager {config};
 
     // What each daemon last said is unread, drawn by the palette and switcher.
-    UnreadReports unreadReports;
-    Palette palette {config, thisMachineColours, manager, unreadReports};
-    Switcher switcher {config, thisMachineColours, manager, unreadReports};
+    ActivityReports activityReports;
+    Palette palette {config, thisMachineColours, manager, activityReports};
+    Switcher switcher {config, thisMachineColours, manager, activityReports};
 
     // Tells the daemons which pane Jamie is looking at (PaneViewing.h).
     PaneViewingReporter paneViewing {&AppShell::sendToDaemonOf};

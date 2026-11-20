@@ -230,7 +230,7 @@ void AppShell::askDaemonsForUnread()
 
 void AppShell::takeUnreadReport(const std::string& host, const std::string& body)
 {
-    unreadReports.takeActivityReport(host, proto::parse(body).payload);
+    activityReports.takeActivityReport(host, proto::parse(body).payload);
     palette.refreshRemoteRows();
 
     if (switcher.isShown())

@@ -92,9 +92,9 @@ bool isOrderedForEmptyQuery(const PaletteItem& a, const PaletteItem& b)
 Palette::Palette(const AppConfig& configToUse,
                  const HostRowColours& thisMachineColours,
                  SessionManager& sessionsToUse,
-                 const UnreadReports& unreadToUse)
+                 const ActivityReports& activityReportsToUse)
     : SearchablePanel(configToUse, thisMachineColours, sessionsToUse, fontSizes)
-    , unread(unreadToUse)
+    , activityReports(activityReportsToUse)
 {
 }
 
@@ -142,8 +142,9 @@ PaletteItem Palette::makeSessionItem(TermSession& session) const
     item.label = session.name;
     item.host = session.host;
     item.claude = session.isClaude();
-    item.lastUsed = sessions.lastUsed(item.key);
-    item.unread = unread.findNewestUnreadMark(session.host, session.listShellIds());
+    item.lastUsed = std::max(sessions.lastUsed(item.key),
+                             activityReports.findLastUseMilliseconds(session.host, session.listShellIds()));
+    item.unread = activityReports.findNewestUnreadMark(session.host, session.listShellIds());
 
     const auto title = session.activeTitle();
     item.detail = title;
@@ -234,7 +235,8 @@ void Palette::applyQuery()
     if (query.empty())
     {
         // Unread sessions first, the newest first, then open sessions, then
-        // projects, each most-recently-used first.
+        // projects. Each is ordered by its last use: switched to here, typed
+        // into anywhere or a file changed in its project, as the phone does.
         visible = allItems;
         std::stable_sort(visible.begin(), visible.end(), isOrderedForEmptyQuery);
         moveUnreadRowsFirst(visible, [](const PaletteItem& item) -> const auto& { return item.unread; });

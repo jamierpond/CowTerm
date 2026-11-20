@@ -959,7 +959,7 @@ puts those sessions first with a yellow pill that names what happened.
   host's link comes back, since the daemon forgets a client that disconnects
   (`PaneViewingReporter`).
 - The Mac asks every daemon for `activity` when the palette or the switcher
-  opens and redraws when the answers arrive (`UnreadReports`).
+  opens and redraws when the answers arrive (`ActivityReports`).
 
 ### Touch on a real phone
 

@@ -69,7 +69,7 @@ int renderPicker(const std::string& outputPath, const std::string& query, int se
     Threads::runEventLoopUntil(haveAllHostsAnswered, waitForHosts);
 
     auto sessions = term::SessionManager {config};
-    const auto noUnreadPanes = term::UnreadReports {};
+    const auto noUnreadPanes = term::ActivityReports {};
     const auto thisMachineColours = term::getThisMachineColours(config);
     auto palette = term::Palette {config, thisMachineColours, sessions, noUnreadPanes};
     auto host = UI::ComponentHost {};

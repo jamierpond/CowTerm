@@ -235,9 +235,9 @@ std::string makeUnreadActivityReport(const term::TermSession& session, const Unr
     return payload;
 }
 
-term::UnreadReports makeUnreadReports(term::SessionManager& sessions)
+term::ActivityReports makeUnreadReports(term::SessionManager& sessions)
 {
-    auto reports = term::UnreadReports {};
+    auto reports = term::ActivityReports {};
 
     for (const auto& unread: unreadSessions)
         reports.takeActivityReport(unread.host, makeUnreadActivityReport(findSession(sessions, unread.host), unread));

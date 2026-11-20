@@ -8,8 +8,8 @@
 
 // The phone's overview, without drawing: every session on every machine as one
 // row, unread ones first (newest first), then waiting ones, then by most
-// recent typing, then every project
-// folder with no session open. Built from what each daemon answers to `info`
+// recent typing or file change in its project, then every project folder with
+// no session open. Built from what each daemon answers to `info`
 // and `activity`, and each host's project scan.
 namespace term::overview
 {
@@ -28,9 +28,17 @@ struct PaneActivityReport
     std::string unreadEvent;
     std::int64_t unreadSinceMilliseconds = 0;
     std::string unreadText;
+
+    // When a file last changed in the pane's project folder. Daemons from
+    // before file changes send none.
+    std::int64_t lastFileChangeMilliseconds = 0;
 };
 
 std::vector<PaneActivityReport> parseActivityReport(const std::string& payload);
+
+// The later of when the pane was last typed into and when a file last changed
+// in its project: what orders sessions after unread and waiting.
+std::int64_t findLastUseMilliseconds(const PaneActivityReport& activity);
 
 // The pane's unread mark; empty when it is read.
 std::optional<UnreadMark> findUnreadMark(const PaneActivityReport& activity);
