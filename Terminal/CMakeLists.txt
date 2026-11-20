@@ -39,7 +39,7 @@ add_executable(${COWTERM_EXECUTABLE_TARGET}
         WindowChrome.cpp)
 
 # Per-platform halves of ct, shell commands, the places watcher,
-# notifications and trash. Privacy grants come from Rudder's PermissionsPanel.
+# notifications and trash. Privacy grants come from PondDev's PermissionsPanel.
 if (APPLE)
     target_sources(${COWTERM_EXECUTABLE_TARGET} PRIVATE
             Command-Posix.cpp
@@ -103,7 +103,7 @@ set_target_properties(${COWTERM_EXECUTABLE_TARGET} PROPERTIES
 
 eacp_set_gui_subsystem(${COWTERM_EXECUTABLE_TARGET})
 set_default_target_setting(${COWTERM_EXECUTABLE_TARGET})
-cowterm_write_line_coverage(${COWTERM_EXECUTABLE_TARGET})
+pond_write_line_coverage(${COWTERM_EXECUTABLE_TARGET} APP_NAME CowTerm INSTANCE_VARIABLE COWTERM_INSTANCE)
 eacp_set_app_icon(${COWTERM_EXECUTABLE_TARGET}
         IMAGE "${CMAKE_CURRENT_SOURCE_DIR}/Icon.png")
 

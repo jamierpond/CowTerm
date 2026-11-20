@@ -14,7 +14,7 @@ target_link_libraries(CowTermDaemon PRIVATE
         CowTermVersion)
 
 set_default_target_setting(CowTermDaemon)
-cowterm_write_line_coverage(CowTermDaemon)
+pond_write_line_coverage(CowTermDaemon APP_NAME CowTerm INSTANCE_VARIABLE COWTERM_INSTANCE)
 
 if (APPLE OR WIN32)
     eacp_enable_crash_reporting(CowTermDaemon SYMBOLS_DIR ${PROJECT_BINARY_DIR}/symbols)

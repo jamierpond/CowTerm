@@ -105,18 +105,18 @@ run: build
 # CowTerm executable's CLI mode) into ~/.local/bin. On Windows `ct` is a ct.cmd
 # there instead: CowTerm.exe is a GUI executable, which a shell would not wait
 # for, and a batch file makes it.
-[doc('Build, then install the app to the usual place for this OS')]
+[doc('Build, then install the normal app, without line coverage, to the usual place for this OS')]
 [macos]
-install: build
+install-without-coverage: build
     mkdir -p "$HOME/.local/bin" "$HOME/.local/libexec/cowterm"
     rm -rf "$HOME/.local/libexec/cowterm/CowTerm.app"
     cp -R "{{build_dir}}/Terminal/CowTerm.app" "$HOME/.local/libexec/cowterm/CowTerm.app"
     ln -sf "$HOME/.local/libexec/cowterm/CowTerm.app/Contents/MacOS/CowTerm" "$HOME/.local/bin/ct"
     @echo "Installed CowTerm.app to ~/.local/libexec/cowterm (ct -> ~/.local/bin/ct)"
 
-[doc('Build, then install the app to the usual place for this OS')]
+[doc('Build, then install the normal app, without line coverage, to the usual place for this OS')]
 [windows]
-install: build
+install-without-coverage: build
     scripts/install-windows.ps1 "{{build_dir}}" "$env:LOCALAPPDATA\Programs\CowTerm"
     $exe = "$env:LOCALAPPDATA\Programs\CowTerm\CowTerm.exe"; $ws = New-Object -ComObject WScript.Shell; @([Environment]::GetFolderPath('Desktop'), [Environment]::GetFolderPath('Programs')) | ForEach-Object { $s = $ws.CreateShortcut((Join-Path $_ 'CowTerm.lnk')); $s.TargetPath = $exe; $s.WorkingDirectory = (Split-Path $exe); $s.IconLocation = $exe; $s.Description = 'CowTerm'; $s.Save() }; Write-Host "Added Desktop and Start Menu shortcuts"
     ie4uinit.exe -show
@@ -136,9 +136,9 @@ install: build
 # directory either way: DaemonClient.cpp finds CowTermDaemon next to
 # /proc/self/exe, so separating them is what leaves the app falling back to
 # in-process shells that die with the window.
-[doc('Build, then install the app to the usual place for this OS')]
+[doc('Build, then install the normal app, without line coverage, to the usual place for this OS')]
 [linux]
-install: build
+install-without-coverage: build
     mkdir -p "$HOME/.local/bin" "$HOME/.local/libexec/cowterm" "$HOME/.local/share/applications" "$HOME/.local/share/icons/hicolor/scalable/apps"
     cp "{{build_dir}}/Terminal/CowTerm" "$HOME/.local/libexec/cowterm/CowTerm"
     cp "{{build_dir}}/Terminal/CowTermDaemon" "$HOME/.local/libexec/cowterm/CowTermDaemon"
@@ -160,6 +160,20 @@ install: build
     -update-desktop-database "$HOME/.local/share/applications" 2>/dev/null
     -gtk-update-icon-cache -f -t "$HOME/.local/share/icons/hicolor" 2>/dev/null
     @echo "Installed to ~/.local/bin, with a desktop entry and icon"
+
+# For now `install` puts in the line-coverage build (see the line coverage
+# section below), so a normal day's use is counted. Clang builds it, so on
+# Windows `install` stays the normal build.
+[doc('For now the line-coverage build: build it and install it, keeping the old and new programs for coverage-report')]
+[unix]
+install: coverage-build
+    {{line_coverage}} $COWTERM_COVERAGE_SETTINGS keep
+    just build_dir={{coverage_build_dir}} install-without-coverage
+    {{line_coverage}} $COWTERM_COVERAGE_SETTINGS keep
+
+[doc('Build, then install the app to the usual place for this OS')]
+[windows]
+install: install-without-coverage
 
 [doc('Build and install ct + cowtermd (headless) on a remote host over ssh, for remote sessions')]
 install-remote host:
@@ -419,45 +433,53 @@ push-relay-check-ready host="jamiepond@macprorack":
 # ---- Line coverage: which lines of CowTerm's own code a normal day runs ----
 
 coverage_build_dir := "build-coverage"
-coverage_cmake_arguments := "-DCOWTERM_LINE_COVERAGE=ON -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++"
+coverage_cmake_arguments := "-DPOND_LINE_COVERAGE=ON -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++"
+# PondDev's line-coverage scripts, which configuring with POND_LINE_COVERAGE copies here.
+coverage_scripts := coverage_build_dir / "PondLineCoverage"
+line_coverage := coverage_scripts / "line-coverage.py"
+coverage_check_headless := if os() == "linux" { "ON" } else { "OFF" }
+
+# line-coverage.py's settings for CowTerm. Recipes expand it unquoted, so the
+# shell leaves each ~ for line-coverage.py to expand on the machine it reads.
+export COWTERM_COVERAGE_SETTINGS := "--app CowTerm --program CowTerm --program CowTermDaemon --program ct --program cowtermd --installed-in ~/.local/libexec/cowterm/CowTerm.app/Contents/MacOS --installed-in ~/.local/libexec/cowterm --installed-in ~/.local/libexec/cowterm-remote --own-code-folder Lib --own-code-folder Terminal --own-code-folder Daemon --own-code-folder Remote --not-own-code-folder iOS --not-own-code-folder Tests --not-own-code-folder Bench --not-own-code-folder Fuzz"
+
+# check-line-coverage.sh's arguments for CowTerm: a throwaway daemon reached through `ct bridge`.
+coverage_check_arguments := "--instance-variable COWTERM_INSTANCE --target CowTermDaemon --target CowTermCli --program Daemon/CowTermDaemon=cowtermd --program Remote/ct=ct --start 'scripts/probe-bridge.py --local \"$1/ct\" --keep' --kill cowtermd"
+
+[private]
+coverage-configure:
+    {{deps}} cmake -S . -B {{coverage_build_dir}} -G "{{generator}}" -DCMAKE_BUILD_TYPE={{build_type}} {{coverage_cmake_arguments}}
 
 [doc('Build the app with line-coverage counters, in build-coverage')]
-coverage-build:
-    {{deps}} cmake -S . -B {{coverage_build_dir}} -G "{{generator}}" -DCMAKE_BUILD_TYPE={{build_type}} {{coverage_cmake_arguments}}
+coverage-build: coverage-configure
     just build_dir={{coverage_build_dir}} build
 
-[doc('Install the line-coverage build in place of the normal app, keeping the old and new programs for coverage-report (just install puts the normal one back)')]
-install-coverage: coverage-build
-    scripts/line-coverage.py keep
-    just build_dir={{coverage_build_dir}} install
-    scripts/line-coverage.py keep
-
 [doc("Install a line-coverage headless ct and cowtermd on a host in place of its normal ones; its running daemon keeps running")]
-coverage-install-headless-on-host host:
-    scripts/line-coverage.py keep {{host}}
+coverage-install-headless-on-host host: coverage-configure
+    {{line_coverage}} $COWTERM_COVERAGE_SETTINGS keep {{host}}
     scripts/install-headless-on-host.sh {{host}} '$HOME/tmp/cowterm-coverage-install' build-headless-coverage {{coverage_cmake_arguments}}
-    scripts/line-coverage.py keep {{host}}
+    {{line_coverage}} $COWTERM_COVERAGE_SETTINGS keep {{host}}
 
 [doc('Print the code that never ran in any build, largest first, from this machine and every collected host')]
-coverage-report *arguments:
-    scripts/line-coverage.py report {{arguments}}
+coverage-report *arguments: coverage-configure
+    {{line_coverage}} $COWTERM_COVERAGE_SETTINGS report {{arguments}}
 
 [doc("Copy a host's line-coverage counts and its programs here, for coverage-report")]
-coverage-collect-from-host host *arguments:
-    scripts/line-coverage.py collect {{host}} {{arguments}}
+coverage-collect-from-host host *arguments: coverage-configure
+    {{line_coverage}} $COWTERM_COVERAGE_SETTINGS collect {{host}} {{arguments}}
 
 [doc('Delete the line-coverage counts and kept programs here, or on user@host')]
-coverage-reset host="" *arguments:
-    scripts/line-coverage.py reset {{host}} {{arguments}}
+coverage-reset host="" *arguments: coverage-configure
+    {{line_coverage}} $COWTERM_COVERAGE_SETTINGS reset {{host}} {{arguments}}
 
 [doc("Kill a throwaway instrumented daemon (instance coverage-check) without a clean exit and show its counts survived")]
-coverage-check:
-    {{deps}} scripts/check-line-coverage.sh {{coverage_build_dir}} {{coverage_cmake_arguments}}
+coverage-check: coverage-configure
+    {{deps}} {{coverage_scripts}}/check-line-coverage.sh --coverage-arguments "$COWTERM_COVERAGE_SETTINGS" --build-directory {{coverage_build_dir}} {{coverage_check_arguments}} -- -DCOWTERM_HEADLESS={{coverage_check_headless}} {{coverage_cmake_arguments}}
 
 [doc("The same check on user@host, detached there, then collect and report its counts here")]
-coverage-check-on-host host:
-    scripts/check-line-coverage-on-host.sh {{host}} {{coverage_cmake_arguments}}
+coverage-check-on-host host: coverage-configure
+    {{coverage_scripts}}/check-line-coverage-on-host.sh {{host}} CowTerm scripts/with-linux-deps.sh "$COWTERM_COVERAGE_SETTINGS" {{coverage_check_arguments}} -- -DCOWTERM_HEADLESS=ON {{coverage_cmake_arguments}}
 
 [doc("Build ct twice, the second with printVersion changed, and show coverage-report counts a function run only under the first build as run")]
-coverage-check-across-builds:
-    {{deps}} scripts/check-line-coverage-across-builds.sh {{coverage_cmake_arguments}}
+coverage-check-across-builds: coverage-configure
+    {{deps}} {{coverage_scripts}}/check-line-coverage-across-builds.sh --coverage-arguments "$COWTERM_COVERAGE_SETTINGS" --instance-variable COWTERM_INSTANCE --target CowTermCli --program Remote/ct --source Remote/CtMain.cpp --function printVersion --marker '"second build"' --substitution 's/int printVersion\(const Arguments&\)\n\{\n/int printVersion(const Arguments& arguments)\n{\n    if (arguments.size() > 1)\n        std::puts("second build");\n/' --first-run version --second-run help -- -DCOWTERM_HEADLESS=ON {{coverage_cmake_arguments}}

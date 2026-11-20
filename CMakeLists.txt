@@ -89,6 +89,17 @@ lockstep_add_package(
 # find_package(ResEmbed) (via eacp_set_gui_subsystem) and need the Find modules.
 list(APPEND CMAKE_MODULE_PATH "${eacp_SOURCE_DIR}/CMake")
 
+# The libraries the pond apps share: PondApp, SessionLog, FrecencySearch,
+# SearchKeys, PermissionsPanel, pond_add_version_library and line coverage.
+# Added after eacp, so PondDev uses this eacp instead of fetching its own.
+# Work against a local checkout with:
+#   cmake -B build -DLOCKSTEP_PondDev_SOURCE=$HOME/projects/PondDev
+lockstep_add_package(
+        NAME PondDev
+        GITHUB_REPOSITORY jamierpond/PondDev
+        GIT_TAG main
+        SYSTEM YES)
+
 # Publishes CowTerm's panes and ctrl+a f places to Rudder (the app switcher)
 # as contexts. Only Rudder's client library is built; CowTerm behaves exactly
 # as before when Rudder isn't running, and on a platform Rudder has no
@@ -162,25 +173,11 @@ lockstep_add_package(
         GIT_TAG main)
 
 # Counts which lines of CowTerm's own code run, so code nobody uses can be found
-# (just coverage-report). Set after the packages, so only CowTerm is counted.
-option(COWTERM_LINE_COVERAGE "Count which lines of CowTerm's code run (clang only)" OFF)
-if (COWTERM_LINE_COVERAGE)
-    if (NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-        message(FATAL_ERROR "COWTERM_LINE_COVERAGE needs clang: configure with -DCMAKE_CXX_COMPILER=clang++")
-    endif ()
-    # With a plain default name every program start creates an empty default.profraw in its working
-    # folder; a %m name makes nothing until LineCoverageWriter.cpp has set the real path.
-    add_compile_options(-fprofile-instr-generate=%m.profraw -fcoverage-mapping)
-    add_link_options(-fprofile-instr-generate=%m.profraw)
-endif ()
+# (just coverage-report), with -DPOND_LINE_COVERAGE=ON. Set after the packages,
+# so only CowTerm is counted.
+pond_add_line_coverage_counters()
 
-function(cowterm_write_line_coverage target)
-    if (COWTERM_LINE_COVERAGE)
-        target_sources(${target} PRIVATE ${PROJECT_SOURCE_DIR}/LineCoverage/LineCoverageWriter.cpp)
-    endif ()
-endfunction()
-
-# ct, the daemon and the app report one version: <semver>+<commit>, from Rudder.
+# ct, the daemon and the app report one version: <semver>+<commit>, from PondDev.
 pond_add_version_library(CowTermVersion)
 
 # The libraries (see Lib/CMakeLists.txt), then the product built on them.

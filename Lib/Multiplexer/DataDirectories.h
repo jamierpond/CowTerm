@@ -16,7 +16,6 @@ std::filesystem::path getDataDirectory();
 std::filesystem::path getLogsDirectory();
 std::filesystem::path getSessionStoreDirectory();
 std::filesystem::path getPaneStoreDirectory();
-std::filesystem::path getLineCoverageDirectory();
 
 // Where CowTerm kept the app's data before pond/CowTerm, moved there on the
 // app's first launch. The daemon's panes move separately, when the daemon
