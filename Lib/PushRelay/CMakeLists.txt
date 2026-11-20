@@ -7,6 +7,12 @@ add_library(CowTermPushRelay STATIC
         PushRelayCommand.cpp
         PushRelayServer.cpp)
 
+if (WIN32)
+    target_sources(CowTermPushRelay PRIVATE LocalTime-Windows.cpp)
+else ()
+    target_sources(CowTermPushRelay PRIVATE LocalTime-Posix.cpp)
+endif ()
+
 target_include_directories(CowTermPushRelay PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/..)
 target_link_libraries(CowTermPushRelay PUBLIC CowTerm::Push eacp-network PRIVATE mbedcrypto)
 

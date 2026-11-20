@@ -1,4 +1,5 @@
 #include "PushRelayCommand.h"
+#include "LocalTime.h"
 #include "PushRelay.h"
 #include "PushRelayServer.h"
 
@@ -31,17 +32,6 @@ struct TextOption
 const auto textOptions = std::array {TextOption {"--listen", &PushRelayOptions::listenAddress},
                                      TextOption {"--topic", &PushRelayOptions::topic},
                                      TextOption {"--sound", &PushRelayOptions::soundName}};
-
-std::tm getLocalTime(std::time_t time)
-{
-    auto localTime = std::tm {};
-#if defined(_WIN32)
-    localtime_s(&localTime, &time);
-#else
-    localtime_r(&time, &localTime);
-#endif
-    return localTime;
-}
 
 void writeLogLine(const std::string& line)
 {
