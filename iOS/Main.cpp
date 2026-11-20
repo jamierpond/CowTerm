@@ -227,7 +227,7 @@ cowterm::mobile::PaneDescription makeSamplePaneDescription(int paneCount)
 Graphics::WindowOptions makeWindowOptions()
 {
     auto options = Graphics::WindowOptions {};
-    options.statusBar = Graphics::StatusBar::LightText;
+    options.statusBar = Graphics::SystemStatusBar::LightText;
     return options;
 }
 
