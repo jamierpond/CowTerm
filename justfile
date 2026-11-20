@@ -430,6 +430,10 @@ ios-check-hidden-views device="iPhone 17e":
 push-relay-check-ready host="jamiepond@macprorack":
     scripts/check-push-relay-ready.sh {{host}}
 
+[doc('List the crash reports nobody has marked fixed here and on other machines (list [HOST ...]), or mark one fixed (mark-fixed HOST ID); reads the script from build, which just test configures')]
+crash-reports *arguments:
+    python3 build/PondCrashReports/crash-reports.py --app CowTerm --program CowTerm --program CowTermDaemon {{arguments}}
+
 # ---- Line coverage: which lines of CowTerm's own code a normal day runs ----
 
 coverage_build_dir := "build-coverage"

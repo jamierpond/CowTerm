@@ -22,10 +22,8 @@
 #include <eacp/Core/Core.h>
 #include <eacp/Core/Utils/Files.h>
 #include <eacp/Network/IPC/Messenger.h>
-#if EACP_CRASH_REPORTING
+#include <PondCrashReports/CrashReports.h>
 #include <PondVersion.h>
-#include <eacp/CrashReporting/CrashReporting.h>
-#endif
 #include <emberstore/AppDatabase.h>
 #include <SessionLog/EventLine.h>
 
@@ -839,16 +837,13 @@ struct Daemon
 };
 } // namespace
 
-int main([[maybe_unused]] int argc, [[maybe_unused]] char** argv)
+int main(int argc, char** argv)
 {
-#if EACP_CRASH_REPORTING
-    if (auto handlerExitCode = CrashReporting::runHandlerIfRequested(argc, argv))
+    if (auto handlerExitCode = pondcrashreports::runCrashHandlerIfRequested(argc, argv))
         return *handlerExitCode;
 
-    auto crashReportingOptions = CrashReporting::Options {};
-    crashReportingOptions.release = pond::getVersionString();
-    CrashReporting::start(crashReportingOptions);
-#endif
+    pondcrashreports::startCrashReports(
+        {.appName = "CowTerm", .release = pond::getVersionString()}, argc, argv);
 
     try
     {

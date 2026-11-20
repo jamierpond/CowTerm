@@ -75,22 +75,14 @@ lockstep_add_package(
         SYSTEM YES
         OPTIONS ${COWTERM_EACP_OPTIONS})
 
-# Crash reports (Crashout): the app and the daemon write one to
-# <app support>/<executable>/Crashes/pending/<id>/ when they crash, which
-# scripts/crash-reports.py lists. Its handler exists on macOS and Windows only.
-lockstep_add_package(
-        NAME Crashout
-        GITHUB_REPOSITORY jamierpond/Crashout
-        GIT_TAG main
-        SYSTEM YES)
-
 # eacp appends its CMake helper directory to CMAKE_MODULE_PATH only within its
 # own directory scope, so re-add it here: the app subdirectories call
 # find_package(ResEmbed) (via eacp_set_gui_subsystem) and need the Find modules.
 list(APPEND CMAKE_MODULE_PATH "${eacp_SOURCE_DIR}/CMake")
 
 # The libraries the pond apps share: PondApp, SessionLog, FrecencySearch,
-# SearchKeys, PermissionsPanel, pond_add_version_library and line coverage.
+# SearchKeys, PermissionsPanel, PondCrashReports (which brings Crashout),
+# pond_add_version_library and line coverage.
 # Added after eacp, so PondDev uses this eacp instead of fetching its own.
 # Work against a local checkout with:
 #   cmake -B build -DLOCKSTEP_PondDev_SOURCE=$HOME/projects/PondDev

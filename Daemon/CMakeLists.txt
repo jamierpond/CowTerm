@@ -16,6 +16,5 @@ target_link_libraries(CowTermDaemon PRIVATE
 set_default_target_setting(CowTermDaemon)
 pond_write_line_coverage(CowTermDaemon APP_NAME CowTerm INSTANCE_VARIABLE COWTERM_INSTANCE)
 
-if (APPLE OR WIN32)
-    eacp_enable_crash_reporting(CowTermDaemon SYMBOLS_DIR ${PROJECT_BINARY_DIR}/symbols)
-endif ()
+# Crash reports in pond/CowTerm/Crashes/CowTermDaemon, which just crash-reports lists.
+pond_enable_crash_reports(CowTermDaemon)

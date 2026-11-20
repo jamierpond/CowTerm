@@ -107,11 +107,9 @@ pond_write_line_coverage(${COWTERM_EXECUTABLE_TARGET} APP_NAME CowTerm INSTANCE_
 eacp_set_app_icon(${COWTERM_EXECUTABLE_TARGET}
         IMAGE "${CMAKE_CURRENT_SOURCE_DIR}/Icon.png")
 
-if (APPLE OR WIN32)
-    eacp_enable_crash_reporting(${COWTERM_EXECUTABLE_TARGET}
-            SYMBOLS_DIR ${PROJECT_BINARY_DIR}/symbols)
-    target_link_libraries(${COWTERM_EXECUTABLE_TARGET} PRIVATE eacp-crash-faults)
-endif ()
+# Crash reports in pond/CowTerm/Crashes/CowTerm, which just crash-reports lists.
+# Crashout has a handler on macOS and Windows only; on Linux the calls do nothing.
+pond_enable_crash_reports(${COWTERM_EXECUTABLE_TARGET})
 
 # The daemon rides beside the GUI executable. CowTermApp is deliberately always
 # out of date so a daemon-only rebuild never leaves a stale bundled copy.
