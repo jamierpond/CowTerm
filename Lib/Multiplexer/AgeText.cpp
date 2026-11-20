@@ -26,6 +26,27 @@ constexpr auto ageUnits = std::array {
     AgeUnit {millisecondsPerMinute, " min ago"},
     AgeUnit {millisecondsPerSecond, " s ago"},
 };
+
+struct SpelledOutUnit
+{
+    std::int64_t milliseconds;
+    std::string_view singular;
+    std::string_view plural;
+};
+
+constexpr auto spelledOutUnits = std::array {
+    SpelledOutUnit {millisecondsPerDay, " day", " days"},
+    SpelledOutUnit {millisecondsPerHour, " hour", " hours"},
+    SpelledOutUnit {millisecondsPerMinute, " minute", " minutes"},
+};
+
+std::string_view chooseUnitName(const SpelledOutUnit& unit, std::int64_t count)
+{
+    if (count == 1)
+        return unit.singular;
+
+    return unit.plural;
+}
 } // namespace
 
 std::string describeStoredScreenAge(std::int64_t ageMilliseconds)
@@ -48,5 +69,18 @@ std::string describeLastUseAge(std::int64_t ageMilliseconds)
         return "yesterday";
 
     return describeStoredScreenAge(ageMilliseconds);
+}
+
+std::string describeAgeAsDuration(std::int64_t ageMilliseconds)
+{
+    for (const auto& unit: spelledOutUnits)
+    {
+        const auto count = ageMilliseconds / unit.milliseconds;
+
+        if (count >= 1)
+            return std::to_string(count) + std::string {chooseUnitName(unit, count)};
+    }
+
+    return "less than a minute";
 }
 } // namespace term

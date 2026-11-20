@@ -31,6 +31,7 @@ add_library(CowTermMultiplexer STATIC
         PaneReadState.cpp
         PaneViewing.cpp
         PaneSizeOwner.cpp
+        PhoneBuildStamp.cpp
         ClaudeHookReport.cpp
         PaneStateCommand.cpp
         ProjectScan.cpp

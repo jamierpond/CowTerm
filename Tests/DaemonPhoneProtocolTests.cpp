@@ -1,11 +1,13 @@
 #include "DaemonConversation.h"
 
+#include <Multiplexer/PhoneBuildStamp.h>
 #include <Multiplexer/Protocol.h>
 #include <Multiplexer/SessionOverview.h>
 #include <PondApp/DataDirectory.h>
 
 #include <NanoTest/NanoTest.h>
 
+#include <algorithm>
 #include <chrono>
 #include <filesystem>
 #include <fstream>
@@ -478,4 +480,66 @@ auto tActivityCarriesFileChanges = test("DaemonPhoneProtocol/activityCarriesTheL
     mac.messenger.send(term::proto::make("kill", {paneId}));
     auto error = std::error_code {};
     std::filesystem::remove_all(project, error);
+};
+
+namespace
+{
+constexpr auto phoneBuildStampText = "1763600000-abc1234";
+
+std::vector<term::ConnectedClientReport> askForConnectedClients(DaemonConversation& client)
+{
+    client.messenger.send(term::proto::make("clients"));
+    const auto answer = client.waitForMessage("clients");
+
+    if (!answer)
+        return {};
+
+    return term::parseConnectedClients(answer->payload);
+}
+
+std::optional<term::ConnectedClientReport> findClientNamed(const std::vector<term::ConnectedClientReport>& clients,
+                                                           const std::string& name)
+{
+    const auto found = std::ranges::find(clients, name, &term::ConnectedClientReport::name);
+
+    if (found == clients.end())
+        return std::nullopt;
+
+    return *found;
+}
+} // namespace
+
+auto tClientsListsThePhonesBuildStamp = test("DaemonPhoneProtocol/clientsListsEachClientWithThePhonesBuildStamp") = []
+{
+    auto daemon = TestDaemon {"daemon-clients-test"};
+    auto mac = DaemonConversation {daemon.instance};
+    auto phone = DaemonConversation {daemon.instance};
+    check(mac.waitForConnection() && phone.waitForConnection());
+    introduce(mac, "Mac");
+    phone.messenger.send(term::proto::make(
+        "hello",
+        {toArgument(term::proto::daemonProtocolVersion), term::proto::phoneClientName, phoneBuildStampText}));
+    phone.waitForMessage("daemon-hello");
+
+    const auto clients = askForConnectedClients(mac);
+    const auto listedPhone = findClientNamed(clients, term::proto::phoneClientName);
+    const auto listedMac = findClientNamed(clients, "Mac");
+
+    check(clients.size() == 2, mac.listReceivedVerbs());
+    check(listedPhone && listedPhone->stamp && term::formatPhoneBuildStamp(*listedPhone->stamp) == phoneBuildStampText);
+    check(listedMac && !listedMac->stamp);
+};
+
+auto tPhoneFromBeforeStampsIsListedWithout = test("DaemonPhoneProtocol/aPhoneFromBeforeBuildStampsIsListedWithoutOne") = []
+{
+    auto daemon = TestDaemon {"daemon-clients-old-phone-test"};
+    auto mac = DaemonConversation {daemon.instance};
+    auto oldPhone = DaemonConversation {daemon.instance};
+    check(mac.waitForConnection() && oldPhone.waitForConnection());
+    introduce(mac, "Mac");
+    introduce(oldPhone, term::proto::phoneClientName);
+
+    const auto listedPhone = findClientNamed(askForConnectedClients(mac), term::proto::phoneClientName);
+
+    check(listedPhone && !listedPhone->stamp);
 };

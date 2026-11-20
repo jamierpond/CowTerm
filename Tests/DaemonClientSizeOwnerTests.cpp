@@ -77,6 +77,19 @@ auto tClientIntroducesItself = test("DaemonClientSizeOwner/clientIntroducesItsel
     DaemonClient::setClientName({});
 };
 
+auto tPhoneSendsItsBuildStamp = test("DaemonClientSizeOwner/aClientWithABuildStampSendsItLastInHello") = []
+{
+    constexpr auto commitSeconds = std::int64_t {1763600000};
+    DaemonClient::setClientName(proto::phoneClientName);
+    DaemonClient::setClientBuildStamp(PhoneBuildStamp {commitSeconds, "abc1234"});
+    auto recorded = ClientWithRecordedLink {};
+
+    check(recorded.hasSent(proto::make(
+        "hello", {std::to_string(proto::daemonProtocolVersion), "iPhone", "1763600000-abc1234"})));
+    DaemonClient::setClientBuildStamp(std::nullopt);
+    DaemonClient::setClientName({});
+};
+
 auto tTypingIsMarkedAsInput = test("DaemonClientSizeOwner/typingIsMarkedAsInput") = []
 {
     auto recorded = ClientWithRecordedLink {};

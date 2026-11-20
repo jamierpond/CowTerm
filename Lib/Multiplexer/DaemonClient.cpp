@@ -25,6 +25,25 @@ std::string& getClientName()
     return name;
 }
 
+std::optional<PhoneBuildStamp>& getClientBuildStamp()
+{
+    static auto stamp = std::optional<PhoneBuildStamp> {};
+    return stamp;
+}
+
+// hello <protocol version> <name> [build stamp]: a daemon from before build
+// stamps reads the first two and ignores the rest.
+std::string makeHello()
+{
+    const auto version = std::to_string(proto::daemonProtocolVersion);
+    const auto name = proto::encodeArgument(getClientName());
+
+    if (!getClientBuildStamp())
+        return proto::make("hello", {version, name});
+
+    return proto::make("hello", {version, name, formatPhoneBuildStamp(*getClientBuildStamp())});
+}
+
 bool& getClaimsSizeOfEveryPaneItShows()
 {
     static auto claims = false;
@@ -96,6 +115,11 @@ void DaemonClient::setClientName(const std::string& name)
     getClientName() = name;
 }
 
+void DaemonClient::setClientBuildStamp(const std::optional<PhoneBuildStamp>& stamp)
+{
+    getClientBuildStamp() = stamp;
+}
+
 void DaemonClient::setClaimsSizeOfEveryPaneItShows(bool claims)
 {
     getClaimsSizeOfEveryPaneItShows() = claims;
@@ -132,9 +156,7 @@ DaemonClient::DaemonClient(std::unique_ptr<DaemonLink> linkToUse, bool keepsPane
 
 void DaemonClient::sendHello()
 {
-    send(proto::make("hello",
-                     {toString(proto::daemonProtocolVersion),
-                      proto::encodeArgument(getClientName())}));
+    send(makeHello());
 }
 
 void DaemonClient::wireLink()

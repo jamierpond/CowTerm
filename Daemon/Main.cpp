@@ -10,6 +10,7 @@
 #include "Multiplexer/DataDirectories.h"
 #include "Multiplexer/LocalHostName.h"
 #include "Multiplexer/PaneSizeOwner.h"
+#include "Multiplexer/PhoneBuildStamp.h"
 #include "Multiplexer/Protocol.h"
 #include "Signals.h"
 #include "CommandLookup.h"
@@ -105,6 +106,10 @@ struct ConnectedClient
     term::PaneSizeOwner::ClientId id = 0;
     int protocolVersion = term::proto::sizeOwnerProtocolVersion - 1;
     std::string name;
+
+    // The phone's build stamp as it sent it; empty from any other client and
+    // from a phone built before stamps.
+    std::string buildStamp;
 
     // A client showing panes asks for info every second; one that stops (a
     // phone iOS suspended with its link still open) loses the panes it holds.
@@ -230,6 +235,7 @@ struct Daemon
             MessageHandler {"viewing", 1, &Daemon::handleViewing},
             MessageHandler {"not-viewing", 1, &Daemon::handleNotViewing},
             MessageHandler {"activity", 0, &Daemon::handleActivity},
+            MessageHandler {"clients", 0, &Daemon::handleClients},
             MessageHandler {"kill", 1, &Daemon::handleKill},
             MessageHandler {"info", 0, &Daemon::handleInfo},
             MessageHandler {"layout", 1, &Daemon::handleLayout},
@@ -245,16 +251,21 @@ struct Daemon
         (this->*(found->handle))(sender, message);
     }
 
-    // hello [protocol version] [client name]
+    // hello [protocol version] [client name] [build stamp]
     void handleHello(IPC::Messenger& sender, const term::proto::Message& message)
     {
+        constexpr auto nameArgument = std::size_t {1};
+        constexpr auto buildStampArgument = std::size_t {2};
         auto& client = clients.at(&sender);
 
         if (!message.args.empty())
             client.protocolVersion = std::stoi(message.args[0]);
 
-        if (message.args.size() > 1)
-            client.name = term::proto::decodeArgument(message.args[1]);
+        if (message.args.size() > nameArgument)
+            client.name = term::proto::decodeArgument(message.args[nameArgument]);
+
+        if (message.args.size() > buildStampArgument)
+            client.buildStamp = message.args[buildStampArgument];
 
         sender.send(term::proto::make(
             "daemon-hello", {std::to_string(term::proto::daemonProtocolVersion)}));
@@ -447,6 +458,18 @@ struct Daemon
         }
 
         sender.send(term::proto::make("activity", {}, payload));
+    }
+
+    // One line per connected client (term::formatConnectedClientLine), so the
+    // Mac can tell a phone running an older build.
+    void handleClients(IPC::Messenger& sender, const term::proto::Message&)
+    {
+        auto payload = std::string {};
+
+        for (const auto& [messenger, client]: clients)
+            payload += term::formatConnectedClientLine({client.name, flattenToOneLine(client.buildStamp)});
+
+        sender.send(term::proto::make("clients", {}, payload));
     }
 
     static std::string flattenToOneLine(std::string text)

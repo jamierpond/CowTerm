@@ -1,6 +1,7 @@
 #pragma once
 
 #include "DaemonLink.h"
+#include "PhoneBuildStamp.h"
 #include "Protocol.h"
 
 #include "Shell/Shell.h"
@@ -102,6 +103,10 @@ public:
     // What other clients see this process called ("Mac", "iPhone") when it
     // holds a pane's size. Set once at startup, before any client connects.
     static void setClientName(const std::string& name);
+
+    // The phone's build stamp, sent last in hello so the Mac can tell an
+    // out-of-date phone; a client without one sends none. Set once at startup.
+    static void setClientBuildStamp(const std::optional<PhoneBuildStamp>& stamp);
 
     // The phone takes the size of every pane it opens or resizes, instead of
     // waiting for the Mac to let go. Set once at startup.
