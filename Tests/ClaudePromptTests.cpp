@@ -44,6 +44,16 @@ constexpr auto wrappedPrompt =
     "ly (esc)\n"
     "\n";
 
+constexpr auto promptWithABlankLineAboveTheQuestion =
+    "Older output\n"
+    " Bash command\n"
+    "   rm -rf build\n"
+    "   Remove the build folder\n"
+    "\n"
+    " Do you want to proceed?\n"
+    " \xe2\x9d\xaf 1. Yes\n"
+    "   2. No\n";
+
 constexpr auto plainOutput = "$ ls\nDaemon  Lib  iOS\nAre you sure?\n$ \n";
 constexpr auto firstOption = 1;
 constexpr auto thirdOption = 3;
@@ -114,4 +124,19 @@ auto tWrappedIsSamePrompt = test("ClaudePrompt/aTapSurvivesTheScreenRewrappingTh
         "   3. No, and tell Claude what to do differently (esc)\n");
 
     check(chooseKeysForTappedOption(drawnFor, firstOption, unwrapped) == "1");
+};
+
+auto tBlankLineCounts = test("ClaudePrompt/aBlankLineAboveTheQuestionCountsAsOneOfItsLines") = []
+{
+    const auto prompt = findPermissionPrompt(promptWithABlankLineAboveTheQuestion);
+
+    check(prompt.has_value());
+    check(prompt->identity
+          == "Bash command\n"
+             "rm -rf build\n"
+             "Remove the build folder\n"
+             "\n"
+             "Do you want to proceed?\n"
+             "1. Yes\n"
+             "2. No\n");
 };

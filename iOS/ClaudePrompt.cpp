@@ -1,5 +1,7 @@
 #include "ClaudePrompt.h"
 
+#include <eacp/Core/Utils/Strings.h>
+
 #include <algorithm>
 #include <cctype>
 
@@ -17,21 +19,6 @@ constexpr auto whitespace = std::string_view {" \t"};
 // command it asks about.
 constexpr auto linesAboveQuestionInIdentity = 4;
 constexpr auto fewestOptions = 2;
-
-std::vector<std::string> splitLines(std::string_view text)
-{
-    auto lines = std::vector<std::string> {};
-    auto start = std::size_t {0};
-
-    while (start <= text.size())
-    {
-        const auto end = std::min(text.find('\n', start), text.size());
-        lines.emplace_back(text.substr(start, end - start));
-        start = end + 1;
-    }
-
-    return lines;
-}
 
 std::string_view trimWhitespace(std::string_view text)
 {
@@ -155,7 +142,7 @@ std::string joinIdentity(const std::vector<std::string>& lines,
 
 std::optional<PermissionPrompt> findPermissionPrompt(std::string_view screenText)
 {
-    const auto rawLines = splitLines(screenText);
+    const auto rawLines = eacp::Strings::split(screenText, '\n').getVector();
     auto lines = std::vector<std::string> {};
 
     for (const auto& line: rawLines)

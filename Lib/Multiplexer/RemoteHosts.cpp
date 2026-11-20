@@ -5,6 +5,8 @@
 #include "RemoteLocation.h"
 #include "UsageLog.h"
 
+#include <eacp/Core/Utils/Strings.h>
+
 #include <algorithm>
 
 namespace term
@@ -28,24 +30,6 @@ std::map<std::string, std::unique_ptr<RemoteHost>>& getHosts()
 {
     static auto hosts = std::map<std::string, std::unique_ptr<RemoteHost>> {};
     return hosts;
-}
-
-std::vector<std::string> splitLines(const std::string& text)
-{
-    auto lines = std::vector<std::string> {};
-    auto start = std::size_t {0};
-
-    while (start < text.size())
-    {
-        const auto end = std::min(text.find('\n', start), text.size());
-
-        if (end > start)
-            lines.push_back(text.substr(start, end - start));
-
-        start = end + 1;
-    }
-
-    return lines;
 }
 } // namespace
 
@@ -162,8 +146,13 @@ void RemoteHost::readScanResult(const std::string& payload)
 {
     lastScan.clear();
 
-    for (const auto& path: splitLines(payload))
+    for (const auto& path: Strings::split(payload, '\n'))
+    {
+        if (path.empty())
+            continue;
+
         lastScan.push_back({remote::makeRemoteProjectDir(host, path), sessionNameFor(path)});
+    }
 
     logUsage("remote.scan", {{"host", host}, {"projects", lastScan.size()}});
     onChanged();

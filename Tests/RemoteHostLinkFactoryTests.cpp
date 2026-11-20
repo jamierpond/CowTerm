@@ -1,7 +1,9 @@
 #include "RecordingBridgeLink.h"
 
 #include "Multiplexer/BridgeFraming.h"
+#include "Multiplexer/Protocol.h"
 #include "Multiplexer/RemoteHosts.h"
+#include "Multiplexer/RemoteLocation.h"
 
 #include <NanoTest/NanoTest.h>
 
@@ -79,3 +81,19 @@ auto messagesRemoteHostIgnoresReachTheApp = test("RemoteHost/messagesRemoteHostI
 
     check(heardVerb == "last-input");
 };
+
+auto scanSkipsBlankLines = test("RemoteHost/scanResultSkipsBlankLines") = []
+{
+    auto factory = RecordingLinkFactory {};
+    auto remote = RemoteHost {host, {"~/projects"}, factory.makeFactory()};
+    auto& link = factory.getLastLink();
+
+    link.deliverBytes(bridge::encodeFrame(bridge::makeHelloMessage("0.1.0")));
+    link.deliverBytes(bridge::encodeFrame(proto::make("scan-result", {}, "\n/home/jamie/iac\n\n/home/jamie/dv\n")));
+
+    const auto& scan = remote.getLastScan();
+    check(scan.size() == 2);
+    check(scan[0].path == remote::makeRemoteProjectDir(host, "/home/jamie/iac"));
+    check(scan[1].path == remote::makeRemoteProjectDir(host, "/home/jamie/dv"));
+};
+
