@@ -6,7 +6,7 @@
 #include <vector>
 
 // Claude Code's permission prompt, read off the pane's screen, so the phone can
-// show its options as buttons above the composer (docs/iOSDesign.md, "Claude
+// show its options as buttons above the key row (docs/iOSDesign.md, "Claude
 // panes"). Plain logic, so the Mac's tests can check it with screen snapshots.
 namespace cowterm::mobile
 {

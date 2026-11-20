@@ -19,8 +19,8 @@
 // dv on the phone (docs/iOSDesign.md, "dv"): full screen, the host and folder
 // on the top line, and a bar at the bottom that closes it, with the keyboard
 // button at its right. A tap reaches dv as a left click and a drag as the
-// mouse wheel, through PaneTouchSurface, and typing, the key row and the
-// composer work as on the pane screen. When dv cannot start, a plain sentence
+// mouse wheel, through PaneTouchSurface, and typing and the key row work as on
+// the pane screen. When dv cannot start, a plain sentence
 // says why.
 namespace cowterm::mobile
 {
@@ -65,7 +65,7 @@ public:
     // From WindowEvents::onSoftwareKeyboardChanged, as the pane screen takes it.
     void setSoftwareKeyboardChange(const eacp::Graphics::SoftwareKeyboardChange& change);
 
-    // The bar's keyboard button: typing straight into dv, or into the composer when it is on.
+    // The bar's keyboard button: typing straight into dv.
     void raiseKeyboard();
 
     // One step of --diff-view-steps=, done as a finger would.

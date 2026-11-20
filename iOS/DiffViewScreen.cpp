@@ -130,7 +130,6 @@ DiffViewScreen::DiffViewScreen()
     chromeHost.setRootComponent(chrome);
     chrome.onClose = [this] { close(); };
     chrome.onKeyboard = [this] { raiseKeyboard(); };
-    typing.onLayoutChanged = [this] { layOutParts(); };
     addChildren({chromeHost});
     typing.addTo(*this);
 }
@@ -270,7 +269,7 @@ bool DiffViewScreen::isKeyboardUp() const
     return softwareKeyboardCoveredHeight > 0.0f && terminal != nullptr;
 }
 
-// With the keyboard up the composer and key row sit on it, over the bar.
+// With the keyboard up the key row sits on it, over the bar.
 void DiffViewScreen::layOutParts()
 {
     const auto bounds = getLocalBounds();
@@ -282,7 +281,7 @@ void DiffViewScreen::layOutParts()
             return calculatePaneScreenRects(bounds, getSafeAreaInsets()).pane;
         }
 
-        const auto rects = calculateTypingRects(bounds, calculateInsetsAroundParts(), typing.showsComposer());
+        const auto rects = calculateTypingRects(bounds, calculateInsetsAroundParts());
         typing.layOut(rects, true);
         return rects.pane;
     }();
@@ -319,8 +318,6 @@ void DiffViewScreen::performLaunchStep(const DiffViewLaunchStep& step)
             return typeText(step.text);
         case DiffViewLaunchAction::PressKeyRowKey:
             return typing.pressKeyRowKey(step.key);
-        case DiffViewLaunchAction::ComposeAndSend:
-            return typing.composeAndSend(step.text);
     }
 }
 

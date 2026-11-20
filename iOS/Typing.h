@@ -8,29 +8,11 @@
 #include <string_view>
 #include <vector>
 
-// The phone's typing (docs/iOSDesign.md, "Typing"): the composer's history, the
-// key row's keys and layout, and Ctrl that latches for one key. Plain logic,
-// so the Mac's tests can check it.
+// The phone's typing (docs/iOSDesign.md, "Typing"): the key row's keys and
+// layout, and Ctrl that latches for one key. Plain logic, so the Mac's tests
+// can check it.
 namespace cowterm::mobile
 {
-// Earlier messages, for the up arrow in an empty composer: older on each up,
-// back toward the newest on each down, and an empty field past the newest.
-class ComposerHistory
-{
-public:
-    void remember(const std::string& message);
-
-    std::optional<std::string> recallOlder();
-    std::optional<std::string> recallNewer();
-
-    bool isRecalling() const { return recalledIndex.has_value(); }
-    void stopRecalling() { recalledIndex.reset(); }
-
-private:
-    std::vector<std::string> messages;
-    std::optional<std::size_t> recalledIndex;
-};
-
 enum class KeyRowKey
 {
     Escape,
@@ -44,7 +26,6 @@ enum class KeyRowKey
     Tilde,
     Slash,
     Minus,
-    Composer,
     HideKeyboard,
     NextPage
 };
@@ -55,7 +36,7 @@ std::string_view getKeyRowLabel(KeyRowKey key);
 bool isRepeatingKeyRowKey(KeyRowKey key);
 
 // The key a key row key presses, as a hardware keyboard would report it.
-// Empty for the row's own controls (Ctrl, the composer switch, hide, next page).
+// Empty for the row's own controls (Ctrl, hide, next page).
 std::optional<eacp::Graphics::KeyEvent> makeKeyRowKeyEvent(KeyRowKey key);
 
 struct KeyRowSlot

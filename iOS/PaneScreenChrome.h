@@ -96,9 +96,9 @@ private:
 };
 
 // The key row above the keyboard: Esc, Tab, Ctrl and the arrows, the symbols
-// on a second page with the compose switch and the key that puts the
-// keyboard away. A latched Ctrl and the composer are lit. An arrow presses
-// when the finger lands and repeats while it stays; other keys press when it lifts.
+// on a second page with the key that puts the keyboard away. A latched Ctrl
+// is lit. An arrow presses when the finger lands and repeats while it stays;
+// other keys press when it lifts.
 class KeyRow final : public eacp::UI::Component
 {
 public:
@@ -111,7 +111,6 @@ public:
 
     int page = 0;
     bool isControlLatched = false;
-    bool isComposerOn = false;
     std::function<void(KeyRowKey)> onKey = [](KeyRowKey) {};
 
 private:
@@ -138,21 +137,6 @@ public:
     std::optional<PermissionPrompt> prompt;
     std::function<void(const PermissionPrompt& drawnFor, int optionNumber)> onChoose =
         [](const PermissionPrompt&, int) {};
-
-private:
-    term::Theme theme;
-};
-
-// Claude's stop: sends Esc. Sits at the composer's left, away from send.
-class StopButton final : public eacp::UI::Component
-{
-public:
-    explicit StopButton(const term::Theme& themeToUse);
-
-    void paint(eacp::UI::Graphics& g) override;
-    void mouseUp(const eacp::UI::MouseEvent& event) override;
-
-    std::function<void()> onStop = [] {};
 
 private:
     term::Theme theme;

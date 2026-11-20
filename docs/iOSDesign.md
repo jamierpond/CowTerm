@@ -33,7 +33,7 @@ phone shows which machine a pane lives on and whether the picture is live.
 | Scrolling back | Wheel, whole lines, drifts while output arrives | Finger, per pixel, with momentum, and it holds still |
 | Selecting | Mouse drag, or copy mode with vi keys | Long press and handles, or the same vi keys on a hardware keyboard |
 | Who needs me | Notification, palette row detail | The waiting group at the top of the overview, and a push |
-| Typing | Keys go straight to the shell | A composer first; raw keys one tap away |
+| Typing | Keys go straight to the shell | Keys go straight to the shell, with a key row for what the keyboard lacks |
 
 ## Leaving the desk
 
@@ -46,20 +46,18 @@ and tested as one.
    stored last time is drawn at once, dimmed, with its age ("12 s ago").
 3. The link comes up in the background, about a second on cellular. The pane
    brightens, the phone takes the size, and Claude repaints at phone width.
-4. He can type into the composer during step 2. What he wrote is sent when the
-   link is up, and the composer shows it waiting until then.
-5. At the door Wi-Fi gives way to cellular. Tailscale keeps the address, so the
+4. At the door Wi-Fi gives way to cellular. Tailscale keeps the address, so the
    link stalls for a few seconds. The app reconnects on the network-change
    event, not after the 15-second keepalive, and the connection mark in the
    bottom bar shows the stall.
-6. The phone goes in a pocket and iOS suspends the app. Nothing is lost: the
+5. The phone goes in a pocket and iOS suspends the app. Nothing is lost: the
    panes are in the daemons.
-7. A Claude asks a question. The daemon sees the Mac idle or locked for 60
+6. A Claude asks a question. The daemon sees the Mac idle or locked for 60
    seconds and pushes. The lock screen shows the question with its options as
    buttons.
-8. Forty minutes later he opens the app. The overview shows what is waiting
+7. Forty minutes later he opens the app. The overview shows what is waiting
    first, each with one line saying what it wants.
-9. He sits back down and presses a key on the Mac. The Mac takes every size
+8. He sits back down and presses a key on the Mac. The Mac takes every size
    back at once and the banners go.
 
 Step 2 has to be instant fifty times a day. A two-second spinner on every
@@ -139,16 +137,11 @@ idea he has to learn.
 Keys go straight to the pane as they are typed, like any terminal. This was
 first designed the other way round, with a composer as the main input, and
 changed on 17 November after Jamie used it: Claude Code already has its own
-input box, so a second field below it that sends on return was confusing.
+input box, so a second field below it that sends on return was confusing. The
+composer then sat behind a "compose" switch on the key row until 20 November,
+when it was removed: Jamie never used it, and it was the only user of eacp's
+iOS native text view. Dictation, autocorrect and message recall went with it.
 
-The composer stays, behind the key row's "compose" switch, off by default and
-lit while it is on. It is a real iOS text view above the keyboard, so it has
-dictation, autocorrect, the space-bar cursor and correction by tapping a word,
-and it sends as a bracketed paste followed by Enter.
-
-- Up-arrow in an empty composer recalls earlier messages, since dictation will
-  mangle `eacp` and `jp/develop` and fixing a recalled line beats saying it
-  again.
 - The keyboard opens from a button on the bottom bar, not from a tap on the
   pane. A tap already means click or open link, and a stray touch would cut 39
   rows to 25.
@@ -156,16 +149,13 @@ and it sends as a bracketed paste followed by Enter.
   row fits seven keys at a walking size of 48 points: `Esc`, `Tab`, `Ctrl`,
   `↑`, `↓`, `←`, `→`. They are grouped by job with a gap between groups, and
   `Esc` sits at the far end from the arrows, because `Esc` interrupts Claude.
-  Symbols (`| ~ / -`) are on a second page of the row.
+  Symbols (`| ~ / -`) and the key that puts the keyboard away are on a second
+  page of the row.
 - `Ctrl` latches for one key. While it is latched the keyboard's own keys show
   `^C`, `^R`, `^D`, so the mode is on the keys and not on a tinted button.
-- The composer's field is there only while its switch is on, so the two ways
-  of typing cannot be confused.
 - The key row's keys are the pane's own: pressing one keeps the keyboard up.
   An eacp ComponentHost takes focus on a press, which took it from the pane and
   closed the keyboard, so the key row's host no longer does.
-- "compose" sits on the key row's second page and is two keys wide, so its
-  word fits on a 375-point iPhone 12 mini; a symbol label was the other choice.
 - A paste of several lines into a shell shows its first lines and asks, as the
   Mac does. A keystroke sent to a remote shell cannot be undone, so the check
   belongs before sending.
@@ -173,10 +163,11 @@ and it sends as a bracketed paste followed by Enter.
 ### Claude panes
 
 - When the screen shows a permission prompt, its options become buttons above
-  the composer. Each button is tied to the exact prompt it was drawn for; if
-  the prompt changed before the tap landed, the tap is dropped and the new
-  prompt is shown. A late tap must never approve a different command.
-- A stop button sends `Esc`. It is on the left, away from the send button.
+  the key row, or above the bottom bar while the keyboard is down. Each button
+  is tied to the exact prompt it was drawn for; if the prompt changed before
+  the tap landed, the tap is dropped and the new prompt is shown. A late tap must never approve a different command.
+- `Esc` on the key row stops Claude. It sits at the far left, away from the
+  arrows.
 - The auto-lock is held off while the pane on screen is producing output.
 
 ### The bottom bar
@@ -202,7 +193,7 @@ thumb reaches.
 - The dots are the panes of this session. Swiping sideways along the bar moves
   to the next one, and tapping a dot does the same. 64% of his sessions have
   one pane, and then there are no dots.
-- `⌨` opens the keyboard and composer.
+- `⌨` opens the keyboard and the key row.
 - `diff` opens dv on this pane's folder ("dv from the bar", under
   "Decisions made while building"; it replaced lazygit, next section).
 - `☰` opens the overview. Swiping up on the bar does the same.
@@ -292,11 +283,10 @@ in the wrong one is harmless.
 | Mode | How it shows | Typing does |
 | --- | --- | --- |
 | Typing (the default) | No field; a cursor shows in the pane | Goes to the pane |
-| Composer | Text field above the keyboard; the key row's "compose" is lit | Edits the field |
 | Ctrl latched | The keyboard's keys read `^C`, `^R` … | Sends that control key, then unlatches |
 | Selecting | Tinted border; the bar reads Copy, Line, Search, Done | Leaves the mode, and says so |
 | Scrolled back | "↓ n new" pill, scroll indicator | Sends, and returns to the bottom |
-| Not live | Pane dimmed, with the age of the picture | Composer text waits and is marked unsent |
+| Not live | Pane dimmed, with the age of the picture | Goes to the pane |
 | Held by the Mac | "on Mac, 150 columns · take over" | Take over claims the size |
 
 ## What the phone leaves out
@@ -354,7 +344,7 @@ the pane screen properly before anything else.
 2. The daemon changes 1, 2, 4 and 7 above, with the Mac app using them
    ("on iPhone" banner; click it to take the pane back).
 3. The pane screen: stored last screen, phone-owned size, per-pixel scrolling
-   with momentum, reconnect on network change, composer, key row, bottom bar.
+   with momentum, reconnect on network change, key row, bottom bar.
    This is the part to get right; it is tried on a real phone before the next
    step starts.
 4. The overview, with "needs you" (daemon change 3) and search.
@@ -576,8 +566,6 @@ launched with `--landscape`, which is how landscape screenshots are taken.
 - iOS does not let an app relabel its own keyboard's keys, so a latched Ctrl
   shows on the lit Ctrl key of the key row instead of as `^C` on the keyboard.
   This is where the design could not be followed.
-- The composer sends through `TerminalView::pasteThenPressEnter`: a bracketed
-  paste then Enter, counted as typing, and back to the live bottom.
 - The overview shows a waiting session once, as a card nearest the thumb, with
   the other sessions above it. While searching there are no cards. Branch,
   changed-file count, thumbnails and answer buttons are not shown: the daemon
@@ -585,11 +573,10 @@ launched with `--landscape`, which is how landscape screenshots are taken.
 - A Claude prompt's buttons answer only the prompt they were drawn for: a tap
   reads the screen again and sends the option's number only if the question,
   the options and the command above them are unchanged; otherwise the tap is
-  dropped and the buttons redraw. The stop button sends Esc and shows when the
-  pane's program is `claude` or a prompt is on screen.
+  dropped and the buttons redraw.
 - The auto-lock is held off for 30 s after the shown pane's last output. eacp
   has no call for it, so it is CowTerm glue (`iOS/ScreenAwake-iOS.mm`).
-- The multi-line send check reuses the Mac's `PasteConfirmation` and
+- The multi-line paste check reuses the Mac's `PasteConfirmation` and
   `NotifyUserPrompt` as they are; on the phone its "Show pane" button does
   nothing useful.
 - With several hosts (`--destination a,b`), each host has its own link watch;
@@ -649,8 +636,8 @@ launched with `--landscape`, which is how landscape screenshots are taken.
   the phone's own record, and a session never opened on the phone shows none.
 - Nothing on the phone signals by colour alone. The link state on the pane
   screen's top line is a word ("live", "connecting", "stalled", "unreachable");
-  a waiting card says "waiting:" and is taller than a row; a latched Ctrl and
-  a lit "compose" key also get a bar under the label.
+  a waiting card says "waiting:" and is taller than a row; a latched Ctrl also
+  gets a bar under the label.
 
 ### dv from the bar
 
@@ -702,19 +689,17 @@ screen had only the close bar. Its bar now has the keyboard button at its
 right, and typing works as on the pane screen.
 
 - Keys go straight into dv. The key row gives Esc (dv's normal mode), Tab,
-  the arrows and Ctrl (Ctrl then s saves and closes the comment); its
-  compose switch brings up the composer for dictation. The composer sends a
-  bracketed paste then Enter, as on the pane screen; dv trims the trailing
-  newline from a comment.
+  the arrows and Ctrl (Ctrl then s saves and closes the comment).
 - The pane screen's `TypingControls`, key row and `calculateTypingRects` are
   used as they are. `TypingControls` made `lowerKeyboard` and
   `pressKeyRowKey` public; the keyboard goes down with dv's pane, so no key
   reaches a pane that is gone.
-- `--diff-view-steps=` plays taps on text on dv's screen, typed text, key
-  row keys and composed text (iOS/DiffViewLaunchSteps.h), so the simulator
-  can do the review a finger does. `just ios-test-diff-view-review` types one
-  comment, composes another, submits, and prints the round dv wrote to
-  `.diffview/latest.md` in a throwaway repository on the host.
+- `--diff-view-steps=` plays taps on text on dv's screen, typed text and key
+  row keys (iOS/DiffViewLaunchSteps.h), so the simulator can do the review a
+  finger does. `just ios-test-diff-view-review` types one comment and saves it
+  with Ctrl then s, types another and saves it with dv's Save button, submits,
+  and prints the round dv wrote to `.diffview/latest.md` in a throwaway
+  repository on the host.
 
 ### Projects with no session
 
@@ -991,10 +976,9 @@ must not depend on it.
   is destroyed on the next loop tick, because it usually closes from inside one
   of its own callbacks.
 - The rest stay alive while hidden, are made invisible and ignore mouse events
-  (`showOrHideLettingTouchesThrough`): the composer, which holds unsent text,
-  its stop button and the key row; the bottom bar while the keyboard is up; the
-  prompt buttons, which take no height when there is no prompt; and the pane
-  screen under the overview or dv. That is only safe where no view that takes
+  (`showOrHideLettingTouchesThrough`): the key row; the bottom bar while the
+  keyboard is up; the prompt buttons, which take no height when there is no
+  prompt; and the pane screen under the overview or dv. That is only safe where no view that takes
   touches lies beneath: eacp picks a finger's view by position whether it is
   shown or not, and ignoring mouse events sends the touch on as a mouse event,
   never to the pane's touch surface. None of these lies over the pane.
@@ -1085,7 +1069,6 @@ jp/develop/2026-11-17.2), which no longer carries eacp's hidden-view change. The
 | Typing: no `UIKeyInput`, so no keyboard and no text; hardware keys reported nothing | `jp/ios-text-input` (`~/projects/eacp-ios-text-input`) | 176ab5a4 |
 | The software keyboard's height and animation | `jp/ios-keyboard-frame` (`~/projects/eacp-ios-keyboard-frame`) | 2b287d8f |
 | The status bar was always hidden | `jp/ios-status-bar` (`~/projects/eacp-ios-status-bar`) | c5ce3388 |
-| No native text view, so no dictation or autocorrect for the composer; a hardware key's down event on it | `jp/ios-native-text-view` (`~/projects/eacp-ios-native-text-view`), stacked on `jp/ios-text-input` | eea9e5a7, f06a4c3d |
 
 Lifecycle events, touch timestamps and safe-area insets already exist. The
 keyboard-frame and status-bar branches both change the iOS window's
@@ -1101,8 +1084,8 @@ constructor, so whichever merges second needs a one-line fix.
   dots.
 - "Gated by Face ID" is replaced by a key usable after first unlock.
 - The twelve-key bar is replaced by seven keys and a second page.
-- "A composer for Claude panes" becomes the main input for every pane, and it
-  is a hosted iOS text view inside the eacp app.
+- "A composer for Claude panes" is dropped: keys go straight to every pane,
+  with the key row for what the keyboard lacks.
 - "iOS reports the VPN state" is untested; there is no public call for another
   app's VPN.
 - Phase 1 "read-only at the daemon's size" is dropped.

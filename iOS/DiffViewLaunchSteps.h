@@ -13,8 +13,7 @@
 //   keyboard          the bar's keyboard button
 //   tap:<text>        a tap on the last place <text> is on dv's screen
 //   type:<text>       <text> typed into dv, one key at a time, as the keyboard types it
-//   key:<name>        a key row key: esc, tab, ctrl, up, down, left, right or compose
-//   compose:<text>    <text> sent from the composer
+//   key:<name>        a key row key: esc, tab, ctrl, up, down, left or right
 namespace cowterm::mobile
 {
 enum class DiffViewLaunchAction
@@ -22,8 +21,7 @@ enum class DiffViewLaunchAction
     RaiseKeyboard,
     TapText,
     TypeText,
-    PressKeyRowKey,
-    ComposeAndSend
+    PressKeyRowKey
 };
 
 struct DiffViewLaunchStep

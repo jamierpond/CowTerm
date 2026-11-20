@@ -846,13 +846,6 @@ void TerminalView::paste()
     if (text.empty())
         return;
 
-    pasteOnceSafe(text, [this, text] { pasteText(text); });
-}
-
-// A paste that could run commands goes to the host to ask first (Ghostty's
-// paste protection, isPasteSafe); a safe one goes at once.
-void TerminalView::pasteOnceSafe(const std::string& text, const eacp::Callback& send)
-{
     const auto isSafe = [&]
     {
         const auto lock = lockTerminal();
@@ -861,16 +854,16 @@ void TerminalView::pasteOnceSafe(const std::string& text, const eacp::Callback& 
 
     if (isSafe)
     {
-        send();
+        pasteText(text);
         return;
     }
 
     auto guard = std::weak_ptr<bool> {alive};
     confirmUnsafePaste(text,
-                       [guard, send]
+                       [this, guard, text]
                        {
                            if (!guard.expired())
-                               send();
+                               pasteText(text);
                        });
 }
 
@@ -878,18 +871,6 @@ void TerminalView::pasteText(const std::string& text)
 {
     const auto lock = lockTerminal();
     sendAndScrollToBottom(preparePastedText(text, screen.modes.bracketedPaste));
-}
-
-void TerminalView::pasteThenPressEnter(const std::string& text)
-{
-    pasteOnceSafe(text,
-                  [this, text]
-                  {
-                      constexpr auto enter = "\r";
-                      const auto lock = lockTerminal();
-                      sendAndScrollToBottom(
-                          preparePastedText(text, screen.modes.bracketedPaste) + enter);
-                  });
 }
 
 // ---- selection & mouse -----------------------------------------------------

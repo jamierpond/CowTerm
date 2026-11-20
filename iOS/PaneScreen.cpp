@@ -20,7 +20,6 @@ namespace
 constexpr auto notLiveOpacity = 0.45f;
 constexpr auto refreshesPerSecond = 1;
 constexpr auto outputWatchesPerSecond = 4;
-constexpr auto claudeProcessName = "claude";
 
 // How long after the last output the auto-lock stays off.
 constexpr auto keepAwakeAfterOutput = std::chrono::seconds {30};
@@ -150,7 +149,6 @@ PaneScreen::PaneScreen(const term::TerminalConfig& config, const std::string& pa
         LOG("bottom bar: overview");
         actions.onOverview();
     };
-    typing.onLayoutChanged = [this] { layOutParts(); };
 
     showPane(config, paneId);
 }
@@ -212,7 +210,6 @@ void PaneScreen::setLinkStatus(const LinkStatus& linkToShow)
     topLine.link = link;
     topLine.repaint();
     showLinkStateOnPane();
-    typing.setLinkLive(isLive());
 }
 
 void PaneScreen::showLinkStateOnPane()
@@ -260,7 +257,7 @@ bool PaneScreen::isKeyboardUp() const
     return softwareKeyboardCoveredHeight > 0.0f;
 }
 
-// With the keyboard up the bottom bar gives way to the composer and key row.
+// With the keyboard up the bottom bar gives way to the key row.
 void PaneScreen::layOutParts()
 {
     const auto bounds = getLocalBounds();
@@ -269,7 +266,7 @@ void PaneScreen::layOutParts()
 
     if (isKeyboardUp())
     {
-        const auto rects = calculateTypingRects(bounds, insets, typing.showsComposer());
+        const auto rects = calculateTypingRects(bounds, insets);
         paneArea = rects.pane;
         topLineHost.setBounds(rects.topLine);
         typing.layOut(rects, true);
@@ -322,13 +319,6 @@ void PaneScreen::watchPaneOutput()
     }
 
     setScreenKeptAwake(now - lastOutputAt < keepAwakeAfterOutput);
-    typing.setShowsStopButton(isClaudePane());
-}
-
-bool PaneScreen::isClaudePane() const
-{
-    return promptButtons.prompt.has_value()
-           || terminal->foregroundProcess().find(claudeProcessName) != std::string::npos;
 }
 
 // The layout changes only when buttons come, go or change in number.
@@ -402,19 +392,9 @@ void PaneScreen::raiseKeyboard()
     typing.raiseKeyboard();
 }
 
-void PaneScreen::composeAndSend(const std::string& text)
-{
-    typing.composeAndSend(text);
-}
-
 void PaneScreen::showKeyRowSecondPage()
 {
     typing.showKeyRowSecondPage();
-}
-
-void PaneScreen::switchToComposer()
-{
-    typing.switchToComposer();
 }
 
 void PaneScreen::returnToLiveBottom()

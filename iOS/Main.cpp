@@ -60,9 +60,6 @@ constexpr auto hiddenViewCheckFingerDelay = Time::MS {10000};
 // screenshotted before the project opens.
 constexpr auto projectOpenDelay = Time::MS {10000};
 
-// Long enough for the keyboard to have come up, so the composer is on screen.
-constexpr auto composeDelay = Time::MS {1500};
-
 // Read back from the phone with `xcrun devicectl device copy from`.
 constexpr auto logFileName = "CowTermMobile.log";
 constexpr auto previousLogFileName = "CowTermMobile.previous.log";
@@ -79,7 +76,6 @@ struct LaunchOptions
     bool opensMenu = false;
     bool streamsOutput = false;
     bool scrollsBack = false;
-    bool showsComposer = false;
     bool showsKeyRowSecondPage = false;
     bool switchesToSecondPane = false;
     bool opensDiffView = false;
@@ -87,7 +83,6 @@ struct LaunchOptions
     bool showsClaudePrompt = false;
     bool tapsPaneAfterOverview = false;
     bool dragsPaneAfterMenu = false;
-    std::string composedText;
     std::vector<cowterm::mobile::DiffViewLaunchStep> diffViewSteps;
     bool showsOverview = false;
     std::string sessionToOpen;
@@ -128,7 +123,6 @@ constexpr LaunchSwitch launchSwitches[] = {
     {"--menu", &LaunchOptions::opensMenu},
     {"--stream", &LaunchOptions::streamsOutput},
     {"--scroll-back", &LaunchOptions::scrollsBack},
-    {"--composer", &LaunchOptions::showsComposer},
     {"--key-row-symbols", &LaunchOptions::showsKeyRowSecondPage},
     {"--switch-to-second-pane", &LaunchOptions::switchesToSecondPane},
     {"--open-diff-view", &LaunchOptions::opensDiffView},
@@ -157,7 +151,6 @@ void applyLaunchValue(LaunchOptions& options, std::string_view argument)
 {
     constexpr auto linkPrefix = std::string_view {"--link="};
     constexpr auto panesPrefix = std::string_view {"--panes="};
-    constexpr auto composePrefix = std::string_view {"--compose="};
     constexpr auto openSessionPrefix = std::string_view {"--open-session="};
     constexpr auto openProjectPrefix = std::string_view {"--open-project="};
     constexpr auto searchPrefix = std::string_view {"--search="};
@@ -167,11 +160,6 @@ void applyLaunchValue(LaunchOptions& options, std::string_view argument)
     {
         options.linkState =
             parseLinkState(argument.substr(linkPrefix.size())).value_or(options.linkState);
-    }
-    else if (argument.starts_with(composePrefix))
-    {
-        options.composedText = std::string {argument.substr(composePrefix.size())};
-        std::ranges::replace(options.composedText, '|', '\n');
     }
     else if (argument.starts_with(openSessionPrefix))
     {
@@ -402,9 +390,6 @@ struct CowTermMobileApp
 
     void applyLaunchKeyboardOptions()
     {
-        if (launchOptions.showsComposer)
-            screen.switchToComposer();
-
         if (launchOptions.showsKeyRowSecondPage)
             screen.showKeyRowSecondPage();
 
@@ -447,12 +432,6 @@ struct CowTermMobileApp
 
         scheduleDiffViewSteps();
         scheduleHiddenViewChecks();
-
-        if (!launchOptions.composedText.empty())
-        {
-            Threads::callAfter(composeDelay,
-                               [this] { screen.composeAndSend(launchOptions.composedText); });
-        }
 
         if (launchOptions.scrollsBack)
         {

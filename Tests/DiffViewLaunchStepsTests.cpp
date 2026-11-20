@@ -11,7 +11,7 @@ using namespace cowterm::mobile;
 namespace
 {
 constexpr auto reviewLoop =
-    "keyboard;tap:beta changed;tap:Comment;type:Looks right;key:ctrl;type:s;compose:From the composer";
+    "keyboard;tap:beta changed;tap:Comment;type:Looks right;key:ctrl;type:s";
 
 // dv at 45 columns with a line selected, as tmux showed it on macprorack.
 constexpr auto diffViewScreen = " beta.txt\n"
@@ -25,7 +25,7 @@ auto tParseLoop = test("DiffViewLaunchSteps/readsEachStepInOrder") = []
 {
     const auto steps = parseDiffViewLaunchSteps(reviewLoop);
 
-    check(steps.size() == 7);
+    check(steps.size() == 6);
     check(steps[0].action == DiffViewLaunchAction::RaiseKeyboard);
     check(steps[1].action == DiffViewLaunchAction::TapText);
     check(steps[1].text == "beta changed");
@@ -33,8 +33,6 @@ auto tParseLoop = test("DiffViewLaunchSteps/readsEachStepInOrder") = []
     check(steps[3].text == "Looks right");
     check(steps[4].action == DiffViewLaunchAction::PressKeyRowKey);
     check(steps[4].key == KeyRowKey::Control);
-    check(steps[6].action == DiffViewLaunchAction::ComposeAndSend);
-    check(steps[6].text == "From the composer");
 };
 
 auto tParseUnknown = test("DiffViewLaunchSteps/leavesOutStepsItCannotRead") = []

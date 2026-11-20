@@ -79,11 +79,9 @@ public:
     void openMenu();
     void closeMenu();
 
-    // ⌨: the keyboard, typing into the pane, or into the composer when it is on.
+    // ⌨: the keyboard, typing into the pane.
     void raiseKeyboard();
-    void switchToComposer();
     void showKeyRowSecondPage();
-    void composeAndSend(const std::string& text);
 
     void resized() override;
     void safeAreaInsetsChanged() override;
@@ -109,7 +107,6 @@ private:
     void watchPaneOutput();
     void showClaudePrompt(std::optional<PermissionPrompt> prompt);
     void answerPrompt(const PermissionPrompt& drawnFor, int optionNumber);
-    bool isClaudePane() const;
     float calculatePromptButtonsHeight() const;
     void showLinkStateOnPane();
 

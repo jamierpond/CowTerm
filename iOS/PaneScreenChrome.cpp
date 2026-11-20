@@ -34,7 +34,7 @@ constexpr auto chipPadding = 10.0f;
 constexpr auto chipCornerRadius = 8.0f;
 constexpr auto keyGap = 3.0f;
 
-// A lit key (latched Ctrl, compose on) also gets a bar under its label, so it
+// A lit key (a latched Ctrl) also gets a bar under its label, so it
 // is not told by its colour alone.
 constexpr auto litKeyBarWidth = 16.0f;
 constexpr auto litKeyBarHeight = 2.0f;
@@ -43,7 +43,6 @@ constexpr auto litKeyBarBelowCentre = 10.0f;
 // iOS's own key repeat: a pause before the first repeat, then about twelve a second.
 constexpr auto keyRepeatDelay = eacp::Time::MS {400};
 constexpr auto keyRepeatInterval = eacp::Time::MS {80};
-constexpr auto stopLabel = "Esc";
 constexpr auto paneDotSize = 8.0f;
 constexpr auto unreadPaneDotSize = 9.0f;
 constexpr auto unreadCountSize = 16.0f;
@@ -394,13 +393,7 @@ KeyRow::KeyRow(const term::Theme& themeToUse)
 
 bool KeyRow::isLit(KeyRowKey key) const
 {
-    if (key == KeyRowKey::Control)
-        return isControlLatched;
-
-    if (key == KeyRowKey::Composer)
-        return isComposerOn;
-
-    return false;
+    return key == KeyRowKey::Control && isControlLatched;
 }
 
 void KeyRow::paint(UI::Graphics& g)
@@ -520,29 +513,6 @@ void PromptButtons::mouseUp(const UI::MouseEvent& event)
         return;
 
     onChoose(*prompt, prompt->options[(std::size_t) row].number);
-}
-
-StopButton::StopButton(const term::Theme& themeToUse)
-    : theme(themeToUse)
-{
-    setInterceptsMouseClicks(true);
-}
-
-void StopButton::paint(UI::Graphics& g)
-{
-    g.setColour(term::toColor(theme.background).brighter(barBrightening));
-    g.fillAll();
-    g.setColour(term::toColor(theme.ansi[ansiRed]));
-    g.fillRoundedRect(getLocalBounds().inset(keyGap * 2.0f), chipCornerRadius);
-    g.setColour(term::toColor(theme.background));
-    g.setFont(makeFont(barFontSize));
-    g.drawText(stopLabel, getLocalBounds(), UI::Justification::Centred);
-}
-
-void StopButton::mouseUp(const UI::MouseEvent& event)
-{
-    if (!hasMovedBeyondTapSlop(event.downPosition, event.position))
-        onStop();
 }
 
 ActionMenu::ActionMenu(const term::Theme& themeToUse)

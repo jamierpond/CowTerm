@@ -134,35 +134,6 @@ auto tSendTextTurnsNewlines = test("View/sendTextPressesEnterForNewlines") = []
     check(pane.takeWritten() == "ls\rexit\r");
 };
 
-auto tComposedTextIsBracketed = test("View/composedTextGoesAsABracketedPasteThenEnter") = []
-{
-    constexpr auto bracketedPasteOn = "\x1b[?2004h";
-    auto pane = TestPane {};
-    pane.showOutput(bracketedPasteOn);
-
-    pane.view->pasteThenPressEnter("git status");
-    check(pane.takeWritten() == "\x1b[200~git status\x1b[201~\r");
-};
-
-auto tComposedLinesAsk = test("View/composedLinesAskBeforeReachingAShellWithoutBracketedPaste") = []
-{
-    auto pane = TestPane {};
-    auto askedAbout = std::string {};
-    auto sendAfterAsking = Callback {};
-    pane.view->confirmUnsafePaste = [&](const std::string& text, const Callback& paste)
-    {
-        askedAbout = text;
-        sendAfterAsking = paste;
-    };
-
-    pane.view->pasteThenPressEnter("rm -rf build\nmake");
-    check(askedAbout == "rm -rf build\nmake");
-    check(pane.takeWritten().empty());
-
-    sendAfterAsking();
-    check(pane.takeWritten() == "rm -rf build\rmake\r");
-};
-
 // ---- mouse ------------------------------------------------------------------
 
 auto tSgrMouseReports = test("View/sgrMouseReportsClicksAndReleases") = []

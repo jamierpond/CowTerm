@@ -285,7 +285,7 @@ ios-test-stored-screen *arguments:
 ios-test-diff-view *arguments:
     scripts/check-ios-diff-view.sh {{arguments}}
 
-# Review a throwaway repository on a host through dv in the simulator: a typed comment, a composed one, submit, and print the round dv wrote
+# Review a throwaway repository on a host through dv in the simulator: a comment saved with Ctrl+s, one saved with Save, submit, and print the round dv wrote
 ios-test-diff-view-review destination="jamiepond@macprorack" prefix="build-ios-sim/diff-view-review":
     scripts/check-ios-diff-view-review.sh "{{destination}}" "{{prefix}}"
 

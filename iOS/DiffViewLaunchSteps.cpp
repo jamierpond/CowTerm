@@ -18,7 +18,6 @@ constexpr NamedAction namedActions[] = {
     {"tap", DiffViewLaunchAction::TapText},
     {"type", DiffViewLaunchAction::TypeText},
     {"key", DiffViewLaunchAction::PressKeyRowKey},
-    {"compose", DiffViewLaunchAction::ComposeAndSend},
 };
 
 struct NamedKey
@@ -35,7 +34,6 @@ constexpr NamedKey namedKeys[] = {
     {"down", KeyRowKey::Down},
     {"left", KeyRowKey::Left},
     {"right", KeyRowKey::Right},
-    {"compose", KeyRowKey::Composer},
 };
 
 std::optional<DiffViewLaunchAction> findActionNamed(std::string_view name)

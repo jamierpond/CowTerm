@@ -6,8 +6,8 @@
 
 #include <variant>
 
-// The phone's typing: the composer's history, Ctrl that latches for one key,
-// and what the key row's keys send, through the Mac's own key encoding.
+// The phone's typing: Ctrl that latches for one key, and what the key row's
+// keys send, through the Mac's own key encoding.
 // iOS/Typing.cpp, built here on the Mac.
 
 using namespace nano;
@@ -43,39 +43,6 @@ std::string encodeKeyRowKey(KeyRowKey key, bool applicationCursorKeys = false)
     return encodeKey(*makeKeyRowKeyEvent(key), applicationCursorKeys);
 }
 } // namespace
-
-auto tRecallOlder = test("Typing/upRecallsOlderMessagesAndStopsAtTheOldest") = []
-{
-    auto history = ComposerHistory {};
-    history.remember("first");
-    history.remember("second");
-
-    check(history.recallOlder() == "second");
-    check(history.recallOlder() == "first");
-    check(history.recallOlder() == "first");
-};
-
-auto tRecallNewer = test("Typing/downWalksBackToAnEmptyField") = []
-{
-    auto history = ComposerHistory {};
-    history.remember("first");
-    history.remember("second");
-    history.recallOlder();
-    history.recallOlder();
-
-    check(history.recallNewer() == "second");
-    check(history.recallNewer() == "");
-    check(!history.isRecalling());
-    check(!history.recallNewer().has_value());
-};
-
-auto tEmptyHistory = test("Typing/nothingToRecallBeforeAnythingWasSent") = []
-{
-    auto history = ComposerHistory {};
-    history.remember("");
-
-    check(!history.recallOlder().has_value());
-};
 
 auto tLatch = test("Typing/ctrlLatchesForOneKey") = []
 {
@@ -115,7 +82,7 @@ auto tKeyRowEncodings = test("Typing/keyRowKeysSendWhatAKeyboardWould") = []
 auto tRowControls = test("Typing/rowControlsSendNothing") = []
 {
     check(!makeKeyRowKeyEvent(KeyRowKey::Control).has_value());
-    check(!makeKeyRowKeyEvent(KeyRowKey::Composer).has_value());
+    check(!makeKeyRowKeyEvent(KeyRowKey::HideKeyboard).has_value());
     check(!makeKeyRowKeyEvent(KeyRowKey::NextPage).has_value());
 };
 
@@ -145,6 +112,8 @@ auto tLayoutSecondPage = test("Typing/secondPageHoldsTheSymbols") = []
 
     check(slots.front().key == KeyRowKey::Pipe);
     check(findKeyRowKeyAt(slots, slots[1].bounds.center()) == KeyRowKey::Tilde);
+    check(slots[slots.size() - 2].key == KeyRowKey::HideKeyboard);
+    check(slots.back().key == KeyRowKey::NextPage);
 };
 
 namespace
@@ -152,16 +121,6 @@ namespace
 constexpr auto iPhone12MiniPortraitWidth = 375.0f;
 constexpr auto iPhone12MiniLandscapeWidth = 812.0f;
 constexpr auto iPhone18ProMaxLandscapeWidth = 956.0f;
-constexpr auto barFontSize = 15.0f;
-constexpr auto monospacedAdvancePerPoint = 0.6f;
-constexpr auto keyFaceInsetBothSides = 6.0f;
-
-// "compose" in the bar's JetBrains Mono, plus the key face's inset.
-float findComposeKeyNeededWidth()
-{
-    const auto letters = static_cast<float>(getKeyRowLabel(KeyRowKey::Composer).size());
-    return letters * barFontSize * monospacedAdvancePerPoint + keyFaceInsetBothSides;
-}
 } // namespace
 
 auto tKeyRowFitsEveryPhone = test("Typing/everyKeyFitsTheRowOnEveryPhoneBothWays") = []
@@ -179,9 +138,6 @@ auto tKeyRowFitsEveryPhone = test("Typing/everyKeyFitsTheRowOnEveryPhoneBothWays
             {
                 check(slot.bounds.x >= 0.0f);
                 check(slot.bounds.right() <= width + layoutTolerance);
-
-                if (slot.key == KeyRowKey::Composer)
-                    check(slot.bounds.w >= findComposeKeyNeededWidth(), "its word fits on the key");
             }
         }
     }

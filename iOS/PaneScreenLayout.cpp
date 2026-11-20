@@ -66,16 +66,12 @@ PaneScreenRects calculatePaneScreenRects(Rect bounds, Insets safeArea)
     return rects;
 }
 
-TypingRects calculateTypingRects(Rect bounds, Insets insetsAroundParts, bool showsComposer)
+TypingRects calculateTypingRects(Rect bounds, Insets insetsAroundParts)
 {
     auto inside = bounds.inset(insetsAroundParts);
     auto rects = TypingRects {};
     rects.topLine = inside.removeFromTop(topLineHeight);
     rects.keyRow = inside.removeFromBottom(keyRowHeight);
-
-    if (showsComposer)
-        rects.composer = inside.removeFromBottom(composerHeight);
-
     rects.pane = inside;
     return rects;
 }

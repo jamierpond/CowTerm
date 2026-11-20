@@ -163,24 +163,13 @@ auto tTitleOnce = test("PaneScreenLayout/titleNeverRepeatsTheHostTheSessionNameS
     check(describePaneTitle("macprorack", "macprorack-tools") == "macprorack/macprorack-tools");
 };
 
-auto tTypingRects = test("PaneScreenLayout/typingStacksComposerAndKeyRowOnTheKeyboard") = []
+auto tTypingRects = test("PaneScreenLayout/typingPutsTheKeyRowOnTheKeyboardUnderThePane") = []
 {
     const auto keyboardUp =
         Insets {.top = iPhone17eSafeAreaTop, .bottom = measuredIPhone17eKeyboardHeight};
-    const auto rects = calculateTypingRects(iPhone17eBounds, keyboardUp, true);
+    const auto rects = calculateTypingRects(iPhone17eBounds, keyboardUp);
 
     check(rects.keyRow.bottom() == iPhone17eHeight - measuredIPhone17eKeyboardHeight);
-    check(rects.composer.bottom() == rects.keyRow.y);
-    check(rects.pane.bottom() == rects.composer.y);
-};
-
-auto tTypingRectsRaw = test("PaneScreenLayout/rawModeHasNoComposer") = []
-{
-    const auto keyboardUp =
-        Insets {.top = iPhone17eSafeAreaTop, .bottom = measuredIPhone17eKeyboardHeight};
-    const auto rects = calculateTypingRects(iPhone17eBounds, keyboardUp, false);
-
-    check(rects.composer.h == 0.0f);
     check(rects.pane.bottom() == rects.keyRow.y);
 };
 
