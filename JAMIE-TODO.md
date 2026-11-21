@@ -15,6 +15,26 @@ ready, so it is not installed yet.
       and that all three hosts accept the phone's key. No authorized_keys line
       is added (the key is already there), and nothing on the Mac restarts.
 
+## Phone: panes on tamby-windows stop vanishing
+
+The phone says "this pane no longer exists" because tamby-windows' daemon dies
+each time the phone's ssh connection closes. Windows' ssh server runs every
+session's command in a job object that kills all its processes when the session
+ends, and eacp's detached launch does not leave that job, so the cowtermd that
+`ct bridge` started goes down with the phone's session and takes every shell
+with it. The fix is uncommitted in `~/projects/eacp-jp-detached-breaks-away-from-job`
+(branch `jp/detached-breaks-away-from-job`, off Eyal's develop): a detached
+launch asks Windows to start the child outside the launcher's job, and starts
+it as before if the job forbids that. None of this Mac's keys can log in to
+tamby-windows, so it has not been built or run on Windows.
+
+- [ ] Review the eacp diff, run eacp's tests on tamby-windows, then push the
+      branch to Eyal's repo as a draft PR and add it to `eacp-jp-develop`.
+- [ ] Re-pin CowTerm's eacp (`just update-deps`), install the headless build on
+      tamby-windows, and quit its cowtermd once if one is running (that ends its shells).
+- [ ] On pond: open a tamby-windows pane, lock the phone for a minute, unlock.
+      The pane should still be there.
+
 ## Push notifications: your phone rings when a Claude finishes or asks
 
 macprorack is ready. `just push-relay-check-ready` shows 14 of 18 requirements
